@@ -252,9 +252,9 @@ export const BROADCAST_MS = 1000 / BROADCAST_RATE_HZ;
 export const MAX_SNAPSHOTS_PER_SECOND = 20;
 
 // Turn rate
-export const TURN_BASE = 0.15;
-export const TURN_MIN = 0.045;
-export const TURN_SCORE_FACTOR = 0.0006;
+export const TURN_BASE = 0.28; // increased from 0.15 for tighter control
+export const TURN_MIN = 0.06;
+export const TURN_SCORE_FACTOR = 0.0004; // reduced impact of score on turn rate
 
 // Size formula
 export const SIZE_BASE = 8;
@@ -319,7 +319,7 @@ export const STAR_CHIP_GROW = 3; // score bonus when collecting a star (in addit
 // Dynamic Map Scaling (Online Mode)
 // ----------------------------------------------------------------------------
 export const MAP_MIN_RADIUS = 1500;  // radius when 1 player
-export const MAP_MAX_RADIUS = 5000;  // radius when 1000 players
+export const MAP_MAX_RADIUS = 8000;  // radius when 1000 players (increased for density)
 export const MAP_BREATH_AMPLITUDE = 40;  // breathing oscillation
 export const MAP_BREATH_CYCLE_MS = 10000;
 export const MAX_ARENA_PLAYERS = 1000;
@@ -346,7 +346,7 @@ export const MAP_BASE_RADIUS = 3800;
 // Bot Constants
 // ----------------------------------------------------------------------------
 export const BOT_SELF_DESTRUCT_THRESHOLD = 100; // score at which bots self-destruct (online only)
-export const BOT_EVADE_RADIUS = 180; // distance at which bots start evading human players
+export const BOT_EVADE_RADIUS = 300; // distance at which bots start evading human players
 export const BOT_FOOD_SCAN_RADIUS = 300; // how far bots scan for food
 
 // Neck protection: first N segments behind the head are immune to head-to-body collision.
@@ -354,8 +354,8 @@ export const BOT_FOOD_SCAN_RADIUS = 300; // how far bots scan for food
 export const NECK_PROTECTION_SEGS = 5;
 
 // Safe spawn: minimum distance from any existing snake when spawning
-export const SAFE_SPAWN_MIN_DIST = 300;
-export const SAFE_SPAWN_ATTEMPTS = 20; // max attempts to find safe spawn point
+export const SAFE_SPAWN_MIN_DIST = 500;
+export const SAFE_SPAWN_ATTEMPTS = 30; // max attempts to find safe spawn point
 
 // ----------------------------------------------------------------------------
 // Daily rewards (7-day cycle, repeats) — original: [10,20,50,100,250,500,1000]

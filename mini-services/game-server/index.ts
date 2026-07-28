@@ -349,7 +349,10 @@ async function settleMatch(
 
   const socket = io.sockets.sockets.get(session.id);
   if (socket) {
-    socket.emit('match_result', payload);
+    // Emit death BEFORE match_result so the client's onDeath handler
+    // runs first (sets up post-death replay recording). If match_result
+    // arrived first it would set matchEndedRef=true and cause onDeath
+    // to bail via its idempotency guard.
     if (outcome === 'death') {
       socket.emit('death', {
         killerId: killer?.id,
@@ -359,12 +362,34 @@ async function settleMatch(
         killerIsBot: killer?.isBot ?? true,
       });
     }
+    socket.emit('match_result', payload);
   }
 
-  room.players.delete(session.id);
-  if (socket) {
-    const data = getSocketData(socket);
-    data.playerSession = undefined;
+  // For death: keep the player in the room for 16 s so the broadcast
+  // loop continues sending snapshots.  The client records 15 s of
+  // post-death frames (300 frames at 20 Hz) for the replay.  After the
+  // window expires we clean up.  The session is already marked
+  // isDead + matchSettling, so the tick loop skips movement/collisions.
+  if (outcome === 'death') {
+    const sid = session.id;
+    const roomId = room.arena.id;
+    setTimeout(() => {
+      const r = rooms.get(roomId);
+      if (r) r.players.delete(sid);
+      const s = io.sockets.sockets.get(sid);
+      if (s) {
+        const d = getSocketData(s);
+        d.playerSession = undefined;
+      }
+      log('info', `Post-death replay window expired — removed ${session.identity.userTag} from ${roomId}`);
+    }, 16_000);
+  } else {
+    // Extract: remove immediately (no post-death replay needed).
+    room.players.delete(session.id);
+    if (socket) {
+      const data = getSocketData(socket);
+      data.playerSession = undefined;
+    }
   }
   log('info', `${session.identity.userTag} ${outcome} in ${room.arena.id}: chips=${carriedChips} kills=${kills} dur=${durationSeconds}s`);
 }

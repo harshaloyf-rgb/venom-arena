@@ -248,7 +248,7 @@ const MAX_SNAPSHOT_POINTS = 60;
 const BOT_THINK_INTERVAL_MS = 120;
 const BOT_THINK_JITTER_MS = 80;
 const BOT_FOOD_SCAN_RADIUS = 300;
-const BOT_THREAT_SCAN_RADIUS = 200;
+const BOT_THREAT_SCAN_RADIUS = 250;
 const BOT_MAX_TURN_PER_TICK = 0.22;
 const BOT_PREDICT_AHEAD_TICKS = 8;
 const BOT_PREDICT_SPEED = BASE_SPEED * 1.5;
@@ -275,7 +275,7 @@ const FOOD_SPAWN_RADIUS_FAR = 2500;
 /** Fraction of replenishment food that spawns far. */
 const FOOD_FAR_FRACTION = 0.15;
 /** Bot spawn radius from origin at game start. */
-const BOT_SPAWN_RADIUS = 2000;
+const BOT_SPAWN_RADIUS = 6000;
 /** Opacity layering proximity factor (multiplied by sum of sizes). */
 const OPACITY_PROXIMITY_FACTOR = 3;
 /** Opacity to which the larger snake fades. */
@@ -383,39 +383,58 @@ interface DeathDropResult {
   /** IDs of dead snakes that should drop food. */
 }
 
+function computeDeathOrbs(totalScore: number): { small: number; medium: number; large: number } {
+  let remaining = totalScore;
+  const large = Math.floor(remaining / 5);
+  remaining -= large * 5;
+  const medium = Math.floor(remaining / 3);
+  remaining -= medium * 3;
+  const small = remaining;
+  return { small, medium, large };
+}
+
 function computeDeathFoodDrop(
   totalScore: number,
-  deathX: number,
-  deathY: number,
+  bodyPoints: Vec2[],
   idPrefix: string,
   idCounter: { value: number },
 ): Food[] {
   const result: Food[] = [];
-  let remaining = Math.max(0, totalScore);
+  if (!bodyPoints || bodyPoints.length === 0 || totalScore <= 0) return result;
 
-  // Large orbs (value 5)
-  const largeOrb = ALL_FOOD_ORBS[2]; // FOOD_ORB_LARGE
-  const largeCount = Math.floor(remaining / largeOrb.value);
-  for (let i = 0; i < largeCount; i++) {
-    const offset = randomPointInCircle(deathX, deathY, 30 + largeCount * 0.5);
-    result.push(createFoodOrbAt(idPrefix, idCounter, offset.x, offset.y, largeOrb));
+  const { small, medium, large } = computeDeathOrbs(totalScore);
+  let orbIdx = 0;
+  const totalOrbs = small + medium + large;
+  if (totalOrbs === 0) return result;
+
+  // Build orb sequence
+  const orbSequence: Array<{ value: number; size: number; color: string; glowColor: string; orbSize: string }> = [];
+  for (let i = 0; i < large; i++) orbSequence.push({ value: 5, size: 8, color: '#f472b6', glowColor: '#ec4899', orbSize: 'large' });
+  for (let i = 0; i < medium; i++) orbSequence.push({ value: 3, size: 5, color: '#38bdf8', glowColor: '#0ea5e9', orbSize: 'medium' });
+  for (let i = 0; i < small; i++) orbSequence.push({ value: 1, size: 3, color: '#34d399', glowColor: '#10b981', orbSize: 'small' });
+
+  // Shuffle
+  for (let i = orbSequence.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [orbSequence[i], orbSequence[j]] = [orbSequence[j], orbSequence[i]];
   }
-  remaining -= largeCount * largeOrb.value;
 
-  // Medium orbs (value 3)
-  const mediumOrb = ALL_FOOD_ORBS[1]; // FOOD_ORB_MEDIUM
-  const mediumCount = Math.floor(remaining / mediumOrb.value);
-  for (let i = 0; i < mediumCount; i++) {
-    const offset = randomPointInCircle(deathX, deathY, 30 + mediumCount * 0.5);
-    result.push(createFoodOrbAt(idPrefix, idCounter, offset.x, offset.y, mediumOrb));
-  }
-  remaining -= mediumCount * mediumOrb.value;
-
-  // Small orbs (value 1) for the remainder
-  const smallOrb = ALL_FOOD_ORBS[0]; // FOOD_ORB_SMALL
-  for (let i = 0; i < remaining; i++) {
-    const offset = randomPointInCircle(deathX, deathY, 30 + remaining * 0.5);
-    result.push(createFoodOrbAt(idPrefix, idCounter, offset.x, offset.y, smallOrb));
+  // Distribute orbs evenly along the body
+  const scatter = 15;
+  for (const orb of orbSequence) {
+    const segIdx = Math.min(bodyPoints.length - 1, Math.floor((orbIdx / totalOrbs) * bodyPoints.length));
+    const pt = bodyPoints[segIdx];
+    result.push({
+      id: `${idPrefix}-death-${idCounter.value++}`,
+      x: pt.x + (Math.random() - 0.5) * scatter,
+      y: pt.y + (Math.random() - 0.5) * scatter,
+      size: orb.size,
+      value: orb.value,
+      orbSize: orb.orbSize as 'small' | 'medium' | 'large',
+      color: orb.color,
+      glowColor: orb.glowColor,
+    });
+    orbIdx++;
   }
 
   return result;
@@ -727,18 +746,19 @@ export class OfflineGameEngine {
     const spawn = randomPointInCircle(cx, cy, BOT_SPAWN_RADIUS);
     const angle = Math.random() * Math.PI * 2;
     const botId = `bot-${this.arena.id}-${idx}`;
+    const initialScore = Math.floor(Math.random() * 80);
     return {
       id: botId,
       botId,
       name,
-      points: initialBody(spawn.x, spawn.y, angle, INITIAL_BODY_LENGTH),
+      points: initialBody(spawn.x, spawn.y, angle, INITIAL_BODY_LENGTH + Math.floor(Math.random() * 30)),
       angle,
-      size: SIZE_BASE + Math.sqrt(INITIAL_SPAWN_SCORE) * SIZE_SCORE_FACTOR,
+      size: SIZE_BASE + Math.sqrt(INITIAL_SPAWN_SCORE + initialScore) * SIZE_SCORE_FACTOR,
       color: skin.color,
       secondaryColor: skin.secondaryColor,
       isPlayer: false,
       isBot: true,
-      score: 0,
+      score: initialScore,
       boostFrameCounter: 0,
       isExtracting: false,
       extractionProgress: 0,
@@ -1097,14 +1117,14 @@ export class OfflineGameEngine {
         playerDied = true;
         // Drop player's food
         const playerTotal = INITIAL_SPAWN_SCORE + p.score;
-        newDropFoods.push(...computeDeathFoodDrop(playerTotal, p.points[0].x, p.points[0].y, this.arena.id, this.idCounterObj));
+        newDropFoods.push(...computeDeathFoodDrop(playerTotal, p.points, this.arena.id, this.idCounterObj));
         continue;
       }
       const bot = this.bots.get(d.deadId);
       if (bot) {
         // Drop bot's food
         const botTotal = INITIAL_SPAWN_SCORE + bot.score;
-        newDropFoods.push(...computeDeathFoodDrop(botTotal, bot.points[0].x, bot.points[0].y, this.arena.id, this.idCounterObj));
+        newDropFoods.push(...computeDeathFoodDrop(botTotal, bot.points, this.arena.id, this.idCounterObj));
         bot.isDead = true;
         // Credit kill to the killer if it's the player.
         if (d.killerId === p.id) {
@@ -1137,7 +1157,7 @@ export class OfflineGameEngine {
       for (let attempt = 0; attempt < 20; attempt++) {
         const spawnPt = bot.points[0];
         const distFromPlayer = dist(spawnPt.x, spawnPt.y, pHead.x, pHead.y);
-        if (distFromPlayer < 300) {
+        if (distFromPlayer < 500) {
           // Re-spawn further from player
           const far = randomPointInCircle(pHead.x, pHead.y, BOT_SPAWN_RADIUS);
           bot.points = initialBody(far.x, far.y, bot.angle, INITIAL_BODY_LENGTH);
@@ -1147,7 +1167,7 @@ export class OfflineGameEngine {
         let tooClose = false;
         for (const other of this.bots.values()) {
           if (other.isDead || other.points.length === 0) continue;
-          if (dist(spawnPt.x, spawnPt.y, other.points[0].x, other.points[0].y) < 300) {
+          if (dist(spawnPt.x, spawnPt.y, other.points[0].x, other.points[0].y) < 500) {
             tooClose = true;
             break;
           }
@@ -1282,11 +1302,7 @@ export class OfflineGameEngine {
       }
 
       let desired: number;
-      const shouldFlee =
-        threatDist < 140 &&
-        (bot.personality === 'coward' ||
-          bot.personality === 'extractor' ||
-          (bot.personality === 'opportunist' && threatDist < 90));
+      const shouldFlee = threatDist < 150; // ALL bots dodge body segments when close
 
       // --- Predictive evasion against the human player ---
       const p = this.player;
@@ -1307,6 +1323,25 @@ export class OfflineGameEngine {
             bot.desiredAngle = desired;
             const wantsBoost = bot.personality === 'hunter' && bot.score > 10;
             this.tickSnakeMovement(bot, bot.desiredAngle, wantsBoost);
+            return;
+          }
+        }
+      }
+
+      // Also check nearby bot heads for predictive evasion
+      for (const other of this.bots.values()) {
+        if (other.id === bot.id || other.isDead || other.points.length === 0) continue;
+        const otherHead = other.points[0];
+        const otherDist = dist(head.x, head.y, otherHead.x, otherHead.y);
+        if (otherDist < 200) {
+          const predictedX = otherHead.x + Math.cos(other.angle) * BOT_PREDICT_SPEED * BOT_PREDICT_AHEAD_TICKS;
+          const predictedY = otherHead.y + Math.sin(other.angle) * BOT_PREDICT_AHEAD_TICKS;
+          const distToPredicted = dist(head.x, head.y, predictedX, predictedY);
+          if (distToPredicted < (bot.size + other.size) * 3) {
+            const evadeAngle = other.angle + (Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2);
+            desired = evadeAngle;
+            bot.desiredAngle = desired;
+            this.tickSnakeMovement(bot, bot.desiredAngle, false);
             return;
           }
         }
@@ -1553,7 +1588,7 @@ export class OfflineGameEngine {
       const bot = this.bots.get(d.deadId);
       if (bot) {
         const botTotal = INITIAL_SPAWN_SCORE + bot.score;
-        newDropFoods.push(...computeDeathFoodDrop(botTotal, bot.points[0].x, bot.points[0].y, this.arena.id, this.idCounterObj));
+        newDropFoods.push(...computeDeathFoodDrop(botTotal, bot.points, this.arena.id, this.idCounterObj));
         bot.isDead = true;
       }
     }
