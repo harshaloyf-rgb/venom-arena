@@ -85,7 +85,8 @@ export async function POST(req: NextRequest) {
     player: toProfile(updated),
     chipsEarned,
     chipsLost,
-    commission: outcome === 'extract' ? Math.floor(carriedChips * commission) : 0,
+    // commission = what the server already deducted: carriedChips - bankedAmount
+    commission: outcome === 'extract' ? (carriedChips - bankedAmountFromBody) : 0,
     xpGained,
     newLevel: updated.level,
     newBankedChips: updated.bankedChips,

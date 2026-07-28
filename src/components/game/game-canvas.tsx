@@ -52,6 +52,8 @@ import {
   LogOut,
   Map as MapIcon,
   MessageSquare,
+  Pause,
+  Play,
   RotateCcw,
   Send,
   Shield,
@@ -64,6 +66,8 @@ import {
   WifiOff,
   X,
   Zap,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -94,12 +98,17 @@ import type {
 } from '@/lib/types';
 
 import {
+  drawChipLabel,
   drawFood,
+  drawFoodOrb,
   drawFullMap,
   drawGrid,
+  drawMapBoundary,
   drawMinimap,
   drawParticles,
   drawSnake,
+  drawSnakeWithLayering,
+  drawStarCollectible,
   getArenaRadius,
   type FrameRenderCtx,
   type Particle,
@@ -225,6 +234,10 @@ interface EndScreenState {
   durationSeconds: number;
   carriedChips: number;
   score: number;
+  /** Last 30s of GameSnapshots for replay playback (death only). */
+  replayFrames?: GameSnapshot[];
+  /** The player's snake id — used to follow them in replay. */
+  replayMyId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -295,6 +308,37 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
   const snapshotRef = useRef<GameSnapshot | null>(null);
   const mySnakeIdRef = useRef<string | null>(null);
   const phaseRef = useRef<Phase>('connecting');
+
+  // --- Replay buffer: records last 30s of GameSnapshots (20Hz × 30s = 600 frames) ---
+  const REPLAY_MAX_FRAMES = 600;
+  const replayBufferRef = useRef<GameSnapshot[]>([]);
+  const replayWriteIdxRef = useRef<number>(0);
+
+  const recordReplayFrame = useCallback((snap: GameSnapshot) => {
+    const buf = replayBufferRef.current;
+    if (buf.length < REPLAY_MAX_FRAMES) {
+      buf.push(snap);
+    } else {
+      buf[replayWriteIdxRef.current % REPLAY_MAX_FRAMES] = snap;
+    }
+    replayWriteIdxRef.current++;
+  }, []);
+
+  /** Extract the last N frames from the circular replay buffer. */
+  const getReplayFrames = useCallback((): GameSnapshot[] => {
+    const buf = replayBufferRef.current;
+    const len = buf.length;
+    if (len === 0) return [];
+    // buf is already in chronological order when < REPLAY_MAX_FRAMES
+    if (len < REPLAY_MAX_FRAMES) return [...buf];
+    // Circular buffer: oldest frame is at writeIdx % maxFrames
+    const start = replayWriteIdxRef.current % REPLAY_MAX_FRAMES;
+    const result: GameSnapshot[] = [];
+    for (let i = 0; i < REPLAY_MAX_FRAMES; i++) {
+      result.push(buf[(start + i) % REPLAY_MAX_FRAMES]);
+    }
+    return result;
+  }, []);
 
   const keysRef = useRef<Set<string>>(new Set());
   const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -555,6 +599,10 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         const data = payload as GameSnapshot;
         if (!data || !Array.isArray(data.snakes) || !Array.isArray(data.foods)) return;
         snapshotRef.current = data;
+        // Record frame for replay (only while playing)
+        if (phaseRef.current === 'playing') {
+          recordReplayFrame(data);
+        }
 
         // --- BUILD-13: server-provided arena-wide fields (online mode) ---
         // In offline mode these are 0 / empty — the HUD falls back to
@@ -721,6 +769,11 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
             data.outcome === 'death' && data.killerName
               ? { name: data.killerName, tag: data.killerTag }
               : undefined,
+          // Attach replay frames for death
+          ...(data.outcome === 'death' ? {
+            replayFrames: getReplayFrames(),
+            replayMyId: mySnakeIdRef.current ?? undefined,
+          } : {}),
         });
         // Show level-up toast if applicable.
         if (data.newLevel > player.level) {
@@ -792,6 +845,9 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
           durationSeconds: duration,
           carriedChips: carriedRef.current,
           score: scoreRef.current,
+          // Attach replay frames for death
+          replayFrames: getReplayFrames(),
+          replayMyId: mySnakeIdRef.current ?? undefined,
           // Final stats pending — server will send match_result shortly.
         });
       };
@@ -1114,7 +1170,8 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
             w: cssW,
             h: cssH,
             worldSize: fmSnap.worldSize ?? WORLD_SIZE,
-            arenaRadius: getArenaRadius(now),
+            // Use dynamic mapRadius from server snapshot, fallback to breathing formula
+            arenaRadius: (fmSnap.mapRadius && fmSnap.mapRadius > 0) ? fmSnap.mapRadius : getArenaRadius(now),
             snakes: fmSnap.snakes,
             myId: mySnakeIdRef.current ?? '',
           });
@@ -1177,20 +1234,42 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
       ctx.scale(cam.zoom, cam.zoom);
       ctx.translate(-cam.x, -cam.y);
 
-      // --- Draw world (breathing arena boundary + grid) ---
-      drawGrid(rc);
+      // --- Draw world (dynamic arena boundary + grid) ---
+      // Use the server-provided dynamic mapRadius for online arenas
+      const dynamicMapRadius = snap?.mapRadius && snap.mapRadius > 0 ? snap.mapRadius : undefined;
+      const mapCenterX = snap?.mapCenterX ?? rc.worldSize / 2;
+      const mapCenterY = snap?.mapCenterY ?? rc.worldSize / 2;
+
+      if (dynamicMapRadius) {
+        // Online mode: draw grid + dynamic map boundary
+        drawGrid(rc);
+        drawMapBoundary(ctx, mapCenterX, mapCenterY, dynamicMapRadius, now);
+      } else {
+        // Fallback: fixed breathing arena
+        drawGrid(rc);
+      }
 
       // --- Draw food ---
       if (snap) {
         drawFood(rc, snap.foods);
       }
 
-      // --- Draw snakes (player last, on top) ---
+      // --- Draw snakes with opacity layering (player last, on top) ---
       if (snap) {
+        // Use drawSnakeWithLayering for opacity system:
+        // larger snakes fade to 75% when a smaller snake passes underneath
         for (const s of snap.snakes) {
-          if (s.id !== myId) drawSnake(rc, s);
+          if (s.id !== myId) drawSnakeWithLayering(rc, s, snap.snakes);
         }
         if (mySnake) drawSnake(rc, mySnake);
+
+        // Draw chip labels above real player heads (NOT bots)
+        for (const s of snap.snakes) {
+          if (s.isPlayer && s.carriedChips > 0 && s.points && s.points.length > 0) {
+            const head = s.points[0];
+            drawChipLabel(ctx, head.x, head.y, s.carriedChips, s.size, cam.zoom);
+          }
+        }
       }
 
       // --- Draw particles ---
@@ -1208,13 +1287,15 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         const mmSize = 96;
         const mmX = cssW - mmSize - 12;
         const mmY = cssH - mmSize - 12;
+        // Use dynamic mapRadius from server snapshot, fallback to breathing formula
+        const mmArenaRadius = dynamicMapRadius ?? getArenaRadius(now);
         drawMinimap({
           ctx,
           x: mmX,
           y: mmY,
           size: mmSize,
           worldSize: rc.worldSize,
-          arenaRadius: getArenaRadius(now),
+          arenaRadius: mmArenaRadius,
           snakes: snap.snakes,
           myId: myId ?? '',
           range: 1800,
@@ -1580,6 +1661,9 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
     setPhase('connecting');
     setConnectingMsg('Rejoining arena…');
     snapshotRef.current = null;
+    // Clear replay buffer on reset
+    replayBufferRef.current = [];
+    replayWriteIdxRef.current = 0;
     camInitRef.current = false;
     particlesRef.current = [];
     socketRef.current.emit('join_arena', { arenaId: arenaIdRef.current });
@@ -2100,6 +2184,246 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
 }
 
 // ---------------------------------------------------------------------------
+// ReplayPlayer sub-component — renders last 30s of gameplay on a canvas
+// ---------------------------------------------------------------------------
+
+interface ReplayPlayerProps {
+  frames: GameSnapshot[];
+  myId: string;
+  onClose: () => void;
+}
+
+const REPLAY_SPEEDS = [0.25, 0.5, 1, 2] as const;
+
+function ReplayPlayer({ frames, myId, onClose }: ReplayPlayerProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const frameIdxRef = useRef(0);
+  const playingRef = useRef(true);
+  const speedRef = useRef(1);
+  const zoomRef = useRef(0.8);
+  const lastTimeRef = useRef(0);
+  const [playing, setPlaying] = useState(true);
+  const [speed, setSpeed] = useState(1);
+  const [zoom, setZoom] = useState(0.8);
+  const [frameIdx, setFrameIdx] = useState(0);
+  const totalFrames = frames.length;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || totalFrames === 0) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    ctx.scale(dpr, dpr);
+
+    const render = (now: number) => {
+      if (!playingRef.current) {
+        lastTimeRef.current = now;
+        rafRef.current = requestAnimationFrame(render);
+        return;
+      }
+
+      const dt = now - lastTimeRef.current;
+      const frameInterval = 50 / speedRef.current; // 50ms per frame at 1x
+      if (dt >= frameInterval) {
+        frameIdxRef.current = (frameIdxRef.current + 1) % totalFrames;
+        lastTimeRef.current = now;
+        setFrameIdx(frameIdxRef.current);
+      }
+
+      const snap = frames[frameIdxRef.current];
+      if (!snap) {
+        rafRef.current = requestAnimationFrame(render);
+        return;
+      }
+
+      // Clear
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(0, 0, w, h);
+
+      // Camera follows player
+      const me = snap.snakes.find((s) => s.id === myId);
+      const camX = me?.points?.[0]?.x ?? snap.mapCenterX ?? 4000;
+      const camY = me?.points?.[0]?.y ?? snap.mapCenterY ?? 4000;
+      const z = zoomRef.current;
+
+      // World transform
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.translate(w / 2, h / 2);
+      ctx.scale(z, z);
+      ctx.translate(-camX, -camY);
+
+      // Draw grid (minimal)
+      const gridSize = 80;
+      const viewL = camX - w / 2 / z - gridSize;
+      const viewR = camX + w / 2 / z + gridSize;
+      const viewT = camY - h / 2 / z - gridSize;
+      const viewB = camY + h / 2 / z + gridSize;
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      const sX = Math.floor(viewL / gridSize) * gridSize;
+      const eX = Math.ceil(viewR / gridSize) * gridSize;
+      const sY = Math.floor(viewT / gridSize) * gridSize;
+      const eY = Math.ceil(viewB / gridSize) * gridSize;
+      for (let x = sX; x <= eX; x += gridSize) { ctx.moveTo(x, viewT); ctx.lineTo(x, viewB); }
+      for (let y = sY; y <= eY; y += gridSize) { ctx.moveTo(viewL, y); ctx.lineTo(viewR, y); }
+      ctx.stroke();
+
+      // Draw food
+      for (const f of snap.foods) {
+        if (f.x < viewL || f.x > viewR || f.y < viewT || f.y > viewB) continue;
+        if (f.isStarChip) {
+          drawStarCollectible(ctx, f.x, f.y, Math.max(6, f.size + 4), now, false);
+        } else {
+          drawFoodOrb(ctx, f.x, f.y, f.size, f.value, f.color, f.glowColor ?? '', now, true);
+        }
+      }
+
+      // Draw snakes
+      for (const s of snap.snakes) {
+        if (!s.points || s.points.length === 0) continue;
+        const head = s.points[0];
+        if (head.x < viewL - 100 || head.x > viewR + 100 || head.y < viewT - 100 || head.y > viewB + 100) continue;
+
+        const rc: FrameRenderCtx = {
+          ctx, w, h, camX, camY, zoom: z,
+          worldSize: snap.worldSize, lowQuality: true,
+          myId, now, metallicCache: new Map(), playerSkin: undefined, dpr,
+        };
+        drawSnake(rc, s);
+      }
+
+      // Draw map boundary
+      if (snap.mapRadius && snap.mapRadius > 0) {
+        drawMapBoundary(ctx, snap.mapCenterX ?? 4000, snap.mapCenterY ?? 4000, snap.mapRadius, now);
+      }
+
+      // Draw replay watermark
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.font = 'bold 12px monospace';
+      ctx.fillStyle = 'rgba(244, 63, 94, 0.8)';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText('⏺ REPLAY', 10, 10);
+      const timeStr = `Frame ${frameIdxRef.current + 1}/${totalFrames}`;
+      ctx.fillStyle = 'rgba(226, 232, 240, 0.6)';
+      ctx.font = '10px monospace';
+      ctx.fillText(timeStr, 10, 26);
+
+      rafRef.current = requestAnimationFrame(render);
+    };
+
+    lastTimeRef.current = performance.now();
+    rafRef.current = requestAnimationFrame(render);
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [frames, myId, totalFrames]);
+
+  const togglePlay = () => {
+    playingRef.current = !playingRef.current;
+    setPlaying(playingRef.current);
+  };
+
+  const cycleSpeed = () => {
+    const curIdx = REPLAY_SPEEDS.indexOf(speed as 0.25 | 0.5 | 1 | 2);
+    const nextIdx = (curIdx + 1) % REPLAY_SPEEDS.length;
+    const newSpeed = REPLAY_SPEEDS[nextIdx];
+    speedRef.current = newSpeed;
+    setSpeed(newSpeed);
+  };
+
+  const adjustZoom = (delta: number) => {
+    zoomRef.current = Math.max(0.3, Math.min(2, zoomRef.current + delta));
+    setZoom(zoomRef.current);
+  };
+
+  const restart = () => {
+    frameIdxRef.current = 0;
+    playingRef.current = true;
+    setPlaying(true);
+    setFrameIdx(0);
+  };
+
+  if (totalFrames === 0) return null;
+
+  const progress = totalFrames > 0 ? (frameIdx / (totalFrames - 1)) * 100 : 0;
+
+  return (
+    <div className="relative w-full rounded-lg overflow-hidden border border-slate-800 bg-slate-950">
+      {/* Replay canvas */}
+      <canvas
+        ref={canvasRef}
+        className="w-full aspect-video cursor-crosshair"
+        style={{ display: 'block' }}
+      />
+
+      {/* Progress bar */}
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800">
+        <div className="h-full bg-rose-500 transition-all duration-75" style={{ width: `${progress}%` }} />
+      </div>
+
+      {/* Controls */}
+      <div className="absolute bottom-3 left-0 right-0 flex items-center justify-center gap-2">
+        <button
+          type="button"
+          onClick={restart}
+          className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-900/80 text-white hover:bg-slate-800 transition-colors"
+          title="Restart"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={togglePlay}
+          className="flex h-9 w-9 items-center justify-center rounded-md bg-rose-600 text-white hover:bg-rose-700 transition-colors"
+        >
+          {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+        </button>
+        <button
+          type="button"
+          onClick={cycleSpeed}
+          className="flex h-8 items-center justify-center rounded-md bg-slate-900/80 px-2.5 text-white text-xs font-mono font-bold hover:bg-slate-800 transition-colors"
+        >
+          {speed}x
+        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => adjustZoom(-0.15)}
+            className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-900/80 text-white hover:bg-slate-800 transition-colors"
+            title="Zoom out"
+          >
+            <ZoomOut className="h-3.5 w-3.5" />
+          </button>
+          <span className="text-[10px] text-slate-400 font-mono w-8 text-center">
+            {Math.round(zoom * 100)}%
+          </span>
+          <button
+            type="button"
+            onClick={() => adjustZoom(0.15)}
+            className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-900/80 text-white hover:bg-slate-800 transition-colors"
+            title="Zoom in"
+          >
+            <ZoomIn className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // EndOverlay sub-component (death or extract) — matches AUDIT-A Sections B+C
 // ---------------------------------------------------------------------------
 
@@ -2126,7 +2450,7 @@ function EndOverlay({
   onAddRival,
   onAddFriend,
 }: EndOverlayProps) {
-  const { outcome, killer, result, durationSeconds, carriedChips, score } = endScreen;
+  const { outcome, killer, result, durationSeconds, carriedChips, score, replayFrames, replayMyId } = endScreen;
   const isExtract = outcome === 'extract';
   const mins = Math.floor(durationSeconds / 60);
   const secs = durationSeconds % 60;
@@ -2134,6 +2458,10 @@ function EndOverlay({
   const snakeLength = score;
   const kills = result?.kills ?? 0;
   const leveledUp = result && result.newLevel > previousLevel;
+
+  // Replay toggle (death only)
+  const [showReplay, setShowReplay] = useState(false);
+  const hasReplay = !isExtract && replayFrames && replayFrames.length > 10;
 
   // Online extract: banked chips after commission (65% retained).
   const commission = isExtract && !isOffline ? Math.floor(carriedChips * EXTRACT_COMMISSION) : 0;
@@ -2270,6 +2598,33 @@ function EndOverlay({
                   <UserPlus className="h-3 w-3" /> Add Friend
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Replay viewer (death only) */}
+          {hasReplay && !showReplay && (
+            <button
+              type="button"
+              onClick={() => setShowReplay(true)}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-indigo-500/30 bg-indigo-500/10 py-2.5 text-xs font-bold text-indigo-300 hover:bg-indigo-500/20 transition-colors"
+            >
+              📺 Watch Death Replay (Last 30s)
+            </button>
+          )}
+          {hasReplay && showReplay && (
+            <div className="mt-3">
+              <ReplayPlayer
+                frames={replayFrames!}
+                myId={replayMyId ?? ''}
+                onClose={() => setShowReplay(false)}
+              />
+              <button
+                type="button"
+                onClick={() => setShowReplay(false)}
+                className="mt-2 flex w-full items-center justify-center gap-1 rounded-md bg-slate-800 py-1.5 text-[10px] font-bold text-slate-300 hover:bg-slate-700 transition-colors"
+              >
+                Hide Replay
+              </button>
             </div>
           )}
 
