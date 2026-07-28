@@ -36,6 +36,7 @@ import {
   EXTRACT_DURATION_MS,
   INITIAL_BODY_LENGTH,
   INITIAL_SPAWN_SCORE,
+  FOOD_ORB_SMALL,
   RESPAWN_INVULN_MS,
   SIZE_BASE,
   SIZE_SCORE_FACTOR,
@@ -61,6 +62,7 @@ import {
   eatFood,
   ensureBots,
   expireChat,
+  findSafeSpawnPoint,
   initialBody,
   randomSpawnPoint,
   recomputeLeader,
@@ -354,6 +356,7 @@ async function settleMatch(
         killerName: killer?.name,
         killerTag: killer?.userTag,
         killerColor: killer?.color,
+        killerIsBot: killer?.isBot ?? true,
       });
     }
   }
@@ -424,7 +427,21 @@ function tickRoom(room: ArenaRoom, now: number): void {
   for (const session of room.players.values()) {
     if (session.isDead || session.matchSettling) continue;
     try {
-      tickSnakeMovement(session, session.desiredAngle, session.wantsBoost);
+      const dropped = tickSnakeMovement(session, session.desiredAngle, session.wantsBoost);
+      // Add boost-dropped food orbs to the room.
+      for (const pt of dropped) {
+        room.foods.push({
+          id: `food-${room.arena.id}-${room.foodIdCounter++}`,
+          x: pt.x,
+          y: pt.y,
+          size: FOOD_ORB_SMALL.radius,
+          value: 1,
+          isStarChip: false,
+          color: FOOD_ORB_SMALL.color,
+          glowColor: FOOD_ORB_SMALL.glowColor,
+          orbSize: 'small',
+        });
+      }
     } catch (err) {
       log('error', `Player movement error: ${(err as Error).message}`);
     }
@@ -442,15 +459,15 @@ function tickRoom(room: ArenaRoom, now: number): void {
   }
 
   // 7) Apply deaths with CORRECT drop rules per spec:
-  //    Body/headOn collision: drop score orbs (all snakes) + 10 stars (real players only).
+  //    Body/headOn collision: drop score orbs (ALL snakes, including selfDestruct bots) + 10 stars (real players only).
   //    Wall death: drop 0 food (score destroyed) + 10 stars (real players only).
-  //    Bot in selfDestruct wall death: drop 0 food, 0 stars (vanish cleanly).
+  //    Bot selfDestruct WALL death: 0 food, 0 stars (vanish cleanly).
+  //    Bot selfDestruct COLLISION death: STILL drops food (only wall death vanishes cleanly).
   for (const death of deaths) {
     const dead = room.players.get(death.deadId) || (room.bots.get(death.deadId) as SnakeBase | undefined);
     if (!dead || dead.isDead) continue;
     dead.isDead = true;
 
-    const isBotSelfDestruct = dead.isBot && (dead as BotSession).botState === 'selfDestruct';
     const headX = dead.points[0]?.x ?? 0;
     const headY = dead.points[0]?.y ?? 0;
 
@@ -462,12 +479,12 @@ function tickRoom(room: ArenaRoom, now: number): void {
       }
       // Bot wall death (selfDestruct): 0 food, 0 stars — vanish cleanly.
     } else {
-      // Body or headOn collision: drop score orbs (sum = snake.score) + 10 stars (players only).
-      if (!isBotSelfDestruct) {
-        dropScoreOrbsAtBody(room, dead.points, dead.score, dead.color);
-        if (dead.isPlayer && dead.carriedChips > 0) {
-          dropStarsAtDeath(room, headX, headY, dead.carriedChips);
-        }
+      // Body or headOn collision: ALL snakes drop score orbs (sum = snake.score).
+      // selfDestruct bots that die by COLLISION still drop food (only WALL death vanishes cleanly).
+      dropScoreOrbsAtBody(room, dead.points, dead.score, dead.color);
+      // Stars: real players only.
+      if (dead.isPlayer && dead.carriedChips > 0) {
+        dropStarsAtDeath(room, headX, headY, dead.carriedChips);
       }
     }
 
@@ -752,7 +769,7 @@ async function handleJoinArena(socket: Socket, payload: unknown): Promise<void> 
 
   const realPlayerCount = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
   const mapRadius = getDynamicMapRadius(Math.max(1, realPlayerCount));
-  const spawn = randomSpawnPoint(mapRadius - 200, room.mapCenterX, room.mapCenterY);
+  const spawn = findSafeSpawnPoint(room, mapRadius - 200, room.mapCenterX, room.mapCenterY);
   const angle = Math.random() * Math.PI * 2;
   const session: PlayerSession = {
     id: socket.id,

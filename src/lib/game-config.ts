@@ -349,6 +349,14 @@ export const BOT_SELF_DESTRUCT_THRESHOLD = 100; // score at which bots self-dest
 export const BOT_EVADE_RADIUS = 180; // distance at which bots start evading human players
 export const BOT_FOOD_SCAN_RADIUS = 300; // how far bots scan for food
 
+// Neck protection: first N segments behind the head are immune to head-to-body collision.
+// Prevents "close call" deaths where a head barely touches the neck area.
+export const NECK_PROTECTION_SEGS = 5;
+
+// Safe spawn: minimum distance from any existing snake when spawning
+export const SAFE_SPAWN_MIN_DIST = 300;
+export const SAFE_SPAWN_ATTEMPTS = 20; // max attempts to find safe spawn point
+
 // ----------------------------------------------------------------------------
 // Daily rewards (7-day cycle, repeats) — original: [10,20,50,100,250,500,1000]
 // ----------------------------------------------------------------------------

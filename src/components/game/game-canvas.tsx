@@ -61,6 +61,7 @@ import {
   Skull,
   Swords,
   Trophy,
+  User,
   UserPlus,
   Users,
   WifiOff,
@@ -312,6 +313,8 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
   const REPLAY_MAX_FRAMES = 600;
   const replayBufferRef = useRef<GameSnapshot[]>([]);
   const replayWriteIdxRef = useRef<number>(0);
+  // Post-death recording: continue recording 100 more frames (5s at 20Hz) after death
+  const postDeathRecordRef = useRef<number>(0);
 
   const recordReplayFrame = useCallback((snap: GameSnapshot) => {
     const buf = replayBufferRef.current;
@@ -598,9 +601,12 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         const data = payload as GameSnapshot;
         if (!data || !Array.isArray(data.snakes) || !Array.isArray(data.foods)) return;
         snapshotRef.current = data;
-        // Record frame for replay (only while playing)
-        if (phaseRef.current === 'playing') {
+        // Record frame for replay: while playing OR during post-death 5s window
+        if (phaseRef.current === 'playing' || postDeathRecordRef.current > 0) {
           recordReplayFrame(data);
+          if (postDeathRecordRef.current > 0) {
+            postDeathRecordRef.current--;
+          }
         }
 
         // --- BUILD-13: server-provided arena-wide fields (online mode) ---
@@ -825,6 +831,10 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
             }
           : undefined;
         const duration = Math.floor((Date.now() - startTimeRef.current) / 1000);
+
+        // Start post-death recording: 100 frames = 5 seconds at 20Hz
+        postDeathRecordRef.current = 100;
+
         setPhase('ended');
         if (!isOffline) {
           toast({
@@ -838,17 +848,29 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
             description: 'CRASH! (Offline Practice Mode - No chips lost!)',
           });
         }
+
+        // Delay capturing replay frames to include post-death frames.
+        // The replay capture happens after the 5s window in the snapshot handler.
+        // But we also set the endScreen now with current replay (pre-death).
+        // We'll update it again when post-death recording completes.
         setEndScreen({
           outcome: 'death',
           killer,
           durationSeconds: duration,
           carriedChips: carriedRef.current,
           score: scoreRef.current,
-          // Attach replay frames for death
           replayFrames: getReplayFrames(),
           replayMyId: mySnakeIdRef.current ?? undefined,
-          // Final stats pending — server will send match_result shortly.
         });
+
+        // After 5s post-death recording completes, update endScreen with final frames.
+        // We use a check in the snapshot handler or a setTimeout as fallback.
+        setTimeout(() => {
+          setEndScreen(prev => prev?.outcome === 'death' ? {
+            ...prev,
+            replayFrames: getReplayFrames(),
+          } : prev);
+        }, 5500); // slightly more than 5s to ensure all 100 frames captured
       };
 
       const onChat = (payload: unknown) => {
@@ -2134,6 +2156,14 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
               });
             }
           }}
+          onViewProfile={() => {
+            if (endScreen.killer?.tag) {
+              toast({
+                title: 'Viewing Profile',
+                description: `👁️ Viewing ${endScreen.killer.name}'s profile (${endScreen.killer.tag})`,
+              });
+            }
+          }}
         />
       )}
 
@@ -2426,6 +2456,7 @@ interface EndOverlayProps {
   onExit: () => void;
   onAddRival: () => void;
   onAddFriend: () => void;
+  onViewProfile: () => void;
 }
 
 function EndOverlay({
@@ -2438,6 +2469,7 @@ function EndOverlay({
   onExit,
   onAddRival,
   onAddFriend,
+  onViewProfile,
 }: EndOverlayProps) {
   const { outcome, killer, result, durationSeconds, carriedChips, score, replayFrames, replayMyId } = endScreen;
   const isExtract = outcome === 'extract';
@@ -2572,22 +2604,32 @@ function EndOverlay({
                   </div>
                 </div>
               </div>
-              <div className="mt-3 flex gap-2">
-                <button
-                  type="button"
-                  onClick={onAddRival}
-                  className="flex items-center gap-1 rounded-md bg-rose-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-rose-700"
-                >
-                  <Swords className="h-3 w-3" /> Add Rival
-                </button>
-                <button
-                  type="button"
-                  onClick={onAddFriend}
-                  className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-slate-700"
-                >
-                  <UserPlus className="h-3 w-3" /> Add Friend
-                </button>
-              </div>
+              {/* Social buttons: only for real players (not bots) */}
+              {killer.isBot === false && (
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={onViewProfile}
+                    className="flex items-center gap-1 rounded-md bg-slate-700 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-slate-600"
+                  >
+                    <User className="h-3 w-3" /> View Profile
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onAddRival}
+                    className="flex items-center gap-1 rounded-md bg-rose-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-rose-700"
+                  >
+                    <Swords className="h-3 w-3" /> Add Rival
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onAddFriend}
+                    className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-slate-700"
+                  >
+                    <UserPlus className="h-3 w-3" /> Add Friend
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -2598,7 +2640,7 @@ function EndOverlay({
               onClick={() => setShowReplay(true)}
               className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-indigo-500/30 bg-indigo-500/10 py-2.5 text-xs font-bold text-indigo-300 hover:bg-indigo-500/20 transition-colors"
             >
-              📺 Watch Death Replay (Last 30s)
+              📺 Watch Death Replay
             </button>
           )}
           {hasReplay && showReplay && (
