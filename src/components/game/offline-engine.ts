@@ -113,6 +113,27 @@ interface BotSession extends SnakeBase {
   botId: string;
   personality: BotPersonality;
   nextThinkAt: number;
+  /** Index into the virtualBots array this active bot came from. */
+  virtualIdx: number;
+}
+
+/** Lightweight bot definition for the virtual pool (1000 total). Only stores identity + cheap position.
+ *  Active bots (BotSession) are created from these when near the player. */
+interface VirtualBot {
+  idx: number;
+  id: string;
+  botId: string;
+  name: string;
+  personality: BotPersonality;
+  color: string;
+  secondaryColor: string;
+  initialScore: number;
+  /** Cheap world position — updated each tick with straight-line wander. */
+  x: number;
+  y: number;
+  angle: number;
+  score: number;
+  isActive: boolean;
 }
 
 interface Food {
@@ -268,14 +289,20 @@ const QUICK_EMOTES = [
   'Extracting soon! ⚡',
 ];
 
+// Virtual bot pool constants
+const VIRTUAL_BOT_COUNT = 1000;
+const ACTIVATION_RADIUS = 2500;   // activate virtual bots within this distance of player
+const DEACTIVATION_RADIUS = 3500; // deactivate active bots beyond this distance (hysteresis)
+const MAX_ACTIVE_BOTS = 60;       // max active bots at any time
+const VIRTUAL_BOT_SPEED = 2.5;    // cheap movement speed for inactive virtual bots
+const VIRTUAL_WORLD_RADIUS = 8000; // virtual bots are spread within this radius of player
+
 /** Food spawn radius around player (primary cluster). */
 const FOOD_SPAWN_RADIUS_NEAR = 1500;
 /** Some food scattered further out. */
 const FOOD_SPAWN_RADIUS_FAR = 2500;
 /** Fraction of replenishment food that spawns far. */
 const FOOD_FAR_FRACTION = 0.15;
-/** Bot spawn radius from origin at game start. */
-const BOT_SPAWN_RADIUS = 6000;
 /** Opacity layering proximity factor (multiplied by sum of sizes). */
 const OPACITY_PROXIMITY_FACTOR = 3;
 /** Opacity to which the larger snake fades. */
@@ -458,7 +485,10 @@ export class OfflineGameEngine {
 
   // World state
   private player: SnakeBase | null = null;
+  /** Active bots near the player (~50 max). Only these get full physics. */
   private bots: Map<string, BotSession> = new Map();
+  /** Virtual bot pool: 1000 bot definitions with cheap position tracking. */
+  private virtualBots: VirtualBot[] = [];
   private foods: Food[] = [];
   private boostDropQueue: { x: number; y: number }[] = [];
   private grid: SpatialHashGrid = new SpatialHashGrid(120);
@@ -680,6 +710,7 @@ export class OfflineGameEngine {
 
   private resetWorld(): void {
     this.bots.clear();
+    this.virtualBots = [];
     this.foods = [];
     this.grid.clear();
     this.tick = 0;
@@ -714,12 +745,11 @@ export class OfflineGameEngine {
       isBoosting: false,
     };
 
-    // Spawn bots in a ring around the origin.
-    const botCount = 1000;
-    for (let i = 0; i < botCount; i++) {
-      const bot = this.spawnBot(0, 0);
-      this.bots.set(bot.id, bot);
-    }
+    // Create virtual bot pool: 1000 lightweight definitions spread across the world.
+    this.createVirtualBotPool(0, 0);
+
+    // Activate bots near the player (within ACTIVATION_RADIUS).
+    this.activateNearbyBots();
 
     // Spawn food orbs around the origin.
     for (let i = 0; i < FOOD_COUNT_TARGET; i++) {
@@ -731,46 +761,158 @@ export class OfflineGameEngine {
     this.updateHUD();
   }
 
-  /** Helper so we can pass idCounter by reference to food-creation helpers. */
-  private get idCounterObj(): { value: number } {
-    return { value: this.idCounter };
+  // --------------------------------------------------------------------------
+  // Virtual Bot Pool management
+  // --------------------------------------------------------------------------
+
+  /** Create 1000 virtual bot definitions with cheap positions spread around (cx, cy). */
+  private createVirtualBotPool(cx: number, cy: number): void {
+    this.virtualBots = [];
+    for (let i = 0; i < VIRTUAL_BOT_COUNT; i++) {
+      const baseName = BOT_NAMES[i % BOT_NAMES.length];
+      const name = i < BOT_NAMES.length ? baseName : `${baseName}-${Math.floor(i / BOT_NAMES.length) + 1}`;
+      const skin = BOT_SKINS[i % BOT_SKINS.length];
+      const personality = PERSONALITIES[i % PERSONALITIES.length];
+      const botId = `bot-${this.arena.id}-${i}`;
+      const initialScore = Math.floor(Math.random() * 80);
+
+      // Spread bots in a large ring. Use a mix of near and far positions.
+      const spawn = randomPointInCircle(cx, cy, VIRTUAL_WORLD_RADIUS);
+      const botAngle = Math.random() * Math.PI * 2;
+
+      this.virtualBots.push({
+        idx: i,
+        id: botId,
+        botId,
+        name,
+        personality,
+        color: skin.color,
+        secondaryColor: skin.secondaryColor,
+        initialScore,
+        x: spawn.x,
+        y: spawn.y,
+        angle: botAngle,
+        score: initialScore,
+        isActive: false,
+      });
+    }
   }
 
-  private spawnBot(cx: number, cy: number): BotSession {
-    const idx = this.idCounter++;
-    const baseName = BOT_NAMES[idx % BOT_NAMES.length];
-    const name =
-      idx < BOT_NAMES.length ? baseName : `${baseName}-${Math.floor(idx / BOT_NAMES.length) + 1}`;
-    const skin = BOT_SKINS[idx % BOT_SKINS.length];
-    const personality = PERSONALITIES[idx % PERSONALITIES.length];
-    const spawn = randomPointInCircle(cx, cy, BOT_SPAWN_RADIUS);
-    const angle = Math.random() * Math.PI * 2;
-    const botId = `bot-${this.arena.id}-${idx}`;
-    const initialScore = Math.floor(Math.random() * 80);
+  /** Cheaply update all virtual bot positions (straight-line wander). Called every tick but is very lightweight. */
+  private updateVirtualBotPositions(): void {
+    for (let i = 0; i < this.virtualBots.length; i++) {
+      const vb = this.virtualBots[i];
+      if (vb.isActive) continue; // active bots are moved by full physics
+      // Random angle tweak occasionally (use simple condition instead of Math.random for speed)
+      if (((this.tick + i) * 7919) % 1000 < 20) { // deterministic pseudo-random
+        vb.angle += (((this.tick + i) * 3571) % 1000 - 500) * 0.0016;
+      }
+      vb.x += Math.cos(vb.angle) * VIRTUAL_BOT_SPEED;
+      vb.y += Math.sin(vb.angle) * VIRTUAL_BOT_SPEED;
+    }
+  }
+
+  /** Activate virtual bots near the player, deactivate those far away. */
+  private activateNearbyBots(): void {
+    const p = this.player;
+    if (!p || p.points.length === 0) return;
+    const px = p.points[0].x;
+    const py = p.points[0].y;
+
+    // 1) Deactivate active bots that moved too far from the player.
+    const toDeactivate: string[] = [];
+    for (const [id, bot] of this.bots) {
+      if (bot.points.length === 0) continue;
+      const head = bot.points[0];
+      const d = dist(head.x, head.y, px, py);
+      if (d > DEACTIVATION_RADIUS) {
+        // Save state back to virtual bot
+        const vb = this.virtualBots[bot.virtualIdx];
+        if (vb) {
+          vb.x = head.x;
+          vb.y = head.y;
+          vb.angle = bot.angle;
+          vb.score = bot.score;
+          vb.isActive = false;
+        }
+        toDeactivate.push(id);
+      }
+    }
+    for (const id of toDeactivate) {
+      this.bots.delete(id);
+    }
+
+    // 2) Activate virtual bots within range (up to MAX_ACTIVE_BOTS).
+    // Only scan virtual pool every 10 ticks to reduce overhead.
+    if (this.tick % 10 !== 0) return;
+    if (this.bots.size >= MAX_ACTIVE_BOTS) return;
+
+    // Quick activation: scan virtual bots, find inactive ones within range.
+    // No sorting needed — just activate up to the limit.
+    for (let i = 0; i < this.virtualBots.length && this.bots.size < MAX_ACTIVE_BOTS; i++) {
+      const vb = this.virtualBots[i];
+      if (vb.isActive) continue;
+      const d = dist(vb.x, vb.y, px, py);
+      if (d < ACTIVATION_RADIUS) {
+        const bot = this.createActiveBotFromVirtual(vb, px, py);
+        this.bots.set(bot.id, bot);
+        vb.isActive = true;
+      }
+    }
+  }
+
+  /** Create a full BotSession from a VirtualBot definition. */
+  private createActiveBotFromVirtual(vb: VirtualBot, playerX: number, playerY: number): BotSession {
+    const now = performance.now();
+    const angle = vb.angle;
+    const bodyLen = INITIAL_BODY_LENGTH + Math.floor(Math.random() * 30);
     return {
-      id: botId,
-      botId,
-      name,
-      points: initialBody(spawn.x, spawn.y, angle, INITIAL_BODY_LENGTH + Math.floor(Math.random() * 30)),
+      id: vb.id,
+      botId: vb.botId,
+      name: vb.name,
+      points: initialBody(vb.x, vb.y, angle, bodyLen),
       angle,
-      size: SIZE_BASE + Math.sqrt(INITIAL_SPAWN_SCORE + initialScore) * SIZE_SCORE_FACTOR,
-      color: skin.color,
-      secondaryColor: skin.secondaryColor,
+      size: SIZE_BASE + Math.sqrt(INITIAL_SPAWN_SCORE + vb.score) * SIZE_SCORE_FACTOR,
+      color: vb.color,
+      secondaryColor: vb.secondaryColor,
       isPlayer: false,
       isBot: true,
-      score: initialScore,
+      score: vb.score,
       boostFrameCounter: 0,
       isExtracting: false,
       extractionProgress: 0,
       isDead: false,
-      spawnProtectedUntil: performance.now() + RESPAWN_INVULN_MS,
+      spawnProtectedUntil: now + RESPAWN_INVULN_MS,
       kills: 0,
       desiredAngle: angle,
       wantsBoost: false,
       isBoosting: false,
-      personality,
+      personality: vb.personality,
       nextThinkAt: 0,
+      virtualIdx: vb.idx,
     };
+  }
+
+  /** Reset a dead virtual bot to a random position (for recycling). */
+  private respawnVirtualBot(vb: VirtualBot, playerX: number, playerY: number): void {
+    vb.isActive = false;
+    const spawn = randomPointInCircle(playerX, playerY, VIRTUAL_WORLD_RADIUS);
+    const d = dist(spawn.x, spawn.y, playerX, playerY);
+    if (d < 1500) {
+      const farAngle = Math.atan2(spawn.y - playerY, spawn.x - playerX);
+      vb.x = playerX + Math.cos(farAngle) * (1500 + Math.random() * 2000);
+      vb.y = playerY + Math.sin(farAngle) * (1500 + Math.random() * 2000);
+    } else {
+      vb.x = spawn.x;
+      vb.y = spawn.y;
+    }
+    vb.angle = Math.random() * Math.PI * 2;
+    vb.score = Math.floor(Math.random() * 80);
+  }
+
+  /** Helper so we can pass idCounter by reference to food-creation helpers. */
+  private get idCounterObj(): { value: number } {
+    return { value: this.idCounter };
   }
 
   // --------------------------------------------------------------------------
@@ -1062,7 +1204,11 @@ export class OfflineGameEngine {
     // 2) Move player.
     this.tickSnakeMovement(p, p.desiredAngle, p.wantsBoost);
 
-    // 3) Bots: think + move.
+    // 3) Update virtual bot positions cheaply + manage activation/deactivation.
+    this.updateVirtualBotPositions();
+    this.activateNearbyBots();
+
+    // 4) Bots: think + move (only active bots).
     for (const bot of this.bots.values()) {
       this.tickBot(bot, now);
     }
@@ -1138,30 +1284,23 @@ export class OfflineGameEngine {
       this.foods.push(...newDropFoods);
     }
 
-    // 8) Remove dead bots and respawn to maintain count.
+    // 8) Remove dead bots and recycle their virtual bots.
     if (deaths.length > 0) {
+      const pHead = p.points[0];
       const toRemove: string[] = [];
       for (const [id, bot] of this.bots) {
-        if (bot.isDead) toRemove.push(id);
+        if (bot.isDead) {
+          // Recycle the virtual bot to a new random position
+          const vb = this.virtualBots[bot.virtualIdx];
+          if (vb) {
+            this.respawnVirtualBot(vb, pHead.x, pHead.y);
+          }
+          toRemove.push(id);
+        }
       }
       for (const id of toRemove) {
         this.bots.delete(id);
       }
-    }
-    // Respawn bots near the player to maintain count.
-    const pHead = p.points[0];
-    while (this.bots.size < 1000) {
-      const bot = this.spawnBot(pHead.x, pHead.y);
-      // Simplified safe spawn: ensure >500px from player only.
-      // With 1000 bots, checking all bot distances per attempt is too expensive;
-      // accept that some bots may be near each other — they'll separate naturally.
-      for (let attempt = 0; attempt < 20; attempt++) {
-        const spawnPt = bot.points[0];
-        if (dist(spawnPt.x, spawnPt.y, pHead.x, pHead.y) >= 500) break;
-        const far = randomPointInCircle(pHead.x, pHead.y, BOT_SPAWN_RADIUS);
-        bot.points = initialBody(far.x, far.y, bot.angle, INITIAL_BODY_LENGTH);
-      }
-      this.bots.set(bot.id, bot);
     }
 
     // 9) Player death → enter post-death recording (15s of continued simulation).
@@ -1578,22 +1717,23 @@ export class OfflineGameEngine {
       this.foods.push(...newDropFoods);
     }
 
-    // Remove dead bots and respawn to maintain count
+    // Remove dead bots and recycle virtual bots
     if (deaths.length > 0) {
       const toRemove: string[] = [];
       for (const [id, bot] of this.bots) {
-        if (bot.isDead) toRemove.push(id);
+        if (bot.isDead) {
+          const vb = this.virtualBots[bot.virtualIdx];
+          if (vb) {
+            this.respawnVirtualBot(vb, this.deathCamX, this.deathCamY);
+          }
+          toRemove.push(id);
+        }
       }
       for (const id of toRemove) {
         this.bots.delete(id);
       }
     }
-    const cx = this.deathCamX;
-    const cy = this.deathCamY;
-    while (this.bots.size < 1000) {
-      const bot = this.spawnBot(cx, cy);
-      this.bots.set(bot.id, bot);
-    }
+    // Note: no respawn loop needed — virtual pool handles recycling.
 
     // Replenish food
     this.replenishFood();
@@ -2547,7 +2687,7 @@ export class OfflineGameEngine {
     const totalScore = INITIAL_SPAWN_SCORE + p.score;
     if (this.hudEls.score) this.hudEls.score.textContent = totalScore.toLocaleString();
     if (this.hudEls.kills) this.hudEls.kills.textContent = String(p.kills);
-    if (this.hudEls.bots) this.hudEls.bots.textContent = String(this.bots.size);
+    if (this.hudEls.bots) this.hudEls.bots.textContent = String(VIRTUAL_BOT_COUNT);
     if (this.hudEls.fps) this.hudEls.fps.textContent = `${this.fps} fps`;
 
     // Rank by total score (player + bots).
