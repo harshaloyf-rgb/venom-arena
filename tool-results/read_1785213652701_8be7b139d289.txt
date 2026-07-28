@@ -1,0 +1,1021 @@
+     1→     1→// ============================================================================
+     2→     2→// game-state.ts — In-memory per-arena game state + pure game logic.
+     3→     3→// ----------------------------------------------------------------------------
+     4→     4→// REWRITTEN per new spec:
+     5→     5→//  * Three food orb sizes (Small=1pt, Medium=3pt, Large=5pt)
+     6→     6→//  * Score model: INITIAL_SPAWN_SCORE(20) + food collected
+     7→     7→//  * Star drops: ALWAYS exactly 10 per player death
+     8→     8→//  * Death food: exact sum matching snake's total score
+     9→     9→//  * Head-on collision: mass + boost priority rules
+    10→    10→//  * Bot AI: all bots evade humans, self-destruct at score >= 100 (online only)
+    11→    11→//  * Dynamic map radius based on real player count
+    12→    12→// ============================================================================
+    13→    13→
+    14→    14→import {
+    15→    15→  BASE_SPEED,
+    16→    16→  BOOST_DROP_INTERVAL,
+    17→    17→  BOOST_MIN_LENGTH,
+    18→    18→  BOOST_SPEED,
+    19→    19→  BOT_EVADE_RADIUS,
+    20→    20→  BOT_FOOD_SCAN_RADIUS,
+    21→    21→  BOT_NAMES,
+    22→    22→  BOT_SELF_DESTRUCT_THRESHOLD,
+    23→    23→  BOT_SKINS,
+    24→    24→  COLLISION_HIT_FACTOR,
+    25→    25→  EXTRACT_DURATION_MS,
+    26→    26→  EXTRACT_GLIDE_SPEED,
+    27→    27→  FOOD_COUNT_TARGET,
+    28→    28→  FOOD_ORB_LARGE,
+    29→    29→  FOOD_ORB_MEDIUM,
+    30→    30→  FOOD_ORB_SMALL,
+    31→    31→  FOOD_ORB_WEIGHTS,
+    32→    32→  HEAD_ON_HIT_FACTOR,
+    33→    33→  INITIAL_BODY_LENGTH,
+    34→    34→  INITIAL_SPAWN_SCORE,
+    35→    35→  MAP_MIN_RADIUS,
+    36→    36→  MAX_BODY_LENGTH,
+    37→    37→  MAX_ARENA_PLAYERS,
+    38→    38→  RESPAWN_INVULN_MS,
+    39→    39→  SEGMENT_SPACING,
+    40→    40→  SIZE_BASE,
+    41→    41→  SIZE_SCORE_FACTOR,
+    42→    42→  STAR_CHIP_GROW,
+    43→    43→  STAR_DROP_COUNT,
+    44→    44→  TICK_MS,
+    45→    45→  TURN_BASE,
+    46→    46→  TURN_MIN,
+    47→    47→  TURN_SCORE_FACTOR,
+    48→    48→  WORLD_SIZE,
+    49→    49→  getDynamicMapRadius,
+    50→    50→  type ArenaTier,
+    51→    51→  type FoodOrbConfig,
+    52→    52→} from '../../src/lib/game-config';
+    53→    53→import type {
+    54→    54→  FoodSnapshot,
+    55→    55→  GameSnapshot,
+    56→    56→  SnakeSnapshot,
+    57→    57→} from '../../src/lib/types';
+    58→    58→import { SpatialHashGrid, type GridItem } from './spatial-grid.js';
+    59→    59→
+    60→    60→// ----------------------------------------------------------------------------
+    61→    61→// Types
+    62→    62→// ----------------------------------------------------------------------------
+    63→    63→
+    64→    64→export interface Vec2 {
+    65→    65→  x: number;
+    66→    66→  y: number;
+    67→    67→}
+    68→    68→
+    69→    69→/** Identity returned by POST /api/match/verify. Treated as immutable trust. */
+    70→    70→export interface PlayerIdentity {
+    71→    71→  id: string;
+    72→    72→  userTag: string;
+    73→    73→  name: string;
+    74→    74→  country: string;
+    75→    75→  level: number;
+    76→    76→  bankedChips?: number;
+    77→    77→  currentSkin: string;
+    78→    78→  currentTrail: string;
+    79→    79→  currentDeath: string;
+    80→    80→  currentFlag: string | null;
+    81→    81→  color: string;
+    82→    82→  secondaryColor?: string;
+    83→    83→  pattern?: string;
+    84→    84→  unlockedSkins: string[];
+    85→    85→  clanTag: string | null;
+    86→    86→  clanRank: string | null;
+    87→    87→  role: 'player' | 'admin';
+    88→    88→}
+    89→    89→
+    90→    90→/** Shared shape between human players and bots. */
+    91→    91→export interface SnakeBase {
+    92→    92→  id: string;
+    93→    93→  name: string;
+    94→    94→  userTag?: string;
+    95→    95→  country?: string;
+    96→    96→  /** Body points; index 0 is the head. */
+    97→    97→  points: Vec2[];
+    98→    98→  angle: number;
+    99→    99→  /** Visual radius in px; used for both rendering and collision. */
+   100→   100→  size: number;
+   101→   101→  color: string;
+   102→   102→  secondaryColor?: string;
+   103→   103→  isPlayer: boolean;
+   104→   104→  isBot: boolean;
+   105→   105→  /** Chips carried in-match (ONLY from star chips). Lost on death, banked on extract. */
+   106→   106→  carriedChips: number;
+   107→   107→  /** Total score: INITIAL_SPAWN_SCORE + all food collected. Determines body length & size. */
+   108→   108→  score: number;
+   109→   109→  /** Frame counter for boost drop interval. */
+   110→   110→  boostFrameCounter: number;
+   111→   111→  isExtracting: boolean;
+   112→   112→  /** ms accumulated toward EXTRACT_DURATION_MS. */
+   113→   113→  extractionProgress: number;
+   114→   114→  isDead: boolean;
+   115→   115→  /** epoch ms; snake is invulnerable until this timestamp. */
+   116→   116→  spawnProtectedUntil: number;
+   117→   117→  chatMessage?: string;
+   118→   118→  chatExpiry?: number;
+   119→   119→  /** Whether the snake is actively boosting (for head-on collision rules). */
+   120→   120→  wantsBoost: boolean;
+   121→   121→  /** Bot behavioral state (online mode only). */
+   122→   122→  botState?: 'harvesting' | 'selfDestruct';
+   123→   123→}
+   124→   124→
+   125→   125→/** A human-controlled snake. */
+   126→   126→export interface PlayerSession extends SnakeBase {
+   127→   127→  identity: PlayerIdentity;
+   128→   128→  /** Last validated desired angle sent by the client. */
+   129→   129→  desiredAngle: number;
+   130→   130→  kills: number;
+   131→   131→  joinedAt: number;
+   132→   132→  lastInputAt: number;
+   133→   133→  /** Counts consecutive rate-limit drops; logged when abusey. */
+   134→   134→  inputDropCount: number;
+   135→   135→  lastChatAt: number;
+   136→   136→  arenaId: string | null;
+   137→   137→  /** True while we're awaiting /api/match/result response — prevents double-report. */
+   138→   138→  matchSettling: boolean;
+   139→   139→}
+   140→   140→
+   141→   141→export type BotPersonality = 'scavenger' | 'opportunist' | 'hunter' | 'extractor' | 'coward';
+   142→   142→
+   143→   143→/** An AI-controlled snake. */
+   144→   144→export interface BotSession extends SnakeBase {
+   145→   145→  botId: string;
+   146→   146→  personality: BotPersonality;
+   147→   147→  /** epoch ms; next time the bot re-evaluates its target angle. */
+   148→   148→  nextThinkAt: number;
+   149→   149→  /** Cached desired angle between re-thinks. */
+   150→   150→  desiredAngle: number;
+   151→   151→}
+   152→   152→
+   153→   153→export interface Food {
+   154→   154→  id: string;
+   155→   155→  x: number;
+   156→   156→  y: number;
+   157→   157→  size: number;
+   158→   158→  value: number;
+   159→   159→  isStarChip: boolean;
+   160→   160→  color: string;
+   161→   161→  glowColor?: string;
+   162→   162→  orbSize?: 'small' | 'medium' | 'large';
+   163→   163→}
+   164→   164→
+   165→   165→/** One arena's full in-memory state. */
+   166→   166→export interface ArenaRoom {
+   167→   167→  arena: ArenaTier;
+   168→   168→  players: Map<string, PlayerSession>;
+   169→   169→  bots: Map<string, BotSession>;
+   170→   170→  foods: Food[];
+   171→   171→  grid: SpatialHashGrid;
+   172→   172→  tick: number;
+   173→   173→  lastBroadcast: number;
+   174→   174→  leaderId: string | null;
+   175→   175→  leaderChips: number;
+   176→   176→  /** Monotonic counter for food ids within this arena. */
+   177→   177→  foodIdCounter: number;
+   178→   178→  /** Monotonic counter for bot ids within this arena. */
+   179→   179→  botIdCounter: number;
+   180→   180→  /** Cached map center X for spawn/reference. */
+   181→   181→  mapCenterX: number;
+   182→   182→  /** Cached map center Y for spawn/reference. */
+   183→   183→  mapCenterY: number;
+   184→   184→}
+   185→   185→
+   186→   186→// ----------------------------------------------------------------------------
+   187→   187→// Constants
+   188→   188→// ----------------------------------------------------------------------------
+   189→   189→
+   190→   190→/** Max turn rate per tick (radians) for bots. */
+   191→   191→const MAX_TURN_PER_TICK = 0.22;
+   192→   192→/** Max points emitted in a snapshot — longer bodies are downsampled. */
+   193→   193→const MAX_SNAPSHOT_POINTS = 60;
+   194→   194→
+   195→   195→// Food orb configs for quick lookup
+   196→   196→const FOOD_ORB_CONFIGS: FoodOrbConfig[] = [
+   197→   197→  FOOD_ORB_SMALL,   // weight 0.6
+   198→   198→  FOOD_ORB_MEDIUM,  // weight 0.3
+   199→   199→  FOOD_ORB_LARGE,   // weight 0.1
+   200→   200→];
+   201→   201→
+   202→   202→// ----------------------------------------------------------------------------
+   203→   203→// Math helpers
+   204→   204→// ----------------------------------------------------------------------------
+   205→   205→
+   206→   206→function angularDelta(current: number, desired: number): number {
+   207→   207→  let diff = desired - current;
+   208→   208→  while (diff > Math.PI) diff -= 2 * Math.PI;
+   209→   209→  while (diff < -Math.PI) diff += 2 * Math.PI;
+   210→   210→  return diff;
+   211→   211→}
+   212→   212→
+   213→   213→export function turnToward(current: number, desired: number, maxStep: number): number {
+   214→   214→  const diff = angularDelta(current, desired);
+   215→   215→  if (Math.abs(diff) <= maxStep) return desired;
+   216→   216→  return current + Math.sign(diff) * maxStep;
+   217→   217→}
+   218→   218→
+   219→   219→function dist(ax: number, ay: number, bx: number, by: number): number {
+   220→   220→  return Math.hypot(ax - bx, ay - by);
+   221→   221→}
+   222→   222→
+   223→   223→// ----------------------------------------------------------------------------
+   224→   224→// Weighted random picker (for food orb spawning)
+   225→   225→// ----------------------------------------------------------------------------
+   226→   226→
+   227→   227→function weightedRandomIndex(weights: number[]): number {
+   228→   228→  const r = Math.random();
+   229→   229→  let cumulative = 0;
+   230→   230→  for (let i = 0; i < weights.length; i++) {
+   231→   231→    cumulative += weights[i];
+   232→   232→    if (r <= cumulative) return i;
+   233→   233→  }
+   234→   234→  return weights.length - 1;
+   235→   235→}
+   236→   236→
+   237→   237→// ----------------------------------------------------------------------------
+   238→   238→// Spawning
+   239→   239→// ----------------------------------------------------------------------------
+   240→   240→
+   241→   241→/** Random point inside a disc of radius `maxR` centered at (cx, cy). */
+   242→   242→export function randomSpawnPoint(maxR: number, cx: number = 0, cy: number = 0): Vec2 {
+   243→   243→  const r = Math.sqrt(Math.random()) * maxR * 0.85;
+   244→   244→  const theta = Math.random() * Math.PI * 2;
+   245→   245→  return { x: cx + Math.cos(theta) * r, y: cy + Math.sin(theta) * r };
+   246→   246→}
+   247→   247→
+   248→   248→/**
+   249→   249→ * Build an initial body: `length` points strung out behind the head at
+   250→   250→ * SEGMENT_SPACING px apart, all along the angle's reverse direction.
+   251→   251→ */
+   252→   252→export function initialBody(headX: number, headY: number, angle: number, length: number): Vec2[] {
+   253→   253→  const pts: Vec2[] = [];
+   254→   254→  for (let i = 0; i < length; i++) {
+   255→   255→    pts.push({
+   256→   256→      x: headX - Math.cos(angle) * i * SEGMENT_SPACING,
+   257→   257→      y: headY - Math.sin(angle) * i * SEGMENT_SPACING,
+   258→   258→    });
+   259→   259→  }
+   260→   260→  return pts;
+   261→   261→}
+   262→   262→
+   263→   263→/** Factory: create a fresh ArenaRoom. */
+   264→   264→export function createArenaRoom(arena: ArenaTier): ArenaRoom {
+   265→   265→  const mapRadius = getDynamicMapRadius(1);
+   266→   266→  return {
+   267→   267→    arena,
+   268→   268→    players: new Map(),
+   269→   269→    bots: new Map(),
+   270→   270→    foods: [],
+   271→   271→    grid: new SpatialHashGrid(120),
+   272→   272→    tick: 0,
+   273→   273→    lastBroadcast: 0,
+   274→   274→    leaderId: null,
+   275→   275→    leaderChips: 0,
+   276→   276→    foodIdCounter: 0,
+   277→   277→    botIdCounter: 0,
+   278→   278→    mapCenterX: 0,
+   279→   279→    mapCenterY: 0,
+   280→   280→  };
+   281→   281→}
+   282→   282→
+   283→   283→/** Spawn a single bot. */
+   284→   284→export function spawnBot(room: ArenaRoom): BotSession {
+   285→   285→  const idx = room.botIdCounter++;
+   286→   286→  const name = BOT_NAMES[idx % BOT_NAMES.length] + (idx >= BOT_NAMES.length ? '-' + Math.floor(idx / BOT_NAMES.length) : '');
+   287→   287→  const skin = BOT_SKINS[idx % BOT_SKINS.length];
+   288→   288→  const personalities: BotPersonality[] = ['scavenger', 'opportunist', 'hunter', 'extractor', 'coward'];
+   289→   289→  const personality = personalities[idx % personalities.length];
+   290→   290→
+   291→   291→  const realPlayerCount = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
+   292→   292→  const mapRadius = getDynamicMapRadius(Math.max(1, realPlayerCount));
+   293→   293→  const spawn = randomSpawnPoint(mapRadius - 200, room.mapCenterX, room.mapCenterY);
+   294→   294→  const angle = Math.random() * Math.PI * 2;
+   295→   295→  const botId = `bot-${room.arena.id}-${idx}`;
+   296→   296→
+   297→   297→  return {
+   298→   298→    id: botId,
+   299→   299→    botId,
+   300→   300→    name,
+   301→   301→    points: initialBody(spawn.x, spawn.y, angle, INITIAL_BODY_LENGTH),
+   302→   302→    angle,
+   303→   303→    size: SIZE_BASE + Math.sqrt(INITIAL_SPAWN_SCORE) * SIZE_SCORE_FACTOR,
+   304→   304→    color: skin.color,
+   305→   305→    secondaryColor: skin.secondaryColor,
+   306→   306→    isPlayer: false,
+   307→   307→    isBot: true,
+   308→   308→    carriedChips: 0,
+   309→   309→    score: INITIAL_SPAWN_SCORE,
+   310→   310→    boostFrameCounter: 0,
+   311→   311→    isExtracting: false,
+   312→   312→    extractionProgress: 0,
+   313→   313→    isDead: false,
+   314→   314→    spawnProtectedUntil: Date.now() + RESPAWN_INVULN_MS,
+   315→   315→    personality,
+   316→   316→    nextThinkAt: 0,
+   317→   317→    desiredAngle: angle,
+   318→   318→    wantsBoost: false,
+   319→   319→    botState: 'harvesting',
+   320→   320→  };
+   321→   321→}
+   322→   322→
+   323→   323→/** Ensure the arena has the target bot count. */
+   324→   324→export function ensureBots(room: ArenaRoom): void {
+   325→   325→  while (room.bots.size < room.arena.botsCount) {
+   326→   326→    const bot = spawnBot(room);
+   327→   327→    room.bots.set(bot.id, bot);
+   328→   328→  }
+   329→   329→}
+   330→   330→
+   331→   331→/** Spawn one random food orb (S/M/L based on weights). */
+   332→   332→export function spawnRandomFood(room: ArenaRoom): Food {
+   333→   333→  const id = `food-${room.arena.id}-${room.foodIdCounter++}`;
+   334→   334→  const realPlayerCount = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
+   335→   335→  const mapRadius = getDynamicMapRadius(Math.max(1, realPlayerCount));
+   336→   336→  const pos = randomSpawnPoint(mapRadius - 50, room.mapCenterX, room.mapCenterY);
+   337→   337→
+   338→   338→  const orbIdx = weightedRandomIndex(FOOD_ORB_WEIGHTS);
+   339→   339→  const orb = FOOD_ORB_CONFIGS[orbIdx];
+   340→   340→
+   341→   341→  return {
+   342→   342→    id,
+   343→   343→    x: pos.x,
+   344→   344→    y: pos.y,
+   345→   345→    size: orb.radius,
+   346→   346→    value: orb.value,
+   347→   347→    isStarChip: false,
+   348→   348→    color: orb.color,
+   349→   349→    glowColor: orb.glowColor,
+   350→   350→    orbSize: orb.size,
+   351→   351→  };
+   352→   352→}
+   353→   353→
+   354→   354→// ----------------------------------------------------------------------------
+   355→   355→// Death drop helpers
+   356→   356→// ----------------------------------------------------------------------------
+   357→   357→
+   358→   358→/**
+   359→   359→ * Compute the mix of Small(1), Medium(3), Large(5) orbs that sum to exactly totalScore.
+   360→   360→ * Greedily picks Large first, then Medium, then Small.
+   361→   361→ */
+   362→   362→export function computeDeathOrbs(totalScore: number): { small: number; medium: number; large: number } {
+   363→   363→  let remaining = totalScore;
+   364→   364→  const large = Math.floor(remaining / 5);
+   365→   365→  remaining -= large * 5;
+   366→   366→  const medium = Math.floor(remaining / 3);
+   367→   367→  remaining -= medium * 3;
+   368→   368→  const small = remaining;
+   369→   369→  return { small, medium, large };
+   370→   370→}
+   371→   371→
+   372→   372→/**
+   373→   373→ * Drop score orbs (S/M/L) that sum to exactly totalScore along a body path.
+   374→   374→ * Used for body-collision deaths (NOT wall deaths).
+   375→   375→ */
+   376→   376→export function dropScoreOrbsAtBody(
+   377→   377→  room: ArenaRoom,
+   378→   378→  bodyPoints: Vec2[],
+   379→   379→  totalScore: number,
+   380→   380→  snakeColor: string,
+   381→   381→): void {
+   382→   382→  if (!bodyPoints || bodyPoints.length === 0 || totalScore <= 0) return;
+   383→   383→
+   384→   384→  const { small, medium, large } = computeDeathOrbs(totalScore);
+   385→   385→  let orbIdx = 0;
+   386→   386→  const totalOrbs = small + medium + large;
+   387→   387→  if (totalOrbs === 0) return;
+   388→   388→
+   389→   389→  // Interleave S/M/L along the body for visual spread
+   390→   390→  const orbSequence: Array<{ value: number; size: number; color: string; glowColor: string; orbSize: 'small' | 'medium' | 'large' }> = [];
+   391→   391→  for (let i = 0; i < large; i++) orbSequence.push({ value: 5, size: 8, color: '#f472b6', glowColor: '#ec4899', orbSize: 'large' });
+   392→   392→  for (let i = 0; i < medium; i++) orbSequence.push({ value: 3, size: 5, color: '#38bdf8', glowColor: '#0ea5e9', orbSize: 'medium' });
+   393→   393→  for (let i = 0; i < small; i++) orbSequence.push({ value: 1, size: 3, color: '#34d399', glowColor: '#10b981', orbSize: 'small' });
+   394→   394→
+   395→   395→  // Shuffle for visual variety
+   396→   396→  for (let i = orbSequence.length - 1; i > 0; i--) {
+   397→   397→    const j = Math.floor(Math.random() * (i + 1));
+   398→   398→    [orbSequence[i], orbSequence[j]] = [orbSequence[j], orbSequence[i]];
+   399→   399→  }
+   400→   400→
+   401→   401→  for (const orb of orbSequence) {
+   402→   402→    const segIdx = Math.min(bodyPoints.length - 1, Math.floor((orbIdx / totalOrbs) * bodyPoints.length));
+   403→   403→    const pt = bodyPoints[segIdx];
+   404→   404→    const scatter = 20;
+   405→   405→    const id = `food-${room.arena.id}-${room.foodIdCounter++}`;
+   406→   406→    room.foods.push({
+   407→   407→      id,
+   408→   408→      x: pt.x + (Math.random() - 0.5) * scatter,
+   409→   409→      y: pt.y + (Math.random() - 0.5) * scatter,
+   410→   410→      size: orb.size,
+   411→   411→      value: orb.value,
+   412→   412→      isStarChip: false,
+   413→   413→      color: orb.color,
+   414→   414→      glowColor: orb.glowColor,
+   415→   415→      orbSize: orb.orbSize,
+   416→   416→    });
+   417→   417→    orbIdx++;
+   418→   418→  }
+   419→   419→}
+   420→   420→
+   421→   421→/**
+   422→   422→ * Drop exactly 10 Star collectibles at a death position.
+   423→   423→ * Each star = floor(chips / 10), remainder goes to the last star.
+   424→   424→ * ONLY for real players. Bots never drop stars.
+   425→   425→ */
+   426→   426→export function dropStarsAtDeath(
+   427→   427→  room: ArenaRoom,
+   428→   428→  x: number,
+   429→   429→  y: number,
+   430→   430→  chips: number,
+   431→   431→): void {
+   432→   432→  if (chips <= 0) return;
+   433→   433→
+   434→   434→  const valuePerStar = Math.floor(chips / STAR_DROP_COUNT);
+   435→   435→  const remainder = chips - valuePerStar * STAR_DROP_COUNT;
+   436→   436→  const scatter = 40;
+   437→   437→
+   438→   438→  // Always spawn exactly 10 stars. When chips < 10, some stars get value=1
+   439→   439→  // (remainder distributed to last stars) so all 10 are visible.
+   440→   440→  for (let i = 0; i < STAR_DROP_COUNT; i++) {
+   441→   441→    const value = Math.max(1, valuePerStar + (i === STAR_DROP_COUNT - 1 ? remainder : 0));
+   442→   442→    const id = `food-${room.arena.id}-${room.foodIdCounter++}`;
+   443→   443→    const angle = (i / STAR_DROP_COUNT) * Math.PI * 2;
+   444→   444→    const dist = scatter * 0.5 + Math.random() * scatter * 0.5;
+   445→   445→    room.foods.push({
+   446→   446→      id,
+   447→   447→      x: x + Math.cos(angle) * dist,
+   448→   448→      y: y + Math.sin(angle) * dist,
+   449→   449→      size: 12,
+   450→   450→      value,
+   451→   451→      isStarChip: true,
+   452→   452→      color: '#fbbf24',
+   453→   453→      glowColor: '#f59e0b',
+   454→   454→    });
+   455→   455→  }
+   456→   456→}
+   457→   457→
+   458→   458→/**
+   459→   459→ * Force one bot into self-destruct state to make room for a new human player.
+   460→   460→ * If no bots available, does nothing.
+   461→   461→ */
+   462→   462→export function displaceBotForPlayer(room: ArenaRoom): void {
+   463→   463→  if (room.bots.size === 0) return;
+   464→   464→  // Pick a random harvesting bot to self-destruct
+   465→   465→  const candidates = [...room.bots.values()].filter(b => !b.isDead && b.botState === 'harvesting');
+   466→   466→  if (candidates.length === 0) return;
+   467→   467→  const bot = candidates[Math.floor(Math.random() * candidates.length)];
+   468→   468→  bot.botState = 'selfDestruct';
+   469→   469→  bot.wantsBoost = true; // boost toward wall faster
+   470→   470→}
+   471→   471→
+   472→   472→// Legacy alias for backward compat with index.ts
+   473→   473→export const dropFoodAtBody = dropScoreOrbsAtBody;
+   474→   474→export const dropStarChipsAtBody = dropStarsAtDeath;
+   475→   475→
+   476→   476→// ----------------------------------------------------------------------------
+   477→   477→// Snake movement
+   478→   478→// ----------------------------------------------------------------------------
+   479→   479→
+   480→   480→/**
+   481→   481→ * Move a snake one tick. Server-authoritative: only desiredAngle from client.
+   482→   482→ */
+   483→   483→export function tickSnakeMovement(
+   484→   484→  snake: SnakeBase,
+   485→   485→  desiredAngle: number,
+   486→   486→  wantsBoost: boolean,
+   487→   487→): void {
+   488→   488→  if (snake.points.length === 0) return;
+   489→   489→  if (snake.isDead) return;
+   490→   490→
+   491→   491→  snake.wantsBoost = wantsBoost;
+   492→   492→
+   493→   493→  // 1) Turn — rate-limited, bigger snakes turn slower.
+   494→   494→  const turnRate = Math.max(TURN_MIN, TURN_BASE - snake.score * TURN_SCORE_FACTOR);
+   495→   495→  snake.angle = turnToward(snake.angle, desiredAngle, turnRate);
+   496→   496→
+   497→   497→  // 2) Speed: extracting < normal < boost.
+   498→   498→  let speed = BASE_SPEED;
+   499→   499→  if (snake.isExtracting) {
+   500→   500→    speed = EXTRACT_GLIDE_SPEED;
+   501→   501→  } else if (wantsBoost && snake.points.length > BOOST_MIN_LENGTH) {
+   502→   502→    speed = BOOST_SPEED;
+   503→   503→    snake.boostFrameCounter++;
+   504→   504→    if (snake.boostFrameCounter >= BOOST_DROP_INTERVAL) {
+   505→   505→      snake.boostFrameCounter = 0;
+   506→   506→      if (snake.points.length > BOOST_MIN_LENGTH) {
+   507→   507→        snake.points.pop();
+   508→   508→        snake.score = Math.max(INITIAL_SPAWN_SCORE, snake.score - 1);
+   509→   509→      }
+   510→   510→    }
+   511→   511→  } else {
+   512→   512→    snake.wantsBoost = false;
+   513→   513→    snake.boostFrameCounter = 0;
+   514→   514→  }
+   515→   515→
+   516→   516→  // 3) Move head.
+   517→   517→  const head = snake.points[0];
+   518→   518→  const nx = head.x + Math.cos(snake.angle) * speed;
+   519→   519→  const ny = head.y + Math.sin(snake.angle) * speed;
+   520→   520→
+   521→   521→  // 4) Unshift new head.
+   522→   522→  snake.points.unshift({ x: nx, y: ny });
+   523→   523→
+   524→   524→  // 5) Body length = INITIAL_BODY_LENGTH + (score - INITIAL_SPAWN_SCORE)
+   525→   525→  const targetLen = Math.min(MAX_BODY_LENGTH, INITIAL_BODY_LENGTH + Math.max(0, snake.score - INITIAL_SPAWN_SCORE));
+   526→   526→  while (snake.points.length > targetLen) snake.points.pop();
+   527→   527→
+   528→   528→  // 6) Size formula.
+   529→   529→  snake.size = SIZE_BASE + Math.sqrt(snake.score) * SIZE_SCORE_FACTOR;
+   530→   530→}
+   531→   531→
+   532→   532→// ----------------------------------------------------------------------------
+   533→   533→// Bot AI
+   534→   534→// ----------------------------------------------------------------------------
+   535→   535→
+   536→   536→/**
+   537→   537→ * Per-bot AI tick. All bots seek food and evade human players.
+   538→   538→ * Self-destruct bots navigate toward the wall.
+   539→   539→ */
+   540→   540→export function tickBot(bot: BotSession, room: ArenaRoom, now: number): void {
+   541→   541→  if (bot.points.length === 0 || bot.isDead) return;
+   542→   542→
+   543→   543→  const head = bot.points[0];
+   544→   544→  const realPlayerCount = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
+   545→   545→  const mapRadius = getDynamicMapRadius(Math.max(1, realPlayerCount), now);
+   546→   546→
+   547→   547→  // --- Self-destruct state: navigate to nearest wall ---
+   548→   548→  if (bot.botState === 'selfDestruct') {
+   549→   549→    // Find direction to nearest wall boundary
+   550→   550→    const toWall = Math.atan2(room.mapCenterY - head.y, room.mapCenterX - head.x);
+   551→   551→    // Navigate AWAY from center (toward wall)
+   552→   552→    const awayFromCenter = Math.atan2(head.y - room.mapCenterY, head.x - room.mapCenterX);
+   553→   553→    // Steer toward nearest wall point
+   554→   554→    bot.desiredAngle = awayFromCenter;
+   555→   555→    bot.wantsBoost = true;
+   556→   556→
+   557→   557→    // Still eat food on the way (prioritize survival)
+   558→   558→    if (now >= bot.nextThinkAt) {
+   559→   559→      bot.nextThinkAt = now + 80;
+   560→   560→      const foodQuery = room.grid.queryRadius(head.x, head.y, BOT_FOOD_SCAN_RADIUS);
+   561→   561→      let bestFood: GridItem | null = null;
+   562→   562→      let bestFoodDist = Infinity;
+   563→   563→      for (const item of foodQuery.values()) {
+   564→   564→        if (item.kind !== 'food') continue;
+   565→   565→        if ((item.value ?? 0) <= 0) continue;
+   566→   566→        if (item.isStarChip) continue; // bots ignore stars
+   567→   567→        const d = dist(head.x, head.y, item.x, item.y);
+   568→   568→        if (d < bestFoodDist) {
+   569→   569→          bestFoodDist = d;
+   570→   570→          bestFood = item;
+   571→   571→        }
+   572→   572→      }
+   573→   573→      // Blend food-seeking with wall-seeking (70% wall, 30% food if close)
+   574→   574→      if (bestFood && bestFoodDist < 150) {
+   575→   575→        const foodAngle = Math.atan2(bestFood.y - head.y, bestFood.x - head.x);
+   576→   576→        bot.desiredAngle = turnToward(awayFromCenter, foodAngle, MAX_TURN_PER_TICK * 0.6);
+   577→   577→      }
+   578→   578→    }
+   579→   579→
+   580→   580→    tickSnakeMovement(bot, bot.desiredAngle, bot.wantsBoost);
+   581→   581→    return;
+   582→   582→  }
+   583→   583→
+   584→   584→  // --- Harvesting state ---
+   585→   585→  if (now >= bot.nextThinkAt) {
+   586→   586→    bot.nextThinkAt = now + 120 + Math.floor(Math.random() * 80);
+   587→   587→
+   588→   588→    // Find nearest food
+   589→   589→    let bestFood: GridItem | null = null;
+   590→   590→    let bestFoodDist = Infinity;
+   591→   591→    const foodQuery = room.grid.queryRadius(head.x, head.y, BOT_FOOD_SCAN_RADIUS);
+   592→   592→    for (const item of foodQuery.values()) {
+   593→   593→      if (item.kind !== 'food') continue;
+   594→   594→      if ((item.value ?? 0) <= 0) continue;
+   595→   595→      if (item.isStarChip) continue; // bots ignore stars
+   596→   596→      const d = dist(head.x, head.y, item.x, item.y);
+   597→   597→      if (d < bestFoodDist) {
+   598→   598→        bestFoodDist = d;
+   599→   599→        bestFood = item;
+   600→   600→      }
+   601→   601→    }
+   602→   602→
+   603→   603→    // Find nearest human player (for evasion)
+   604→   604→    let nearPlayerDist = Infinity;
+   605→   605→    let nearPlayerAngle = 0;
+   606→   606→    let nearPlayerVx = 0;
+   607→   607→    let nearPlayerVy = 0;
+   608→   608→    let nearPlayerHx = 0;
+   609→   609→    let nearPlayerHy = 0;
+   610→   610→    for (const p of room.players.values()) {
+   611→   611→      if (p.isDead || p.matchSettling) continue;
+   612→   612→      if (p.points.length === 0) continue;
+   613→   613→      const ph = p.points[0];
+   614→   614→      const d = dist(head.x, head.y, ph.x, ph.y);
+   615→   615→      if (d < nearPlayerDist) {
+   616→   616→        nearPlayerDist = d;
+   617→   617→        nearPlayerAngle = Math.atan2(ph.y - head.y, ph.x - head.x);
+   618→   618→        nearPlayerHx = ph.x;
+   619→   619→        nearPlayerHy = ph.y;
+   620→   620→        // Estimate player velocity from head angle
+   621→   621→        nearPlayerVx = Math.cos(p.angle) * BASE_SPEED;
+   622→   622→        nearPlayerVy = Math.sin(p.angle) * BASE_SPEED;
+   623→   623→      }
+   624→   624→    }
+   625→   625→
+   626→   626→    // Also check nearby body segments (for collision avoidance)
+   627→   627→    let threatX = 0;
+   628→   628→    let threatY = 0;
+   629→   629→    let threatDist = Infinity;
+   630→   630→    const threatQuery = room.grid.queryRadius(head.x, head.y, 150);
+   631→   631→    for (const item of threatQuery.values()) {
+   632→   632→      if (item.kind !== 'segment') continue;
+   633→   633→      if (item.snakeId === bot.id) continue;
+   634→   634→      if (item.segIdx === 0) continue;
+   635→   635→      const d = dist(head.x, head.y, item.x, item.y);
+   636→   636→      if (d < threatDist) {
+   637→   637→        threatDist = d;
+   638→   638→        threatX = item.x;
+   639→   639→        threatY = item.y;
+   640→   640→      }
+   641→   641→    }
+   642→   642→
+   643→   643→    let desired: number;
+   644→   644→
+   645→   645→    // Priority 1: Evasion of body segments (immediate danger)
+   646→   646→    if (threatDist < 140) {
+   647→   647→      desired = Math.atan2(head.y - threatY, head.x - threatX);
+   648→   648→    }
+   649→   649→    // Priority 2: Predictive evasion of human players
+   650→   650→    else if (nearPlayerDist < BOT_EVADE_RADIUS) {
+   651→   651→      // Project nearest player position 8 ticks ahead
+   652→   652→      const futurePx = nearPlayerHx + nearPlayerVx * 8;
+   653→   653→      const futurePy = nearPlayerHy + nearPlayerVy * 8;
+   654→   654→      const futureD = dist(head.x, head.y, futurePx, futurePy);
+   655→   655→      if (futureD < BOT_EVADE_RADIUS) {
+   656→   656→        // Steer perpendicular to the player's approach vector
+   657→   657→        const perpAngle = nearPlayerAngle + Math.PI / 2 * (Math.random() > 0.5 ? 1 : -1);
+   658→   658→        desired = perpAngle;
+   659→   659→      } else {
+   660→   660→        // Just steer away from nearest player
+   661→   661→        desired = Math.atan2(head.y - nearPlayerHy, head.x - nearPlayerHx);
+   662→   662→      }
+   663→   663→    }
+   664→   664→    // Priority 3: Seek food
+   665→   665→    else if (bestFood) {
+   666→   666→      desired = Math.atan2(bestFood.y - head.y, bestFood.x - head.x);
+   667→   667→    }
+   668→   668→    // Priority 4: Wander
+   669→   669→    else {
+   670→   670→      desired = bot.angle + (Math.random() - 0.5) * 0.4;
+   671→   671→    }
+   672→   672→
+   673→   673→    // Edge avoidance: if near map boundary, turn back toward center
+   674→   674→    const distFromCenter = Math.hypot(head.x - room.mapCenterX, head.y - room.mapCenterY);
+   675→   675→    if (distFromCenter > mapRadius - 300) {
+   676→   676→      const toCenter = Math.atan2(room.mapCenterY - head.y, room.mapCenterX - head.x);
+   677→   677→      desired = turnToward(desired, toCenter, MAX_TURN_PER_TICK * 2);
+   678→   678→    }
+   679→   679→
+   680→   680→    bot.desiredAngle = desired;
+   681→   681→  }
+   682→   682→
+   683→   683→  // Check self-destruct threshold
+   684→   684→  if (bot.score >= BOT_SELF_DESTRUCT_THRESHOLD && bot.botState === 'harvesting') {
+   685→   685→    bot.botState = 'selfDestruct';
+   686→   686→  }
+   687→   687→
+   688→   688→  // Bots don't boost in harvesting mode
+   689→   689→  tickSnakeMovement(bot, bot.desiredAngle, false);
+   690→   690→}
+   691→   691→
+   692→   692→// ----------------------------------------------------------------------------
+   693→   693→// Collision detection
+   694→   694→// ----------------------------------------------------------------------------
+   695→   695→
+   696→   696→/** A pending death detected during collision iteration. */
+   697→   697→export interface PendingDeath {
+   698→   698→  deadId: string;
+   699→   699→  killerId?: string;
+   700→   700→  cause: 'body' | 'wall' | 'headOn';
+   701→   701→}
+   702→   702→
+   703→   703→/**
+   704→   704→ * Detect head-to-body collisions via spatial grid.
+   705→   705→ * Head hits any foreign body segment → that head's owner dies.
+   706→   706→ */
+   707→   707→export function detectCollisions(room: ArenaRoom, now: number): PendingDeath[] {
+   708→   708→  const deaths: PendingDeath[] = [];
+   709→   709→  const seenDead = new Set<string>();
+   710→   710→
+   711→   711→  const allSnakes: SnakeBase[] = collectAllSnakes(room);
+   712→   712→  const realPlayerCount = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
+   713→   713→  const mapRadius = getDynamicMapRadius(Math.max(1, realPlayerCount), now);
+   714→   714→
+   715→   715→  for (const snake of allSnakes) {
+   716→   716→    if (snake.isDead) continue;
+   717→   717→    if (snake.points.length === 0) continue;
+   718→   718→    if (now < snake.spawnProtectedUntil) continue;
+   719→   719→    if (seenDead.has(snake.id)) continue;
+   720→   720→
+   721→   721→    const head = snake.points[0];
+   722→   722→
+   723→   723→    // Wall collision
+   724→   724→    const distFromCenter = Math.hypot(head.x - room.mapCenterX, head.y - room.mapCenterY);
+   725→   725→    if (distFromCenter > mapRadius) {
+   726→   726→      deaths.push({ deadId: snake.id, killerId: 'wall', cause: 'wall' });
+   727→   727→      seenDead.add(snake.id);
+   728→   728→      continue;
+   729→   729→    }
+   730→   730→
+   731→   731→    // Head-to-body collision
+   732→   732→    const queryR = snake.size + 30;
+   733→   733→    const nearby = room.grid.queryRadius(head.x, head.y, queryR);
+   734→   734→
+   735→   735→    for (const item of nearby.values()) {
+   736→   736→      if (item.kind !== 'segment') continue;
+   737→   737→      if (item.snakeId === snake.id) continue;
+   738→   738→      if (item.segIdx === 0) continue; // head-to-head handled separately
+   739→   739→      const d = dist(head.x, head.y, item.x, item.y);
+   740→   740→      if (d < (snake.size + item.radius) * COLLISION_HIT_FACTOR) {
+   741→   741→        deaths.push({ deadId: snake.id, killerId: item.snakeId, cause: 'body' });
+   742→   742→        seenDead.add(snake.id);
+   743→   743→        break;
+   744→   744→      }
+   745→   745→    }
+   746→   746→  }
+   747→   747→
+   748→   748→  return deaths;
+   749→   749→}
+   750→   750→
+   751→   751→/**
+   752→   752→ * Detect head-on (head-to-head) collisions.
+   753→   753→ * Rules:
+   754→   754→ *   A) No boost / both boosting → higher score survives
+   755→   755→ *   B) Smaller boosting, larger steady → smaller survives
+   756→   756→ *   C) Both boosting → higher score survives (same as A)
+   757→   757→ *   Tie → both die
+   758→   758→ */
+   759→   759→export function detectHeadOnCollisions(room: ArenaRoom, now: number): PendingDeath[] {
+   760→   760→  const deaths: PendingDeath[] = [];
+   761→   761→  const seenDead = new Set<string>();
+   762→   762→
+   763→   763→  const allSnakes: SnakeBase[] = collectAllSnakes(room);
+   764→   764→  const headMap = new Map<string, SnakeBase>();
+   765→   765→  for (const s of allSnakes) {
+   766→   766→    if (s.isDead || s.points.length === 0 || now < s.spawnProtectedUntil) continue;
+   767→   767→    headMap.set(s.id, s);
+   768→   768→  }
+   769→   769→
+   770→   770→  const processed = new Set<string>();
+   771→   771→  for (const snakeA of allSnakes) {
+   772→   772→    if (snakeA.isDead || snakeA.points.length === 0 || now < snakeA.spawnProtectedUntil) continue;
+   773→   773→    if (seenDead.has(snakeA.id)) continue;
+   774→   774→    if (processed.has(snakeA.id)) continue;
+   775→   775→
+   776→   776→    const headA = snakeA.points[0];
+   777→   777→    const queryR = snakeA.size + 20;
+   778→   778→    const nearby = room.grid.queryRadius(headA.x, headA.y, queryR);
+   779→   779→
+   780→   780→    for (const item of nearby.values()) {
+   781→   781→      if (item.kind !== 'segment') continue;
+   782→   782→      if (item.segIdx !== 0) continue; // only heads
+   783→   783→      const snakeB = headMap.get(item.snakeId ?? '');
+   784→   784→      if (!snakeB || snakeB.isDead || snakeB.id === snakeA.id) continue;
+   785→   785→      if (seenDead.has(snakeB.id)) continue;
+   786→   786→      if (processed.has(snakeB.id)) continue;
+   787→   787→
+   788→   788→      const headB = snakeB.points[0];
+   789→   789→      const d = dist(headA.x, headA.y, headB.x, headB.y);
+   790→   790→      if (d < (snakeA.size + snakeB.size) * HEAD_ON_HIT_FACTOR) {
+   791→   791→        processed.add(snakeA.id);
+   792→   792→        processed.add(snakeB.id);
+   793→   793→
+   794→   794→        const aBoosting = snakeA.wantsBoost;
+   795→   795→        const bBoosting = snakeB.wantsBoost;
+   796→   796→        const aScore = snakeA.score;
+   797→   797→        const bScore = snakeB.score;
+   798→   798→
+   799→   799→        let loserId: string | null = null;
+   800→   800→
+   801→   801→        if (aScore === bScore) {
+   802→   802→          // Tie: both die
+   803→   803→          deaths.push({ deadId: snakeA.id, killerId: snakeB.id, cause: 'headOn' });
+   804→   804→          deaths.push({ deadId: snakeB.id, killerId: snakeA.id, cause: 'headOn' });
+   805→   805→          seenDead.add(snakeA.id);
+   806→   806→          seenDead.add(snakeB.id);
+   807→   807→        } else if (aScore > bScore) {
+   808→   808→          // A is bigger
+   809→   809→          if (bBoosting && !aBoosting) {
+   810→   810→            // Rule B: smaller boosting vs larger steady → smaller survives
+   811→   811→            loserId = snakeA.id;
+   812→   812→          } else {
+   813→   813→            // Rule A/C: bigger survives
+   814→   814→            loserId = snakeB.id;
+   815→   815→          }
+   816→   816→        } else {
+   817→   817→          // B is bigger
+   818→   818→          if (aBoosting && !bBoosting) {
+   819→   819→            // Rule B: smaller boosting vs larger steady → smaller survives
+   820→   820→            loserId = snakeB.id;
+   821→   821→          } else {
+   822→   822→            // Rule A/C: bigger survives
+   823→   823→            loserId = snakeA.id;
+   824→   824→          }
+   825→   825→        }
+   826→   826→
+   827→   827→        if (loserId && aScore !== bScore) {
+   828→   828→          const winnerId = loserId === snakeA.id ? snakeB.id : snakeA.id;
+   829→   829→          deaths.push({ deadId: loserId, killerId: winnerId, cause: 'headOn' });
+   830→   830→          seenDead.add(loserId);
+   831→   831→        }
+   832→   832→        break;
+   833→   833→      }
+   834→   834→    }
+   835→   835→  }
+   836→   836→
+   837→   837→  return deaths;
+   838→   838→}
+   839→   839→
+   840→   840→// ----------------------------------------------------------------------------
+   841→   841→// Food eating
+   842→   842→// ----------------------------------------------------------------------------
+   843→   843→
+   844→   844→/**
+   845→   845→ * Eat food via spatial grid.
+   846→   846→ * Regular food: snake.score += value (1, 3, or 5). ALL snakes eat.
+   847→   847→ * Star chips: carriedChips += value, score += STAR_CHIP_GROW. ONLY real players.
+   848→   848→ * Bots NEVER collect star chips.
+   849→   849→ */
+   850→   850→export function eatFood(room: ArenaRoom): void {
+   851→   851→  const allSnakes: SnakeBase[] = collectAllSnakes(room);
+   852→   852→  for (const snake of allSnakes) {
+   853→   853→    if (snake.isDead) continue;
+   854→   854→    if (snake.points.length === 0) continue;
+   855→   855→    const head = snake.points[0];
+   856→   856→    const nearby = room.grid.queryRadius(head.x, head.y, snake.size + 20);
+   857→   857→    for (const item of nearby.values()) {
+   858→   858→      if (item.kind !== 'food') continue;
+   859→   859→      if ((item.value ?? 0) <= 0) continue;
+   860→   860→      const d = dist(head.x, head.y, item.x, item.y);
+   861→   861→      if (d < snake.size + (item.radius || 6) + 6) {
+   862→   862→        if (item.isStarChip) {
+   863→   863→          // Star chip: ONLY real players collect (bots skip).
+   864→   864→          if (!snake.isPlayer) continue;
+   865→   865→          snake.carriedChips += item.value ?? 0;
+   866→   866→          snake.score += STAR_CHIP_GROW;
+   867→   867→        } else {
+   868→   868→          // Regular food orb: ALL snakes eat, score += value.
+   869→   869→          snake.score += item.value ?? 1;
+   870→   870→        }
+   871→   871→        // Zero BOTH the grid item and the real food object.
+   872→   872→        item.value = 0;
+   873→   873→        if (item.foodRef) item.foodRef.value = 0;
+   874→   874→      }
+   875→   875→    }
+   876→   876→  }
+   877→   877→}
+   878→   878→
+   879→   879→// ----------------------------------------------------------------------------
+   880→   880→// Snapshot
+   881→   881→// ----------------------------------------------------------------------------
+   882→   882→
+   883→   883→/** Iterator: yield every snake (player + bot) in the room. */
+   884→   884→export function collectAllSnakes(room: ArenaRoom): SnakeBase[] {
+   885→   885→  const out: SnakeBase[] = [];
+   886→   886→  for (const p of room.players.values()) out.push(p);
+   887→   887→  for (const b of room.bots.values()) out.push(b);
+   888→   888→  return out;
+   889→   889→}
+   890→   890→
+   891→   891→/**
+   892→   892→ * Build the broadcast GameSnapshot for an arena.
+   893→   893→ */
+   894→   894→export function buildSnapshot(room: ArenaRoom, viewerId?: string): GameSnapshot {
+   895→   895→  const snakes: SnakeSnapshot[] = [];
+   896→   896→  const now = Date.now();
+   897→   897→  const realPlayerCount = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
+   898→   898→  const mapRadius = getDynamicMapRadius(Math.max(1, realPlayerCount), now);
+   899→   899→
+   900→   900→  for (const snake of collectAllSnakes(room)) {
+   901→   901→    let points = snake.points;
+   902→   902→    if (points.length > MAX_SNAPSHOT_POINTS) {
+   903→   903→      const step = points.length / MAX_SNAPSHOT_POINTS;
+   904→   904→      const downsampled: Vec2[] = [];
+   905→   905→      for (let i = 0; i < MAX_SNAPSHOT_POINTS; i++) {
+   906→   906→        downsampled.push(points[Math.floor(i * step)]);
+   907→   907→      }
+   908→   908→      points = downsampled;
+   909→   909→    }
+   910→   910→    snakes.push({
+   911→   911→      id: snake.id,
+   912→   912→      name: snake.name,
+   913→   913→      userTag: snake.userTag,
+   914→   914→      points,
+   915→   915→      angle: snake.angle,
+   916→   916→      size: snake.size,
+   917→   917→      color: snake.color,
+   918→   918→      secondaryColor: snake.secondaryColor,
+   919→   919→      isPlayer: snake.isPlayer,
+   920→   920→      isBot: snake.isBot,
+   921→   921→      carriedChips: Math.floor(snake.carriedChips),
+   922→   922→      score: snake.score,
+   923→   923→      isExtracting: snake.isExtracting,
+   924→   924→      extractionProgress: Math.min(1, snake.extractionProgress / EXTRACT_DURATION_MS),
+   925→   925→      isDead: snake.isDead,
+   926→   926→      spawnProtected: now < snake.spawnProtectedUntil,
+   927→   927→      chatMessage: snake.chatMessage,
+   928→   928→      country: snake.country,
+   929→   929→      isBoosting: snake.wantsBoost,
+   930→   930→      botState: snake.botState,
+   931→   931→    });
+   932→   932→  }
+   933→   933→
+   934→   934→  const foods: FoodSnapshot[] = room.foods.map((f) => ({
+   935→   935→    id: f.id,
+   936→   936→    x: f.x,
+   937→   937→    y: f.y,
+   938→   938→    size: f.size,
+   939→   939→    value: f.value,
+   940→   940→    isStarChip: f.isStarChip,
+   941→   941→    color: f.color,
+   942→   942→    glowColor: f.glowColor,
+   943→   943→    orbSize: f.orbSize,
+   944→   944→  }));
+   945→   945→
+   946→   946→  // Arena leaderboard: real players by carriedChips desc
+   947→   947→  const realPlayers = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling);
+   948→   948→  const sorted = realPlayers.sort((a, b) => b.carriedChips - a.carriedChips);
+   949→   949→  const arenaLeaderboard = sorted.slice(0, 10).map(p => ({
+   950→   950→    id: p.id,
+   951→   951→    name: p.name,
+   952→   952→    userTag: p.userTag,
+   953→   953→    carriedChips: Math.floor(p.carriedChips),
+   954→   954→    score: p.score,
+   955→   955→    kills: p.kills,
+   956→   956→    isPlayer: p.id === viewerId,
+   957→   957→    country: p.country,
+   958→   958→  }));
+   959→   959→
+   960→   960→  const yourRank = viewerId ? sorted.findIndex(p => p.id === viewerId) + 1 : 0;
+   961→   961→  const commissionRate = realPlayerCount <= 3 ? 0 : 0.35;
+   962→   962→
+   963→   963→  return {
+   964→   964→    arenaId: room.arena.id,
+   965→   965→    tick: room.tick,
+   966→   966→    snakes,
+   967→   967→    foods,
+   968→   968→    worldSize: WORLD_SIZE,
+   969→   969→    mapRadius,
+   970→   970→    mapCenterX: room.mapCenterX,
+   971→   971→    mapCenterY: room.mapCenterY,
+   972→   972→    leaderId: room.leaderId,
+   973→   973→    leaderChips: room.leaderChips,
+   974→   974→    realPlayerCount,
+   975→   975→    yourRank: yourRank > 0 ? yourRank : 0,
+   976→   976→    arenaLeaderboard,
+   977→   977→    commissionRate,
+   978→   978→  };
+   979→   979→}
+   980→   980→
+   981→   981→/**
+   982→   982→ * Recompute the arena leader (highest carriedChips).
+   983→   983→ */
+   984→   984→export function recomputeLeader(room: ArenaRoom): void {
+   985→   985→  let topId: string | null = null;
+   986→   986→  let topChips = 0;
+   987→   987→  for (const snake of collectAllSnakes(room)) {
+   988→   988→    if (snake.carriedChips > topChips) {
+   989→   989→      topChips = snake.carriedChips;
+   990→   990→      topId = snake.id;
+   991→   991→    }
+   992→   992→  }
+   993→   993→  room.leaderId = topId;
+   994→   994→  room.leaderChips = Math.floor(topChips);
+   995→   995→}
+   996→   996→
+   997→   997→/** Re-populate food up to target. */
+   998→   998→export function replenishFood(room: ArenaRoom): void {
+   999→   999→  if (room.foods.some((f) => f.value <= 0)) {
+  1000→  1000→    room.foods = room.foods.filter((f) => f.value > 0);
+  1001→  1001→  }
+  1002→  1002→  let guard = 0;
+  1003→  1003→  while (room.foods.length < FOOD_COUNT_TARGET && guard < 50) {
+  1004→  1004→    room.foods.push(spawnRandomFood(room));
+  1005→  1005→    guard++;
+  1006→  1006→  }
+  1007→  1007→}
+  1008→  1008→
+  1009→  1009→/** Expire chat bubbles. */
+  1010→  1010→export function expireChat(room: ArenaRoom, now: number): void {
+  1011→  1011→  for (const snake of collectAllSnakes(room)) {
+  1012→  1012→    if (snake.chatExpiry && now > snake.chatExpiry) {
+  1013→  1013→      snake.chatMessage = undefined;
+  1014→  1014→      snake.chatExpiry = undefined;
+  1015→  1015→    }
+  1016→  1016→  }
+  1017→  1017→}
+  1018→  1018→
+  1019→  1019→// Re-export
+  1020→  1020→export { TICK_MS };
+  1021→  1021→

@@ -126,6 +126,7 @@ interface Food {
   orbSize: 'small' | 'medium' | 'large';
   color: string;
   glowColor: string;
+  isStarChip?: boolean;
 }
 
 interface GridItem {
@@ -402,6 +403,7 @@ export class OfflineGameEngine {
   private player: SnakeBase | null = null;
   private bots: Map<string, BotSession> = new Map();
   private foods: Food[] = [];
+  private boostDropQueue: { x: number; y: number }[] = [];
   private grid: SpatialHashGrid = new SpatialHashGrid(120);
   private tick: number = 0;
   private idCounter: number = 0;
@@ -958,6 +960,24 @@ export class OfflineGameEngine {
       this.tickBot(bot, now);
     }
 
+    // Process boost food drops (from tail shedding)
+    if (this.boostDropQueue.length > 0) {
+      for (const drop of this.boostDropQueue) {
+        this.foods.push({
+          id: `food-${this.arena.id}-${this.idCounterObj.value++}`,
+          x: drop.x,
+          y: drop.y,
+          size: 3,
+          value: 1,
+          isStarChip: false,
+          color: '#34d399',
+          glowColor: '#10b981',
+          orbSize: 'small',
+        });
+      }
+      this.boostDropQueue.length = 0;
+    }
+
     // 4) Build spatial grid for collision + food queries.
     this.grid.clear();
     this.insertSnakeIntoGrid(p);
@@ -1025,12 +1045,33 @@ export class OfflineGameEngine {
     const pHead = p.points[0];
     while (this.bots.size < this.arena.botsCount) {
       const bot = this.spawnBot(pHead.x, pHead.y);
-      // Ensure bots spawn far enough from the player.
-      const spawnDist = dist(bot.points[0].x, bot.points[0].y, pHead.x, pHead.y);
-      if (spawnDist < 400) {
-        // Re-spawn further away
-        const far = randomPointInCircle(pHead.x, pHead.y, BOT_SPAWN_RADIUS);
-        bot.points = initialBody(far.x, far.y, bot.angle, INITIAL_BODY_LENGTH);
+      // Ensure bots spawn in a safe area (far from player AND other bots)
+      let safe = false;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const spawnPt = bot.points[0];
+        const distFromPlayer = dist(spawnPt.x, spawnPt.y, pHead.x, pHead.y);
+        if (distFromPlayer < 300) {
+          // Re-spawn further from player
+          const far = randomPointInCircle(pHead.x, pHead.y, BOT_SPAWN_RADIUS);
+          bot.points = initialBody(far.x, far.y, bot.angle, INITIAL_BODY_LENGTH);
+          continue;
+        }
+        // Also check distance from other bots
+        let tooClose = false;
+        for (const other of this.bots.values()) {
+          if (other.isDead || other.points.length === 0) continue;
+          if (dist(spawnPt.x, spawnPt.y, other.points[0].x, other.points[0].y) < 300) {
+            tooClose = true;
+            break;
+          }
+        }
+        if (tooClose) {
+          const far = randomPointInCircle(pHead.x, pHead.y, BOT_SPAWN_RADIUS);
+          bot.points = initialBody(far.x, far.y, bot.angle, INITIAL_BODY_LENGTH);
+          continue;
+        }
+        safe = true;
+        break;
       }
       this.bots.set(bot.id, bot);
     }
@@ -1075,6 +1116,12 @@ export class OfflineGameEngine {
       if (snake.boostFrameCounter >= BOOST_DROP_INTERVAL) {
         snake.boostFrameCounter = 0;
         if (snake.points.length > BOOST_MIN_LENGTH) {
+          // Record tail position BEFORE popping (for food drop)
+          const tail = snake.points[snake.points.length - 1];
+          this.boostDropQueue.push({
+            x: tail.x,
+            y: tail.y,
+          });
           snake.points.pop();
           // Reduce food-score (score can go below 0 but body is clamped)
           snake.score = Math.max(0, snake.score - 1);
@@ -1333,6 +1380,8 @@ export class OfflineGameEngine {
         if (item.snakeId === snake.id) continue;
         // Skip head segments (handled by head-on collision above).
         if (item.segIdx === 0) continue;
+        // Neck protection: skip first N segments behind the head (close-call safety)
+        if (item.segIdx <= 5) continue;
         const d = dist(head.x, head.y, item.x, item.y);
         if (d < (snake.size + item.radius) * COLLISION_HIT_FACTOR) {
           deaths.push({ deadId: snake.id, killerId: item.snakeId, cause: 'body' });

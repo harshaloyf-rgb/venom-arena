@@ -91,3 +91,49 @@ Stage Summary:
 - Online game confirmed working: connections, kills, deaths, match results
 - Offline game confirmed working: score-only leaderboard, no chips, infinite map
 - All rendering (food orbs, stars, opacity, boundaries) verified correct
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix all reported gameplay bugs - bot self-destruct, collision system, boost food drops, safe spawning, death replay, social buttons
+
+Work Log:
+- Read all 8 key project files to understand existing implementation
+- Discovered that most Phase 1-8 changes from previous session WERE actually implemented (MAX_ARENA=1000, types, food system, etc.)
+- Identified 6 specific bugs from user's latest feedback that needed fixing
+
+Changes Made:
+
+1. **game-config.ts**: Added NECK_PROTECTION_SEGS=5, SAFE_SPAWN_MIN_DIST=300, SAFE_SPAWN_ATTEMPTS=20
+
+2. **game-state.ts** (online server):
+   - Bot self-destruct: Changed `wantsBoost=true` → `wantsBoost=false`, bots now go SLOWLY toward wall while collecting food
+   - Neck protection: Added `if (item.segIdx <= NECK_PROTECTION_SEGS) continue;` in detectCollisions
+   - Boost food drop: Modified tickSnakeMovement to return Vec2[] of dropped tail positions
+   - Safe spawning: Added findSafeSpawnPoint() that checks distance from ALL snakes
+   - spawnBot now uses findSafeSpawnPoint instead of randomSpawnPoint
+
+3. **index.ts** (online socket server):
+   - Updated imports to include findSafeSpawnPoint, FOOD_ORB_SMALL, NECK_PROTECTION_SEGS
+   - Player spawn uses findSafeSpawnPoint
+   - Boost food drops: tick loop now creates small food orbs at dropped tail positions
+   - Bot food drop fix: Removed isBotSelfDestruct guard from collision death path - ALL snakes drop food on collision, only wall-death selfDestruct bots vanish cleanly
+   - Added killerIsBot to death event payload
+
+4. **game-canvas.tsx** (client):
+   - Post-death replay: Added postDeathRecordRef (100 frames = 5s), continues recording after death
+   - setTimeout fallback updates endScreen replay frames after 5.5s
+   - View Profile button: Added onViewProfile prop to EndOverlay
+   - Social buttons (View Profile, Add Rival, Add Friend) only shown for real players (killer.isBot === false)
+   - Added User icon import from lucide-react
+   - killerTag now available in killer info from server
+
+5. **offline-engine.ts** (subagent):
+   - Neck protection: Added segIdx <= 5 skip in detectCollisions
+   - Boost food drop: Added boostDropQueue, tail positions recorded before pop, processed in tick loop
+   - Safe bot spawning: 20-attempt retry loop checking distance from player AND all other bots
+
+Stage Summary:
+- All 6 user-reported bugs fixed: bot boost behavior, collision neck protection, boost food drops, safe spawning, death replay extension, social buttons
+- ESLint passes clean
+- Both servers running (port 3000 + 3001)
+- Browser verification: page loads correctly with no JS errors
