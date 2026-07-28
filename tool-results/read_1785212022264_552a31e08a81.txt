@@ -1,0 +1,858 @@
+     1→   286→// Food orb rendering — three distinct sizes
+     2→   287→// ---------------------------------------------------------------------------
+     3→   288→
+     4→   289→/** Orb type configuration for the three visual tiers. */
+     5→   290→interface OrbConfig {
+     6→   291→  radius: number;
+     7→   292→  color: string;
+     8→   293→  glowColor: string;
+     9→   294→  shadowBlur: number;
+    10→   295→  label: 'small' | 'medium' | 'large';
+    11→   296→}
+    12→   297→
+    13→   298→const ORB_CONFIGS: Record<number, OrbConfig> = {
+    14→   299→  1: { radius: 3, color: '#34d399', glowColor: '#10b981', shadowBlur: 6, label: 'small' },
+    15→   300→  3: { radius: 5, color: '#38bdf8', glowColor: '#0ea5e9', shadowBlur: 10, label: 'medium' },
+    16→   301→  5: { radius: 8, color: '#f472b6', glowColor: '#ec4899', shadowBlur: 16, label: 'large' },
+    17→   302→};
+    18→   303→
+    19→   304→/** Default config used when orbSize doesn't match known values. */
+    20→   305→const DEFAULT_ORB: OrbConfig = ORB_CONFIGS[1];
+    21→   306→
+    22→   307→/**
+    23→   308→ * Draws a single food orb with glow effects. The orbSize determines which
+    24→   309→ * visual tier to use. Falls back to small orb for unknown sizes.
+    25→   310→ */
+    26→   311→export function drawFoodOrb(
+    27→   312→  ctx: CanvasRenderingContext2D,
+    28→   313→  x: number,
+    29→   314→  y: number,
+    30→   315→  orbSize: number,
+    31→   316→  value: number,
+    32→   317→  color: string,
+    33→   318→  glowColor: string,
+    34→   319→  now: number,
+    35→   320→  lowQuality: boolean,
+    36→   321→): void {
+    37→   322→  // Select config based on value; use provided color/glowColor if different
+    38→   323→  const config = ORB_CONFIGS[value] ?? DEFAULT_ORB;
+    39→   324→  const useColor = color || config.color;
+    40→   325→  const useGlow = glowColor || config.glowColor;
+    41→   326→  const r = Math.max(2, orbSize > 0 ? orbSize : config.radius);
+    42→   327→
+    43→   328→  ctx.save();
+    44→   329→
+    45→   330→  // Large orbs get a subtle pulse animation
+    46→   331→  let animR = r;
+    47→   332→  if (value === 5 && !lowQuality) {
+    48→   333→    const pulse = Math.sin(now * 0.004) * 1.5;
+    49→   334→    animR = r + pulse;
+    50→   335→  }
+    51→   336→
+    52→   337→  // Glow effect (skip in low quality)
+    53→   338→  if (!lowQuality) {
+    54→   339→    ctx.shadowColor = useGlow;
+    55→   340→    ctx.shadowBlur = config.shadowBlur;
+    56→   341→  }
+    57→   342→
+    58→   343→  // Radial gradient for a lit-from-within look
+    59→   344→  const grad = ctx.createRadialGradient(x, y, 0, x, y, animR);
+    60→   345→  grad.addColorStop(0, '#ffffff');
+    61→   346→  grad.addColorStop(0.3, useColor);
+    62→   347→  grad.addColorStop(1, useGlow);
+    63→   348→
+    64→   349→  ctx.beginPath();
+    65→   350→  ctx.arc(x, y, animR, 0, Math.PI * 2);
+    66→   351→  ctx.fillStyle = grad;
+    67→   352→  ctx.fill();
+    68→   353→
+    69→   354→  ctx.shadowBlur = 0;
+    70→   355→  ctx.restore();
+    71→   356→}
+    72→   357→
+    73→   358→// ---------------------------------------------------------------------------
+    74→   359→// Star collectible rendering — 5-pointed star shape
+    75→   360→// ---------------------------------------------------------------------------
+    76→   361→
+    77→   362→/**
+    78→   363→ * Draws a proper 5-pointed star path. Generic helper used by drawStarCollectible.
+    79→   364→ *
+    80→   365→ * @param ctx     Canvas context
+    81→   366→ * @param cx      Center X
+    82→   367→ * @param cy      Center Y
+    83→   368→ * @param outerR  Outer radius (tip of star)
+    84→   369→ * @param innerR  Inner radius (valley between points)
+    85→   370→ * @param points  Number of points (always 5 for stars)
+    86→   371→ * @param rotation Rotation in radians (for spin animation)
+    87→   372→ */
+    88→   373→export function drawStarShape(
+    89→   374→  ctx: CanvasRenderingContext2D,
+    90→   375→  cx: number,
+    91→   376→  cy: number,
+    92→   377→  outerR: number,
+    93→   378→  innerR: number,
+    94→   379→  points: number,
+    95→   380→  rotation: number,
+    96→   381→): void {
+    97→   382→  ctx.beginPath();
+    98→   383→  for (let i = 0; i < points * 2; i++) {
+    99→   384→    const r = i % 2 === 0 ? outerR : innerR;
+   100→   385→    const angle = (Math.PI / points) * i - Math.PI / 2 + rotation;
+   101→   386→    const px = cx + Math.cos(angle) * r;
+   102→   387→    const py = cy + Math.sin(angle) * r;
+   103→   388→    if (i === 0) ctx.moveTo(px, py);
+   104→   389→    else ctx.lineTo(px, py);
+   105→   390→  }
+   106→   391→  ctx.closePath();
+   107→   392→}
+   108→   393→
+   109→   394→/**
+   110→   395→ * Draws a 5-pointed star collectible with golden glow, subtle rotation,
+   111→   396→ * and pulsing glow effect. Stars are the rare high-value pickups.
+   112→   397→ */
+   113→   398→export function drawStarCollectible(
+   114→   399→  ctx: CanvasRenderingContext2D,
+   115→   400→  x: number,
+   116→   401→  y: number,
+   117→   402→  size: number,
+   118→   403→  tick: number,
+   119→   404→  lowQuality: boolean,
+   120→   405→): void {
+   121→   406→  const outerR = Math.max(4, size);
+   122→   407→  const innerR = Math.max(2, size * 0.4);
+   123→   408→
+   124→   409→  // Rotation: slow spin based on tick
+   125→   410→  const rotation = tick * 0.002;
+   126→   411→
+   127→   412→  // Pulsing glow: size oscillates ±1.5px over ~1.5s
+   128→   413→  const pulse = lowQuality ? 0 : Math.sin(tick * 0.004) * 1.5;
+   129→   414→  const animOuter = outerR + pulse;
+   130→   415→  const animInner = innerR + pulse * 0.4;
+   131→   416→
+   132→   417→  ctx.save();
+   133→   418→
+   134→   419→  // Glow
+   135→   420→  if (!lowQuality) {
+   136→   421→    ctx.shadowColor = '#f59e0b';
+   137→   422→    ctx.shadowBlur = 12 + Math.sin(tick * 0.003) * 4;
+   138→   423→  }
+   139→   424→
+   140→   425→  // Star shape
+   141→   426→  drawStarShape(ctx, x, y, animOuter, animInner, 5, rotation);
+   142→   427→
+   143→   428→  // Golden radial gradient fill
+   144→   429→  const grad = ctx.createRadialGradient(x, y, 0, x, y, animOuter);
+   145→   430→  grad.addColorStop(0, '#fef3c7'); // bright center
+   146→   431→  grad.addColorStop(0.4, '#fbbf24');
+   147→   432→  grad.addColorStop(1, '#f59e0b');
+   148→   433→  ctx.fillStyle = grad;
+   149→   434→  ctx.fill();
+   150→   435→
+   151→   436→  ctx.shadowBlur = 0;
+   152→   437→  ctx.restore();
+   153→   438→}
+   154→   439→
+   155→   440→// ---------------------------------------------------------------------------
+   156→   441→// Food (main entry point — batches regular orbs, draws stars individually)
+   157→   442→// ---------------------------------------------------------------------------
+   158→   443→
+   159→   444→/**
+   160→   445→ * Draws all food in two passes:
+   161→   446→ *  1. Regular food orbs — batched by orbSize tier into Path2D groups.
+   162→   447→ *     Each tier (small/medium/large) has its own glow gradient.
+   163→   448→ *  2. Star collectibles — drawn individually as 5-pointed gold stars with
+   164→   449→ *     rotation + pulsing glow.
+   165→   450→ */
+   166→   451→export function drawFood(rc: FrameRenderCtx, foods: FoodSnapshot[]): void {
+   167→   452→  const { ctx, lowQuality } = rc;
+   168→   453→  const vis = computeVisibleRect(rc);
+   169→   454→
+   170→   455→  // --- Regular food orbs: batch by value tier ---
+   171→   456→  const smallOrbs: FoodSnapshot[] = [];
+   172→   457→  const mediumOrbs: FoodSnapshot[] = [];
+   173→   458→  const largeOrbs: FoodSnapshot[] = [];
+   174→   459→  const starChips: FoodSnapshot[] = [];
+   175→   460→
+   176→   461→  for (let i = 0; i < foods.length; i++) {
+   177→   462→    const f = foods[i];
+   178→   463→    if (f.x < vis.left || f.x > vis.right || f.y < vis.top || f.y > vis.bottom) {
+   179→   464→      continue; // culled
+   180→   465→    }
+   181→   466→    if (f.isStarChip) {
+   182→   467→      starChips.push(f);
+   183→   468→      continue;
+   184→   469→    }
+   185→   470→    // Route to orb tier by value
+   186→   471→    if (f.value >= 5) largeOrbs.push(f);
+   187→   472→    else if (f.value >= 3) mediumOrbs.push(f);
+   188→   473→    else smallOrbs.push(f);
+   189→   474→  }
+   190→   475→
+   191→   476→  // Draw each orb tier
+   192→   477→  const drawOrbBatch = (orbs: FoodSnapshot[]) => {
+   193→   478→    for (let i = 0; i < orbs.length; i++) {
+   194→   479→      const f = orbs[i];
+   195→   480→      drawFoodOrb(ctx, f.x, f.y, f.orbSize ? f.size : f.size, f.value, f.color, f.glowColor ?? '', rc.now, lowQuality);
+   196→   481→    }
+   197→   482→  };
+   198→   483→
+   199→   484→  drawOrbBatch(smallOrbs);
+   200→   485→  drawOrbBatch(mediumOrbs);
+   201→   486→  drawOrbBatch(largeOrbs);
+   202→   487→
+   203→   488→  // --- Star collectibles: 5-pointed gold stars with rotation + glow ---
+   204→   489→  if (starChips.length > 0) {
+   205→   490→    ctx.save();
+   206→   491→    for (let i = 0; i < starChips.length; i++) {
+   207→   492→      const f = starChips[i];
+   208→   493→      drawStarCollectible(ctx, f.x, f.y, Math.max(6, f.size + 4), rc.now, lowQuality);
+   209→   494→    }
+   210→   495→    ctx.restore();
+   211→   496→  }
+   212→   497→}
+   213→   498→
+   214→   499→// ---------------------------------------------------------------------------
+   215→   500→// Snake rendering
+   216→   501→// ---------------------------------------------------------------------------
+   217→   502→
+   218→   503→/**
+   219→   504→ * Draws a single snake. The body is rendered as ONE thick stroked polyline
+   220→   505→ * (with an outline underlay). The head is drawn separately with eyes and
+   221→   506→ * (for the player's own snake, high-quality only) a glow halo.
+   222→   507→ *
+   223→   508→ * Player skin patterns (rainbow / neon / metallic / camo) are applied when
+   224→   509→ * `rc.playerSkin.pattern` is set and the snake is the local player.
+   225→   510→ *
+   226→   511→ * @param opacity  Optional global alpha override (0..1). Default = 1.
+   227→   512→ */
+   228→   513→export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot, opacity?: number): void {
+   229→   514→  const pts = snake.points;
+   230→   515→  if (!pts || pts.length === 0) return;
+   231→   516→
+   232→   517→  const vis = computeVisibleRect(rc);
+   233→   518→  if (!snakeIsVisible(pts, vis)) return;
+   234→   519→
+   235→   520→  const { ctx, zoom, lowQuality } = rc;
+   236→   521→  const isMe = snake.id === rc.myId;
+   237→   522→  const baseAlpha = opacity ?? 1;
+   238→   523→
+   239→   524→  // Downsample long snakes
+   240→   525→  const stride = pts.length > 60 ? 2 : 1;
+   241→   526→
+   242→   527→  // Body width in world units
+   243→   528→  const radius = Math.max(2, snake.size);
+   244→   529→  const width = radius * 2;
+   245→   530→
+   246→   531→  ctx.save();
+   247→   532→  ctx.globalAlpha = baseAlpha;
+   248→   533→
+   249→   534→  // --- Outline (underlay) ---
+   250→   535→  if (snake.secondaryColor) {
+   251→   536→    ctx.save();
+   252→   537→    ctx.lineCap = 'round';
+   253→   538→    ctx.lineJoin = 'round';
+   254→   539→    ctx.lineWidth = width + 4 / zoom;
+   255→   540→    ctx.strokeStyle = snake.secondaryColor;
+   256→   541→    ctx.globalAlpha = baseAlpha * 0.55;
+   257→   542→    ctx.beginPath();
+   258→   543→    ctx.moveTo(pts[0].x, pts[0].y);
+   259→   544→    for (let i = stride; i < pts.length; i += stride) {
+   260→   545→      ctx.lineTo(pts[i].x, pts[i].y);
+   261→   546→    }
+   262→   547→    ctx.stroke();
+   263→   548→    ctx.restore();
+   264→   549→  }
+   265→   550→
+   266→   551→  // --- Body ---
+   267→   552→  ctx.save();
+   268→   553→  ctx.globalAlpha = baseAlpha;
+   269→   554→  ctx.lineCap = 'round';
+   270→   555→  ctx.lineJoin = 'round';
+   271→   556→  ctx.lineWidth = width;
+   272→   557→
+   273→   558→  const pattern = isMe ? rc.playerSkin?.pattern : undefined;
+   274→   559→  if (pattern === 'metallic' && snake.secondaryColor) {
+   275→   560→    const g = getMetallicGradient(rc, radius, snake.color, snake.secondaryColor);
+   276→   561→    ctx.strokeStyle = g;
+   277→   562→    ctx.beginPath();
+   278→   563→    ctx.moveTo(pts[0].x, pts[0].y);
+   279→   564→    for (let i = stride; i < pts.length; i += stride) {
+   280→   565→      ctx.lineTo(pts[i].x, pts[i].y);
+   281→   566→    }
+   282→   567→    ctx.stroke();
+   283→   568→  } else if (pattern === 'rainbow' && !lowQuality) {
+   284→   569→    const chunkSize = Math.max(4, Math.floor(pts.length / 12));
+   285→   570→    ctx.lineWidth = width;
+   286→   571→    for (let i = 0; i < pts.length - 1; i += chunkSize) {
+   287→   572→      const hue = (rc.now * 0.05 + i * 14) % 360;
+   288→   573→      ctx.strokeStyle = `hsl(${hue}, 90%, 55%)`;
+   289→   574→      ctx.beginPath();
+   290→   575→      ctx.moveTo(pts[i].x, pts[i].y);
+   291→   576→      const end = Math.min(pts.length - 1, i + chunkSize + 1);
+   292→   577→      for (let j = i + stride; j <= end; j += stride) {
+   293→   578→        ctx.lineTo(pts[j].x, pts[j].y);
+   294→   579→      }
+   295→   580→      ctx.stroke();
+   296→   581→    }
+   297→   582→  } else if (pattern === 'neon' && !lowQuality) {
+   298→   583→    const chunkSize = Math.max(4, Math.floor(pts.length / 10));
+   299→   584→    ctx.lineWidth = width;
+   300→   585→    let chunkIndex = 0;
+   301→   586→    for (let i = 0; i < pts.length - 1; i += chunkSize) {
+   302→   587→      const ratio = (Math.sin(rc.now * 0.009 - chunkIndex * 0.28) + 1) / 2;
+   303→   588→      ctx.strokeStyle = ratio > 0.5 ? '#06b6d4' : '#a855f7';
+   304→   589→      ctx.beginPath();
+   305→   590→      ctx.moveTo(pts[i].x, pts[i].y);
+   306→   591→      const end = Math.min(pts.length - 1, i + chunkSize + 1);
+   307→   592→      for (let j = i + stride; j <= end; j += stride) {
+   308→   593→        ctx.lineTo(pts[j].x, pts[j].y);
+   309→   594→      }
+   310→   595→      ctx.stroke();
+   311→   596→      chunkIndex += 1;
+   312→   597→    }
+   313→   598→  } else if (pattern === 'camo') {
+   314→   599→    const camoColors = ['#15803d', '#854d0e', '#78350f', '#166534'];
+   315→   600→    const chunkSize = Math.max(4, Math.floor(pts.length / 12));
+   316→   601→    let chunkIndex = 0;
+   317→   602→    for (let i = 0; i < pts.length - 1; i += chunkSize) {
+   318→   603→      ctx.strokeStyle = camoColors[chunkIndex % camoColors.length];
+   319→   604→      ctx.beginPath();
+   320→   605→      ctx.moveTo(pts[i].x, pts[i].y);
+   321→   606→      const end = Math.min(pts.length - 1, i + chunkSize + 1);
+   322→   607→      for (let j = i + stride; j <= end; j += stride) {
+   323→   608→        ctx.lineTo(pts[j].x, pts[j].y);
+   324→   609→      }
+   325→   610→      ctx.stroke();
+   326→   611→      chunkIndex += 1;
+   327→   612→    }
+   328→   613→  } else {
+   329→   614→    // Default: solid snake.color
+   330→   615→    ctx.strokeStyle = snake.color;
+   331→   616→    ctx.beginPath();
+   332→   617→    ctx.moveTo(pts[0].x, pts[0].y);
+   333→   618→    for (let i = stride; i < pts.length; i += stride) {
+   334→   619→      ctx.lineTo(pts[i].x, pts[i].y);
+   335→   620→    }
+   336→   621→    ctx.stroke();
+   337→   622→  }
+   338→   623→  ctx.restore();
+   339→   624→
+   340→   625→  // --- Head ---
+   341→   626→  const head = pts[0];
+   342→   627→  ctx.save();
+   343→   628→  ctx.globalAlpha = baseAlpha;
+   344→   629→  if (isMe && !lowQuality) {
+   345→   630→    ctx.shadowColor = snake.color;
+   346→   631→    ctx.shadowBlur = 14;
+   347→   632→  }
+   348→   633→  ctx.beginPath();
+   349→   634→  ctx.arc(head.x, head.y, radius, 0, Math.PI * 2);
+   350→   635→  ctx.fillStyle = snake.color;
+   351→   636→  ctx.fill();
+   352→   637→  if (isMe && !lowQuality) ctx.shadowBlur = 0;
+   353→   638→
+   354→   639→  // Eyes
+   355→   640→  const eyeOffset = radius * 0.45;
+   356→   641→  const eyeR = Math.max(1.5, radius * 0.32);
+   357→   642→  const pupilR = Math.max(0.8, radius * 0.18);
+   358→   643→  const angle = snake.angle;
+   359→   644→  const perp = angle + Math.PI / 2;
+   360→   645→  const ex1 = head.x + Math.cos(angle) * eyeOffset * 0.4 + Math.cos(perp) * eyeOffset;
+   361→   646→  const ey1 = head.y + Math.sin(angle) * eyeOffset * 0.4 + Math.sin(perp) * eyeOffset;
+   362→   647→  const ex2 = head.x + Math.cos(angle) * eyeOffset * 0.4 - Math.cos(perp) * eyeOffset;
+   363→   648→  const ey2 = head.y + Math.sin(angle) * eyeOffset * 0.4 - Math.sin(perp) * eyeOffset;
+   364→   649→
+   365→   650→  ctx.fillStyle = '#ffffff';
+   366→   651→  ctx.beginPath();
+   367→   652→  ctx.arc(ex1, ey1, eyeR, 0, Math.PI * 2);
+   368→   653→  ctx.arc(ex2, ey2, eyeR, 0, Math.PI * 2);
+   369→   654→  ctx.fill();
+   370→   655→
+   371→   656→  ctx.fillStyle = '#0a0a0a';
+   372→   657→  ctx.beginPath();
+   373→   658→  ctx.arc(ex1 + Math.cos(angle) * pupilR, ey1 + Math.sin(angle) * pupilR, pupilR, 0, Math.PI * 2);
+   374→   659→  ctx.arc(ex2 + Math.cos(angle) * pupilR, ey2 + Math.sin(angle) * pupilR, pupilR, 0, Math.PI * 2);
+   375→   660→  ctx.fill();
+   376→   661→
+   377→   662→  // Spawn-protection ring
+   378→   663→  if (snake.spawnProtected) {
+   379→   664→    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+   380→   665→    ctx.lineWidth = 2 / zoom;
+   381→   666→    ctx.beginPath();
+   382→   667→    ctx.arc(head.x, head.y, radius + 4 / zoom, 0, Math.PI * 2);
+   383→   668→    ctx.stroke();
+   384→   669→  }
+   385→   670→
+   386→   671→  // Extraction ring
+   387→   672→  if (snake.isExtracting) {
+   388→   673→    ctx.strokeStyle = 'rgba(16, 185, 129, 0.95)';
+   389→   674→    ctx.lineWidth = 3 / zoom;
+   390→   675→    ctx.setLineDash([6 / zoom, 4 / zoom]);
+   391→   676→    ctx.beginPath();
+   392→   677→    ctx.arc(head.x, head.y, radius + 8 / zoom, 0, Math.PI * 2);
+   393→   678→    ctx.stroke();
+   394→   679→    ctx.setLineDash([]);
+   395→   680→  }
+   396→   681→  ctx.restore();
+   397→   682→
+   398→   683→  // --- Name label ---
+   399→   684→  if (snake.name) {
+   400→   685→    ctx.save();
+   401→   686→    ctx.globalAlpha = baseAlpha;
+   402→   687→    ctx.font = `${Math.max(10, 12 / zoom)}px monospace`;
+   403→   688→    ctx.textAlign = 'center';
+   404→   689→    ctx.textBaseline = 'bottom';
+   405→   690→    const labelY = head.y - radius - 6 / zoom;
+   406→   691→    ctx.fillStyle = isMe ? '#22c55e' : 'rgba(226, 232, 240, 0.85)';
+   407→   692→    ctx.fillText(snake.name, head.x, labelY);
+   408→   693→    if (snake.userTag) {
+   409→   694→      ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
+   410→   695→      ctx.font = `${Math.max(8, 9 / zoom)}px monospace`;
+   411→   696→      ctx.fillText(snake.userTag, head.x, labelY - 12 / zoom);
+   412→   697→    }
+   413→   698→    ctx.restore();
+   414→   699→  }
+   415→   700→
+   416→   701→  // --- Chat bubble ---
+   417→   702→  if (snake.chatMessage) {
+   418→   703→    ctx.save();
+   419→   704→    ctx.globalAlpha = baseAlpha;
+   420→   705→    drawChatBubble(rc, head.x, head.y - radius - 24 / zoom, snake.chatMessage);
+   421→   706→    ctx.restore();
+   422→   707→  }
+   423→   708→
+   424→   709→  ctx.restore(); // outer globalAlpha save
+   425→   710→}
+   426→   711→
+   427→   712→// ---------------------------------------------------------------------------
+   428→   713→// Snake opacity layering system
+   429→   714→// ---------------------------------------------------------------------------
+   430→   715→
+   431→   716→/** Proximity threshold for opacity fade (world-space pixels). */
+   432→   717→const LAYERING_PROXIMITY = 30;
+   433→   718→
+   434→   719→/**
+   435→   720→ * Draws a snake with opacity layering: when a smaller snake passes close to a
+   436→   721→ * larger snake, the larger snake fades to 75% opacity. This creates visual
+   437→   722→ * depth when snakes overlap spatially.
+   438→   723→ *
+   439→   724→ * Logic:
+   440→   725→ *  1. For each OTHER snake, check if its head is within ~30px of this snake's head
+   441→   726→ *  2. If a smaller snake (by size) is nearby, this snake fades to 0.75 opacity
+   442→   727→ *  3. Otherwise, render at full opacity
+   443→   728→ */
+   444→   729→export function drawSnakeWithLayering(
+   445→   730→  rc: FrameRenderCtx,
+   446→   731→  snake: SnakeSnapshot,
+   447→   732→  allSnakes: SnakeSnapshot[],
+   448→   733→): void {
+   449→   734→  const pts = snake.points;
+   450→   735→  if (!pts || pts.length === 0) return;
+   451→   736→
+   452→   737→  const myHead = pts[0];
+   453→   738→  let shouldFade = false;
+   454→   739→
+   455→   740→  for (let i = 0; i < allSnakes.length; i++) {
+   456→   741→    const other = allSnakes[i];
+   457→   742→    if (other.id === snake.id) continue;
+   458→   743→    const otherPts = other.points;
+   459→   744→    if (!otherPts || otherPts.length === 0) continue;
+   460→   745→
+   461→   746→    const otherHead = otherPts[0];
+   462→   747→    const dist = Math.hypot(otherHead.x - myHead.x, otherHead.y - myHead.y);
+   463→   748→
+   464→   749→    if (dist < LAYERING_PROXIMITY && snake.size > other.size) {
+   465→   750→      // A smaller snake is close by — fade this (larger) snake
+   466→   751→      shouldFade = true;
+   467→   752→      break;
+   468→   753→    }
+   469→   754→  }
+   470→   755→
+   471→   756→  drawSnake(rc, snake, shouldFade ? 0.75 : 1);
+   472→   757→}
+   473→   758→
+   474→   759→// ---------------------------------------------------------------------------
+   475→   760→// Chip label above snake head
+   476→   761→// ---------------------------------------------------------------------------
+   477→   762→
+   478→   763→/**
+   479→   764→ * Draws a chip count label above the snake's head. Uses Indian numbering
+   480→   765→ * (K, L, Cr). Only meaningful for real players (bots have 0 carriedChips).
+   481→   766→ *
+   482→   767→ * Rendered as a semi-transparent pill with white text, positioned centered
+   483→   768→ * above the head.
+   484→   769→ */
+   485→   770→export function drawChipLabel(
+   486→   771→  ctx: CanvasRenderingContext2D,
+   487→   772→  x: number,
+   488→   773→  y: number,
+   489→   774→  chips: number,
+   490→   775→  snakeSize: number,
+   491→   776→  zoom: number,
+   492→   777→): void {
+   493→   778→  if (chips <= 0) return; // bots have 0 chips, skip them
+   494→   779→
+   495→   780→  const label = formatChipDisplay(chips);
+   496→   781→  const fontSize = Math.max(9, 10 / zoom);
+   497→   782→  const offset = snakeSize + 12 / zoom;
+   498→   783→
+   499→   784→  ctx.save();
+   500→   785→  ctx.font = `bold ${fontSize}px monospace`;
+   501→   786→  ctx.textAlign = 'center';
+   502→   787→  ctx.textBaseline = 'bottom';
+   503→   788→
+   504→   789→  const metrics = ctx.measureText(label);
+   505→   790→  const padX = 5 / zoom;
+   506→   791→  const padY = 2 / zoom;
+   507→   792→  const tw = metrics.width + padX * 2;
+   508→   793→  const th = fontSize + padY * 2;
+   509→   794→  const rx = x - tw / 2;
+   510→   795→  const ry = y - offset - th;
+   511→   796→  const rr = 4 / zoom;
+   512→   797→
+   513→   798→  // Background pill
+   514→   799→  ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+   515→   800→  ctx.beginPath();
+   516→   801→  ctx.moveTo(rx + rr, ry);
+   517→   802→  ctx.lineTo(rx + tw - rr, ry);
+   518→   803→  ctx.arcTo(rx + tw, ry, rx + tw, ry + rr, rr);
+   519→   804→  ctx.lineTo(rx + tw, ry + th - rr);
+   520→   805→  ctx.arcTo(rx + tw, ry + th, rx + tw - rr, ry + th, rr);
+   521→   806→  ctx.lineTo(rx + rr, ry + th);
+   522→   807→  ctx.arcTo(rx, ry + th, rx, ry + th - rr, rr);
+   523→   808→  ctx.lineTo(rx, ry + rr);
+   524→   809→  ctx.arcTo(rx, ry, rx + rr, ry, rr);
+   525→   810→  ctx.closePath();
+   526→   811→  ctx.fill();
+   527→   812→
+   528→   813→  // Gold accent border
+   529→   814→  ctx.strokeStyle = 'rgba(251, 191, 36, 0.7)';
+   530→   815→  ctx.lineWidth = 1 / zoom;
+   531→   816→  ctx.stroke();
+   532→   817→
+   533→   818→  // Text
+   534→   819→  ctx.fillStyle = '#ffffff';
+   535→   820→  ctx.textBaseline = 'middle';
+   536→   821→  ctx.fillText(label, x, ry + th / 2);
+   537→   822→
+   538→   823→  ctx.restore();
+   539→   824→}
+   540→   825→
+   541→   826→// ---------------------------------------------------------------------------
+   542→   827→// Chat bubble
+   543→   828→// ---------------------------------------------------------------------------
+   544→   829→
+   545→   830→/** Draws a small chat bubble above a snake head. */
+   546→   831→function drawChatBubble(
+   547→   832→  rc: FrameRenderCtx,
+   548→   833→  x: number,
+   549→   834→  y: number,
+   550→   835→  msg: string,
+   551→   836→): void {
+   552→   837→  const { ctx, zoom } = rc;
+   553→   838→  const text = msg.length > 80 ? msg.slice(0, 78) + '…' : msg;
+   554→   839→  ctx.save();
+   555→   840→  ctx.font = `${Math.max(10, 11 / zoom)}px monospace`;
+   556→   841→  const metrics = ctx.measureText(text);
+   557→   842→  const padX = 6 / zoom;
+   558→   843→  const padY = 3 / zoom;
+   559→   844→  const tw = metrics.width + padX * 2;
+   560→   845→  const th = 14 / zoom + padY * 2;
+   561→   846→  ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+   562→   847→  ctx.strokeStyle = 'rgba(99, 102, 241, 0.6)';
+   563→   848→  ctx.lineWidth = 1.5 / zoom;
+   564→   849→  const rx = x - tw / 2;
+   565→   850→  const ry = y - th;
+   566→   851→  const rr = 4 / zoom;
+   567→   852→  ctx.beginPath();
+   568→   853→  ctx.moveTo(rx + rr, ry);
+   569→   854→  ctx.lineTo(rx + tw - rr, ry);
+   570→   855→  ctx.arcTo(rx + tw, ry, rx + tw, ry + rr, rr);
+   571→   856→  ctx.lineTo(rx + tw, ry + th - rr);
+   572→   857→  ctx.arcTo(rx + tw, ry + th, rx + tw - rr, ry + th, rr);
+   573→   858→  ctx.lineTo(rx + rr, ry + th);
+   574→   859→  ctx.arcTo(rx, ry + th, rx, ry + th - rr, rr);
+   575→   860→  ctx.lineTo(rx, ry + rr);
+   576→   861→  ctx.arcTo(rx, ry, rx + rr, ry, rr);
+   577→   862→  ctx.closePath();
+   578→   863→  ctx.fill();
+   579→   864→  ctx.stroke();
+   580→   865→  ctx.fillStyle = '#f8fafc';
+   581→   866→  ctx.textAlign = 'center';
+   582→   867→  ctx.textBaseline = 'middle';
+   583→   868→  ctx.fillText(text, x, y - th / 2);
+   584→   869→  ctx.restore();
+   585→   870→}
+   586→   871→
+   587→   872→// ---------------------------------------------------------------------------
+   588→   873→// Particles
+   589→   874→// ---------------------------------------------------------------------------
+   590→   875→
+   591→   876→/** Draws the particle array (caller caps at MAX_PARTICLES = 200). */
+   592→   877→export function drawParticles(rc: FrameRenderCtx, particles: Particle[]): void {
+   593→   878→  if (particles.length === 0) return;
+   594→   879→  const { ctx, zoom } = rc;
+   595→   880→  ctx.save();
+   596→   881→  ctx.globalCompositeOperation = 'lighter';
+   597→   882→  for (let i = 0; i < particles.length; i++) {
+   598→   883→    const p = particles[i];
+   599→   884→    if (p.life <= 0) continue;
+   600→   885→    const alpha = Math.max(0, Math.min(1, p.life / p.maxLife));
+   601→   886→    ctx.globalAlpha = alpha;
+   602→   887→    ctx.fillStyle = p.color;
+   603→   888→    ctx.beginPath();
+   604→   889→    ctx.arc(p.x, p.y, p.size / zoom, 0, Math.PI * 2);
+   605→   890→    ctx.fill();
+   606→   891→  }
+   607→   892→  ctx.globalAlpha = 1;
+   608→   893→  ctx.globalCompositeOperation = 'source-over';
+   609→   894→  ctx.restore();
+   610→   895→}
+   611→   896→
+   612→   897→// ---------------------------------------------------------------------------
+   613→   898→// Minimap (drawn in screen-space, no camera transform)
+   614→   899→// ---------------------------------------------------------------------------
+   615→   900→
+   616→   901→export interface MinimapArgs {
+   617→   902→  ctx: CanvasRenderingContext2D;
+   618→   903→  /** Top-left of minimap in CSS pixels. */
+   619→   904→  x: number;
+   620→   905→  y: number;
+   621→   906→  /** Minimap size (square). */
+   622→   907→  size: number;
+   623→   908→  worldSize: number;
+   624→   909→  /** Current breathing arena radius (world units). */
+   625→   910→  arenaRadius: number;
+   626→   911→  snakes: SnakeSnapshot[];
+   627→   912→  myId: string;
+   628→   913→  /**
+   629→   914→   * World-space radius around the player the radar should cover. Snakes
+   630→   915→   * outside this range are NOT rendered on the small corner minimap.
+   631→   916→   * Defaults to WORLD_SIZE/2 (legacy full-radar behaviour) when omitted.
+   632→   917→   */
+   633→   918→  range?: number;
+   634→   919→}
+   635→   920→
+   636→   921→/**
+   637→   922→ * Draws the circular radar minimap. Player is rendered as an indigo dot at
+   638→   923→ * the centre (the radar is centered on the player's head). The arena
+   639→   924→ * boundary is a dashed rose circle. Bots render as rose dots, other real
+   640→   925→ * players as emerald dots — matches AUDIT-A radar visual language.
+   641→   926→ */
+   642→   927→export function drawMinimap(args: MinimapArgs): void {
+   643→   928→  const { ctx, x, y, size, worldSize, arenaRadius, snakes, myId } = args;
+   644→   929→  const cx = x + size / 2;
+   645→   930→  const cy = y + size / 2;
+   646→   931→  const r = size / 2;
+   647→   932→  const radarRange = args.range ?? WORLD_SIZE / 2;
+   648→   933→  const scale = r / radarRange;
+   649→   934→
+   650→   935→  ctx.save();
+   651→   936→  // Background circle (radar disc)
+   652→   937→  ctx.beginPath();
+   653→   938→  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+   654→   939→  ctx.fillStyle = 'rgba(2, 6, 23, 0.85)';
+   655→   940→  ctx.fill();
+   656→   941→  ctx.strokeStyle = 'rgba(99, 102, 241, 0.4)';
+   657→   942→  ctx.lineWidth = 1.5;
+   658→   943→  ctx.stroke();
+   659→   944→
+   660→   945→  // Clip to minimap circle.
+   661→   946→  ctx.beginPath();
+   662→   947→  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+   663→   948→  ctx.clip();
+   664→   949→
+   665→   950→  // Concentric rings.
+   666→   951→  ctx.strokeStyle = 'rgba(99, 102, 241, 0.10)';
+   667→   952→  ctx.lineWidth = 1;
+   668→   953→  for (const inset of [2, 5, 8]) {
+   669→   954→    ctx.beginPath();
+   670→   955→    ctx.arc(cx, cy, r - inset, 0, Math.PI * 2);
+   671→   956→    ctx.stroke();
+   672→   957→  }
+   673→   958→
+   674→   959→  // Crosshairs.
+   675→   960→  ctx.strokeStyle = 'rgba(15, 23, 42, 0.4)';
+   676→   961→  ctx.beginPath();
+   677→   962→  ctx.moveTo(cx, y);
+   678→   963→  ctx.lineTo(cx, y + size);
+   679→   964→  ctx.moveTo(x, cy);
+   680→   965→  ctx.lineTo(x + size, cy);
+   681→   966→  ctx.stroke();
+   682→   967→
+   683→   968→  // Arena boundary (dashed rose) — centered on world center.
+   684→   969→  const mySnake = snakes.find((s) => s.id === myId);
+   685→   970→  const myHead = mySnake?.points?.[0];
+   686→   971→  const px = myHead ? myHead.x : worldSize / 2;
+   687→   972→  const py = myHead ? myHead.y : worldSize / 2;
+   688→   973→  const worldCenterOffsetX = (worldSize / 2 - px) * scale;
+   689→   974→  const worldCenterOffsetY = (worldSize / 2 - py) * scale;
+   690→   975→  const arenaR = arenaRadius * scale;
+   691→   976→  ctx.strokeStyle = 'rgba(244, 63, 94, 0.6)';
+   692→   977→  ctx.lineWidth = 1.2;
+   693→   978→  ctx.setLineDash([4, 4]);
+   694→   979→  ctx.beginPath();
+   695→   980→  ctx.arc(cx + worldCenterOffsetX, cy + worldCenterOffsetY, arenaR, 0, Math.PI * 2);
+   696→   981→  ctx.stroke();
+   697→   982→  ctx.setLineDash([]);
+   698→   983→
+   699→   984→  // Snakes (player centered → drawn at centre; others offset).
+   700→   985→  for (let i = 0; i < snakes.length; i++) {
+   701→   986→    const s = snakes[i];
+   702→   987→    if (!s.points || s.points.length === 0) continue;
+   703→   988→    const head = s.points[0];
+   704→   989→    const dx = (head.x - px) * scale;
+   705→   990→    const dy = (head.y - py) * scale;
+   706→   991→    const dist = Math.hypot(dx, dy);
+   707→   992→    if (dist > r) continue;
+   708→   993→    const mx = cx + dx;
+   709→   994→    const my = cy + dy;
+   710→   995→    ctx.beginPath();
+   711→   996→    if (s.id === myId) {
+   712→   997→      ctx.arc(mx, my, 3, 0, Math.PI * 2);
+   713→   998→      ctx.fillStyle = '#818cf8'; // indigo-400
+   714→   999→    } else if (s.isBot) {
+   715→  1000→      ctx.arc(mx, my, 2, 0, Math.PI * 2);
+   716→  1001→      ctx.fillStyle = '#f43f5e'; // rose-500
+   717→  1002→    } else {
+   718→  1003→      ctx.arc(mx, my, 2, 0, Math.PI * 2);
+   719→  1004→      ctx.fillStyle = '#34d399'; // emerald-400
+   720→  1005→    }
+   721→  1006→    ctx.fill();
+   722→  1007→  }
+   723→  1008→  ctx.restore();
+   724→  1009→}
+   725→  1010→
+   726→  1011→// ---------------------------------------------------------------------------
+   727→  1012→// Full Map overlay — drawn in screen-space, no camera transform.
+   728→  1013→// Press `M` to toggle. Shows the ENTIRE arena with all snakes as dots.
+   729→  1014→// ---------------------------------------------------------------------------
+   730→  1015→
+   731→  1016→export interface FullMapArgs {
+   732→  1017→  ctx: CanvasRenderingContext2D;
+   733→  1018→  /** Canvas CSS-pixel width. */
+   734→  1019→  w: number;
+   735→  1020→  /** Canvas CSS-pixel height. */
+   736→  1021→  h: number;
+   737→  1022→  worldSize: number;
+   738→  1023→  /** Current breathing arena radius (world units). */
+   739→  1024→  arenaRadius: number;
+   740→  1025→  snakes: SnakeSnapshot[];
+   741→  1026→  myId: string;
+   742→  1027→}
+   743→  1028→
+   744→  1029→/**
+   745→  1030→ * Draws a full-screen overlay of the entire arena. The arena circle is
+   746→  1031→ * centered on screen and scaled to fit the smaller of (w, h) with padding.
+   747→  1032→ * All snakes are rendered as dots — player = indigo (larger), bots = rose,
+   748→  1033→ * other real humans = emerald. A "Press M to close" hint is drawn at the
+   749→  1034→ * bottom. The player's own dot pulses with a ring.
+   750→  1035→ */
+   751→  1036→export function drawFullMap(args: FullMapArgs): void {
+   752→  1037→  const { ctx, w, h, worldSize, arenaRadius, snakes, myId } = args;
+   753→  1038→  ctx.save();
+   754→  1039→  ctx.setTransform(1, 0, 0, 1, 0, 0);
+   755→  1040→
+   756→  1041→  // --- Background fill (dim slate) ---
+   757→  1042→  ctx.fillStyle = 'rgba(2, 6, 23, 0.94)';
+   758→  1043→  ctx.fillRect(0, 0, w, h);
+   759→  1044→
+   760→  1045→  // --- Layout: arena centred on screen ---
+   761→  1046→  const cx = w / 2;
+   762→  1047→  const cy = h / 2;
+   763→  1048→  const margin = 80;
+   764→  1049→  const fitDim = Math.min(w, h) - margin * 2;
+   765→  1050→  const arenaDiameter = arenaRadius * 2;
+   766→  1051→  const scale = fitDim / arenaDiameter;
+   767→  1052→  const screenR = arenaRadius * scale;
+   768→  1053→
+   769→  1054→  const wcx = worldSize / 2;
+   770→  1055→  const wcy = worldSize / 2;
+   771→  1056→  const toScreenX = (wx: number) => cx + (wx - wcx) * scale;
+   772→  1057→  const toScreenY = (wy: number) => cy + (wy - wcy) * scale;
+   773→  1058→
+   774→  1059→  // --- Concentric range rings (faint) ---
+   775→  1060→  ctx.strokeStyle = 'rgba(99, 102, 241, 0.10)';
+   776→  1061→  ctx.lineWidth = 1;
+   777→  1062→  for (const frac of [0.25, 0.5, 0.75]) {
+   778→  1063→    ctx.beginPath();
+   779→  1064→    ctx.arc(cx, cy, screenR * frac, 0, Math.PI * 2);
+   780→  1065→    ctx.stroke();
+   781→  1066→  }
+   782→  1067→  // Crosshairs.
+   783→  1068→  ctx.strokeStyle = 'rgba(15, 23, 42, 0.5)';
+   784→  1069→  ctx.beginPath();
+   785→  1070→  ctx.moveTo(cx, cy - screenR);
+   786→  1071→  ctx.lineTo(cx, cy + screenR);
+   787→  1072→  ctx.moveTo(cx - screenR, cy);
+   788→  1073→  ctx.lineTo(cx + screenR, cy);
+   789→  1074→  ctx.stroke();
+   790→  1075→
+   791→  1076→  // --- Arena boundary (dashed rose) ---
+   792→  1077→  ctx.strokeStyle = 'rgba(244, 63, 94, 0.8)';
+   793→  1078→  ctx.lineWidth = 2;
+   794→  1079→  ctx.setLineDash([6, 6]);
+   795→  1080→  ctx.beginPath();
+   796→  1081→  ctx.arc(cx, cy, screenR, 0, Math.PI * 2);
+   797→  1082→  ctx.stroke();
+   798→  1083→  ctx.setLineDash([]);
+   799→  1084→
+   800→  1085→  // --- Snakes ---
+   801→  1086→  for (let i = 0; i < snakes.length; i++) {
+   802→  1087→    const s = snakes[i];
+   803→  1088→    if (!s.points || s.points.length === 0) continue;
+   804→  1089→    const head = s.points[0];
+   805→  1090→    const sx = toScreenX(head.x);
+   806→  1091→    const sy = toScreenY(head.y);
+   807→  1092→    ctx.beginPath();
+   808→  1093→    if (s.id === myId) {
+   809→  1094→      ctx.arc(sx, sy, 5, 0, Math.PI * 2);
+   810→  1095→      ctx.fillStyle = '#818cf8';
+   811→  1096→      ctx.fill();
+   812→  1097→      ctx.strokeStyle = 'rgba(129, 140, 248, 0.7)';
+   813→  1098→      ctx.lineWidth = 2;
+   814→  1099→      ctx.beginPath();
+   815→  1100→      ctx.arc(sx, sy, 9, 0, Math.PI * 2);
+   816→  1101→      ctx.stroke();
+   817→  1102→    } else if (s.isBot) {
+   818→  1103→      ctx.arc(sx, sy, 2.5, 0, Math.PI * 2);
+   819→  1104→      ctx.fillStyle = '#f43f5e';
+   820→  1105→      ctx.fill();
+   821→  1106→    } else {
+   822→  1107→      ctx.arc(sx, sy, 3, 0, Math.PI * 2);
+   823→  1108→      ctx.fillStyle = '#34d399';
+   824→  1109→      ctx.fill();
+   825→  1110→    }
+   826→  1111→  }
+   827→  1112→
+   828→  1113→  // --- Title + close hint ---
+   829→  1114→  ctx.fillStyle = 'rgba(226, 232, 240, 0.95)';
+   830→  1115→  ctx.font = 'bold 14px monospace';
+   831→  1116→  ctx.textAlign = 'center';
+   832→  1117→  ctx.textBaseline = 'top';
+   833→  1118→  ctx.fillText('ARENA OVERVIEW — ALL SNAKES', cx, 16);
+   834→  1119→  ctx.fillStyle = 'rgba(148, 163, 184, 0.85)';
+   835→  1120→  ctx.font = '11px monospace';
+   836→  1121→  ctx.fillText('Press M to close', cx, h - 24);
+   837→  1122→
+   838→  1123→  // Legend (top-left).
+   839→  1124→  ctx.textAlign = 'left';
+   840→  1125→  ctx.font = '11px monospace';
+   841→  1126→  const legendX = 20;
+   842→  1127→  let legendY = 20;
+   843→  1128→  const drawLegend = (color: string, label: string, dotR: number) => {
+   844→  1129→    ctx.beginPath();
+   845→  1130→    ctx.arc(legendX + 6, legendY + 6, dotR, 0, Math.PI * 2);
+   846→  1131→    ctx.fillStyle = color;
+   847→  1132→    ctx.fill();
+   848→  1133→    ctx.fillStyle = 'rgba(226, 232, 240, 0.85)';
+   849→  1134→    ctx.fillText(label, legendX + 18, legendY);
+   850→  1135→    legendY += 18;
+   851→  1136→  };
+   852→  1137→  drawLegend('#818cf8', 'You', 5);
+   853→  1138→  drawLegend('#34d399', 'Real Players', 3);
+   854→  1139→  drawLegend('#f43f5e', 'Bots', 2.5);
+   855→  1140→
+   856→  1141→  ctx.restore();
+   857→  1142→}
+   858→  1143→

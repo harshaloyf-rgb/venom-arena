@@ -204,8 +204,8 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                       <span className="text-xs font-bold font-mono text-indigo-400 flex items-center justify-end gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
                         {arenaStats[tier.id]
-                          ? `${arenaStats[tier.id].players} / ${arenaStats[tier.id].maxPlayers}`
-                          : '0 / 500'}
+                          ? `${arenaStats[tier.id].players} / ${arenaStats[tier.id].maxPlayers.toLocaleString()}`
+                          : '0 / 1,000'}
                       </span>
                     </div>
                   )}
@@ -274,12 +274,8 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
 
             <DetailRow
               icon={<Trophy className="w-3.5 h-3.5 text-slate-500" />}
-              label="Target Value"
-              value={
-                selectedTier.minExtract === 0
-                  ? 'NONE (EXIT ANYTIME)'
-                  : `${selectedTier.minExtract.toLocaleString()} CHIPS`
-              }
+              label="Extraction"
+              value={'EXIT ANYTIME'}
               valueClass="text-emerald-400"
             />
 
@@ -298,8 +294,8 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                 </span>
                 <span className="font-mono text-indigo-400 font-semibold">
                   {arenaStats[selectedTier.id]
-                    ? `${arenaStats[selectedTier.id].players} / ${arenaStats[selectedTier.id].maxPlayers}`
-                    : '0 / 500'}
+                    ? `${arenaStats[selectedTier.id].players} / ${arenaStats[selectedTier.id].maxPlayers.toLocaleString()}`
+                    : '0 / 1,000'}
                 </span>
               </div>
             )}
@@ -318,10 +314,9 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
             <div>
               {isOnline ? (
                 <span>
-                  <strong>ONLINE MULTIPLAYER SIM:</strong> High-tension lobby.
-                  Collect dropping star chips from opponents and escape safely.
-                  Successful extraction banks <strong>65% of carried chips</strong>{' '}
-                  after <strong>35% system commission</strong>.
+                  <strong>ONLINE MULTIPLAYER:</strong> High-stakes arena for up to 1,000 players.
+                  Collect star chips from defeated opponents and extract safely.
+                  Graduated commission: <strong>0% if ≤3 players</strong>, <strong>35% if ≥4 players</strong>.
                 </span>
               ) : (
                 <span>

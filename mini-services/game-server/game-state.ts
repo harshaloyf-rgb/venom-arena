@@ -435,9 +435,10 @@ export function dropStarsAtDeath(
   const remainder = chips - valuePerStar * STAR_DROP_COUNT;
   const scatter = 40;
 
+  // Always spawn exactly 10 stars. When chips < 10, some stars get value=1
+  // (remainder distributed to last stars) so all 10 are visible.
   for (let i = 0; i < STAR_DROP_COUNT; i++) {
-    const value = valuePerStar + (i === STAR_DROP_COUNT - 1 ? remainder : 0);
-    if (value <= 0) continue;
+    const value = Math.max(1, valuePerStar + (i === STAR_DROP_COUNT - 1 ? remainder : 0));
     const id = `food-${room.arena.id}-${room.foodIdCounter++}`;
     const angle = (i / STAR_DROP_COUNT) * Math.PI * 2;
     const dist = scatter * 0.5 + Math.random() * scatter * 0.5;
@@ -604,6 +605,8 @@ export function tickBot(bot: BotSession, room: ArenaRoom, now: number): void {
     let nearPlayerAngle = 0;
     let nearPlayerVx = 0;
     let nearPlayerVy = 0;
+    let nearPlayerHx = 0;
+    let nearPlayerHy = 0;
     for (const p of room.players.values()) {
       if (p.isDead || p.matchSettling) continue;
       if (p.points.length === 0) continue;
@@ -612,6 +615,8 @@ export function tickBot(bot: BotSession, room: ArenaRoom, now: number): void {
       if (d < nearPlayerDist) {
         nearPlayerDist = d;
         nearPlayerAngle = Math.atan2(ph.y - head.y, ph.x - head.x);
+        nearPlayerHx = ph.x;
+        nearPlayerHy = ph.y;
         // Estimate player velocity from head angle
         nearPlayerVx = Math.cos(p.angle) * BASE_SPEED;
         nearPlayerVy = Math.sin(p.angle) * BASE_SPEED;
@@ -643,17 +648,17 @@ export function tickBot(bot: BotSession, room: ArenaRoom, now: number): void {
     }
     // Priority 2: Predictive evasion of human players
     else if (nearPlayerDist < BOT_EVADE_RADIUS) {
-      // Project player position 8 ticks ahead
-      const futurePx = (room.players.values().toArray().find(p => !p.isDead)?.points[0]?.x ?? 0) + nearPlayerVx * 8;
-      const futurePy = (room.players.values().toArray().find(p => !p.isDead)?.points[0]?.y ?? 0) + nearPlayerVy * 8;
+      // Project nearest player position 8 ticks ahead
+      const futurePx = nearPlayerHx + nearPlayerVx * 8;
+      const futurePy = nearPlayerHy + nearPlayerVy * 8;
       const futureD = dist(head.x, head.y, futurePx, futurePy);
       if (futureD < BOT_EVADE_RADIUS) {
         // Steer perpendicular to the player's approach vector
         const perpAngle = nearPlayerAngle + Math.PI / 2 * (Math.random() > 0.5 ? 1 : -1);
         desired = perpAngle;
       } else {
-        // Just steer away
-        desired = Math.atan2(head.y - (room.players.values().toArray().find(p => !p.isDead)?.points[0]?.y ?? 0), head.x - (room.players.values().toArray().find(p => !p.isDead)?.points[0]?.x ?? 0));
+        // Just steer away from nearest player
+        desired = Math.atan2(head.y - nearPlayerHy, head.x - nearPlayerHx);
       }
     }
     // Priority 3: Seek food

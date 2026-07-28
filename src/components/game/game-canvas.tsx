@@ -83,7 +83,6 @@ import { useToast } from '@/hooks/use-toast';
 
 import {
   ARENA_TIERS,
-  EXTRACT_COMMISSION,
   WORLD_SIZE,
   countryFlag,
   getArenaById,
@@ -717,8 +716,8 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
               arenaId: data.arenaId,
               arenaName: data.arenaName,
               chipsExtracted: data.chipsExtracted,
-              commission: Math.floor(data.chipsExtracted * EXTRACT_COMMISSION),
-              bankedAmount: data.chipsExtracted - Math.floor(data.chipsExtracted * EXTRACT_COMMISSION),
+              commission: data.commission ?? 0,
+              bankedAmount: data.bankedAmount ?? 0,
               kills: data.kills,
               score: data.score,
               deaths: data.outcome === 'death' ? 1 : 0,
@@ -745,8 +744,8 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
           arenaId: data.arenaId,
           arenaName: data.arenaName,
           chipsExtracted: data.chipsExtracted,
-          commission: Math.floor(data.chipsExtracted * EXTRACT_COMMISSION),
-          bankedAmount: data.chipsExtracted - Math.floor(data.chipsExtracted * EXTRACT_COMMISSION),
+          commission: data.commission ?? 0,
+          bankedAmount: data.bankedAmount ?? 0,
           kills: data.kills,
           score: data.score,
           deaths: data.outcome === 'death' ? 1 : 0,
@@ -1686,7 +1685,6 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
           ? 'text-amber-400'
           : 'text-rose-400';
   const snakeLength = hudScore; // Score = body length
-  const carriedBelowMin = arena.minExtract > 0 && hudCarried < arena.minExtract;
 
   // BUILD-13: offline-mode flag (practice arena OR server reports 0 real
   // players). Drives chips-display hiding + rank/leaderboard formatting.
@@ -2053,15 +2051,6 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
                   )}
                 </div>
               )}
-            </div>
-          ) : carriedBelowMin ? (
-            <div className="rounded-lg border border-rose-500/40 bg-slate-950/85 px-3 py-1.5 backdrop-blur-sm">
-              <div className="text-[11px] font-bold text-rose-400">
-                CHIPS NEEDED TO EXIT: {hudCarried}/{arena.minExtract}
-              </div>
-              <div className="mt-0.5 text-[10px] text-slate-400">
-                You need at least {arena.minExtract} chips to extract! Keep eating star chips! 💎
-              </div>
             </div>
           ) : (
             <div className="text-[11px] font-bold text-emerald-400">
@@ -2463,9 +2452,10 @@ function EndOverlay({
   const [showReplay, setShowReplay] = useState(false);
   const hasReplay = !isExtract && replayFrames && replayFrames.length > 10;
 
-  // Online extract: banked chips after commission (65% retained).
-  const commission = isExtract && !isOffline ? Math.floor(carriedChips * EXTRACT_COMMISSION) : 0;
-  const bankedAmount = isExtract && !isOffline ? carriedChips - commission : 0;
+  // Online extract: banked chips after graduated commission (0% if <=3 players, 35% if >=4).
+  // The server computes the actual commission and reports it in result.commission.
+  const commission = result?.commission ?? 0;
+  const bankedAmount = result?.bankedAmount ?? (isExtract && !isOffline ? carriedChips : 0);
   const finalBankedChips = result?.newBankedChips ?? previousBankedChips;
 
   // Title logic — AUDIT-A Section C
@@ -2654,7 +2644,7 @@ function EndOverlay({
                     <span className="text-white">{carriedChips.toLocaleString()} chips</span>
                   </div>
                   <div className="mt-1 flex items-center justify-between">
-                    <span className="text-slate-400">System Commission (35%):</span>
+                    <span className="text-slate-400">System Commission{commission > 0 ? ` (${Math.round((commission / Math.max(1, carriedChips)) * 100)}%)` : ' (0% — Low Density)'}:</span>
                     <span className="text-yellow-500">-{commission.toLocaleString()} chips</span>
                   </div>
                   <div className="mt-1 flex items-center justify-between">

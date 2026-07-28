@@ -66,3 +66,28 @@ Stage Summary:
 - All HUD requirements already implemented in prior sessions
 - Offline engine verified correct for all spec requirements
 - Lint clean, both servers running, browser verified
+---
+Task ID: 1-7
+Agent: Main Agent
+Task: Fix ALL gameplay overhaul changes per user spec — arena selector, HUD, minExtract, commission, bot AI bugs, arena-stats API
+
+Work Log:
+- Read all 8 target files (game-config.ts, types.ts, game-state.ts, index.ts, render-helpers.ts, game-canvas.tsx, offline-engine.ts, match/result/route.ts)
+- Launched 3 parallel verification agents (game-state.ts, render-helpers.ts, offline-engine.ts) to audit existing implementations
+- ALL backend game logic confirmed correct: food drops, star drops, head-on collision, bot evasion, selfDestruct, dynamic map, opacity layering, infinite offline map
+- Fixed arena-selector.tsx: "0 / 500" → "0 / 1,000", minExtract target → "EXIT ANYTIME", commission description → graduated system
+- Fixed game-canvas.tsx: removed carriedBelowMin gate, dynamic commission from server result, removed hardcoded EXTRACT_COMMISSION
+- Fixed game-state.ts: bot evasion future-position bug (was using wrong player ref), star count guarantee (always 10 even with low chips)
+- Created /api/arena-stats/route.ts for arena player count data
+- Removed conflicting HTTP stats handler from game-server (was crashing Socket.IO)
+- Restarted both servers, verified via agent-browser
+
+Stage Summary:
+- Arena selector now shows "0 / 1,000" for all arenas (was "0 / 500")
+- Extraction available at any time (no minExtract gate)
+- Graduated commission (0% ≤3 players, 35% ≥4) displayed correctly
+- Bot evasion bug fixed (future position now uses correct nearest player)
+- Star drops always spawn exactly 10 (fixed value=0 skip)
+- Online game confirmed working: connections, kills, deaths, match results
+- Offline game confirmed working: score-only leaderboard, no chips, infinite map
+- All rendering (food orbs, stars, opacity, boundaries) verified correct
