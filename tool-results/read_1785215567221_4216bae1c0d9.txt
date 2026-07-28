@@ -1,0 +1,2002 @@
+     1→'use client';
+     2→
+     3→/**
+     4→ * Venom Arena — clean GameCanvas (BUILD-10 game-canvas fix).
+     5→ *
+     6→ * Every UI string and visual element in this file has been reconciled against
+     7→ * AUDIT-A (the exhaustive audit of the original 4110-line GameCanvas.tsx).
+     8→ * The HUD text, death screen, extraction screen, hold-to-extract popup, and
+     9→ * quick-chat emotes bar all match the original strings character-for-character.
+    10→ *
+    11→ * Adapted to the BUILD-6a game-server changes:
+    12→ *  - `GameSnapshot` no longer has `extractZoneRadius`. Extraction is button-
+    13→ *    based (hold E or the bottom-right EXTRACT button anywhere in the arena).
+    14→ *  - `SnakeSnapshot` now has `score` (body-length score). The HUD "Score:"
+    15→ *    reads this directly (the snake length, not chips).
+    16→ *  - Food: regular food = +1 score (grows body), NO chips. Star chips
+    17→ *    (golden 5-point star) = +chips to carriedChips. The HUD "Carried Chips"
+    18→ *    only goes up from star chips.
+    19→ *  - Boost costs body length, not chips. Client sends `wantsBoost: true`
+    20→ *    when SPACE is held OR the BOOST button is held OR the touch joystick
+    21→ *    magnitude > 0.6. The server enforces the BOOST_MIN_LENGTH=8 gate and
+    22→ *    drops 1 tail segment every 40 frames.
+    23→ *  - Wall = death. The map has a breathing circular boundary
+    24→ *    (radius 3800 ± 40, cycle 10 s). Rendered in render-helpers as a neon
+    25→ *    rose circle. Hitting it kills you.
+    26→ *  - World is 8000×8000, centered at (4000, 4000).
+    27→ *
+    28→ * High-level architecture:
+    29→ *  - One socket effect (mount-once per arenaId) wires every server event with
+    30→ *    a paired `.off(...)` cleanup. On `connect`/`reconnect` we re-emit
+    31→ *    `join_arena` (the old canvas never did, leaving the player a ghost after
+    32→ *    a blip). [FIXES C7, C8, S1, S2, S3]
+    33→ *  - One canvas effect (mount-once) sets up the rAF loop, ResizeObserver, and
+    34→ *    DPR-aware sizing. The loop reads purely from refs (no closures over
+    35→ *    stale state). rAF is cancelled on unmount.
+    36→ *  - One input effect (mount-once) wires mouse / keyboard / touch joystick
+    37→ *    with `preventDefault` for arrows/space, blur-reset for stuck keys,
+    38→ *    pointer-capture on the extract & boost buttons, and a virtual joystick
+    39→ *    on the bottom-left quadrant of the canvas.
+    40→ *  - Rendering math lives in `./render-helpers.ts` (pure functions, no React).
+    41→ */
+    42→
+    43→import { useCallback, useEffect, useRef, useState } from 'react';
+    44→import { io, type Socket } from 'socket.io-client';
+    45→import {
+    46→  AlertTriangle,
+    47→  ChevronDown,
+    48→  ChevronUp,
+    49→  Compass,
+    50→  Landmark,
+    51→  Loader2,
+    52→  LogOut,
+    53→  Map as MapIcon,
+    54→  MessageSquare,
+    55→  Pause,
+    56→  Play,
+    57→  RotateCcw,
+    58→  Send,
+    59→  Shield,
+    60→  Signal,
+    61→  Skull,
+    62→  Swords,
+    63→  Trophy,
+    64→  User,
+    65→  UserPlus,
+    66→  Users,
+    67→  WifiOff,
+    68→  X,
+    69→  Zap,
+    70→  ZoomIn,
+    71→  ZoomOut,
+    72→} from 'lucide-react';
+    73→
+    74→import { Button } from '@/components/ui/button';
+    75→import {
+    76→  Dialog,
+    77→  DialogContent,
+    78→  DialogFooter,
+    79→  DialogHeader,
+    80→  DialogTitle,
+    81→} from '@/components/ui/dialog';
+    82→import { Input } from '@/components/ui/input';
+    83→import { useToast } from '@/hooks/use-toast';
+    84→
+    85→import {
+    86→  ARENA_TIERS,
+    87→  WORLD_SIZE,
+    88→  countryFlag,
+    89→  getArenaById,
+    90→  getCosmeticById,
+    91→} from '@/lib/game-config';
+    92→import type {
+    93→  ArenaLeaderboardEntry,
+    94→  GameSnapshot,
+    95→  MatchResult,
+    96→  PlayerProfile,
+    97→  SnakeSnapshot,
+    98→} from '@/lib/types';
+    99→
+   100→import {
+   101→  drawChipLabel,
+   102→  drawFood,
+   103→  drawFoodOrb,
+   104→  drawFullMap,
+   105→  drawGrid,
+   106→  drawMapBoundary,
+   107→  drawMinimap,
+   108→  drawParticles,
+   109→  drawSnake,
+   110→  drawSnakeWithLayering,
+   111→  drawStarCollectible,
+   112→  getArenaRadius,
+   113→  type FrameRenderCtx,
+   114→  type Particle,
+   115→} from './render-helpers';
+   116→import { OfflineGameEngine, type OfflineExitResult, type OfflineState } from './offline-engine';
+   117→
+   118→// ---------------------------------------------------------------------------
+   119→// Public types
+   120→// ---------------------------------------------------------------------------
+   121→
+   122→export interface GameCanvasProps {
+   123→  arenaId: string;
+   124→  player: PlayerProfile;
+   125→  onExit: (result?: MatchResult) => void;
+   126→}
+   127→
+   128→// ---------------------------------------------------------------------------
+   129→// Socket event payload types (strictly typed — no `any`).
+   130→// ---------------------------------------------------------------------------
+   131→
+   132→interface JoinedPayload {
+   133→  arenaId: string;
+   134→  worldSize: number;
+   135→  yourId: string;
+   136→}
+   137→
+   138→type JoinErrorReason =
+   139→  | 'insufficient_chips'
+   140→  | 'banned'
+   141→  | 'invalid_arena'
+   142→  | 'already_in_match';
+   143→
+   144→interface JoinErrorPayload {
+   145→  reason: JoinErrorReason;
+   146→}
+   147→
+   148→interface MatchResultPayload {
+   149→  outcome: 'extract' | 'death';
+   150→  arenaId: string;
+   151→  arenaName: string;
+   152→  chipsExtracted: number;
+   153→  kills: number;
+   154→  score: number;
+   155→  xpGained: number;
+   156→  newLevel: number;
+   157→  newBankedChips: number;
+   158→  durationSeconds: number;
+   159→  killerName?: string;
+   160→  killerTag?: string;
+   161→}
+   162→
+   163→interface ExtractStartPayload {
+   164→  durationMs: number;
+   165→}
+   166→
+   167→interface ExtractProgressPayload {
+   168→  progress: number; // 0..1
+   169→}
+   170→
+   171→interface ExtractFailPayload {
+   172→  reason: string;
+   173→}
+   174→
+   175→interface DeathPayload {
+   176→  killerId?: string;
+   177→  killerName?: string;
+   178→  killerTag?: string;
+   179→  killerColor?: string;
+   180→  killerIsBot?: boolean;
+   181→}
+   182→
+   183→interface ChatPayload {
+   184→  senderId: string;
+   185→  senderName: string;
+   186→  senderTag: string;
+   187→  message: string;
+   188→}
+   189→
+   190→interface KickedPayload {
+   191→  reason: string;
+   192→}
+   193→
+   194→interface ServerErrorPayload {
+   195→  message: string;
+   196→}
+   197→
+   198→interface PongPayload {
+   199→  t: number;
+   200→  id: string;
+   201→}
+   202→
+   203→interface InputPayload {
+   204→  angle: number;
+   205→  wantsBoost: boolean;
+   206→}
+   207→
+   208→// ---------------------------------------------------------------------------
+   209→// Internal helper types
+   210→// ---------------------------------------------------------------------------
+   211→
+   212→type Phase = 'connecting' | 'playing' | 'ended';
+   213→
+   214→interface KillerInfo {
+   215→  name?: string;
+   216→  tag?: string;
+   217→  color?: string;
+   218→  isBot?: boolean;
+   219→}
+   220→
+   221→interface JoystickState {
+   222→  active: boolean;
+   223→  pointerId: number;
+   224→  originX: number;
+   225→  originY: number;
+   226→  curX: number;
+   227→  curY: number;
+   228→}
+   229→
+   230→interface EndScreenState {
+   231→  outcome: 'extract' | 'death';
+   232→  killer?: KillerInfo;
+   233→  result?: MatchResult;
+   234→  durationSeconds: number;
+   235→  carriedChips: number;
+   236→  score: number;
+   237→  /** Last 30s of GameSnapshots for replay playback (death only). */
+   238→  replayFrames?: GameSnapshot[];
+   239→  /** The player's snake id — used to follow them in replay. */
+   240→  replayMyId?: string;
+   241→}
+   242→
+   243→// ---------------------------------------------------------------------------
+   244→// Constants
+   245→// ---------------------------------------------------------------------------
+   246→
+   247→const SOCKET_PORT = 3001;
+   248→const MAX_PARTICLES = 200; // [FIXES C10] capped particle array
+   249→const INPUT_HEARTBEAT_MS = 200;
+   250→const PING_INTERVAL_MS = 2500;
+   251→const FPS_LOW_THRESHOLD = 40;
+   252→const FPS_HIGH_THRESHOLD = 55;
+   253→const FPS_LOW_DURATION_MS = 2000;
+   254→const FPS_HIGH_DURATION_MS = 5000;
+   255→const MOUSE_DEADZONE_PX = 15; // [FIXES I2] old was 5px → jittery
+   256→const JOYSTICK_DEADZONE = 0.18;
+   257→const JOYSTICK_MAX_RADIUS_PX = 70;
+   258→const JOYSTICK_BOOST_MAGNITUDE = 0.6; // >60% deflection = boost
+   259→
+   260→// ---------------------------------------------------------------------------
+   261→// Component
+   262→// ---------------------------------------------------------------------------
+   263→
+   264→export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
+   265→  const { toast } = useToast();
+   266→  const arena = getArenaById(arenaId) ?? ARENA_TIERS[0];
+   267→  const isOffline = !!arena.isPractice;
+   268→
+   269→  // --- React state (triggers re-render; used only for HUD / overlays) ---
+   270→  const [phase, setPhase] = useState<Phase>('connecting');
+   271→  const [connectingMsg, setConnectingMsg] = useState('Authenticating…');
+   272→  const [connectionError, setConnectionError] = useState<string | null>(null);
+   273→  const [isReconnecting, setIsReconnecting] = useState(false);
+   274→  const [endScreen, setEndScreen] = useState<EndScreenState | null>(null);
+   275→  const [hudCarried, setHudCarried] = useState(0);
+   276→  const [hudKills, setHudKills] = useState(0);
+   277→  const [hudScore, setHudScore] = useState(0);
+   278→  const [hudRank, setHudRank] = useState(1);
+   279→  const [hudRealPlayers, setHudRealPlayers] = useState(1);
+   280→  const [hudBots, setHudBots] = useState(0);
+   281→  const [extracting, setExtracting] = useState(false);
+   282→  const [extractProgress, setExtractProgress] = useState(0);
+   283→  const [fps, setFps] = useState(60);
+   284→  const [ping, setPing] = useState<number>(-1);
+   285→  const [lowQuality, setLowQuality] = useState(false);
+   286→  const [chatOpen, setChatOpen] = useState(false);
+   287→  const [chatInput, setChatInput] = useState('');
+   288→
+   289→  // --- BUILD-13: arena leaderboard / minimap / full-map HUD state ---
+   290→  // Server-provided fields (online mode only). Zero/empty in offline.
+   291→  const [hudCommissionRate, setHudCommissionRate] = useState(0);
+   292→  const [hudLeaderboard, setHudLeaderboard] = useState<ArenaLeaderboardEntry[]>([]);
+   293→  const [hudYourRank, setHudYourRank] = useState(0);
+   294→  // realPlayerCount defaults to 1 for non-practice arenas so the HUD
+   295→  // doesn't briefly flash "offline mode" before the first snapshot.
+   296→  const [hudRealPlayerCount, setHudRealPlayerCount] = useState<number>(isOffline ? 0 : 1);
+   297→  // UI panel visibility (HTML overlays — not canvas-drawn).
+   298→  const [leaderboardOpen, setLeaderboardOpen] = useState(true);
+   299→  const [minimapVisible, setMinimapVisible] = useState(true);
+   300→  const [fullMapOpen, setFullMapOpen] = useState(false);
+   301→
+   302→  // --- Refs (mutable; read by rAF / event handlers; do NOT trigger re-render) ---
+   303→  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+   304→  const socketRef = useRef<Socket | null>(null);
+   305→  const rafRef = useRef<number | null>(null);
+   306→  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+   307→
+   308→  const snapshotRef = useRef<GameSnapshot | null>(null);
+   309→  const mySnakeIdRef = useRef<string | null>(null);
+   310→  const phaseRef = useRef<Phase>('connecting');
+   311→
+   312→  // --- Replay buffer: records last 30s of GameSnapshots (20Hz × 30s = 600 frames) ---
+   313→  const REPLAY_MAX_FRAMES = 600;
+   314→  const replayBufferRef = useRef<GameSnapshot[]>([]);
+   315→  const replayWriteIdxRef = useRef<number>(0);
+   316→  // Post-death recording: continue recording 100 more frames (5s at 20Hz) after death
+   317→  const postDeathRecordRef = useRef<number>(0);
+   318→
+   319→  const recordReplayFrame = useCallback((snap: GameSnapshot) => {
+   320→    const buf = replayBufferRef.current;
+   321→    if (buf.length < REPLAY_MAX_FRAMES) {
+   322→      buf.push(snap);
+   323→    } else {
+   324→      buf[replayWriteIdxRef.current % REPLAY_MAX_FRAMES] = snap;
+   325→    }
+   326→    replayWriteIdxRef.current++;
+   327→  }, []);
+   328→
+   329→  /** Extract the last N frames from the circular replay buffer. */
+   330→  const getReplayFrames = useCallback((): GameSnapshot[] => {
+   331→    const buf = replayBufferRef.current;
+   332→    const len = buf.length;
+   333→    if (len === 0) return [];
+   334→    // buf is already in chronological order when < REPLAY_MAX_FRAMES
+   335→    if (len < REPLAY_MAX_FRAMES) return [...buf];
+   336→    // Circular buffer: oldest frame is at writeIdx % maxFrames
+   337→    const start = replayWriteIdxRef.current % REPLAY_MAX_FRAMES;
+   338→    const result: GameSnapshot[] = [];
+   339→    for (let i = 0; i < REPLAY_MAX_FRAMES; i++) {
+   340→      result.push(buf[(start + i) % REPLAY_MAX_FRAMES]);
+   341→    }
+   342→    return result;
+   343→  }, []);
+   344→
+   345→  const keysRef = useRef<Set<string>>(new Set());
+   346→  const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+   347→  const mouseActiveRef = useRef<boolean>(false);
+   348→  const touchAngleRef = useRef<number | null>(null);
+   349→  const touchBoostRef = useRef<boolean>(false);
+   350→  const joystickRef = useRef<JoystickState | null>(null);
+   351→
+   352→  const camRef = useRef<{ x: number; y: number; zoom: number }>({
+   353→    x: WORLD_SIZE / 2,
+   354→    y: WORLD_SIZE / 2,
+   355→    zoom: 1.0,
+   356→  });
+   357→  const camInitRef = useRef<boolean>(false);
+   358→
+   359→  const particlesRef = useRef<Particle[]>([]);
+   360→  const metallicCacheRef = useRef<Map<string, CanvasGradient>>(new Map());
+   361→
+   362→  const lowQualityRef = useRef<boolean>(false);
+   363→  const fpsAccumRef = useRef<{ frames: number; lastSecond: number; lowSince: number; highSince: number }>({
+   364→    frames: 0,
+   365→    lastSecond: 0,
+   366→    lowSince: 0,
+   367→    highSince: 0,
+   368→  });
+   369→
+   370→  const pingRef = useRef<number>(-1);
+   371→  const pendingPingsRef = useRef<Map<string, number>>(new Map());
+   372→  const lastPingSentRef = useRef<number>(0);
+   373→
+   374→  const matchEndedRef = useRef<boolean>(false); // [FIXES C3] idempotency guard
+   375→  const startTimeRef = useRef<number>(Date.now());
+   376→  const killsRef = useRef<number>(0); // heuristic — refined by match_result
+   377→  const prevSnakesRef = useRef<SnakeSnapshot[]>([]); // for kill detection
+   378→  const carriedRef = useRef<number>(0); // last known carried chips
+   379→  const scoreRef = useRef<number>(0); // last known body-length score
+   380→
+   381→  const lastInputEmitRef = useRef<number>(0);
+   382→  const lastEmittedAngleRef = useRef<number>(0);
+   383→  const lastEmittedBoostRef = useRef<boolean>(false);
+   384→
+   385→  const isMountedRef = useRef<boolean>(true);
+   386→  const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+   387→  const chatTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+   388→  const extractActiveRef = useRef<boolean>(false);
+   389→  const boostHoldRef = useRef<boolean>(false);
+   390→
+   391→  // BUILD-13: refs mirroring minimap / full-map / offline-mode state so the
+   392→  // rAF loop (which reads only refs) can react without a stale closure.
+   393→  const minimapVisibleRef = useRef<boolean>(true);
+   394→  const fullMapOpenRef = useRef<boolean>(false);
+   395→  const isOfflineModeRef = useRef<boolean>(isOffline);
+   396→
+   397→  const playerSkinRef = useRef(player.currentSkin);
+   398→  playerSkinRef.current = player.currentSkin;
+   399→
+   400→  const arenaIdRef = useRef(arenaId);
+   401→  arenaIdRef.current = arenaId;
+   402→
+   403→  const playerNameRef = useRef(player.name);
+   404→  playerNameRef.current = player.name;
+   405→
+   406→  const onExitRef = useRef(onExit);
+   407→  onExitRef.current = onExit;
+   408→
+   409→  // --- Offline engine refs (BUILD-14) ---
+   410→  // When `arenaId` starts with `practice-`, we run the entire game client-side
+   411→  // via `OfflineGameEngine` instead of connecting to Socket.IO.
+   412→  const offlineEngineRef = useRef<OfflineGameEngine | null>(null);
+   413→  const offlineFinalStateRef = useRef<OfflineState | null>(null);
+   414→
+   415→  // Keep phaseRef in sync.
+   416→  useEffect(() => {
+   417→    phaseRef.current = phase;
+   418→  }, [phase]);
+   419→
+   420→  // Keep lowQualityRef in sync.
+   421→  useEffect(() => {
+   422→    lowQualityRef.current = lowQuality;
+   423→  }, [lowQuality]);
+   424→
+   425→  // BUILD-13: keep minimap / full-map / offline-mode refs in sync with state.
+   426→  useEffect(() => {
+   427→    minimapVisibleRef.current = minimapVisible;
+   428→  }, [minimapVisible]);
+   429→  useEffect(() => {
+   430→    fullMapOpenRef.current = fullMapOpen;
+   431→  }, [fullMapOpen]);
+   432→  useEffect(() => {
+   433→    isOfflineModeRef.current = isOffline || hudRealPlayerCount === 0;
+   434→  }, [isOffline, hudRealPlayerCount]);
+   435→  // Auto-hide minimap in offline mode (mapless practice arena).
+   436→  useEffect(() => {
+   437→    if (isOffline) setMinimapVisible(false);
+   438→  }, [isOffline]);
+   439→  // Default-collapse the leaderboard on small screens (mobile).
+   440→  useEffect(() => {
+   441→    if (typeof window !== 'undefined' && window.innerWidth < 640) {
+   442→      setLeaderboardOpen(false);
+   443→    }
+   444→  }, []);
+   445→
+   446→  // ----- Timer helper that's tracked for cleanup (fixes C5/C18/U8) -----
+   447→  const safeTimeout = useCallback((fn: () => void, ms: number) => {
+   448→    const id = setTimeout(() => {
+   449→      timersRef.current.delete(id);
+   450→      if (isMountedRef.current) fn();
+   451→    }, ms);
+   452→    timersRef.current.add(id);
+   453→    return id;
+   454→  }, []);
+   455→
+   456→  // =========================================================================
+   457→  // SOCKET LIFECYCLE EFFECT (mount-once per arenaId).
+   458→  // Wires every server event with a paired `.off(...)` cleanup, re-emits
+   459→  // `join_arena` on every `connect`/`reconnect`, and disconnects on unmount.
+   460→  // [FIXES C7, C8, S1, S2, S3]
+   461→  // =========================================================================
+   462→  useEffect(() => {
+   463→    // --- Offline mode: skip Socket.IO entirely. The OfflineGameEngine
+   464→    // (instantiated in a separate effect below) owns the game loop, rendering,
+   465→    // input, and HUD. ---
+   466→    if (isOffline) {
+   467→      setPhase('playing');
+   468→      setConnectingMsg('');
+   469→      return;
+   470→    }
+   471→
+   472→    isMountedRef.current = true;
+   473→    let cancelled = false;
+   474→    let localSocket: Socket | null = null;
+   475→
+   476→    (async () => {
+   477→      // --- Fetch a short-lived JWT for socket auth (cookie is httpOnly) ---
+   478→      let token: string | null = null;
+   479→      try {
+   480→        const res = await fetch('/api/auth/token', { cache: 'no-store' });
+   481→        if (res.ok) {
+   482→          const data = (await res.json()) as { token: string | null };
+   483→          token = data.token;
+   484→        }
+   485→      } catch {
+   486→        /* network error — token stays null */
+   487→      }
+   488→      if (cancelled || !isMountedRef.current) return;
+   489→
+   490→      if (!token) {
+   491→        setConnectionError('Not authenticated. Please sign in again.');
+   492→        setConnectingMsg('');
+   493→        return;
+   494→      }
+   495→
+   496→      // --- Connect socket.io ---
+   497→      // Path MUST be `/`, XTransformPort MUST be in query (per Caddy gateway).
+   498→      // Use websocket transport only to avoid polling-fallback lag.
+   499→      const socket = io('/', {
+   500→        transports: ['websocket'],
+   501→        query: { XTransformPort: SOCKET_PORT },
+   502→        auth: { token },
+   503→        reconnection: true,
+   504→        reconnectionAttempts: Infinity,
+   505→        reconnectionDelay: 1000,
+   506→        reconnectionDelayMax: 5000,
+   507→        timeout: 10000,
+   508→      });
+   509→      localSocket = socket;
+   510→      socketRef.current = socket;
+   511→
+   512→      // ----- Helpers -----
+   513→      const emitJoin = () => {
+   514→        socket.emit('join_arena', { arenaId });
+   515→      };
+   516→
+   517→      // ----- Connection lifecycle handlers -----
+   518→      const onConnect = () => {
+   519→        setIsReconnecting(false);
+   520→        setConnectionError(null);
+   521→        // [FIXES S1] emit join_arena on EVERY connect (including reconnects)
+   522→        emitJoin();
+   523→        // Reset the ping clock.
+   524→        lastPingSentRef.current = Date.now();
+   525→      };
+   526→
+   527→      const onDisconnect = () => {
+   528→        setIsReconnecting(true);
+   529→        // Clear stuck keys/inputs so the snake doesn't keep steering.
+   530→        keysRef.current.clear();
+   531→        touchBoostRef.current = false;
+   532→        boostHoldRef.current = false;
+   533→      };
+   534→
+   535→      const onConnectError = (err: Error) => {
+   536→        // [FIXES S2] surface the error to the user instead of a black screen
+   537→        setIsReconnecting(true);
+   538→        setConnectionError(err?.message || 'Connection failed');
+   539→      };
+   540→
+   541→      const onReconnectAttempt = (attempt: number) => {
+   542→        setIsReconnecting(true);
+   543→        setConnectingMsg(`Reconnecting (attempt ${attempt})…`);
+   544→      };
+   545→
+   546→      // ----- Game event handlers -----
+   547→      const onJoined = (payload: unknown) => {
+   548→        const data = payload as JoinedPayload;
+   549→        if (!data || typeof data.yourId !== 'string') return;
+   550→        mySnakeIdRef.current = data.yourId;
+   551→        startTimeRef.current = Date.now();
+   552→        matchEndedRef.current = false;
+   553→        killsRef.current = 0;
+   554→        prevSnakesRef.current = [];
+   555→        carriedRef.current = 0;
+   556→        scoreRef.current = 0;
+   557→        setPhase('playing');
+   558→        setEndScreen(null);
+   559→        setHudKills(0);
+   560→        setHudCarried(0);
+   561→        setHudScore(0);
+   562→        setHudRank(1);
+   563→        // BUILD-13: reset arena-leaderboard HUD state on (re)join.
+   564→        setHudCommissionRate(0);
+   565→        setHudLeaderboard([]);
+   566→        setHudYourRank(0);
+   567→        setHudRealPlayerCount(isOfflineModeRef.current ? 0 : 1);
+   568→        setConnectingMsg('');
+   569→        toast({
+   570→          title: isOffline ? 'Practice Mode' : 'Connected',
+   571→          description: isOffline
+   572→            ? 'Offline training arena loaded.'
+   573→            : 'Connected to real-time multiplayer shard!',
+   574→        });
+   575→      };
+   576→
+   577→      const onJoinError = (payload: unknown) => {
+   578→        const data = payload as JoinErrorPayload;
+   579→        const messages: Record<JoinErrorReason, string> = {
+   580→          insufficient_chips: 'Not enough chips to enter this arena.',
+   581→          banned: 'Your account has been banned.',
+   582→          invalid_arena: 'This arena does not exist.',
+   583→          already_in_match: 'You are already in a match.',
+   584→        };
+   585→        const reason = data?.reason ?? 'invalid_arena';
+   586→        const msg = messages[reason] || 'Could not join arena.';
+   587→        setConnectionError(msg);
+   588→        setConnectingMsg('');
+   589→        toast({
+   590→          title: 'Cannot join arena',
+   591→          description: msg,
+   592→          variant: 'destructive',
+   593→        });
+   594→        // Auto-exit after a short delay so the user sees the toast.
+   595→        safeTimeout(() => {
+   596→          if (isMountedRef.current) onExitRef.current();
+   597→        }, 1800);
+   598→      };
+   599→
+   600→      const onSnapshot = (payload: unknown) => {
+   601→        const data = payload as GameSnapshot;
+   602→        if (!data || !Array.isArray(data.snakes) || !Array.isArray(data.foods)) return;
+   603→        snapshotRef.current = data;
+   604→        // Record frame for replay: while playing OR during post-death 5s window
+   605→        if (phaseRef.current === 'playing' || postDeathRecordRef.current > 0) {
+   606→          recordReplayFrame(data);
+   607→          if (postDeathRecordRef.current > 0) {
+   608→            postDeathRecordRef.current--;
+   609→          }
+   610→        }
+   611→
+   612→        // --- BUILD-13: server-provided arena-wide fields (online mode) ---
+   613→        // In offline mode these are 0 / empty — the HUD falls back to
+   614→        // client-computed values (rank by score vs bots, leaderboard
+   615→        // built from snakes, etc.).
+   616→        const realPlayerCount =
+   617→          typeof data.realPlayerCount === 'number' ? data.realPlayerCount : 0;
+   618→        const yourRank = typeof data.yourRank === 'number' ? data.yourRank : 0;
+   619→        const commissionRate =
+   620→          typeof data.commissionRate === 'number' ? data.commissionRate : 0;
+   621→        const serverLeaderboard = Array.isArray(data.arenaLeaderboard)
+   622→          ? data.arenaLeaderboard
+   623→          : [];
+   624→        setHudRealPlayerCount(realPlayerCount);
+   625→        setHudYourRank(yourRank);
+   626→        setHudCommissionRate(commissionRate);
+   627→
+   628→        // --- Update HUD carried chips, score, rank, counts ---
+   629→        const myId = mySnakeIdRef.current;
+   630→        const me = myId ? data.snakes.find((s) => s.id === myId) : undefined;
+   631→        if (me) {
+   632→          // [FIXES S10] throttle setState — only when value changes
+   633→          if (me.carriedChips !== carriedRef.current) {
+   634→            carriedRef.current = me.carriedChips;
+   635→            setHudCarried(me.carriedChips);
+   636→          }
+   637→          if (me.score !== scoreRef.current) {
+   638→            scoreRef.current = me.score;
+   639→            setHudScore(me.score);
+   640→          }
+   641→
+   642→          // BUILD-13: rank computation differs by mode:
+   643→          //  - Online (realPlayerCount > 0): server-provided yourRank
+   644→          //    (rank by carriedChips among real players). Falls back to
+   645→          //    score-sort if the server didn't send it.
+   646→          //  - Offline: rank by score vs all snakes (you + bots).
+   647→          if (realPlayerCount > 0 && yourRank > 0) {
+   648→            setHudRank(yourRank);
+   649→          } else {
+   650→            const sorted = [...data.snakes].sort((a, b) => b.score - a.score);
+   651→            const idx = sorted.findIndex((s) => s.id === myId);
+   652→            setHudRank(idx >= 0 ? idx + 1 : 1);
+   653→          }
+   654→
+   655→          // Heuristic kill detection: a snake near us last tick that vanished.
+   656→          // Not authoritative — server's match_result.kills is the source of truth.
+   657→          const currentIds = new Set(data.snakes.map((s) => s.id));
+   658→          const head = me.points?.[0];
+   659→          if (head) {
+   660→            const prev = prevSnakesRef.current;
+   661→            for (const s of prev) {
+   662→              if (currentIds.has(s.id) || s.id === myId) continue;
+   663→              const h = s.points?.[0];
+   664→              if (!h) continue;
+   665→              const dx = h.x - head.x;
+   666→              const dy = h.y - head.y;
+   667→              const dist = Math.hypot(dx, dy);
+   668→              if (dist < 220) {
+   669→                killsRef.current += 1;
+   670→                setHudKills(killsRef.current);
+   671→              }
+   672→            }
+   673→          }
+   674→          prevSnakesRef.current = data.snakes.slice();
+   675→        }
+   676→
+   677→        // --- BUILD-13: arena leaderboard ---
+   678→        // Online: use server-provided top-10 real players by carriedChips.
+   679→        // Offline: build a top-10 by score from all snakes (you + bots).
+   680→        if (realPlayerCount > 0) {
+   681→          setHudLeaderboard(serverLeaderboard);
+   682→        } else {
+   683→          const offlineBoard: ArenaLeaderboardEntry[] = [...data.snakes]
+   684→            .sort((a, b) => b.score - a.score)
+   685→            .slice(0, 10)
+   686→            .map((s) => ({
+   687→              id: s.id,
+   688→              name: s.name,
+   689→              userTag: s.userTag,
+   690→              carriedChips: s.carriedChips,
+   691→              score: s.score,
+   692→              kills: 0,
+   693→              isPlayer: s.id === myId,
+   694→              country: s.country,
+   695→            }));
+   696→          setHudLeaderboard(offlineBoard);
+   697→        }
+   698→
+   699→        // --- Active competitor counts ---
+   700→        // BUILD-13: prefer server-reported realPlayerCount (authoritative —
+   701→        // includes humans not currently visible). Bots counted from snapshot.
+   702→        const realPlayers =
+   703→          realPlayerCount > 0
+   704→            ? realPlayerCount
+   705→            : data.snakes.filter((s) => s.isPlayer && !s.isBot).length;
+   706→        const bots = data.snakes.filter((s) => s.isBot).length;
+   707→        setHudRealPlayers(realPlayers);
+   708→        setHudBots(bots);
+   709→      };
+   710→
+   711→      const onMatchResult = (payload: unknown) => {
+   712→        const data = payload as MatchResultPayload;
+   713→        if (!data || !data.outcome) return;
+   714→        // [FIXES C3] idempotency guard — ignore duplicate match_result
+   715→        if (matchEndedRef.current && matchEndedRef.current === true) {
+   716→          // Still update the end screen with the authoritative numbers if we
+   717→          // previously got a `death` event with placeholder stats.
+   718→          setEndScreen((prev) => {
+   719→            if (!prev) return prev;
+   720→            const result: MatchResult = {
+   721→              outcome: data.outcome,
+   722→              arenaId: data.arenaId,
+   723→              arenaName: data.arenaName,
+   724→              chipsExtracted: data.chipsExtracted,
+   725→              commission: data.commission ?? 0,
+   726→              bankedAmount: data.bankedAmount ?? 0,
+   727→              kills: data.kills,
+   728→              score: data.score,
+   729→              deaths: data.outcome === 'death' ? 1 : 0,
+   730→              xpGained: data.xpGained,
+   731→              newLevel: data.newLevel,
+   732→              newBankedChips: data.newBankedChips,
+   733→              durationSeconds: data.durationSeconds,
+   734→              killerName: data.killerName,
+   735→              killerTag: data.killerTag,
+   736→            };
+   737→            return {
+   738→              ...prev,
+   739→              result,
+   740→              durationSeconds: data.durationSeconds,
+   741→              carriedChips: prev.carriedChips,
+   742→              score: data.score || prev.score,
+   743→            };
+   744→          });
+   745→          return;
+   746→        }
+   747→        matchEndedRef.current = true;
+   748→        const result: MatchResult = {
+   749→          outcome: data.outcome,
+   750→          arenaId: data.arenaId,
+   751→          arenaName: data.arenaName,
+   752→          chipsExtracted: data.chipsExtracted,
+   753→          commission: data.commission ?? 0,
+   754→          bankedAmount: data.bankedAmount ?? 0,
+   755→          kills: data.kills,
+   756→          score: data.score,
+   757→          deaths: data.outcome === 'death' ? 1 : 0,
+   758→          xpGained: data.xpGained,
+   759→          newLevel: data.newLevel,
+   760→          newBankedChips: data.newBankedChips,
+   761→          durationSeconds: data.durationSeconds,
+   762→          killerName: data.killerName,
+   763→          killerTag: data.killerTag,
+   764→        };
+   765→        setPhase('ended');
+   766→        setHudKills(data.kills);
+   767→        setEndScreen({
+   768→          outcome: data.outcome,
+   769→          result,
+   770→          durationSeconds: data.durationSeconds,
+   771→          carriedChips: carriedRef.current,
+   772→          score: data.score || scoreRef.current,
+   773→          killer:
+   774→            data.outcome === 'death' && data.killerName
+   775→              ? { name: data.killerName, tag: data.killerTag }
+   776→              : undefined,
+   777→          // Attach replay frames for death
+   778→          ...(data.outcome === 'death' ? {
+   779→            replayFrames: getReplayFrames(),
+   780→            replayMyId: mySnakeIdRef.current ?? undefined,
+   781→          } : {}),
+   782→        });
+   783→        // Show level-up toast if applicable.
+   784→        if (data.newLevel > player.level) {
+   785→          toast({
+   786→            title: 'Level Up!',
+   787→            description: `LEVEL UP! You reached Level ${data.newLevel}!`,
+   788→          });
+   789→        }
+   790→      };
+   791→
+   792→      const onExtractStart = (payload: unknown) => {
+   793→        const data = payload as ExtractStartPayload;
+   794→        extractActiveRef.current = true;
+   795→        setExtracting(true);
+   796→        setExtractProgress(0);
+   797→        // Server's durationMs is informational — progress events drive the bar.
+   798→        void data;
+   799→      };
+   800→
+   801→      const onExtractProgress = (payload: unknown) => {
+   802→        const data = payload as ExtractProgressPayload;
+   803→        if (typeof data?.progress === 'number') {
+   804→          setExtractProgress(Math.max(0, Math.min(1, data.progress)));
+   805→        }
+   806→      };
+   807→
+   808→      const onExtractFail = (payload: unknown) => {
+   809→        const data = payload as ExtractFailPayload;
+   810→        extractActiveRef.current = false;
+   811→        setExtracting(false);
+   812→        setExtractProgress(0);
+   813→        toast({
+   814→          title: 'Extraction failed',
+   815→          description: data?.reason || 'You moved or took damage.',
+   816→          variant: 'destructive',
+   817→        });
+   818→      };
+   819→
+   820→      const onDeath = (payload: unknown) => {
+   821→        const data = payload as DeathPayload;
+   822→        // [FIXES C3] idempotency — if match already ended, ignore.
+   823→        if (matchEndedRef.current) return;
+   824→        matchEndedRef.current = true;
+   825→        const killer: KillerInfo | undefined = data?.killerName
+   826→          ? {
+   827→              name: data.killerName,
+   828→              tag: data.killerTag,
+   829→              color: data.killerColor,
+   830→              isBot: data?.killerIsBot ?? true,
+   831→            }
+   832→          : undefined;
+   833→        const duration = Math.floor((Date.now() - startTimeRef.current) / 1000);
+   834→
+   835→        // Start post-death recording: 100 frames = 5 seconds at 20Hz
+   836→        postDeathRecordRef.current = 100;
+   837→
+   838→        setPhase('ended');
+   839→        if (!isOffline) {
+   840→          toast({
+   841→            title: 'Eliminated',
+   842→            description: `ELIMINATED: You collided with ${data?.killerName || 'another player'}! 💀`,
+   843→            variant: 'destructive',
+   844→          });
+   845→        } else {
+   846→          toast({
+   847→            title: 'Crashed',
+   848→            description: 'CRASH! (Offline Practice Mode - No chips lost!)',
+   849→          });
+   850→        }
+   851→
+   852→        // Delay capturing replay frames to include post-death frames.
+   853→        // The replay capture happens after the 5s window in the snapshot handler.
+   854→        // But we also set the endScreen now with current replay (pre-death).
+   855→        // We'll update it again when post-death recording completes.
+   856→        setEndScreen({
+   857→          outcome: 'death',
+   858→          killer,
+   859→          durationSeconds: duration,
+   860→          carriedChips: carriedRef.current,
+   861→          score: scoreRef.current,
+   862→          replayFrames: getReplayFrames(),
+   863→          replayMyId: mySnakeIdRef.current ?? undefined,
+   864→        });
+   865→
+   866→        // After 5s post-death recording completes, update endScreen with final frames.
+   867→        // We use a check in the snapshot handler or a setTimeout as fallback.
+   868→        setTimeout(() => {
+   869→          setEndScreen(prev => prev?.outcome === 'death' ? {
+   870→            ...prev,
+   871→            replayFrames: getReplayFrames(),
+   872→          } : prev);
+   873→        }, 5500); // slightly more than 5s to ensure all 100 frames captured
+   874→      };
+   875→
+   876→      const onChat = (payload: unknown) => {
+   877→        const data = payload as ChatPayload;
+   878→        if (!data || typeof data.message !== 'string') return;
+   879→        // Mention detection — toast if message contains player's name (case-insensitive).
+   880→        const myName = playerNameRef.current.toLowerCase();
+   881→        if (myName && data.message.toLowerCase().includes(myName)) {
+   882→          toast({
+   883→            title: `${data.senderName} mentioned you`,
+   884→            description: data.message.slice(0, 120),
+   885→          });
+   886→        }
+   887→      };
+   888→
+   889→      const onKicked = (payload: unknown) => {
+   890→        const data = payload as KickedPayload;
+   891→        toast({
+   892→          title: 'Kicked',
+   893→          description: data?.reason || 'You were removed by an admin.',
+   894→          variant: 'destructive',
+   895→        });
+   896→        safeTimeout(() => {
+   897→          if (isMountedRef.current) onExitRef.current();
+   898→        }, 1500);
+   899→      };
+   900→
+   901→      const onServerShutdown = () => {
+   902→        toast({
+   903→          title: 'Server restarting',
+   904→          description: 'The game server is going down for maintenance.',
+   905→          variant: 'destructive',
+   906→        });
+   907→        safeTimeout(() => {
+   908→          if (isMountedRef.current) onExitRef.current();
+   909→        }, 1500);
+   910→      };
+   911→
+   912→      const onError = (payload: unknown) => {
+   913→        const data = payload as ServerErrorPayload;
+   914→        toast({
+   915→          title: 'Server error',
+   916→          description: data?.message || 'An error occurred.',
+   917→          variant: 'destructive',
+   918→        });
+   919→      };
+   920→
+   921→      const onPong = (payload: unknown) => {
+   922→        const data = payload as PongPayload;
+   923→        if (!data || typeof data.id !== 'string') return;
+   924→        const sentAt = pendingPingsRef.current.get(data.id);
+   925→        if (sentAt === undefined) return;
+   926→        pendingPingsRef.current.delete(data.id);
+   927→        const rtt = Date.now() - sentAt;
+   928→        pingRef.current = rtt;
+   929→        setPing(rtt);
+   930→      };
+   931→
+   932→      // ----- Register all listeners -----
+   933→      socket.on('connect', onConnect);
+   934→      socket.on('disconnect', onDisconnect);
+   935→      socket.on('connect_error', onConnectError);
+   936→      socket.on('reconnect_attempt', onReconnectAttempt);
+   937→      socket.on('joined', onJoined);
+   938→      socket.on('join_error', onJoinError);
+   939→      socket.on('snapshot', onSnapshot);
+   940→      socket.on('match_result', onMatchResult);
+   941→      socket.on('extract_start', onExtractStart);
+   942→      socket.on('extract_progress', onExtractProgress);
+   943→      socket.on('extract_fail', onExtractFail);
+   944→      socket.on('death', onDeath);
+   945→      socket.on('chat', onChat);
+   946→      socket.on('kicked', onKicked);
+   947→      socket.on('server_shutdown', onServerShutdown);
+   948→      socket.on('error', onError);
+   949→      socket.on('pong', onPong);
+   950→    })();
+   951→
+   952→    return () => {
+   953→      cancelled = true;
+   954→      isMountedRef.current = false;
+   955→      const s = localSocket || socketRef.current;
+   956→      if (s) {
+   957→        // Best-effort leave emit, then disconnect.
+   958→        try {
+   959→          s.emit('leave', {});
+   960→        } catch {
+   961→          /* ignore */
+   962→        }
+   963→        // [FIXES C7] explicitly remove every listener we registered
+   964→        s.off('connect');
+   965→        s.off('disconnect');
+   966→        s.off('connect_error');
+   967→        s.off('reconnect_attempt');
+   968→        s.off('joined');
+   969→        s.off('join_error');
+   970→        s.off('snapshot');
+   971→        s.off('match_result');
+   972→        s.off('extract_start');
+   973→        s.off('extract_progress');
+   974→        s.off('extract_fail');
+   975→        s.off('death');
+   976→        s.off('chat');
+   977→        s.off('kicked');
+   978→        s.off('server_shutdown');
+   979→        s.off('error');
+   980→        s.off('pong');
+   981→        s.disconnect();
+   982→      }
+   983→      socketRef.current = null;
+   984→      // Clear all tracked timers.
+   985→      for (const id of timersRef.current) clearTimeout(id);
+   986→      timersRef.current.clear();
+   987→      for (const id of chatTimeoutsRef.current.values()) clearTimeout(id);
+   988→      chatTimeoutsRef.current.clear();
+   989→      // Cancel any pending rAF (defensive — also handled by the canvas effect).
+   990→      if (rafRef.current !== null) {
+   991→        cancelAnimationFrame(rafRef.current);
+   992→        rafRef.current = null;
+   993→      }
+   994→    };
+   995→  }, [arenaId, isOffline, player.level, safeTimeout, toast]);
+   996→
+   997→  // =========================================================================
+   998→  // OFFLINE ENGINE EFFECT (BUILD-14) — practice-* arenas run entirely
+   999→  // client-side. No Socket.IO, no minimap, no chips. The engine owns the
+  1000→  // game loop, rendering, input, and HUD overlays (built as DOM children
+  1001→  // of `canvas.parentElement`). On unmount we stop the engine and tear down
+  1002→  // every listener / DOM node it created.
+  1003→  // =========================================================================
+  1004→  useEffect(() => {
+  1005→    if (!isOffline) return;
+  1006→    const canvas = canvasRef.current;
+  1007→    if (!canvas) return;
+  1008→
+  1009→    offlineFinalStateRef.current = null;
+  1010→    const engine = new OfflineGameEngine(arena, player, canvas);
+  1011→    offlineEngineRef.current = engine;
+  1012→
+  1013→    engine.onStateChange = (s) => {
+  1014→      if (s === 'dead' || s === 'extracted') {
+  1015→        offlineFinalStateRef.current = s;
+  1016→      }
+  1017→    };
+  1018→    engine.onExit = (r: OfflineExitResult) => {
+  1019→      const outcome: 'extract' | 'death' =
+  1020→        offlineFinalStateRef.current === 'dead' ? 'death' : 'extract';
+  1021→      const result: MatchResult = {
+  1022→        outcome,
+  1023→        arenaId: arena.id,
+  1024→        arenaName: arena.name,
+  1025→        chipsExtracted: 0, // chip-less offline mode
+  1026→        commission: 0,
+  1027→        bankedAmount: 0,
+  1028→        kills: r.kills,
+  1029→        score: r.score,
+  1030→        deaths: outcome === 'death' ? 1 : 0,
+  1031→        xpGained: 0, // offline = no XP
+  1032→        newLevel: player.level,
+  1033→        newBankedChips: player.bankedChips,
+  1034→        durationSeconds: r.durationSeconds,
+  1035→      };
+  1036→      onExitRef.current(result);
+  1037→    };
+  1038→
+  1039→    engine.start();
+  1040→
+  1041→    return () => {
+  1042→      engine.stop();
+  1043→      offlineEngineRef.current = null;
+  1044→    };
+  1045→  }, [arena, isOffline, player]);
+  1046→
+  1047→  // Ref holding the input-compute function (set by the input effect, read by rAF).
+  1048→  const computeInputRef = useRef<(() => { angle: number | null; boost: boolean }) | null>(null);
+  1049→
+  1050→  // =========================================================================
+  1051→  // Input emit (called from rAF loop).
+  1052→  // [FIXES P13, S4] single emit site, throttled to MAX_SNAPSHOTS_PER_SECOND.
+  1053→  // Declared BEFORE the canvas effect so the rAF closure can reference it
+  1054→  // without a temporal-dead-zone violation.
+  1055→  // =========================================================================
+  1056→  const maybeEmitInput = useCallback((now: number) => {
+  1057→    const s = socketRef.current;
+  1058→    if (!s || !s.connected) return;
+  1059→    if (phaseRef.current !== 'playing') return;
+  1060→    if (matchEndedRef.current) return;
+  1061→    const compute = computeInputRef.current;
+  1062→    if (!compute) return;
+  1063→    const { angle, boost } = compute();
+  1064→    if (angle === null) return;
+  1065→
+  1066→    const sinceLast = now - lastInputEmitRef.current;
+  1067→    const angleChanged = Math.abs(angle - lastEmittedAngleRef.current) > 0.015;
+  1068→    const boostChanged = boost !== lastEmittedBoostRef.current;
+  1069→    const heartbeat = sinceLast > INPUT_HEARTBEAT_MS;
+  1070→
+  1071→    if (sinceLast < 50 && !angleChanged && !boostChanged) return;
+  1072→    if (!angleChanged && !boostChanged && !heartbeat) return;
+  1073→
+  1074→    const payload: InputPayload = { angle, wantsBoost: boost };
+  1075→    s.emit('input', payload);
+  1076→    lastInputEmitRef.current = now;
+  1077→    lastEmittedAngleRef.current = angle;
+  1078→    lastEmittedBoostRef.current = boost;
+  1079→  }, []);
+  1080→
+  1081→  // =========================================================================
+  1082→  // CANVAS + RENDER LOOP EFFECT (mount-once).
+  1083→  // =========================================================================
+  1084→  useEffect(() => {
+  1085→    // Offline mode: the OfflineGameEngine owns the canvas + rAF loop.
+  1086→    if (isOffline) return;
+  1087→    const canvas = canvasRef.current;
+  1088→    if (!canvas) return;
+  1089→    const ctx = canvas.getContext('2d', { alpha: false });
+  1090→    if (!ctx) return;
+  1091→
+  1092→    // ----- DPR-aware sizing -----
+  1093→    const resize = () => {
+  1094→      const dpr = Math.min(window.devicePixelRatio || 1, 2); // cap DPR at 2 for perf
+  1095→      const rect = canvas.getBoundingClientRect();
+  1096→      const w = Math.max(1, Math.floor(rect.width));
+  1097→      const h = Math.max(1, Math.floor(rect.height));
+  1098→      canvas.width = Math.floor(w * dpr);
+  1099→      canvas.height = Math.floor(h * dpr);
+  1100→      // Invalidate the metallic gradient cache (gradients are device-pixel bound).
+  1101→      metallicCacheRef.current.clear();
+  1102→    };
+  1103→    resize();
+  1104→    resizeObserverRef.current = new ResizeObserver(resize);
+  1105→    resizeObserverRef.current.observe(canvas);
+  1106→
+  1107→    // ----- FPS tracking with adaptive quality -----
+  1108→    const updateFps = (now: number) => {
+  1109→      const acc = fpsAccumRef.current;
+  1110→      acc.frames += 1;
+  1111→      if (acc.lastSecond === 0) acc.lastSecond = now;
+  1112→      const dt = now - acc.lastSecond;
+  1113→      if (dt >= 1000) {
+  1114→        const measured = (acc.frames * 1000) / dt;
+  1115→        setFps(Math.round(measured));
+  1116→        if (measured < FPS_LOW_THRESHOLD) {
+  1117→          if (acc.lowSince === 0) acc.lowSince = now;
+  1118→          if (acc.highSince !== 0) acc.highSince = 0;
+  1119→          if (now - acc.lowSince >= FPS_LOW_DURATION_MS && !lowQualityRef.current) {
+  1120→            setLowQuality(true);
+  1121→          }
+  1122→        } else if (measured > FPS_HIGH_THRESHOLD) {
+  1123→          if (acc.highSince === 0) acc.highSince = now;
+  1124→          if (acc.lowSince !== 0) acc.lowSince = 0;
+  1125→          if (now - acc.highSince >= FPS_HIGH_DURATION_MS && lowQualityRef.current) {
+  1126→            setLowQuality(false);
+  1127→          }
+  1128→        } else {
+  1129→          // Hysteresis band — don't flap.
+  1130→          acc.lowSince = 0;
+  1131→          acc.highSince = 0;
+  1132→        }
+  1133→        acc.frames = 0;
+  1134→        acc.lastSecond = now;
+  1135→      }
+  1136→    };
+  1137→
+  1138→    // ----- Particle update -----
+  1139→    const updateParticles = (dtMs: number) => {
+  1140→      const arr = particlesRef.current;
+  1141→      const dt = dtMs / 1000;
+  1142→      for (let i = arr.length - 1; i >= 0; i--) {
+  1143→        const p = arr[i];
+  1144→        p.life -= dtMs;
+  1145→        if (p.life <= 0) {
+  1146→          arr.splice(i, 1);
+  1147→          continue;
+  1148→        }
+  1149→        p.x += p.vx * dt;
+  1150→        p.y += p.vy * dt;
+  1151→        p.vx *= 0.96;
+  1152→        p.vy *= 0.96;
+  1153→      }
+  1154→      // Hard cap (defensive — spawns are already throttled).
+  1155→      if (arr.length > MAX_PARTICLES) {
+  1156→        arr.splice(0, arr.length - MAX_PARTICLES);
+  1157→      }
+  1158→    };
+  1159→
+  1160→    // ----- Main loop -----
+  1161→    let lastFrameTime = performance.now();
+  1162→    const frame = (now: number) => {
+  1163→      if (!isMountedRef.current) return;
+  1164→      rafRef.current = requestAnimationFrame(frame);
+  1165→
+  1166→      const dt = now - lastFrameTime;
+  1167→      lastFrameTime = now;
+  1168→
+  1169→      updateFps(now);
+  1170→      updateParticles(dt);
+  1171→
+  1172→      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  1173→      const cssW = canvas.clientWidth;
+  1174→      const cssH = canvas.clientHeight;
+  1175→      if (cssW === 0 || cssH === 0) return;
+  1176→
+  1177→      // --- Clear ---
+  1178→      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  1179→      ctx.clearRect(0, 0, cssW, cssH);
+  1180→      ctx.fillStyle = '#020617'; // Deep Slate (matches arena bg)
+  1181→      ctx.fillRect(0, 0, cssW, cssH);
+  1182→
+  1183→      // --- BUILD-13: full-screen arena map overlay (M key) ---
+  1184→      // Replaces the regular scene while open. Still emits input + ping
+  1185→      // so the snake keeps moving in the background.
+  1186→      if (fullMapOpenRef.current) {
+  1187→        const fmSnap = snapshotRef.current;
+  1188→        if (fmSnap) {
+  1189→          drawFullMap({
+  1190→            ctx,
+  1191→            w: cssW,
+  1192→            h: cssH,
+  1193→            worldSize: fmSnap.worldSize ?? WORLD_SIZE,
+  1194→            // Use dynamic mapRadius from server snapshot, fallback to breathing formula
+  1195→            arenaRadius: (fmSnap.mapRadius && fmSnap.mapRadius > 0) ? fmSnap.mapRadius : getArenaRadius(now),
+  1196→            snakes: fmSnap.snakes,
+  1197→            myId: mySnakeIdRef.current ?? '',
+  1198→          });
+  1199→          maybeEmitInput(now);
+  1200→          if (now - lastPingSentRef.current >= PING_INTERVAL_MS) {
+  1201→            lastPingSentRef.current = now;
+  1202→            const s = socketRef.current;
+  1203→            if (s && s.connected) {
+  1204→              const id = `${now}-${Math.random().toString(36).slice(2, 8)}`;
+  1205→              pendingPingsRef.current.set(id, now);
+  1206→              s.emit('ping', { t: now, id });
+  1207→            }
+  1208→          }
+  1209→          return;
+  1210→        }
+  1211→      }
+  1212→
+  1213→      // --- Camera follow ---
+  1214→      const snap = snapshotRef.current;
+  1215→      const myId = mySnakeIdRef.current;
+  1216→      const mySnake = snap && myId ? snap.snakes.find((s) => s.id === myId) : undefined;
+  1217→      const head = mySnake?.points?.[0];
+  1218→      const cam = camRef.current;
+  1219→      if (head) {
+  1220→        if (!camInitRef.current) {
+  1221→          cam.x = head.x;
+  1222→          cam.y = head.y;
+  1223→          camInitRef.current = true;
+  1224→        } else {
+  1225→          // Smooth lerp
+  1226→          cam.x += (head.x - cam.x) * 0.18;
+  1227→          cam.y += (head.y - cam.y) * 0.18;
+  1228→        }
+  1229→        // Zoom based on body length: bigger snake → zoom out.
+  1230→        const len = mySnake.points.length;
+  1231→        const targetZoom = Math.max(0.6, Math.min(1.4, 1.4 - (len - 12) * 0.008));
+  1232→        cam.zoom += (targetZoom - cam.zoom) * 0.05;
+  1233→      }
+  1234→
+  1235→      // --- Build per-frame render context ---
+  1236→      const playerSkin = getCosmeticById(playerSkinRef.current);
+  1237→      const rc: FrameRenderCtx = {
+  1238→        ctx,
+  1239→        w: cssW,
+  1240→        h: cssH,
+  1241→        camX: cam.x,
+  1242→        camY: cam.y,
+  1243→        zoom: cam.zoom,
+  1244→        worldSize: snap?.worldSize ?? WORLD_SIZE,
+  1245→        lowQuality: lowQualityRef.current,
+  1246→        myId: myId ?? '',
+  1247→        now,
+  1248→        metallicCache: metallicCacheRef.current,
+  1249→        playerSkin,
+  1250→        dpr,
+  1251→      };
+  1252→
+  1253→      // --- World transform ---
+  1254→      ctx.translate(cssW / 2, cssH / 2);
+  1255→      ctx.scale(cam.zoom, cam.zoom);
+  1256→      ctx.translate(-cam.x, -cam.y);
+  1257→
+  1258→      // --- Draw world (dynamic arena boundary + grid) ---
+  1259→      // Use the server-provided dynamic mapRadius for online arenas
+  1260→      const dynamicMapRadius = snap?.mapRadius && snap.mapRadius > 0 ? snap.mapRadius : undefined;
+  1261→      const mapCenterX = snap?.mapCenterX ?? rc.worldSize / 2;
+  1262→      const mapCenterY = snap?.mapCenterY ?? rc.worldSize / 2;
+  1263→
+  1264→      if (dynamicMapRadius) {
+  1265→        // Online mode: draw grid + dynamic map boundary
+  1266→        drawGrid(rc);
+  1267→        drawMapBoundary(ctx, mapCenterX, mapCenterY, dynamicMapRadius, now);
+  1268→      } else {
+  1269→        // Fallback: fixed breathing arena
+  1270→        drawGrid(rc);
+  1271→      }
+  1272→
+  1273→      // --- Draw food ---
+  1274→      if (snap) {
+  1275→        drawFood(rc, snap.foods);
+  1276→      }
+  1277→
+  1278→      // --- Draw snakes with opacity layering (player last, on top) ---
+  1279→      if (snap) {
+  1280→        // Use drawSnakeWithLayering for opacity system:
+  1281→        // larger snakes fade to 75% when a smaller snake passes underneath
+  1282→        for (const s of snap.snakes) {
+  1283→          if (s.id !== myId) drawSnakeWithLayering(rc, s, snap.snakes);
+  1284→        }
+  1285→        if (mySnake) drawSnake(rc, mySnake);
+  1286→
+  1287→        // Draw chip labels above real player heads (NOT bots)
+  1288→        for (const s of snap.snakes) {
+  1289→          if (s.isPlayer && s.carriedChips > 0 && s.points && s.points.length > 0) {
+  1290→            const head = s.points[0];
+  1291→            drawChipLabel(ctx, head.x, head.y, s.carriedChips, s.size, cam.zoom);
+  1292→          }
+  1293→        }
+  1294→      }
+  1295→
+  1296→      // --- Draw particles ---
+  1297→      drawParticles(rc, particlesRef.current);
+  1298→
+  1299→      // --- Reset transform for screen-space drawing ---
+  1300→      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  1301→
+  1302→      // --- Minimap (bottom-right per AUDIT-A radar) ---
+  1303→      // BUILD-13: hidden when the user toggles it off via the top-right
+  1304→      // "Collapse" button. Range clamped to 1800 so only nearby snakes
+  1305→      // render (per BUILD-13 spec). Offline mode never reaches this code
+  1306→      // path (the OfflineGameEngine owns the canvas in practice arenas).
+  1307→      if (snap && minimapVisibleRef.current) {
+  1308→        const mmSize = 96;
+  1309→        const mmX = cssW - mmSize - 12;
+  1310→        const mmY = cssH - mmSize - 12;
+  1311→        // Use dynamic mapRadius from server snapshot, fallback to breathing formula
+  1312→        const mmArenaRadius = dynamicMapRadius ?? getArenaRadius(now);
+  1313→        drawMinimap({
+  1314→          ctx,
+  1315→          x: mmX,
+  1316→          y: mmY,
+  1317→          size: mmSize,
+  1318→          worldSize: rc.worldSize,
+  1319→          arenaRadius: mmArenaRadius,
+  1320→          snakes: snap.snakes,
+  1321→          myId: myId ?? '',
+  1322→          range: 1800,
+  1323→        });
+  1324→      }
+  1325→
+  1326→      // --- Joystick (touch) ---
+  1327→      const js = joystickRef.current;
+  1328→      if (js && js.active) {
+  1329→        const dx = js.curX - js.originX;
+  1330→        const dy = js.curY - js.originY;
+  1331→        const dist = Math.min(JOYSTICK_MAX_RADIUS_PX, Math.hypot(dx, dy));
+  1332→        const ang = Math.atan2(dy, dx);
+  1333→        const stickX = js.originX + Math.cos(ang) * dist;
+  1334→        const stickY = js.originY + Math.sin(ang) * dist;
+  1335→        // Outer ring
+  1336→        ctx.beginPath();
+  1337→        ctx.arc(js.originX, js.originY, JOYSTICK_MAX_RADIUS_PX, 0, Math.PI * 2);
+  1338→        ctx.fillStyle = 'rgba(129, 140, 248, 0.12)'; // indigo-400 alpha
+  1339→        ctx.fill();
+  1340→        ctx.strokeStyle = 'rgba(129, 140, 248, 0.5)';
+  1341→        ctx.lineWidth = 2;
+  1342→        ctx.stroke();
+  1343→        // Inner stick
+  1344→        ctx.beginPath();
+  1345→        ctx.arc(stickX, stickY, 24, 0, Math.PI * 2);
+  1346→        ctx.fillStyle = 'rgba(129, 140, 248, 0.85)';
+  1347→        ctx.fill();
+  1348→      }
+  1349→
+  1350→      // --- Emit input (throttled) ---
+  1351→      maybeEmitInput(now);
+  1352→
+  1353→      // --- Send periodic ping ---
+  1354→      if (now - lastPingSentRef.current >= PING_INTERVAL_MS) {
+  1355→        lastPingSentRef.current = now;
+  1356→        const s = socketRef.current;
+  1357→        if (s && s.connected) {
+  1358→          const id = `${now}-${Math.random().toString(36).slice(2, 8)}`;
+  1359→          pendingPingsRef.current.set(id, now);
+  1360→          s.emit('ping', { t: now, id });
+  1361→        }
+  1362→      }
+  1363→    };
+  1364→
+  1365→    rafRef.current = requestAnimationFrame(frame);
+  1366→
+  1367→    return () => {
+  1368→      if (rafRef.current !== null) {
+  1369→        cancelAnimationFrame(rafRef.current);
+  1370→        rafRef.current = null;
+  1371→      }
+  1372→      if (resizeObserverRef.current) {
+  1373→        resizeObserverRef.current.disconnect();
+  1374→        resizeObserverRef.current = null;
+  1375→      }
+  1376→    };
+  1377→  }, [isOffline, maybeEmitInput]);
+  1378→
+  1379→  // =========================================================================
+  1380→  // INPUT effect — mouse + keyboard + touch joystick + pointer buttons.
+  1381→  // [FIXES I1, I2, I4, I6, I9, I11, C19]
+  1382→  // =========================================================================
+  1383→  useEffect(() => {
+  1384→    // Offline mode: the OfflineGameEngine attaches its own input listeners.
+  1385→    if (isOffline) return;
+  1386→    const canvas = canvasRef.current;
+  1387→    if (!canvas) return;
+  1388→
+  1389→    // ----- Compute input angle + boost from current sources -----
+  1390→    // Priority: touch joystick > keyboard > mouse.
+  1391→    // Boost fires when SPACE held OR boost button held OR joystick magnitude
+  1392→    // > 0.6 (matches original AUDIT-A boost logic + mobile joystick convention).
+  1393→    const computeAngleAndBoost = (): { angle: number | null; boost: boolean } => {
+  1394→      const spaceHeld = keysRef.current.has(' ') || keysRef.current.has('space') || boostHoldRef.current;
+  1395→      // Touch joystick
+  1396→      if (touchAngleRef.current !== null) {
+  1397→        return { angle: touchAngleRef.current, boost: touchBoostRef.current || spaceHeld };
+  1398→      }
+  1399→      // Keyboard
+  1400→      const k = keysRef.current;
+  1401→      let kx = 0;
+  1402→      let ky = 0;
+  1403→      if (k.has('w') || k.has('arrowup')) ky -= 1;
+  1404→      if (k.has('s') || k.has('arrowdown')) ky += 1;
+  1405→      if (k.has('a') || k.has('arrowleft')) kx -= 1;
+  1406→      if (k.has('d') || k.has('arrowright')) kx += 1;
+  1407→      if (kx !== 0 || ky !== 0) {
+  1408→        return { angle: Math.atan2(ky, kx), boost: spaceHeld };
+  1409→      }
+  1410→      // Mouse
+  1411→      if (mouseActiveRef.current) {
+  1412→        const rect = canvas.getBoundingClientRect();
+  1413→        const cx = rect.width / 2;
+  1414→        const cy = rect.height / 2;
+  1415→        const dx = mousePosRef.current.x - cx;
+  1416→        const dy = mousePosRef.current.y - cy;
+  1417→        const dist = Math.hypot(dx, dy);
+  1418→        if (dist > MOUSE_DEADZONE_PX) {
+  1419→          return { angle: Math.atan2(dy, dx), boost: spaceHeld };
+  1420→        }
+  1421→      }
+  1422→      return { angle: null, boost: false };
+  1423→    };
+  1424→
+  1425→    // Expose computeAngleAndBoost to the rAF loop via a ref.
+  1426→    computeInputRef.current = computeAngleAndBoost;
+  1427→
+  1428→    // ----- Mouse -----
+  1429→    const onMouseMove = (e: MouseEvent) => {
+  1430→      const rect = canvas.getBoundingClientRect();
+  1431→      mousePosRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  1432→      mouseActiveRef.current = true;
+  1433→    };
+  1434→    const onMouseLeave = () => {
+  1435→      // Keep last position but mark inactive so we don't keep steering if
+  1436→      // the user moves off the canvas (e.g., onto the HUD).
+  1437→    };
+  1438→
+  1439→    // ----- Keyboard -----
+  1440→    const onKeyDown = (e: KeyboardEvent) => {
+  1441→      const k = e.key.toLowerCase();
+  1442→      // [FIXES I4] prevent default for arrows/space so the page doesn't scroll
+  1443→      if (
+  1444→        k === 'arrowup' ||
+  1445→        k === 'arrowdown' ||
+  1446→        k === 'arrowleft' ||
+  1447→        k === 'arrowright' ||
+  1448→        k === ' ' ||
+  1449→        k === 'spacebar'
+  1450→      ) {
+  1451→        e.preventDefault();
+  1452→      }
+  1453→      if (k === 'escape') {
+  1454→        if (phaseRef.current === 'ended') {
+  1455→          onExitRef.current();
+  1456→        }
+  1457→        return;
+  1458→      }
+  1459→      // Hold E to extract
+  1460→      if (k === 'e' && phaseRef.current === 'playing' && !matchEndedRef.current && !extractActiveRef.current) {
+  1461→        socketRef.current?.emit('extract', {});
+  1462→        extractActiveRef.current = true;
+  1463→      }
+  1464→      // BUILD-13: M key toggles the full-screen arena map overlay.
+  1465→      if (k === 'm' && phaseRef.current === 'playing') {
+  1466→        setFullMapOpen((prev) => !prev);
+  1467→      }
+  1468→      // Quick chat emote keys 1-5
+  1469→      if (phaseRef.current === 'playing' && ['1', '2', '3', '4', '5'].includes(k)) {
+  1470→        const emotes = [
+  1471→          'GG! 🏆',
+  1472→          'Target Spot! 🎯',
+  1473→          'Fleeing! 🏃💨',
+  1474→          'Get Ripped! 💪',
+  1475→          'Extracting soon! ⚡',
+  1476→        ];
+  1477→        const idx = parseInt(k, 10) - 1;
+  1478→        if (idx >= 0 && idx < emotes.length) {
+  1479→          socketRef.current?.emit('chat', { message: emotes[idx] });
+  1480→        }
+  1481→      }
+  1482→      // Normalize space
+  1483→      const normalized = k === 'spacebar' ? ' ' : k;
+  1484→      keysRef.current.add(normalized);
+  1485→    };
+  1486→    const onKeyUp = (e: KeyboardEvent) => {
+  1487→      const k = e.key.toLowerCase();
+  1488→      // Release E cancels extract
+  1489→      if (k === 'e' && extractActiveRef.current) {
+  1490→        socketRef.current?.emit('cancel_extract', {});
+  1491→        extractActiveRef.current = false;
+  1492→      }
+  1493→      const normalized = k === 'spacebar' ? ' ' : k;
+  1494→      keysRef.current.delete(normalized);
+  1495→    };
+  1496→    // [FIXES I9] clear keys on blur so they don't stick
+  1497→    const onBlur = () => {
+  1498→      keysRef.current.clear();
+  1499→      mouseActiveRef.current = false;
+  1500→      boostHoldRef.current = false;
+  1501→    };
+  1502→
+  1503→    // ----- Touch joystick (bottom-left quadrant of canvas) -----
+  1504→    const findJoystickTouch = (touches: TouchList): Touch | null => {
+  1505→      const rect = canvas.getBoundingClientRect();
+  1506→      for (let i = 0; i < touches.length; i++) {
+  1507→        const t = touches[i];
+  1508→        const x = t.clientX - rect.left;
+  1509→        const y = t.clientY - rect.top;
+  1510→        // Bottom-left quadrant
+  1511→        if (x < rect.width / 2 && y > rect.height / 2) {
+  1512→          return t;
+  1513→        }
+  1514→      }
+  1515→      return null;
+  1516→    };
+  1517→    const onTouchStart = (e: TouchEvent) => {
+  1518→      if (joystickRef.current) return;
+  1519→      const t = findJoystickTouch(e.touches);
+  1520→      if (!t) return;
+  1521→      e.preventDefault();
+  1522→      const rect = canvas.getBoundingClientRect();
+  1523→      joystickRef.current = {
+  1524→        active: true,
+  1525→        pointerId: t.identifier,
+  1526→        originX: t.clientX - rect.left,
+  1527→        originY: t.clientY - rect.top,
+  1528→        curX: t.clientX - rect.left,
+  1529→        curY: t.clientY - rect.top,
+  1530→      };
+  1531→    };
+  1532→    const onTouchMove = (e: TouchEvent) => {
+  1533→      const js = joystickRef.current;
+  1534→      if (!js) return;
+  1535→      let t: Touch | null = null;
+  1536→      for (let i = 0; i < e.touches.length; i++) {
+  1537→        if (e.touches[i].identifier === js.pointerId) {
+  1538→          t = e.touches[i];
+  1539→          break;
+  1540→        }
+  1541→      }
+  1542→      if (!t) return;
+  1543→      e.preventDefault();
+  1544→      const rect = canvas.getBoundingClientRect();
+  1545→      js.curX = t.clientX - rect.left;
+  1546→      js.curY = t.clientY - rect.top;
+  1547→      const dx = js.curX - js.originX;
+  1548→      const dy = js.curY - js.originY;
+  1549→      const dist = Math.hypot(dx, dy);
+  1550→      const magnitude = Math.min(1, dist / JOYSTICK_MAX_RADIUS_PX);
+  1551→      if (magnitude > JOYSTICK_DEADZONE) {
+  1552→        touchAngleRef.current = Math.atan2(dy, dx);
+  1553→        // Boost when magnitude > 0.6 (BUILD-10 spec)
+  1554→        touchBoostRef.current = magnitude > JOYSTICK_BOOST_MAGNITUDE;
+  1555→      } else {
+  1556→        touchAngleRef.current = null;
+  1557→        touchBoostRef.current = false;
+  1558→      }
+  1559→    };
+  1560→    const onTouchEnd = (e: TouchEvent) => {
+  1561→      const js = joystickRef.current;
+  1562→      if (!js) return;
+  1563→      let stillActive = false;
+  1564→      for (let i = 0; i < e.touches.length; i++) {
+  1565→        if (e.touches[i].identifier === js.pointerId) {
+  1566→          stillActive = true;
+  1567→          break;
+  1568→        }
+  1569→      }
+  1570→      if (!stillActive) {
+  1571→        joystickRef.current = null;
+  1572→        touchAngleRef.current = null;
+  1573→        touchBoostRef.current = false;
+  1574→      }
+  1575→    };
+  1576→    const onTouchCancel = (e: TouchEvent) => onTouchEnd(e);
+  1577→
+  1578→    // Wire up
+  1579→    canvas.addEventListener('mousemove', onMouseMove);
+  1580→    canvas.addEventListener('mouseleave', onMouseLeave);
+  1581→    canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+  1582→    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+  1583→    canvas.addEventListener('touchend', onTouchEnd);
+  1584→    canvas.addEventListener('touchcancel', onTouchCancel);
+  1585→    window.addEventListener('keydown', onKeyDown);
+  1586→    window.addEventListener('keyup', onKeyUp);
+  1587→    window.addEventListener('blur', onBlur);
+  1588→
+  1589→    return () => {
+  1590→      canvas.removeEventListener('mousemove', onMouseMove);
+  1591→      canvas.removeEventListener('mouseleave', onMouseLeave);
+  1592→      canvas.removeEventListener('touchstart', onTouchStart);
+  1593→      canvas.removeEventListener('touchmove', onTouchMove);
+  1594→      canvas.removeEventListener('touchend', onTouchEnd);
+  1595→      canvas.removeEventListener('touchcancel', onTouchCancel);
+  1596→      window.removeEventListener('keydown', onKeyDown);
+  1597→      window.removeEventListener('keyup', onKeyUp);
+  1598→      window.removeEventListener('blur', onBlur);
+  1599→    };
+  1600→  }, [isOffline]);
+  1601→
+  1602→  // =========================================================================
+  1603→  // Extract / boost button handlers (pointer events with capture).
+  1604→  // [FIXES C19, I6, I11] pointer capture prevents stuck-hold.
+  1605→  // =========================================================================
+  1606→  const onExtractPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+  1607→    if (phaseRef.current !== 'playing' || matchEndedRef.current) return;
+  1608→    e.preventDefault();
+  1609→    (e.currentTarget as HTMLButtonElement).setPointerCapture(e.pointerId);
+  1610→    socketRef.current?.emit('extract', {});
+  1611→    extractActiveRef.current = true;
+  1612→  };
+  1613→  const onExtractPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+  1614→    if (!extractActiveRef.current) return;
+  1615→    e.preventDefault();
+  1616→    try {
+  1617→      (e.currentTarget as HTMLButtonElement).releasePointerCapture(e.pointerId);
+  1618→    } catch {
+  1619→      /* ignore */
+  1620→    }
+  1621→    socketRef.current?.emit('cancel_extract', {});
+  1622→    extractActiveRef.current = false;
+  1623→  };
+  1624→
+  1625→  const onBoostPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+  1626→    e.preventDefault();
+  1627→    (e.currentTarget as HTMLButtonElement).setPointerCapture(e.pointerId);
+  1628→    boostHoldRef.current = true;
+  1629→    keysRef.current.add(' '); // reuse keyboard-boost path
+  1630→  };
+  1631→  const onBoostPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+  1632→    if (!boostHoldRef.current) return;
+  1633→    e.preventDefault();
+  1634→    try {
+  1635→      (e.currentTarget as HTMLButtonElement).releasePointerCapture(e.pointerId);
+  1636→    } catch {
+  1637→      /* ignore */
+  1638→    }
+  1639→    boostHoldRef.current = false;
+  1640→    keysRef.current.delete(' ');
+  1641→  };
+  1642→
+  1643→  // =========================================================================
+  1644→  // Chat submit
+  1645→  // =========================================================================
+  1646→  const submitChat = () => {
+  1647→    const msg = chatInput.trim();
+  1648→    if (!msg) {
+  1649→      setChatOpen(false);
+  1650→      return;
+  1651→    }
+  1652→    socketRef.current?.emit('chat', { message: msg.slice(0, 200) });
+  1653→    setChatInput('');
+  1654→    setChatOpen(false);
+  1655→  };
+  1656→
+  1657→  // Quick chat emote bar (AUDIT-A Section H)
+  1658→  const triggerEmote = (msg: string) => {
+  1659→    socketRef.current?.emit('chat', { message: msg });
+  1660→  };
+  1661→
+  1662→  // =========================================================================
+  1663→  // Play Again — re-emit join_arena, reset local state.
+  1664→  // =========================================================================
+  1665→  const playAgain = () => {
+  1666→    if (!socketRef.current) return;
+  1667→    matchEndedRef.current = false;
+  1668→    killsRef.current = 0;
+  1669→    setHudKills(0);
+  1670→    setHudCarried(0);
+  1671→    setHudScore(0);
+  1672→    setHudRank(1);
+  1673→    // BUILD-13: reset arena-leaderboard HUD state on re-join.
+  1674→    setHudCommissionRate(0);
+  1675→    setHudLeaderboard([]);
+  1676→    setHudYourRank(0);
+  1677→    setHudRealPlayerCount(1);
+  1678→    setFullMapOpen(false);
+  1679→    setEndScreen(null);
+  1680→    setExtracting(false);
+  1681→    setExtractProgress(0);
+  1682→    setPhase('connecting');
+  1683→    setConnectingMsg('Rejoining arena…');
+  1684→    snapshotRef.current = null;
+  1685→    // Clear replay buffer on reset
+  1686→    replayBufferRef.current = [];
+  1687→    replayWriteIdxRef.current = 0;
+  1688→    camInitRef.current = false;
+  1689→    particlesRef.current = [];
+  1690→    socketRef.current.emit('join_arena', { arenaId: arenaIdRef.current });
+  1691→  };
+  1692→
+  1693→  const exitNow = () => {
+  1694→    const result = endScreen?.result;
+  1695→    onExitRef.current(result);
+  1696→  };
+  1697→
+  1698→  // =========================================================================
+  1699→  // Derived display values
+  1700→  // =========================================================================
+  1701→  const pingColor =
+  1702→    ping < 0
+  1703→      ? 'text-muted-foreground'
+  1704→      : ping < 80
+  1705→        ? 'text-emerald-400'
+  1706→        : ping < 160
+  1707→          ? 'text-amber-400'
+  1708→          : 'text-rose-400';
+  1709→  const snakeLength = hudScore; // Score = body length
+  1710→
+  1711→  // BUILD-13: offline-mode flag (practice arena OR server reports 0 real
+  1712→  // players). Drives chips-display hiding + rank/leaderboard formatting.
+  1713→  // (Offline practice arenas return early before this point, so this only
+  1714→  //  matters for the online-mode edge case where realPlayerCount === 0.)
+  1715→  const isOfflineMode = isOffline || hudRealPlayerCount === 0;
+  1716→  // Rank display:
+  1717→  //  - Online (realPlayerCount > 1): "#X of Y" using server yourRank.
+  1718→  //  - Online with <= 1 real player: "#1 of 1".
+  1719→  //  - Offline: "#X" (computed from score vs bots).
+  1720→  const rankDisplay = isOfflineMode
+  1721→    ? `#${hudRank}`
+  1722→    : hudRealPlayerCount <= 1
+  1723→      ? '#1 of 1'
+  1724→      : `#${hudYourRank || hudRank} of ${hudRealPlayerCount}`;
+  1725→
+  1726→  // =========================================================================
+  1727→  // JSX
+  1728→  // =========================================================================
+  1729→  // OFFLINE MODE (BUILD-14): the OfflineGameEngine owns the game loop,
+  1730→  // rendering, input, HUD, death screen, and extract screen. React only
+  1731→  // renders the bare <canvas>; all overlays are DOM nodes the engine
+  1732→  // appends to the canvas's parent element.
+  1733→  if (isOffline) {
+  1734→    return (
+  1735→      <div className="fixed inset-0 overflow-hidden bg-background select-none">
+  1736→        <canvas
+  1737→          ref={canvasRef}
+  1738→          className="va-game-canvas absolute inset-0 h-full w-full"
+  1739→          aria-label="Venom Arena offline practice canvas"
+  1740→          style={{ touchAction: 'none' }}
+  1741→        />
+  1742→      </div>
+  1743→    );
+  1744→  }
+  1745→
+  1746→  return (
+  1747→    <div className="fixed inset-0 overflow-hidden bg-background select-none">
+  1748→      {/* Canvas */}
+  1749→      <canvas
+  1750→        ref={canvasRef}
+  1751→        className="va-game-canvas absolute inset-0 h-full w-full"
+  1752→        aria-label="Venom Arena game canvas"
+  1753→        style={{ touchAction: 'none' }}
+  1754→      />
+  1755→
+  1756→      {/* Connecting / error overlay */}
+  1757→      {phase === 'connecting' && (
+  1758→        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-background/80 backdrop-blur-sm">
+  1759→          {connectionError ? (
+  1760→            <>
+  1761→              <AlertTriangle className="h-12 w-12 text-rose-500" />
+  1762→              <p className="max-w-sm text-center text-lg font-semibold text-foreground">
+  1763→                {connectionError}
+  1764→              </p>
+  1765→              <Button variant="outline" onClick={exitNow}>
+  1766→                <LogOut className="mr-2 h-4 w-4" /> Back to lobby
+  1767→              </Button>
+  1768→            </>
+  1769→          ) : (
+  1770→            <>
+  1771→              <Loader2 className="h-10 w-10 animate-spin text-primary" />
+  1772→              <p className="text-sm text-muted-foreground">{connectingMsg || 'Connecting…'}</p>
+  1773→            </>
+  1774→          )}
+  1775→        </div>
+  1776→      )}
+  1777→
+  1778→      {/* Reconnecting banner */}
+  1779→      {isReconnecting && phase === 'playing' && (
+  1780→        <div className="absolute left-1/2 top-3 -translate-x-1/2 flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-500/10 px-4 py-1.5 text-xs font-medium text-amber-300 backdrop-blur-sm">
+  1781→          <WifiOff className="h-3.5 w-3.5" />
+  1782→          Reconnecting…
+  1783→        </div>
+  1784→      )}
+  1785→
+  1786→      {/* HUD: top-left (Carried Chips + Rank/Score/Kills/Boost + Real Players/Bots) — AUDIT-A Section A */}
+  1787→      {phase !== 'connecting' && (
+  1788→        <div className="pointer-events-none absolute left-3 top-3 flex max-w-sm flex-col gap-2 font-mono">
+  1789→          {/* Carried Chips card — BUILD-13: hidden when isOfflineMode (no chips in offline). */}
+  1790→          {!isOfflineMode && (
+  1791→            <div className="rounded-lg border border-emerald-500/30 bg-slate-950/80 px-3 py-2 backdrop-blur-sm">
+  1792→              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-500">
+  1793→                <Landmark className="h-3 w-3 text-emerald-400" />
+  1794→                <span>Carried Chips</span>
+  1795→              </div>
+  1796→              <div className="text-2xl font-bold text-emerald-400 tabular-nums">
+  1797→                {hudCarried.toLocaleString()}<span className="ml-0.5 text-base">c</span>
+  1798→              </div>
+  1799→            </div>
+  1800→          )}
+  1801→
+  1802→          {/* Rank / Score / Kills / Boost card */}
+  1803→          <div className="rounded-lg border border-slate-700/60 bg-slate-950/80 px-3 py-2 backdrop-blur-sm">
+  1804→            <div className="flex items-center gap-2 text-xs">
+  1805→              <Trophy className="h-3.5 w-3.5 text-yellow-500" />
+  1806→              <span className="text-slate-400">Rank:</span>
+  1807→              <span className="font-bold text-yellow-400">{rankDisplay}</span>
+  1808→            </div>
+  1809→            <div className="mt-1 flex items-center gap-2 text-xs">
+  1810→              <Shield className="h-3.5 w-3.5 text-indigo-400" />
+  1811→              <span className="text-slate-400">Score:</span>
+  1812→              <span className="font-bold text-white">{snakeLength.toLocaleString()}</span>
+  1813→            </div>
+  1814→            <div className="mt-1 flex items-center gap-2 text-xs">
+  1815→              <Skull className="h-3.5 w-3.5 text-rose-500" />
+  1816→              <span className="text-slate-400">Kills:</span>
+  1817→              <span className="font-bold text-rose-400">{hudKills}</span>
+  1818→            </div>
+  1819→            <div className="mt-1 flex items-center gap-2 text-xs">
+  1820→              <Zap className="h-3.5 w-3.5 text-amber-500" />
+  1821→              <span className="text-slate-400">Boost:</span>
+  1822→              <span className="font-bold text-amber-400">SPACE</span>
+  1823→            </div>
+  1824→          </div>
+  1825→
+  1826→          {/* Active competitors card */}
+  1827→          <div className="rounded-lg border border-slate-700/60 bg-slate-950/80 px-3 py-2 backdrop-blur-sm text-xs">
+  1828→            {isOfflineMode ? (
+  1829→              <div className="flex items-center gap-2">
+  1830→                <span className="text-slate-400">Offline Mode:</span>
+  1831→                <span className="font-bold text-amber-400">1 Player</span>
+  1832→              </div>
+  1833→            ) : (
+  1834→              <div className="flex items-center gap-2">
+  1835→                <span className="text-slate-400">Real Players:</span>
+  1836→                <span className="font-bold text-indigo-400 animate-pulse">
+  1837→                  {hudRealPlayerCount || hudRealPlayers} Active
+  1838→                </span>
+  1839→              </div>
+  1840→            )}
+  1841→            <div className="mt-1 flex items-center gap-2">
+  1842→              <Users className="h-3.5 w-3.5 text-slate-400" />
+  1843→              <span className="text-slate-400">Bots:</span>
+  1844→              <span className="font-bold text-slate-300">{hudBots}</span>
+  1845→            </div>
+  1846→          </div>
+  1847→        </div>
+  1848→      )}
+  1849→
+  1850→      {/* HUD: top-right (Banked / FPS / Ping) — AUDIT-A Section A */}
+  1851→      {phase !== 'connecting' && (
+  1852→        <div className="pointer-events-none absolute right-3 top-3 flex flex-col items-end gap-1.5 font-mono">
+  1853→          <div className="rounded-md border border-amber-500/30 bg-slate-950/80 px-2.5 py-1 text-right backdrop-blur-sm">
+  1854→            <div className="text-[10px] uppercase tracking-wider text-slate-500">BANKED</div>
+  1855→            <div className="text-sm font-bold text-amber-300 tabular-nums">
+  1856→              {player.bankedChips.toLocaleString()}c
+  1857→            </div>
+  1858→          </div>
+  1859→          <div className="flex items-center gap-2 rounded-md border border-slate-700/60 bg-slate-950/80 px-2 py-1 text-[11px] backdrop-blur-sm">
+  1860→            <span className="text-slate-400">{fps} fps</span>
+  1861→            <span className={pingColor}>
+  1862→              <Signal className="inline h-3 w-3" /> {ping < 0 ? '—' : `${ping}ms`}
+  1863→            </span>
+  1864→            {lowQuality && (
+  1865→              <span className="rounded bg-amber-500/20 px-1 text-amber-300" title="Low quality mode (adaptive)">
+  1866→                🎨 LQ
+  1867→              </span>
+  1868→            )}
+  1869→          </div>
+  1870→        </div>
+  1871→      )}
+  1872→
+  1873→      {/* BUILD-13: Chat + Minimap-toggle row (top-right, below BANKED/FPS). */}
+  1874→      {phase === 'playing' && (
+  1875→        <div className="absolute right-3 top-[92px] z-20 flex items-center gap-2 font-mono">
+  1876→          <Button
+  1877→            variant="outline"
+  1878→            size="icon"
+  1879→            className="h-9 w-9 rounded-full border-primary/40 bg-card/80 backdrop-blur-sm"
+  1880→            onClick={() => setChatOpen(true)}
+  1881→            aria-label="Open chat"
+  1882→          >
+  1883→            <MessageSquare className="h-4 w-4" />
+  1884→          </Button>
+  1885→          <Button
+  1886→            variant="outline"
+  1887→            size="sm"
+  1888→            className="h-9 rounded-full border-primary/40 bg-card/80 px-3 text-[10px] uppercase tracking-wider backdrop-blur-sm"
+  1889→            onClick={() => setMinimapVisible((v) => !v)}
+  1890→            aria-label={minimapVisible ? 'Collapse minimap' : 'Show minimap'}
+  1891→          >
+  1892→            <MapIcon className="h-3.5 w-3.5" />
+  1893→            <span className="hidden sm:inline">{minimapVisible ? 'Collapse' : 'Show Minimap'}</span>
+  1894→          </Button>
+  1895→        </div>
+  1896→      )}
+  1897→
+  1898→      {/* BUILD-13: Arena Leaderboard panel (top-right, below chat/minimap row).
+  1899→          Online mode: top 10 real players by carriedChips (server-provided).
+  1900→          Offline-mode edge case (realPlayerCount === 0): top 10 by score
+  1901→          (you + bots). Collapsible — collapsed state renders a small icon
+  1902→          button (mobile-friendly). */}
+  1903→      {phase !== 'connecting' && (
+  1904→        <div className="absolute right-3 top-[140px] z-20 max-h-[60vh] font-mono">
+  1905→          {leaderboardOpen ? (
+  1906→            <div className="w-[240px] max-w-[80vw] overflow-hidden rounded-lg border border-slate-700/60 bg-slate-950/90 backdrop-blur-md">
+  1907→              {/* Header */}
+  1908→              <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
+  1909→                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-500">
+  1910→                  <Trophy className="h-3 w-3 text-yellow-500" />
+  1911→                  <span>Arena Leaders</span>
+  1912→                </div>
+  1913→                <button
+  1914→                  type="button"
+  1915→                  onClick={() => setLeaderboardOpen(false)}
+  1916→                  className="text-slate-400 hover:text-white"
+  1917→                  aria-label="Collapse leaderboard"
+  1918→                >
+  1919→                  <ChevronUp className="h-3.5 w-3.5" />
+  1920→                </button>
+  1921→              </div>
+  1922→              {/* List */}
+  1923→              <div className="max-h-72 overflow-y-auto p-1.5 va-scroll">
+  1924→                {hudLeaderboard.length === 0 ? (
+  1925→                  <div className="px-2 py-3 text-center text-[10px] text-slate-500">
+  1926→                    No real players yet.
+  1927→                  </div>
+  1928→                ) : (
+  1929→                  hudLeaderboard.map((entry, i) => (
+  1930→                    <div
+  1931→                      key={entry.id || i}
+  1932→                      className={`mb-0.5 flex items-center gap-1.5 rounded px-2 py-1 text-[11px] ${
+  1933→                        entry.isPlayer
+  1934→                          ? 'border border-indigo-500/30 bg-indigo-500/15'
+  1935→                          : ''
+  1936→                      }`}
+  1937→                    >
+  1938→                      <span className="w-5 shrink-0 text-right text-slate-500 tabular-nums">{i + 1}</span>
+  1939→                      {entry.country && (
+  1940→                        <span className="shrink-0 text-xs leading-none">
+  1941→                          {countryFlag(entry.country)}
+  1942→                        </span>
+  1943→                      )}
+  1944→                      <span
+  1945→                        className={`flex-1 truncate ${
+  1946→                          entry.isPlayer ? 'font-bold text-indigo-300' : 'text-slate-300'
+  1947→                        }`}
+  1948→                        title={entry.name}
+  1949→                      >
+  1950→                        {entry.name || 'Unknown'}
+  1951→                      </span>
+  1952→                      {entry.isPlayer && (
+  1953→                        <span className="shrink-0 rounded bg-indigo-500/30 px-1 text-[9px] font-bold text-indigo-200">
+  1954→                          YOU
+  1955→                        </span>
+  1956→                      )}
+  1957→                      {isOfflineMode ? (
+  1958→                        <span className="shrink-0 text-indigo-300 tabular-nums">
+  1959→                          {entry.score.toLocaleString()}
+  1960→                        </span>
+  1961→                      ) : (
+  1962→                        <span className="shrink-0 text-emerald-400 tabular-nums">
+  1963→                          {entry.carriedChips.toLocaleString()}c
+  1964→                        </span>
+  1965→                      )}
+  1966→                    </div>
+  1967→                  ))
+  1968→                )}
+  1969→              </div>
+  1970→            </div>
+  1971→          ) : (
+  1972→            <button
+  1973→              type="button"
+  1974→              onClick={() => setLeaderboardOpen(true)}
+  1975→              className="flex h-9 items-center gap-1.5 rounded-full border border-slate-700 bg-slate-950/85 px-3 text-[10px] uppercase tracking-wider text-slate-400 backdrop-blur-sm hover:text-white"
+  1976→              aria-label="Show leaderboard"
+  1977→            >
+  1978→              <ChevronDown className="h-3.5 w-3.5 text-yellow-500" />
+  1979→              <span className="hidden sm:inline">Show Leaderboard</span>
+  1980→            </button>
+  1981→          )}
+  1982→        </div>
+  1983→      )}
+  1984→
+  1985→      {/* BUILD-13: Full-screen arena map overlay close button (M key toggle).
+  1986→          The map itself is canvas-drawn; this is the HTML close affordance. */}
+  1987→      {fullMapOpen && phase === 'playing' && (
+  1988→        <button
+  1989→          type="button"
+  1990→          onClick={() => setFullMapOpen(false)}
+  1991→          className="absolute right-4 top-4 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-slate-700 bg-slate-900/80 text-slate-300 backdrop-blur-sm hover:text-white"
+  1992→          aria-label="Close full map"
+  1993→        >
+  1994→          <X className="h-4 w-4" />
+  1995→        </button>
+  1996→      )}
+  1997→
+  1998→      {/* Quick Chat Emotes Bar (bottom-left) — AUDIT-A Section H */}
+  1999→      {phase === 'playing' && (
+  2000→        <div className="absolute bottom-2 left-2 sm:bottom-4 sm:left-4 z-20 w-[min(60vw,280px)] rounded-xl border border-slate-800 bg-slate-950/90 p-2.5 backdrop-blur-md">
+
+[showing lines 1-2000 of 2780; use offset=2001 with limit to continue reading]

@@ -1,0 +1,2002 @@
+     1→'use client';
+     2→
+     3→// ============================================================================
+     4→// offline-engine.ts — Pure client-side snake game engine for "Venom Arena".
+     5→// ----------------------------------------------------------------------------
+     6→// Infinite-map offline practice mode. No server connection, no chips, no stars,
+     7→// no wallet, no boundaries. Camera follows the player in an endless world.
+     8→//
+     9→// Key changes from the original:
+    10→//  * **Infinite map** — no boundaries, no wall death, no breathing radius.
+    11→//  * **Food orb system** — three sizes (Small/Medium/Large) with weighted spawn.
+    12→//  * **No chips / stars / wallet** — pure score-based gameplay.
+    13→//  * **Death food drop** — dead snakes drop orbs summing to their total score.
+    14→//  * **Head-on collision** — boost-aware resolution rules.
+    15→//  * **Bot AI** — no self-destruct, predictive evasion, food-seeking.
+    16→//  * **Opacity layering** — larger snakes fade when a smaller snake is near.
+    17→//  * **Score model** — INITIAL_SPAWN_SCORE + food eaten, body from score.
+    18→// ============================================================================
+    19→
+    20→import {
+    21→  ALL_FOOD_ORBS,
+    22→  BASE_SPEED,
+    23→  BOT_EVADE_RADIUS,
+    24→  BOT_NAMES,
+    25→  BOT_SKINS,
+    26→  BOOST_DROP_INTERVAL,
+    27→  BOOST_MIN_LENGTH,
+    28→  BOOST_SPEED,
+    29→  COLLISION_HIT_FACTOR,
+    30→  EXTRACT_DURATION_MS,
+    31→  EXTRACT_GLIDE_SPEED,
+    32→  FOOD_COUNT_TARGET,
+    33→  FOOD_ORB_WEIGHTS,
+    34→  HEAD_ON_HIT_FACTOR,
+    35→  INITIAL_BODY_LENGTH,
+    36→  INITIAL_SPAWN_SCORE,
+    37→  MAX_BODY_LENGTH,
+    38→  RESPAWN_INVULN_MS,
+    39→  SEGMENT_SPACING,
+    40→  SIZE_BASE,
+    41→  SIZE_SCORE_FACTOR,
+    42→  TICK_MS,
+    43→  TURN_BASE,
+    44→  TURN_MIN,
+    45→  TURN_SCORE_FACTOR,
+    46→  type ArenaTier,
+    47→  getCosmeticById,
+    48→  type FoodOrbConfig,
+    49→  type Skin,
+    50→} from '@/lib/game-config';
+    51→import type { PlayerProfile } from '@/lib/types';
+    52→import {
+    53→  computeVisibleRect,
+    54→  drawParticles,
+    55→  drawSnake,
+    56→  type FrameRenderCtx,
+    57→  type Particle,
+    58→} from './render-helpers';
+    59→
+    60→// ----------------------------------------------------------------------------
+    61→// Public types
+    62→// ----------------------------------------------------------------------------
+    63→
+    64→export type OfflineState = 'playing' | 'dead' | 'extracted';
+    65→
+    66→export interface OfflineExitResult {
+    67→  score: number;
+    68→  kills: number;
+    69→  durationSeconds: number;
+    70→}
+    71→
+    72→// ----------------------------------------------------------------------------
+    73→// Internal types
+    74→// ----------------------------------------------------------------------------
+    75→
+    76→interface Vec2 {
+    77→  x: number;
+    78→  y: number;
+    79→}
+    80→
+    81→type BotPersonality = 'scavenger' | 'opportunist' | 'hunter' | 'extractor' | 'coward';
+    82→
+    83→interface SnakeBase {
+    84→  id: string;
+    85→  name: string;
+    86→  userTag?: string;
+    87→  country?: string;
+    88→  points: Vec2[];
+    89→  angle: number;
+    90→  size: number;
+    91→  color: string;
+    92→  secondaryColor?: string;
+    93→  isPlayer: boolean;
+    94→  isBot: boolean;
+    95→  /** Food-mass score (starts at 0, grows with food, shrinks with boost).
+    96→   *  Display score = INITIAL_SPAWN_SCORE + this value. */
+    97→  score: number;
+    98→  boostFrameCounter: number;
+    99→  isExtracting: boolean;
+   100→  extractionProgress: number;
+   101→  isDead: boolean;
+   102→  spawnProtectedUntil: number;
+   103→  chatMessage?: string;
+   104→  chatExpiry?: number;
+   105→  kills: number;
+   106→  desiredAngle: number;
+   107→  wantsBoost: boolean;
+   108→  /** Whether the snake is actively boosting (for head-on collision + rendering). */
+   109→  isBoosting: boolean;
+   110→}
+   111→
+   112→interface BotSession extends SnakeBase {
+   113→  botId: string;
+   114→  personality: BotPersonality;
+   115→  nextThinkAt: number;
+   116→}
+   117→
+   118→interface Food {
+   119→  id: string;
+   120→  x: number;
+   121→  y: number;
+   122→  /** Visual radius in px. */
+   123→  size: number;
+   124→  /** Score value (1, 3, or 5). */
+   125→  value: number;
+   126→  orbSize: 'small' | 'medium' | 'large';
+   127→  color: string;
+   128→  glowColor: string;
+   129→  isStarChip?: boolean;
+   130→}
+   131→
+   132→interface GridItem {
+   133→  id: string;
+   134→  kind: 'segment' | 'food';
+   135→  x: number;
+   136→  y: number;
+   137→  radius: number;
+   138→  snakeId?: string;
+   139→  segIdx?: number;
+   140→  value?: number;
+   141→  foodRef?: Food;
+   142→}
+   143→
+   144→// ----------------------------------------------------------------------------
+   145→// Spatial hash grid — slimmed-down client port of the server's grid.
+   146→// Items are bucketed into square cells; queries return a deduplicated Map.
+   147→// ----------------------------------------------------------------------------
+   148→
+   149→class SpatialHashGrid {
+   150→  private readonly cellSize: number;
+   151→  private readonly cells: Map<string, Map<string, GridItem>> = new Map();
+   152→
+   153→  constructor(cellSize = 120) {
+   154→    this.cellSize = cellSize;
+   155→  }
+   156→
+   157→  private key(cx: number, cy: number): string {
+   158→    return cx + ':' + cy;
+   159→  }
+   160→
+   161→  clear(): void {
+   162→    this.cells.clear();
+   163→  }
+   164→
+   165→  insert(item: GridItem): void {
+   166→    const minCx = Math.floor((item.x - item.radius) / this.cellSize);
+   167→    const maxCx = Math.floor((item.x + item.radius) / this.cellSize);
+   168→    const minCy = Math.floor((item.y - item.radius) / this.cellSize);
+   169→    const maxCy = Math.floor((item.y + item.radius) / this.cellSize);
+   170→    for (let cx = minCx; cx <= maxCx; cx++) {
+   171→      for (let cy = minCy; cy <= maxCy; cy++) {
+   172→        const k = this.key(cx, cy);
+   173→        let bucket = this.cells.get(k);
+   174→        if (!bucket) {
+   175→          bucket = new Map();
+   176→          this.cells.set(k, bucket);
+   177→        }
+   178→        bucket.set(item.id, item);
+   179→      }
+   180→    }
+   181→  }
+   182→
+   183→  queryRadius(x: number, y: number, r: number): Map<string, GridItem> {
+   184→    const out = new Map<string, GridItem>();
+   185→    const minCx = Math.floor((x - r) / this.cellSize);
+   186→    const maxCx = Math.floor((x + r) / this.cellSize);
+   187→    const minCy = Math.floor((y - r) / this.cellSize);
+   188→    const maxCy = Math.floor((y + r) / this.cellSize);
+   189→    for (let cx = minCx; cx <= maxCx; cx++) {
+   190→      for (let cy = minCy; cy <= maxCy; cy++) {
+   191→        const bucket = this.cells.get(this.key(cx, cy));
+   192→        if (!bucket) continue;
+   193→        for (const [id, item] of bucket) {
+   194→          if (!out.has(id)) out.set(id, item);
+   195→        }
+   196→      }
+   197→    }
+   198→    return out;
+   199→  }
+   200→}
+   201→
+   202→// ----------------------------------------------------------------------------
+   203→// Constants
+   204→// ----------------------------------------------------------------------------
+   205→
+   206→const MAX_PARTICLES = 200;
+   207→const FPS_LOW_THRESHOLD = 40;
+   208→const FPS_HIGH_THRESHOLD = 55;
+   209→const FPS_LOW_DURATION_MS = 2000;
+   210→const FPS_HIGH_DURATION_MS = 5000;
+   211→const MOUSE_DEADZONE_PX = 15;
+   212→const JOYSTICK_DEADZONE = 0.18;
+   213→const JOYSTICK_MAX_RADIUS_PX = 70;
+   214→const JOYSTICK_BOOST_MAGNITUDE = 0.6;
+   215→const MAX_SNAPSHOT_POINTS = 60;
+   216→const BOT_THINK_INTERVAL_MS = 120;
+   217→const BOT_THINK_JITTER_MS = 80;
+   218→const BOT_FOOD_SCAN_RADIUS = 300;
+   219→const BOT_THREAT_SCAN_RADIUS = 200;
+   220→const BOT_MAX_TURN_PER_TICK = 0.22;
+   221→const BOT_PREDICT_AHEAD_TICKS = 8;
+   222→const BOT_PREDICT_SPEED = BASE_SPEED * 1.5;
+   223→const PERSONALITIES: BotPersonality[] = [
+   224→  'scavenger',
+   225→  'opportunist',
+   226→  'hunter',
+   227→  'extractor',
+   228→  'coward',
+   229→];
+   230→
+   231→const QUICK_EMOTES = [
+   232→  'GG! 🏆',
+   233→  'Target Spot! 🎯',
+   234→  'Fleeing! 🏃💨',
+   235→  'Get Ripped! 💪',
+   236→  'Extracting soon! ⚡',
+   237→];
+   238→
+   239→/** Food spawn radius around player (primary cluster). */
+   240→const FOOD_SPAWN_RADIUS_NEAR = 1500;
+   241→/** Some food scattered further out. */
+   242→const FOOD_SPAWN_RADIUS_FAR = 2500;
+   243→/** Fraction of replenishment food that spawns far. */
+   244→const FOOD_FAR_FRACTION = 0.15;
+   245→/** Bot spawn radius from origin at game start. */
+   246→const BOT_SPAWN_RADIUS = 2000;
+   247→/** Opacity layering proximity factor (multiplied by sum of sizes). */
+   248→const OPACITY_PROXIMITY_FACTOR = 3;
+   249→/** Opacity to which the larger snake fades. */
+   250→const OPACITY_FADE_TO = 0.75;
+   251→
+   252→// ----------------------------------------------------------------------------
+   253→// Math helpers
+   254→// ----------------------------------------------------------------------------
+   255→
+   256→function angularDelta(current: number, desired: number): number {
+   257→  let diff = desired - current;
+   258→  while (diff > Math.PI) diff -= 2 * Math.PI;
+   259→  while (diff < -Math.PI) diff += 2 * Math.PI;
+   260→  return diff;
+   261→}
+   262→
+   263→function turnToward(current: number, desired: number, maxStep: number): number {
+   264→  const diff = angularDelta(current, desired);
+   265→  if (Math.abs(diff) <= maxStep) return desired;
+   266→  return current + Math.sign(diff) * maxStep;
+   267→}
+   268→
+   269→function dist(ax: number, ay: number, bx: number, by: number): number {
+   270→  return Math.hypot(ax - bx, ay - by);
+   271→}
+   272→
+   273→/** Random point within a circle of maxR around center. */
+   274→function randomPointInCircle(cx: number, cy: number, maxR: number): Vec2 {
+   275→  const r = Math.sqrt(Math.random()) * maxR;
+   276→  const theta = Math.random() * Math.PI * 2;
+   277→  return {
+   278→    x: cx + Math.cos(theta) * r,
+   279→    y: cy + Math.sin(theta) * r,
+   280→  };
+   281→}
+   282→
+   283→function initialBody(headX: number, headY: number, angle: number, length: number): Vec2[] {
+   284→  const pts: Vec2[] = [];
+   285→  for (let i = 0; i < length; i++) {
+   286→    pts.push({
+   287→      x: headX - Math.cos(angle) * i * SEGMENT_SPACING,
+   288→      y: headY - Math.sin(angle) * i * SEGMENT_SPACING,
+   289→    });
+   290→  }
+   291→  return pts;
+   292→}
+   293→
+   294→// ----------------------------------------------------------------------------
+   295→// Food orb helpers
+   296→// ----------------------------------------------------------------------------
+   297→
+   298→/** Pick a weighted random FoodOrbConfig. */
+   299→function weightedRandomOrb(): FoodOrbConfig {
+   300→  let r = Math.random();
+   301→  for (let i = 0; i < ALL_FOOD_ORBS.length; i++) {
+   302→    r -= FOOD_ORB_WEIGHTS[i];
+   303→    if (r <= 0) return ALL_FOOD_ORBS[i];
+   304→  }
+   305→  return ALL_FOOD_ORBS[0]; // fallback to small
+   306→}
+   307→
+   308→/** Create a Food object at a random position around the player. */
+   309→function createFoodOrb(idPrefix: string, idCounter: { value: number }, cx: number, cy: number, farSpawn: boolean): Food {
+   310→  const orb = weightedRandomOrb();
+   311→  const radius = farSpawn ? FOOD_SPAWN_RADIUS_FAR : FOOD_SPAWN_RADIUS_NEAR;
+   312→  const pos = randomPointInCircle(cx, cy, radius);
+   313→  return {
+   314→    id: `${idPrefix}-food-${idCounter.value++}`,
+   315→    x: pos.x,
+   316→    y: pos.y,
+   317→    size: orb.radius,
+   318→    value: orb.value,
+   319→    orbSize: orb.size,
+   320→    color: orb.color,
+   321→    glowColor: orb.glowColor,
+   322→  };
+   323→}
+   324→
+   325→/** Create a specific Food object at an exact position (for death drops). */
+   326→function createFoodOrbAt(idPrefix: string, idCounter: { value: number }, x: number, y: number, orb: FoodOrbConfig): Food {
+   327→  return {
+   328→    id: `${idPrefix}-drop-${idCounter.value++}`,
+   329→    x,
+   330→    y,
+   331→    size: orb.radius,
+   332→    value: orb.value,
+   333→    orbSize: orb.size,
+   334→    color: orb.color,
+   335→    glowColor: orb.glowColor,
+   336→  };
+   337→}
+   338→
+   339→// ----------------------------------------------------------------------------
+   340→// Death food drop — greedily split score into Large(5)/Medium(3)/Small(1)
+   341→// ----------------------------------------------------------------------------
+   342→
+   343→interface DeathDropResult {
+   344→  foods: Food[];
+   345→  /** IDs of dead snakes that should drop food. */
+   346→}
+   347→
+   348→function computeDeathFoodDrop(
+   349→  totalScore: number,
+   350→  deathX: number,
+   351→  deathY: number,
+   352→  idPrefix: string,
+   353→  idCounter: { value: number },
+   354→): Food[] {
+   355→  const result: Food[] = [];
+   356→  let remaining = Math.max(0, totalScore);
+   357→
+   358→  // Large orbs (value 5)
+   359→  const largeOrb = ALL_FOOD_ORBS[2]; // FOOD_ORB_LARGE
+   360→  const largeCount = Math.floor(remaining / largeOrb.value);
+   361→  for (let i = 0; i < largeCount; i++) {
+   362→    const offset = randomPointInCircle(deathX, deathY, 30 + largeCount * 0.5);
+   363→    result.push(createFoodOrbAt(idPrefix, idCounter, offset.x, offset.y, largeOrb));
+   364→  }
+   365→  remaining -= largeCount * largeOrb.value;
+   366→
+   367→  // Medium orbs (value 3)
+   368→  const mediumOrb = ALL_FOOD_ORBS[1]; // FOOD_ORB_MEDIUM
+   369→  const mediumCount = Math.floor(remaining / mediumOrb.value);
+   370→  for (let i = 0; i < mediumCount; i++) {
+   371→    const offset = randomPointInCircle(deathX, deathY, 30 + mediumCount * 0.5);
+   372→    result.push(createFoodOrbAt(idPrefix, idCounter, offset.x, offset.y, mediumOrb));
+   373→  }
+   374→  remaining -= mediumCount * mediumOrb.value;
+   375→
+   376→  // Small orbs (value 1) for the remainder
+   377→  const smallOrb = ALL_FOOD_ORBS[0]; // FOOD_ORB_SMALL
+   378→  for (let i = 0; i < remaining; i++) {
+   379→    const offset = randomPointInCircle(deathX, deathY, 30 + remaining * 0.5);
+   380→    result.push(createFoodOrbAt(idPrefix, idCounter, offset.x, offset.y, smallOrb));
+   381→  }
+   382→
+   383→  return result;
+   384→}
+   385→
+   386→// ----------------------------------------------------------------------------
+   387→// Main engine
+   388→// ----------------------------------------------------------------------------
+   389→
+   390→export class OfflineGameEngine {
+   391→  // --- Public callbacks (set by the host) ---
+   392→  public onExit: (result: OfflineExitResult) => void = () => {};
+   393→  public onStateChange: (state: OfflineState) => void = () => {};
+   394→
+   395→  // --- Engine-owned state ---
+   396→  private readonly arena: ArenaTier;
+   397→  private readonly playerProfile: PlayerProfile;
+   398→  private readonly canvas: HTMLCanvasElement;
+   399→  private readonly ctx: CanvasRenderingContext2D | null;
+   400→  private readonly playerSkin: Skin | undefined;
+   401→
+   402→  // World state
+   403→  private player: SnakeBase | null = null;
+   404→  private bots: Map<string, BotSession> = new Map();
+   405→  private foods: Food[] = [];
+   406→  private boostDropQueue: { x: number; y: number }[] = [];
+   407→  private grid: SpatialHashGrid = new SpatialHashGrid(120);
+   408→  private tick: number = 0;
+   409→  private idCounter: number = 0;
+   410→  private startTime: number = 0;
+   411→
+   412→  // rAF + sizing
+   413→  private rafId: number | null = null;
+   414→  private resizeObserver: ResizeObserver | null = null;
+   415→  private lastFrameTime: number = 0;
+   416→
+   417→  // Camera (follows player, no world bounds)
+   418→  private cam: { x: number; y: number; zoom: number } = {
+   419→    x: 0,
+   420→    y: 0,
+   421→    zoom: 0.9,
+   422→  };
+   423→  private camInit: boolean = false;
+   424→
+   425→  // Input state
+   426→  private keys: Set<string> = new Set();
+   427→  private mousePos: { x: number; y: number } = { x: 0, y: 0 };
+   428→  private mouseActive: boolean = false;
+   429→  private touchAngle: number | null = null;
+   430→  private touchBoost: boolean = false;
+   431→  private joystick: {
+   432→    active: boolean;
+   433→    pointerId: number;
+   434→    originX: number;
+   435→    originY: number;
+   436→    curX: number;
+   437→    curY: number;
+   438→  } | null = null;
+   439→  private boostHold: boolean = false;
+   440→  private extractHold: boolean = false;
+   441→
+   442→  // HUD / overlays DOM
+   443→  private overlayRoot: HTMLDivElement | null = null;
+   444→  private hudEls: {
+   445→    score?: HTMLSpanElement;
+   446→    kills?: HTMLSpanElement;
+   447→    rank?: HTMLSpanElement;
+   448→    bots?: HTMLSpanElement;
+   449→    fps?: HTMLSpanElement;
+   450→    extractingBar?: HTMLDivElement;
+   451→    extractingPct?: HTMLSpanElement;
+   452→    extractingWrap?: HTMLDivElement;
+   453→    idleHint?: HTMLDivElement;
+   454→    leaderboardRows?: HTMLDivElement;
+   455→    leaderboardToggle?: HTMLButtonElement;
+   456→    leaderboardOpen: boolean;
+   457→  } = { leaderboardOpen: true };
+   458→
+   459→  // End screen DOM (death / extract)
+   460→  private endOverlay: HTMLDivElement | null = null;
+   461→
+   462→  // State machine
+   463→  private state: OfflineState = 'playing';
+   464→  private finalScore: number = 0;
+   465→  private finalKills: number = 0;
+   466→  private finalDurationSeconds: number = 0;
+   467→
+   468→  // Particles
+   469→  private particles: Particle[] = [];
+   470→  private metallicCache: Map<string, CanvasGradient> = new Map();
+   471→
+   472→  // FPS + adaptive quality
+   473→  private fps: number = 60;
+   474→  private fpsAccum: { frames: number; lastSecond: number; lowSince: number; highSince: number } = {
+   475→    frames: 0,
+   476→    lastSecond: 0,
+   477→    lowSince: 0,
+   478→    highSince: 0,
+   479→  };
+   480→  private lowQuality: boolean = false;
+   481→
+   482→  // Mobile detection (for camera zoom)
+   483→  private isMobile: boolean = false;
+   484→
+   485→  // Bound listeners (kept so we can remove them on stop)
+   486→  private boundMouseMove: (e: MouseEvent) => void;
+   487→  private boundTouchStart: (e: TouchEvent) => void;
+   488→  private boundTouchMove: (e: TouchEvent) => void;
+   489→  private boundTouchEnd: (e: TouchEvent) => void;
+   490→  private boundKeyDown: (e: KeyboardEvent) => void;
+   491→  private boundKeyUp: (e: KeyboardEvent) => void;
+   492→  private boundBlur: () => void;
+   493→  private boundResize: () => void;
+   494→
+   495→  // Cleanup flag
+   496→  private stopped: boolean = false;
+   497→
+   498→  constructor(arena: ArenaTier, playerProfile: PlayerProfile, canvas: HTMLCanvasElement) {
+   499→    this.arena = arena;
+   500→    this.playerProfile = playerProfile;
+   501→    this.canvas = canvas;
+   502→    this.ctx = canvas.getContext('2d', { alpha: false });
+   503→
+   504→    // Resolve the player's equipped skin.
+   505→    this.playerSkin = this.resolvePlayerSkin();
+   506→
+   507→    // Pre-bind listeners so removeEventListener works.
+   508→    this.boundMouseMove = this.onMouseMove.bind(this);
+   509→    this.boundTouchStart = this.onTouchStart.bind(this);
+   510→    this.boundTouchMove = this.onTouchMove.bind(this);
+   511→    this.boundTouchEnd = this.onTouchEnd.bind(this);
+   512→    this.boundKeyDown = this.onKeyDown.bind(this);
+   513→    this.boundKeyUp = this.onKeyUp.bind(this);
+   514→    this.boundBlur = this.onBlur.bind(this);
+   515→    this.boundResize = this.handleResize.bind(this);
+   516→  }
+   517→
+   518→  // --------------------------------------------------------------------------
+   519→  // Lifecycle
+   520→  // --------------------------------------------------------------------------
+   521→
+   522→  start(): void {
+   523→    if (this.stopped) return;
+   524→    this.isMobile =
+   525→      typeof window !== 'undefined' &&
+   526→      (window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768);
+   527→    this.setupCanvas();
+   528→    this.attachInput();
+   529→    this.buildHUD();
+   530→    this.resetWorld();
+   531→    this.startTime = performance.now();
+   532→    this.lastFrameTime = performance.now();
+   533→    this.rafId = requestAnimationFrame(this.frame);
+   534→  }
+   535→
+   536→  stop(): void {
+   537→    this.stopped = true;
+   538→    if (this.rafId !== null) {
+   539→      cancelAnimationFrame(this.rafId);
+   540→      this.rafId = null;
+   541→    }
+   542→    this.detachInput();
+   543→    if (this.resizeObserver) {
+   544→      this.resizeObserver.disconnect();
+   545→      this.resizeObserver = null;
+   546→    }
+   547→    this.teardownHUD();
+   548→  }
+   549→
+   550→  // --------------------------------------------------------------------------
+   551→  // Skin resolution
+   552→  // --------------------------------------------------------------------------
+   553→
+   554→  private resolvePlayerSkin(): Skin | undefined {
+   555→    try {
+   556→      const raw = localStorage.getItem('venom_custom_skin_state');
+   557→      if (raw) {
+   558→        const parsed = JSON.parse(raw) as {
+   559→          useCustomSkin?: boolean;
+   560→          currentSkin?: string;
+   561→        };
+   562→        if (parsed.useCustomSkin && parsed.currentSkin && parsed.currentSkin !== 'custom-lab-skin') {
+   563→          const s = getCosmeticById(parsed.currentSkin);
+   564→          if (s) return s;
+   565→        }
+   566→      }
+   567→    } catch {
+   568→      /* ignore */
+   569→    }
+   570→    return getCosmeticById(this.playerProfile.currentSkin);
+   571→  }
+   572→
+   573→  // --------------------------------------------------------------------------
+   574→  // Canvas setup
+   575→  // --------------------------------------------------------------------------
+   576→
+   577→  private setupCanvas(): void {
+   578→    const canvas = this.canvas;
+   579→    canvas.style.touchAction = 'none';
+   580→    canvas.style.outline = 'none';
+   581→    this.handleResize();
+   582→    this.resizeObserver = new ResizeObserver(this.boundResize);
+   583→    this.resizeObserver.observe(canvas);
+   584→  }
+   585→
+   586→  private handleResize(): void {
+   587→    const canvas = this.canvas;
+   588→    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+   589→    const rect = canvas.getBoundingClientRect();
+   590→    const w = Math.max(1, Math.floor(rect.width));
+   591→    const h = Math.max(1, Math.floor(rect.height));
+   592→    canvas.width = Math.floor(w * dpr);
+   593→    canvas.height = Math.floor(h * dpr);
+   594→    this.metallicCache.clear();
+   595→  }
+   596→
+   597→  // --------------------------------------------------------------------------
+   598→  // World init / reset
+   599→  // --------------------------------------------------------------------------
+   600→
+   601→  private resetWorld(): void {
+   602→    this.bots.clear();
+   603→    this.foods = [];
+   604→    this.grid.clear();
+   605→    this.tick = 0;
+   606→    this.idCounter = 0;
+   607→    this.particles = [];
+   608→    this.camInit = false;
+   609→
+   610→    // Spawn player at origin (0,0), facing east.
+   611→    const angle = 0;
+   612→    const profile = this.playerProfile;
+   613→    this.player = {
+   614→      id: 'player-offline',
+   615→      name: profile.name,
+   616→      userTag: profile.userTag,
+   617→      country: profile.country,
+   618→      points: initialBody(0, 0, angle, INITIAL_BODY_LENGTH),
+   619→      angle,
+   620→      size: SIZE_BASE + Math.sqrt(INITIAL_SPAWN_SCORE) * SIZE_SCORE_FACTOR,
+   621→      color: this.playerSkin?.color ?? '#22c55e',
+   622→      secondaryColor: this.playerSkin?.secondaryColor ?? '#15803d',
+   623→      isPlayer: true,
+   624→      isBot: false,
+   625→      score: 0,
+   626→      boostFrameCounter: 0,
+   627→      isExtracting: false,
+   628→      extractionProgress: 0,
+   629→      isDead: false,
+   630→      spawnProtectedUntil: performance.now() + RESPAWN_INVULN_MS,
+   631→      kills: 0,
+   632→      desiredAngle: angle,
+   633→      wantsBoost: false,
+   634→      isBoosting: false,
+   635→    };
+   636→
+   637→    // Spawn bots in a ring around the origin.
+   638→    const botCount = Math.min(1000, this.arena.botsCount);
+   639→    for (let i = 0; i < botCount; i++) {
+   640→      const bot = this.spawnBot(0, 0);
+   641→      this.bots.set(bot.id, bot);
+   642→    }
+   643→
+   644→    // Spawn food orbs around the origin.
+   645→    for (let i = 0; i < FOOD_COUNT_TARGET; i++) {
+   646→      const far = Math.random() < FOOD_FAR_FRACTION;
+   647→      this.foods.push(createFoodOrb(this.arena.id, this.idCounterObj, 0, 0, far));
+   648→    }
+   649→
+   650→    this.setState('playing');
+   651→    this.updateHUD();
+   652→  }
+   653→
+   654→  /** Helper so we can pass idCounter by reference to food-creation helpers. */
+   655→  private get idCounterObj(): { value: number } {
+   656→    return { value: this.idCounter };
+   657→  }
+   658→
+   659→  private spawnBot(cx: number, cy: number): BotSession {
+   660→    const idx = this.idCounter++;
+   661→    const baseName = BOT_NAMES[idx % BOT_NAMES.length];
+   662→    const name =
+   663→      idx < BOT_NAMES.length ? baseName : `${baseName}-${Math.floor(idx / BOT_NAMES.length) + 1}`;
+   664→    const skin = BOT_SKINS[idx % BOT_SKINS.length];
+   665→    const personality = PERSONALITIES[idx % PERSONALITIES.length];
+   666→    const spawn = randomPointInCircle(cx, cy, BOT_SPAWN_RADIUS);
+   667→    const angle = Math.random() * Math.PI * 2;
+   668→    const botId = `bot-${this.arena.id}-${idx}`;
+   669→    return {
+   670→      id: botId,
+   671→      botId,
+   672→      name,
+   673→      points: initialBody(spawn.x, spawn.y, angle, INITIAL_BODY_LENGTH),
+   674→      angle,
+   675→      size: SIZE_BASE + Math.sqrt(INITIAL_SPAWN_SCORE) * SIZE_SCORE_FACTOR,
+   676→      color: skin.color,
+   677→      secondaryColor: skin.secondaryColor,
+   678→      isPlayer: false,
+   679→      isBot: true,
+   680→      score: 0,
+   681→      boostFrameCounter: 0,
+   682→      isExtracting: false,
+   683→      extractionProgress: 0,
+   684→      isDead: false,
+   685→      spawnProtectedUntil: performance.now() + RESPAWN_INVULN_MS,
+   686→      kills: 0,
+   687→      desiredAngle: angle,
+   688→      wantsBoost: false,
+   689→      isBoosting: false,
+   690→      personality,
+   691→      nextThinkAt: 0,
+   692→    };
+   693→  }
+   694→
+   695→  // --------------------------------------------------------------------------
+   696→  // Input listeners
+   697→  // --------------------------------------------------------------------------
+   698→
+   699→  private attachInput(): void {
+   700→    const canvas = this.canvas;
+   701→    canvas.addEventListener('mousemove', this.boundMouseMove);
+   702→    canvas.addEventListener('touchstart', this.boundTouchStart, { passive: false });
+   703→    canvas.addEventListener('touchmove', this.boundTouchMove, { passive: false });
+   704→    canvas.addEventListener('touchend', this.boundTouchEnd);
+   705→    canvas.addEventListener('touchcancel', this.boundTouchEnd);
+   706→    window.addEventListener('keydown', this.boundKeyDown);
+   707→    window.addEventListener('keyup', this.boundKeyUp);
+   708→    window.addEventListener('blur', this.boundBlur);
+   709→  }
+   710→
+   711→  private detachInput(): void {
+   712→    const canvas = this.canvas;
+   713→    canvas.removeEventListener('mousemove', this.boundMouseMove);
+   714→    canvas.removeEventListener('touchstart', this.boundTouchStart);
+   715→    canvas.removeEventListener('touchmove', this.boundTouchMove);
+   716→    canvas.removeEventListener('touchend', this.boundTouchEnd);
+   717→    canvas.removeEventListener('touchcancel', this.boundTouchEnd);
+   718→    window.removeEventListener('keydown', this.boundKeyDown);
+   719→    window.removeEventListener('keyup', this.boundKeyUp);
+   720→    window.removeEventListener('blur', this.boundBlur);
+   721→  }
+   722→
+   723→  private onMouseMove(e: MouseEvent): void {
+   724→    const rect = this.canvas.getBoundingClientRect();
+   725→    this.mousePos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+   726→    this.mouseActive = true;
+   727→  }
+   728→
+   729→  private onTouchStart(e: TouchEvent): void {
+   730→    if (this.joystick) return;
+   731→    const t = this.findJoystickTouch(e.touches);
+   732→    if (!t) return;
+   733→    e.preventDefault();
+   734→    const rect = this.canvas.getBoundingClientRect();
+   735→    this.joystick = {
+   736→      active: true,
+   737→      pointerId: t.identifier,
+   738→      originX: t.clientX - rect.left,
+   739→      originY: t.clientY - rect.top,
+   740→      curX: t.clientX - rect.left,
+   741→      curY: t.clientY - rect.top,
+   742→    };
+   743→  }
+   744→
+   745→  private onTouchMove(e: TouchEvent): void {
+   746→    const js = this.joystick;
+   747→    if (!js) return;
+   748→    let t: Touch | null = null;
+   749→    for (let i = 0; i < e.touches.length; i++) {
+   750→      if (e.touches[i].identifier === js.pointerId) {
+   751→        t = e.touches[i];
+   752→        break;
+   753→      }
+   754→    }
+   755→    if (!t) return;
+   756→    e.preventDefault();
+   757→    const rect = this.canvas.getBoundingClientRect();
+   758→    js.curX = t.clientX - rect.left;
+   759→    js.curY = t.clientY - rect.top;
+   760→    const dx = js.curX - js.originX;
+   761→    const dy = js.curY - js.originY;
+   762→    const d = Math.hypot(dx, dy);
+   763→    const mag = Math.min(1, d / JOYSTICK_MAX_RADIUS_PX);
+   764→    if (mag > JOYSTICK_DEADZONE) {
+   765→      this.touchAngle = Math.atan2(dy, dx);
+   766→      this.touchBoost = mag > JOYSTICK_BOOST_MAGNITUDE;
+   767→    } else {
+   768→      this.touchAngle = null;
+   769→      this.touchBoost = false;
+   770→    }
+   771→  }
+   772→
+   773→  private onTouchEnd(e: TouchEvent): void {
+   774→    const js = this.joystick;
+   775→    if (!js) return;
+   776→    let stillActive = false;
+   777→    for (let i = 0; i < e.touches.length; i++) {
+   778→      if (e.touches[i].identifier === js.pointerId) {
+   779→        stillActive = true;
+   780→        break;
+   781→      }
+   782→    }
+   783→    if (!stillActive) {
+   784→      this.joystick = null;
+   785→      this.touchAngle = null;
+   786→      this.touchBoost = false;
+   787→    }
+   788→  }
+   789→
+   790→  private findJoystickTouch(touches: TouchList): Touch | null {
+   791→    const rect = this.canvas.getBoundingClientRect();
+   792→    for (let i = 0; i < touches.length; i++) {
+   793→      const t = touches[i];
+   794→      const x = t.clientX - rect.left;
+   795→      const y = t.clientY - rect.top;
+   796→      if (x < rect.width / 2 && y > rect.height / 2) {
+   797→        return t;
+   798→      }
+   799→    }
+   800→    return null;
+   801→  }
+   802→
+   803→  private onKeyDown(e: KeyboardEvent): void {
+   804→    const k = e.key.toLowerCase();
+   805→    if (
+   806→      k === 'arrowup' ||
+   807→      k === 'arrowdown' ||
+   808→      k === 'arrowleft' ||
+   809→      k === 'arrowright' ||
+   810→      k === ' ' ||
+   811→      k === 'spacebar'
+   812→    ) {
+   813→      e.preventDefault();
+   814→    }
+   815→    if (k === 'escape' && this.state !== 'playing') {
+   816→      this.handleExitToLobby();
+   817→      return;
+   818→    }
+   819→    if (k === 'e' && this.state === 'playing' && !this.extractHold) {
+   820→      this.extractHold = true;
+   821→      this.beginExtract();
+   822→    }
+   823→    if (this.state === 'playing' && ['1', '2', '3', '4', '5'].includes(k)) {
+   824→      const idx = parseInt(k, 10) - 1;
+   825→      if (idx >= 0 && idx < QUICK_EMOTES.length) {
+   826→        this.setPlayerChat(QUICK_EMOTES[idx]);
+   827→      }
+   828→    }
+   829→    const normalized = k === 'spacebar' ? ' ' : k;
+   830→    this.keys.add(normalized);
+   831→  }
+   832→
+   833→  private onKeyUp(e: KeyboardEvent): void {
+   834→    const k = e.key.toLowerCase();
+   835→    if (k === 'e' && this.extractHold) {
+   836→      this.extractHold = false;
+   837→      this.cancelExtract();
+   838→    }
+   839→    const normalized = k === 'spacebar' ? ' ' : k;
+   840→    this.keys.delete(normalized);
+   841→  }
+   842→
+   843→  private onBlur(): void {
+   844→    this.keys.clear();
+   845→    this.mouseActive = false;
+   846→    this.boostHold = false;
+   847→    if (this.extractHold) {
+   848→      this.extractHold = false;
+   849→      this.cancelExtract();
+   850→    }
+   851→  }
+   852→
+   853→  // --------------------------------------------------------------------------
+   854→  // Extraction
+   855→  // --------------------------------------------------------------------------
+   856→
+   857→  private beginExtract(): void {
+   858→    const p = this.player;
+   859→    if (!p || p.isDead) return;
+   860→    if (p.isExtracting) return;
+   861→    p.isExtracting = true;
+   862→    p.extractionProgress = 0;
+   863→    if (this.hudEls.extractingWrap) this.hudEls.extractingWrap.style.display = 'block';
+   864→    if (this.hudEls.idleHint) this.hudEls.idleHint.style.display = 'none';
+   865→  }
+   866→
+   867→  private cancelExtract(): void {
+   868→    const p = this.player;
+   869→    if (!p) return;
+   870→    p.isExtracting = false;
+   871→    p.extractionProgress = 0;
+   872→    if (this.hudEls.extractingWrap) this.hudEls.extractingWrap.style.display = 'none';
+   873→    if (this.hudEls.idleHint) this.hudEls.idleHint.style.display = 'block';
+   874→    if (this.hudEls.extractingBar) this.hudEls.extractingBar.style.width = '0%';
+   875→    if (this.hudEls.extractingPct) this.hudEls.extractingPct.textContent = '0%';
+   876→  }
+   877→
+   878→  private finishExtract(): void {
+   879→    if (this.state !== 'playing') return;
+   880→    const p = this.player;
+   881→    if (!p) return;
+   882→    this.finalScore = INITIAL_SPAWN_SCORE + p.score;
+   883→    this.finalKills = p.kills;
+   884→    this.finalDurationSeconds = Math.floor((performance.now() - this.startTime) / 1000);
+   885→    this.setState('extracted');
+   886→    this.showEndScreen('extract');
+   887→  }
+   888→
+   889→  // --------------------------------------------------------------------------
+   890→  // Chat bubble
+   891→  // --------------------------------------------------------------------------
+   892→
+   893→  private setPlayerChat(msg: string): void {
+   894→    const p = this.player;
+   895→    if (!p) return;
+   896→    p.chatMessage = msg;
+   897→    p.chatExpiry = performance.now() + 4000;
+   898→  }
+   899→
+   900→  // --------------------------------------------------------------------------
+   901→  // Main rAF loop
+   902→  // --------------------------------------------------------------------------
+   903→
+   904→  private frame = (now: number): void => {
+   905→    if (this.stopped) return;
+   906→    this.rafId = requestAnimationFrame(this.frame);
+   907→    const dt = now - this.lastFrameTime;
+   908→    this.lastFrameTime = now;
+   909→
+   910→    this.updateFps(now);
+   911→    this.updateParticles(dt);
+   912→
+   913→    // Physics ticks at ~TICK_MS (30 Hz) cadence.
+   914→    if (this.state === 'playing') {
+   915→      this.accumulator += dt;
+   916→      let safety = 4;
+   917→      while (this.accumulator >= TICK_MS && safety > 0) {
+   918→        this.tickPhysics(now);
+   919→        this.accumulator -= TICK_MS;
+   920→        safety--;
+   921→      }
+   922→      if (safety === 0) this.accumulator = 0;
+   923→    }
+   924→
+   925→    this.render(now);
+   926→    this.updateHUD();
+   927→  };
+   928→
+   929→  private accumulator: number = 0;
+   930→
+   931→  // --------------------------------------------------------------------------
+   932→  // Physics tick (one server-tick equivalent)
+   933→  // --------------------------------------------------------------------------
+   934→
+   935→  private tickPhysics(now: number): void {
+   936→    this.tick++;
+   937→    const p = this.player;
+   938→    if (!p || p.isDead) return;
+   939→
+   940→    // 1) Compute player desired angle + boost.
+   941→    const { angle, boost } = this.computePlayerInput();
+   942→    if (angle !== null) p.desiredAngle = angle;
+   943→    p.wantsBoost = boost;
+   944→    p.isBoosting = boost && p.points.length > BOOST_MIN_LENGTH + INITIAL_BODY_LENGTH - 20;
+   945→
+   946→    // Extraction progress (3-second hold).
+   947→    if (p.isExtracting) {
+   948→      p.extractionProgress += TICK_MS;
+   949→      if (p.extractionProgress >= EXTRACT_DURATION_MS) {
+   950→        this.finishExtract();
+   951→        return;
+   952→      }
+   953→    }
+   954→
+   955→    // 2) Move player.
+   956→    this.tickSnakeMovement(p, p.desiredAngle, p.wantsBoost);
+   957→
+   958→    // 3) Bots: think + move.
+   959→    for (const bot of this.bots.values()) {
+   960→      this.tickBot(bot, now);
+   961→    }
+   962→
+   963→    // Process boost food drops (from tail shedding)
+   964→    if (this.boostDropQueue.length > 0) {
+   965→      for (const drop of this.boostDropQueue) {
+   966→        this.foods.push({
+   967→          id: `food-${this.arena.id}-${this.idCounterObj.value++}`,
+   968→          x: drop.x,
+   969→          y: drop.y,
+   970→          size: 3,
+   971→          value: 1,
+   972→          isStarChip: false,
+   973→          color: '#34d399',
+   974→          glowColor: '#10b981',
+   975→          orbSize: 'small',
+   976→        });
+   977→      }
+   978→      this.boostDropQueue.length = 0;
+   979→    }
+   980→
+   981→    // 4) Build spatial grid for collision + food queries.
+   982→    this.grid.clear();
+   983→    this.insertSnakeIntoGrid(p);
+   984→    for (const bot of this.bots.values()) {
+   985→      if (!bot.isDead) this.insertSnakeIntoGrid(bot);
+   986→    }
+   987→    for (const food of this.foods) {
+   988→      this.grid.insert({
+   989→        id: food.id,
+   990→        kind: 'food',
+   991→        x: food.x,
+   992→        y: food.y,
+   993→        radius: food.size,
+   994→        value: food.value,
+   995→        foodRef: food,
+   996→      });
+   997→    }
+   998→
+   999→    // 5) Eat food (player + bots).
+  1000→    this.eatFood();
+  1001→
+  1002→    // 6) Collision detection (body collision + head-on collision). NO wall death.
+  1003→    const deaths = this.detectCollisions(now);
+  1004→
+  1005→    // 7) Apply deaths + drop food.
+  1006→    let playerDied = false;
+  1007→    const newDropFoods: Food[] = [];
+  1008→    for (const d of deaths) {
+  1009→      if (d.deadId === p.id) {
+  1010→        playerDied = true;
+  1011→        // Drop player's food
+  1012→        const playerTotal = INITIAL_SPAWN_SCORE + p.score;
+  1013→        newDropFoods.push(...computeDeathFoodDrop(playerTotal, p.points[0].x, p.points[0].y, this.arena.id, this.idCounterObj));
+  1014→        continue;
+  1015→      }
+  1016→      const bot = this.bots.get(d.deadId);
+  1017→      if (bot) {
+  1018→        // Drop bot's food
+  1019→        const botTotal = INITIAL_SPAWN_SCORE + bot.score;
+  1020→        newDropFoods.push(...computeDeathFoodDrop(botTotal, bot.points[0].x, bot.points[0].y, this.arena.id, this.idCounterObj));
+  1021→        bot.isDead = true;
+  1022→        // Credit kill to the killer if it's the player.
+  1023→        if (d.killerId === p.id) {
+  1024→          p.kills++;
+  1025→        }
+  1026→      }
+  1027→    }
+  1028→
+  1029→    // Add dropped food to the world.
+  1030→    if (newDropFoods.length > 0) {
+  1031→      this.foods.push(...newDropFoods);
+  1032→    }
+  1033→
+  1034→    // 8) Remove dead bots and respawn to maintain count.
+  1035→    if (deaths.length > 0) {
+  1036→      const toRemove: string[] = [];
+  1037→      for (const [id, bot] of this.bots) {
+  1038→        if (bot.isDead) toRemove.push(id);
+  1039→      }
+  1040→      for (const id of toRemove) {
+  1041→        this.bots.delete(id);
+  1042→      }
+  1043→    }
+  1044→    // Respawn bots near the player to maintain count.
+  1045→    const pHead = p.points[0];
+  1046→    while (this.bots.size < this.arena.botsCount) {
+  1047→      const bot = this.spawnBot(pHead.x, pHead.y);
+  1048→      // Ensure bots spawn in a safe area (far from player AND other bots)
+  1049→      let safe = false;
+  1050→      for (let attempt = 0; attempt < 20; attempt++) {
+  1051→        const spawnPt = bot.points[0];
+  1052→        const distFromPlayer = dist(spawnPt.x, spawnPt.y, pHead.x, pHead.y);
+  1053→        if (distFromPlayer < 300) {
+  1054→          // Re-spawn further from player
+  1055→          const far = randomPointInCircle(pHead.x, pHead.y, BOT_SPAWN_RADIUS);
+  1056→          bot.points = initialBody(far.x, far.y, bot.angle, INITIAL_BODY_LENGTH);
+  1057→          continue;
+  1058→        }
+  1059→        // Also check distance from other bots
+  1060→        let tooClose = false;
+  1061→        for (const other of this.bots.values()) {
+  1062→          if (other.isDead || other.points.length === 0) continue;
+  1063→          if (dist(spawnPt.x, spawnPt.y, other.points[0].x, other.points[0].y) < 300) {
+  1064→            tooClose = true;
+  1065→            break;
+  1066→          }
+  1067→        }
+  1068→        if (tooClose) {
+  1069→          const far = randomPointInCircle(pHead.x, pHead.y, BOT_SPAWN_RADIUS);
+  1070→          bot.points = initialBody(far.x, far.y, bot.angle, INITIAL_BODY_LENGTH);
+  1071→          continue;
+  1072→        }
+  1073→        safe = true;
+  1074→        break;
+  1075→      }
+  1076→      this.bots.set(bot.id, bot);
+  1077→    }
+  1078→
+  1079→    // 9) Player death → death screen.
+  1080→    if (playerDied) {
+  1081→      p.isDead = true;
+  1082→      this.handlePlayerDeath();
+  1083→      return;
+  1084→    }
+  1085→
+  1086→    // 10) Replenish food toward target (spawn around player).
+  1087→    this.replenishFood();
+  1088→
+  1089→    // 11) Expire chat bubbles.
+  1090→    this.expireChat(now);
+  1091→
+  1092→    // 12) Update camera target.
+  1093→    this.updateCamera();
+  1094→  }
+  1095→
+  1096→  // --------------------------------------------------------------------------
+  1097→  // Snake movement (server-authoritative formula)
+  1098→  // --------------------------------------------------------------------------
+  1099→
+  1100→  private tickSnakeMovement(snake: SnakeBase, desiredAngle: number, wantsBoost: boolean): void {
+  1101→    if (snake.points.length === 0 || snake.isDead) return;
+  1102→
+  1103→    // Turn rate: max(0.045, 0.15 - totalScore*0.0006).
+  1104→    const totalScore = INITIAL_SPAWN_SCORE + snake.score;
+  1105→    const turnRate = Math.max(TURN_MIN, TURN_BASE - totalScore * TURN_SCORE_FACTOR);
+  1106→    snake.angle = turnToward(snake.angle, desiredAngle, turnRate);
+  1107→
+  1108→    // Speed.
+  1109→    let speed = BASE_SPEED;
+  1110→    if (snake.isExtracting) {
+  1111→      speed = EXTRACT_GLIDE_SPEED;
+  1112→    } else if (wantsBoost && snake.points.length > BOOST_MIN_LENGTH) {
+  1113→      speed = BOOST_SPEED;
+  1114→      snake.isBoosting = true;
+  1115→      snake.boostFrameCounter++;
+  1116→      if (snake.boostFrameCounter >= BOOST_DROP_INTERVAL) {
+  1117→        snake.boostFrameCounter = 0;
+  1118→        if (snake.points.length > BOOST_MIN_LENGTH) {
+  1119→          // Record tail position BEFORE popping (for food drop)
+  1120→          const tail = snake.points[snake.points.length - 1];
+  1121→          this.boostDropQueue.push({
+  1122→            x: tail.x,
+  1123→            y: tail.y,
+  1124→          });
+  1125→          snake.points.pop();
+  1126→          // Reduce food-score (score can go below 0 but body is clamped)
+  1127→          snake.score = Math.max(0, snake.score - 1);
+  1128→        }
+  1129→      }
+  1130→    } else {
+  1131→      snake.isBoosting = false;
+  1132→    }
+  1133→
+  1134→    // Move head.
+  1135→    const head = snake.points[0];
+  1136→    const nx = head.x + Math.cos(snake.angle) * speed;
+  1137→    const ny = head.y + Math.sin(snake.angle) * speed;
+  1138→    snake.points.unshift({ x: nx, y: ny });
+  1139→
+  1140→    // Grow / shrink body to target length based on SCORE.
+  1141→    // targetLen = INITIAL_BODY_LENGTH + foodScore, clamped to [BOOST_MIN_LENGTH+1, MAX_BODY_LENGTH]
+  1142→    const targetLen = Math.max(
+  1143→      BOOST_MIN_LENGTH + 1,
+  1144→      Math.min(MAX_BODY_LENGTH, INITIAL_BODY_LENGTH + snake.score),
+  1145→    );
+  1146→    while (snake.points.length > targetLen) snake.points.pop();
+  1147→
+  1148→    // Size: 8 + sqrt(totalScore) * 0.4.
+  1149→    snake.size = SIZE_BASE + Math.sqrt(INITIAL_SPAWN_SCORE + snake.score) * SIZE_SCORE_FACTOR;
+  1150→  }
+  1151→
+  1152→  // --------------------------------------------------------------------------
+  1153→  // Bot AI — no self-destruct, seek food, predictive evasion
+  1154→  // --------------------------------------------------------------------------
+  1155→
+  1156→  private tickBot(bot: BotSession, now: number): void {
+  1157→    if (bot.points.length === 0 || bot.isDead) return;
+  1158→
+  1159→    if (now >= bot.nextThinkAt) {
+  1160→      bot.nextThinkAt = now + BOT_THINK_INTERVAL_MS + Math.floor(Math.random() * BOT_THINK_JITTER_MS);
+  1161→      const head = bot.points[0];
+  1162→
+  1163→      // --- Find nearest food ---
+  1164→      let bestFood: GridItem | null = null;
+  1165→      let bestFoodDist = Infinity;
+  1166→      const foodQuery = this.grid.queryRadius(head.x, head.y, BOT_FOOD_SCAN_RADIUS);
+  1167→      for (const item of foodQuery.values()) {
+  1168→        if (item.kind !== 'food') continue;
+  1169→        if ((item.value ?? 0) <= 0) continue;
+  1170→        const d = dist(head.x, head.y, item.x, item.y);
+  1171→        if (d < bestFoodDist) {
+  1172→          bestFoodDist = d;
+  1173→          bestFood = item;
+  1174→        }
+  1175→      }
+  1176→
+  1177→      // --- Find nearest threat (foreign body segment) ---
+  1178→      let threatX = 0;
+  1179→      let threatY = 0;
+  1180→      let threatDist = Infinity;
+  1181→      const threatQuery = this.grid.queryRadius(head.x, head.y, BOT_THREAT_SCAN_RADIUS);
+  1182→      for (const item of threatQuery.values()) {
+  1183→        if (item.kind !== 'segment') continue;
+  1184→        if (item.snakeId === bot.id) continue;
+  1185→        if (item.segIdx === 0) continue;
+  1186→        const d = dist(head.x, head.y, item.x, item.y);
+  1187→        if (d < threatDist) {
+  1188→          threatDist = d;
+  1189→          threatX = item.x;
+  1190→          threatY = item.y;
+  1191→        }
+  1192→      }
+  1193→
+  1194→      let desired: number;
+  1195→      const shouldFlee =
+  1196→        threatDist < 140 &&
+  1197→        (bot.personality === 'coward' ||
+  1198→          bot.personality === 'extractor' ||
+  1199→          (bot.personality === 'opportunist' && threatDist < 90));
+  1200→
+  1201→      // --- Predictive evasion against the human player ---
+  1202→      const p = this.player;
+  1203→      if (p && !p.isDead && p.points.length > 0 && now >= p.spawnProtectedUntil) {
+  1204→        const playerHead = p.points[0];
+  1205→        const playerDist = dist(head.x, head.y, playerHead.x, playerHead.y);
+  1206→        if (playerDist < BOT_EVADE_RADIUS * 2) {
+  1207→          // Predict where the player will be in N ticks.
+  1208→          const predictedX = playerHead.x + Math.cos(p.angle) * BOT_PREDICT_SPEED * BOT_PREDICT_AHEAD_TICKS;
+  1209→          const predictedY = playerHead.y + Math.sin(p.angle) * BOT_PREDICT_AHEAD_TICKS;
+  1210→          const distToPredicted = dist(head.x, head.y, predictedX, predictedY);
+  1211→
+  1212→          // If the bot is on a collision course with the predicted position, evade.
+  1213→          if (distToPredicted < (bot.size + p.size) * 3) {
+  1214→            // Evade perpendicular to the player's heading.
+  1215→            const evadeAngle = p.angle + (Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2);
+  1216→            desired = evadeAngle;
+  1217→            bot.desiredAngle = desired;
+  1218→            const wantsBoost = bot.personality === 'hunter' && bot.score > 10;
+  1219→            this.tickSnakeMovement(bot, bot.desiredAngle, wantsBoost);
+  1220→            return;
+  1221→          }
+  1222→        }
+  1223→      }
+  1224→
+  1225→      if (shouldFlee) {
+  1226→        desired = Math.atan2(head.y - threatY, head.x - threatX);
+  1227→      } else if (bestFood) {
+  1228→        desired = Math.atan2(bestFood.y - head.y, bestFood.x - head.x);
+  1229→      } else {
+  1230→        desired = bot.angle + (Math.random() - 0.5) * 0.4;
+  1231→      }
+  1232→
+  1233→      // NO edge avoidance — infinite map, no boundaries.
+  1234→
+  1235→      bot.desiredAngle = desired;
+  1236→    }
+  1237→
+  1238→    // Hunter personality occasionally boosts.
+  1239→    const wantsBoost = bot.personality === 'hunter' && bot.score > 5 && Math.random() < 0.05;
+  1240→    this.tickSnakeMovement(bot, bot.desiredAngle, wantsBoost);
+  1241→  }
+  1242→
+  1243→  // --------------------------------------------------------------------------
+  1244→  // Spatial grid insertion
+  1245→  // --------------------------------------------------------------------------
+  1246→
+  1247→  private insertSnakeIntoGrid(snake: SnakeBase): void {
+  1248→    const pts = snake.points;
+  1249→    for (let i = 0; i < pts.length; i += 2) {
+  1250→      this.grid.insert({
+  1251→        id: `${snake.id}:${i}`,
+  1252→        kind: 'segment',
+  1253→        x: pts[i].x,
+  1254→        y: pts[i].y,
+  1255→        radius: snake.size,
+  1256→        snakeId: snake.id,
+  1257→        segIdx: i,
+  1258→      });
+  1259→    }
+  1260→  }
+  1261→
+  1262→  // --------------------------------------------------------------------------
+  1263→  // Food eating
+  1264→  // --------------------------------------------------------------------------
+  1265→
+  1266→  private eatFood(): void {
+  1267→    const p = this.player;
+  1268→    if (p && !p.isDead) this.eatFoodForSnake(p);
+  1269→    for (const bot of this.bots.values()) {
+  1270→      if (!bot.isDead) this.eatFoodForSnake(bot);
+  1271→    }
+  1272→  }
+  1273→
+  1274→  private eatFoodForSnake(snake: SnakeBase): void {
+  1275→    if (snake.points.length === 0) return;
+  1276→    const head = snake.points[0];
+  1277→    const nearby = this.grid.queryRadius(head.x, head.y, snake.size + 20);
+  1278→    for (const item of nearby.values()) {
+  1279→      if (item.kind !== 'food') continue;
+  1280→      if ((item.value ?? 0) <= 0) continue;
+  1281→      const d = dist(head.x, head.y, item.x, item.y);
+  1282→      if (d < snake.size + (item.radius || 6) + 6) {
+  1283→        // Eat food — add its value to the snake's food-score.
+  1284→        snake.score += item.value ?? 0;
+  1285→        item.value = 0;
+  1286→        if (item.foodRef) item.foodRef.value = 0;
+  1287→        // Spawn small particle burst for player only.
+  1288→        if (snake.isPlayer) {
+  1289→          this.spawnEatParticles(item.x, item.y, item.radius || 6, item.foodRef?.color ?? '#fbbf24');
+  1290→        }
+  1291→      }
+  1292→    }
+  1293→  }
+  1294→
+  1295→  // --------------------------------------------------------------------------
+  1296→  // Collision detection (body + head-on) — NO wall death
+  1297→  // --------------------------------------------------------------------------
+  1298→
+  1299→  private detectCollisions(now: number): { deadId: string; killerId?: string; cause: 'body' | 'headon' }[] {
+  1300→    const deaths: { deadId: string; killerId?: string; cause: 'body' | 'headon' }[] = [];
+  1301→    const seenDead = new Set<string>();
+  1302→    const all: SnakeBase[] = [];
+  1303→    if (this.player && !this.player.isDead) all.push(this.player);
+  1304→    for (const bot of this.bots.values()) {
+  1305→      if (!bot.isDead) all.push(bot);
+  1306→    }
+  1307→
+  1308→    // --- Head-to-head collision (checked first, takes priority) ---
+  1309→    const headOnChecked = new Set<string>();
+  1310→    for (let i = 0; i < all.length; i++) {
+  1311→      for (let j = i + 1; j < all.length; j++) {
+  1312→        const a = all[i];
+  1313→        const b = all[j];
+  1314→        if (a.isDead || b.isDead) continue;
+  1315→        if (now < a.spawnProtectedUntil || now < b.spawnProtectedUntil) continue;
+  1316→        const pairKey = a.id < b.id ? `${a.id}:${b.id}` : `${b.id}:${a.id}`;
+  1317→        if (headOnChecked.has(pairKey)) continue;
+  1318→        headOnChecked.add(pairKey);
+  1319→
+  1320→        const ha = a.points[0];
+  1321→        const hb = b.points[0];
+  1322→        const d = dist(ha.x, ha.y, hb.x, hb.y);
+  1323→        const hitDist = (a.size + b.size) * HEAD_ON_HIT_FACTOR;
+  1324→        if (d >= hitDist) continue;
+  1325→
+  1326→        // Head-on collision! Determine winner based on rules.
+  1327→        const aBoosting = a.isBoosting;
+  1328→        const bBoosting = b.isBoosting;
+  1329→        const aTotalScore = INITIAL_SPAWN_SCORE + a.score;
+  1330→        const bTotalScore = INITIAL_SPAWN_SCORE + b.score;
+  1331→
+  1332→        let aDies = false;
+  1333→        let bDies = false;
+  1334→
+  1335→        if (aTotalScore === bTotalScore) {
+  1336→          // Tie — both die
+  1337→          aDies = true;
+  1338→          bDies = true;
+  1339→        } else if (aBoosting && !bBoosting) {
+  1340→          // A is boosting, B is not → A wins (boost advantage)
+  1341→          bDies = true;
+  1342→        } else if (bBoosting && !aBoosting) {
+  1343→          // B is boosting, A is not → B wins (boost advantage)
+  1344→          aDies = true;
+  1345→        } else {
+  1346→          // Both boosting or neither boosting → higher score wins
+  1347→          if (aTotalScore > bTotalScore) {
+  1348→            bDies = true;
+  1349→          } else {
+  1350→            aDies = true;
+  1351→          }
+  1352→        }
+  1353→
+  1354→        if (aDies && !seenDead.has(a.id)) {
+  1355→          deaths.push({ deadId: a.id, killerId: b.id, cause: 'headon' });
+  1356→          seenDead.add(a.id);
+  1357→        }
+  1358→        if (bDies && !seenDead.has(b.id)) {
+  1359→          deaths.push({ deadId: b.id, killerId: a.id, cause: 'headon' });
+  1360→          seenDead.add(b.id);
+  1361→        }
+  1362→      }
+  1363→    }
+  1364→
+  1365→    // --- Body collision: head vs foreign non-head segment ---
+  1366→    for (const snake of all) {
+  1367→      if (snake.isDead) continue;
+  1368→      if (snake.points.length === 0) continue;
+  1369→      if (now < snake.spawnProtectedUntil) continue;
+  1370→      if (seenDead.has(snake.id)) continue;
+  1371→      const head = snake.points[0];
+  1372→
+  1373→      // NO wall collision — infinite map.
+  1374→
+  1375→      const queryR = snake.size + 30;
+  1376→      const nearby = this.grid.queryRadius(head.x, head.y, queryR);
+  1377→      for (const item of nearby.values()) {
+  1378→        if (item.kind !== 'segment') continue;
+  1379→        // Own-collision immunity — skip own segments.
+  1380→        if (item.snakeId === snake.id) continue;
+  1381→        // Skip head segments (handled by head-on collision above).
+  1382→        if (item.segIdx === 0) continue;
+  1383→        // Neck protection: skip first N segments behind the head (close-call safety)
+  1384→        if (item.segIdx <= 5) continue;
+  1385→        const d = dist(head.x, head.y, item.x, item.y);
+  1386→        if (d < (snake.size + item.radius) * COLLISION_HIT_FACTOR) {
+  1387→          deaths.push({ deadId: snake.id, killerId: item.snakeId, cause: 'body' });
+  1388→          seenDead.add(snake.id);
+  1389→          break;
+  1390→        }
+  1391→      }
+  1392→    }
+  1393→    return deaths;
+  1394→  }
+  1395→
+  1396→  // --------------------------------------------------------------------------
+  1397→  // Player death
+  1398→  // --------------------------------------------------------------------------
+  1399→
+  1400→  private handlePlayerDeath(): void {
+  1401→    const p = this.player;
+  1402→    if (!p) return;
+  1403→    this.finalScore = INITIAL_SPAWN_SCORE + p.score;
+  1404→    this.finalKills = p.kills;
+  1405→    this.finalDurationSeconds = Math.floor((performance.now() - this.startTime) / 1000);
+  1406→    // Spawn death particles at the head.
+  1407→    this.spawnDeathParticles(p.points[0].x, p.points[0].y, p.color);
+  1408→    this.setState('dead');
+  1409→    this.showEndScreen('death');
+  1410→  }
+  1411→
+  1412→  // --------------------------------------------------------------------------
+  1413→  // Food replenishment (spawn around the player's current position)
+  1414→  // --------------------------------------------------------------------------
+  1415→
+  1416→  private replenishFood(): void {
+  1417→    // Remove eaten food (value <= 0).
+  1418→    if (this.foods.some((f) => f.value <= 0)) {
+  1419→      this.foods = this.foods.filter((f) => f.value > 0);
+  1420→    }
+  1421→
+  1422→    // Replenish up to target, spawning around the player.
+  1423→    const p = this.player;
+  1424→    const cx = p ? p.points[0].x : 0;
+  1425→    const cy = p ? p.points[0].y : 0;
+  1426→    let guard = 0;
+  1427→    while (this.foods.length < FOOD_COUNT_TARGET && guard < 50) {
+  1428→      const far = Math.random() < FOOD_FAR_FRACTION;
+  1429→      this.foods.push(createFoodOrb(this.arena.id, this.idCounterObj, cx, cy, far));
+  1430→      guard++;
+  1431→    }
+  1432→  }
+  1433→
+  1434→  // --------------------------------------------------------------------------
+  1435→  // Chat expiry
+  1436→  // --------------------------------------------------------------------------
+  1437→
+  1438→  private expireChat(now: number): void {
+  1439→    if (this.player && this.player.chatExpiry && now > this.player.chatExpiry) {
+  1440→      this.player.chatMessage = undefined;
+  1441→      this.player.chatExpiry = undefined;
+  1442→    }
+  1443→    for (const bot of this.bots.values()) {
+  1444→      if (bot.chatExpiry && now > bot.chatExpiry) {
+  1445→        bot.chatMessage = undefined;
+  1446→        bot.chatExpiry = undefined;
+  1447→      }
+  1448→    }
+  1449→  }
+  1450→
+  1451→  // --------------------------------------------------------------------------
+  1452→  // Camera (follows player, no world bounds)
+  1453→  // --------------------------------------------------------------------------
+  1454→
+  1455→  private updateCamera(): void {
+  1456→    const p = this.player;
+  1457→    if (!p || p.points.length === 0) return;
+  1458→    const head = p.points[0];
+  1459→    if (!this.camInit) {
+  1460→      this.cam.x = head.x;
+  1461→      this.cam.y = head.y;
+  1462→      this.camInit = true;
+  1463→    } else {
+  1464→      this.cam.x += (head.x - this.cam.x) * 0.18;
+  1465→      this.cam.y += (head.y - this.cam.y) * 0.18;
+  1466→    }
+  1467→    // Zoom: mobile = 0.58, desktop = 0.9; zoom out slightly as body grows.
+  1468→    const baseZoom = this.isMobile ? 0.58 : 0.9;
+  1469→    const len = p.points.length;
+  1470→    const targetZoom = Math.max(baseZoom * 0.65, baseZoom - (len - INITIAL_BODY_LENGTH) * 0.005);
+  1471→    this.cam.zoom += (targetZoom - this.cam.zoom) * 0.05;
+  1472→  }
+  1473→
+  1474→  // --------------------------------------------------------------------------
+  1475→  // Player input compute
+  1476→  // --------------------------------------------------------------------------
+  1477→
+  1478→  private computePlayerInput(): { angle: number | null; boost: boolean } {
+  1479→    const spaceHeld = this.keys.has(' ') || this.keys.has('space') || this.boostHold;
+  1480→    // Touch joystick
+  1481→    if (this.touchAngle !== null) {
+  1482→      return { angle: this.touchAngle, boost: this.touchBoost || spaceHeld };
+  1483→    }
+  1484→    // Keyboard
+  1485→    const k = this.keys;
+  1486→    let kx = 0;
+  1487→    let ky = 0;
+  1488→    if (k.has('w') || k.has('arrowup')) ky -= 1;
+  1489→    if (k.has('s') || k.has('arrowdown')) ky += 1;
+  1490→    if (k.has('a') || k.has('arrowleft')) kx -= 1;
+  1491→    if (k.has('d') || k.has('arrowright')) kx += 1;
+  1492→    if (kx !== 0 || ky !== 0) {
+  1493→      return { angle: Math.atan2(ky, kx), boost: spaceHeld };
+  1494→    }
+  1495→    // Mouse
+  1496→    if (this.mouseActive) {
+  1497→      const rect = this.canvas.getBoundingClientRect();
+  1498→      const cx = rect.width / 2;
+  1499→      const cy = rect.height / 2;
+  1500→      const dx = this.mousePos.x - cx;
+  1501→      const dy = this.mousePos.y - cy;
+  1502→      const d = Math.hypot(dx, dy);
+  1503→      if (d > MOUSE_DEADZONE_PX) {
+  1504→        return { angle: Math.atan2(dy, dx), boost: spaceHeld };
+  1505→      }
+  1506→    }
+  1507→    return { angle: null, boost: false };
+  1508→  }
+  1509→
+  1510→  // --------------------------------------------------------------------------
+  1511→  // Rendering
+  1512→  // --------------------------------------------------------------------------
+  1513→
+  1514→  private render(now: number): void {
+  1515→    const ctx = this.ctx;
+  1516→    if (!ctx) return;
+  1517→    const canvas = this.canvas;
+  1518→    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  1519→    const cssW = canvas.clientWidth;
+  1520→    const cssH = canvas.clientHeight;
+  1521→    if (cssW === 0 || cssH === 0) return;
+  1522→
+  1523→    // Clear + background.
+  1524→    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  1525→    ctx.fillStyle = '#020617';
+  1526→    ctx.fillRect(0, 0, cssW, cssH);
+  1527→
+  1528→    if (!this.player) {
+  1529→      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  1530→      return;
+  1531→    }
+  1532→
+  1533→    // Build render context.
+  1534→    const rc: FrameRenderCtx = {
+  1535→      ctx,
+  1536→      w: cssW,
+  1537→      h: cssH,
+  1538→      camX: this.cam.x,
+  1539→      camY: this.cam.y,
+  1540→      zoom: this.cam.zoom,
+  1541→      worldSize: 1000000, // large placeholder (infinite map)
+  1542→      lowQuality: this.lowQuality,
+  1543→      myId: this.player.id,
+  1544→      now,
+  1545→      metallicCache: this.metallicCache,
+  1546→      playerSkin: this.playerSkin,
+  1547→      dpr,
+  1548→    };
+  1549→
+  1550→    // World transform.
+  1551→    ctx.translate(cssW / 2, cssH / 2);
+  1552→    ctx.scale(this.cam.zoom, this.cam.zoom);
+  1553→    ctx.translate(-this.cam.x, -this.cam.y);
+  1554→
+  1555→    // --- Infinite grid (no boundary circle) ---
+  1556→    this.drawInfiniteGrid(ctx, rc);
+  1557→
+  1558→    // --- Food orbs (custom rendering with glow per size) ---
+  1559→    this.drawFoodOrbs(ctx, rc);
+  1560→
+  1561→    // --- Snakes with opacity layering ---
+  1562→    this.drawAllSnakes(ctx, rc, now);
+  1563→
+  1564→    // --- Particles ---
+  1565→    drawParticles(rc, this.particles);
+  1566→
+  1567→    // Reset transform for screen-space overlays.
+  1568→    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  1569→
+  1570→    // Joystick (touch).
+  1571→    this.drawJoystick(ctx);
+  1572→  }
+  1573→
+  1574→  // --------------------------------------------------------------------------
+  1575→  // Infinite grid rendering (no circular boundary)
+  1576→  // --------------------------------------------------------------------------
+  1577→
+  1578→  private drawInfiniteGrid(ctx: CanvasRenderingContext2D, rc: FrameRenderCtx): void {
+  1579→    const vis = computeVisibleRect(rc);
+  1580→    const gridSize = 60;
+  1581→    const zoom = rc.zoom;
+  1582→
+  1583→    // Clamp to avoid drawing extreme ranges.
+  1584→    const startX = Math.floor(vis.left / gridSize) * gridSize;
+  1585→    const endX = Math.ceil(vis.right / gridSize) * gridSize;
+  1586→    const startY = Math.floor(vis.top / gridSize) * gridSize;
+  1587→    const endY = Math.ceil(vis.bottom / gridSize) * gridSize;
+  1588→
+  1589→    ctx.strokeStyle = '#1e293b';
+  1590→    ctx.lineWidth = 1 / zoom;
+  1591→    ctx.beginPath();
+  1592→    for (let x = startX; x <= endX; x += gridSize) {
+  1593→      ctx.moveTo(x, startY);
+  1594→      ctx.lineTo(x, endY);
+  1595→    }
+  1596→    for (let y = startY; y <= endY; y += gridSize) {
+  1597→      ctx.moveTo(startX, y);
+  1598→      ctx.lineTo(endX, y);
+  1599→    }
+  1600→    ctx.stroke();
+  1601→
+  1602→    // Origin crosshair (subtle).
+  1603→    ctx.strokeStyle = '#334155';
+  1604→    ctx.lineWidth = 1.5 / zoom;
+  1605→    ctx.beginPath();
+  1606→    ctx.moveTo(startX, 0);
+  1607→    ctx.lineTo(endX, 0);
+  1608→    ctx.moveTo(0, startY);
+  1609→    ctx.lineTo(0, endY);
+  1610→    ctx.stroke();
+  1611→  }
+  1612→
+  1613→  // --------------------------------------------------------------------------
+  1614→  // Food orb rendering (three sizes with distinct glow)
+  1615→  // --------------------------------------------------------------------------
+  1616→
+  1617→  private drawFoodOrbs(ctx: CanvasRenderingContext2D, rc: FrameRenderCtx): void {
+  1618→    const vis = computeVisibleRect(rc);
+  1619→    const zoom = rc.zoom;
+  1620→    const lowQ = rc.lowQuality;
+  1621→
+  1622→    // Batch by orb size for efficient rendering.
+  1623→    // Small: tiny glowing dot, green
+  1624→    // Medium: medium circle, blue
+  1625→    // Large: larger circle, pink with brighter glow
+  1626→    const smalls: Food[] = [];
+  1627→    const mediums: Food[] = [];
+  1628→    const larges: Food[] = [];
+  1629→
+  1630→    for (let i = 0; i < this.foods.length; i++) {
+  1631→      const f = this.foods[i];
+  1632→      if (f.value <= 0) continue;
+  1633→      if (f.x < vis.left || f.x > vis.right || f.y < vis.top || f.y > vis.bottom) continue;
+  1634→
+  1635→      if (f.orbSize === 'small') smalls.push(f);
+  1636→      else if (f.orbSize === 'medium') mediums.push(f);
+  1637→      else larges.push(f);
+  1638→    }
+  1639→
+  1640→    // --- Small orbs: batched simple circles ---
+  1641→    if (smalls.length > 0) {
+  1642→      if (!lowQ) {
+  1643→        ctx.save();
+  1644→        ctx.shadowColor = '#10b981';
+  1645→        ctx.shadowBlur = 4;
+  1646→      }
+  1647→      ctx.fillStyle = '#34d399';
+  1648→      ctx.beginPath();
+  1649→      for (let i = 0; i < smalls.length; i++) {
+  1650→        const f = smalls[i];
+  1651→        ctx.moveTo(f.x + f.size, f.y);
+  1652→        ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+  1653→      }
+  1654→      ctx.fill();
+  1655→      if (!lowQ) {
+  1656→        ctx.shadowBlur = 0;
+  1657→        ctx.restore();
+  1658→      }
+  1659→    }
+  1660→
+  1661→    // --- Medium orbs: batched circles with medium glow ---
+  1662→    if (mediums.length > 0) {
+  1663→      if (!lowQ) {
+  1664→        ctx.save();
+  1665→        ctx.shadowColor = '#0ea5e9';
+  1666→        ctx.shadowBlur = 8;
+  1667→      }
+  1668→      ctx.fillStyle = '#38bdf8';
+  1669→      ctx.beginPath();
+  1670→      for (let i = 0; i < mediums.length; i++) {
+  1671→        const f = mediums[i];
+  1672→        ctx.moveTo(f.x + f.size, f.y);
+  1673→        ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+  1674→      }
+  1675→      ctx.fill();
+  1676→      if (!lowQ) {
+  1677→        ctx.shadowBlur = 0;
+  1678→        ctx.restore();
+  1679→      }
+  1680→    }
+  1681→
+  1682→    // --- Large orbs: individual rendering with brighter glow + outer ring ---
+  1683→    if (larges.length > 0) {
+  1684→      ctx.save();
+  1685→      if (!lowQ) {
+  1686→        ctx.shadowColor = '#ec4899';
+  1687→        ctx.shadowBlur = 14;
+  1688→      }
+  1689→      ctx.fillStyle = '#f472b6';
+  1690→      ctx.beginPath();
+  1691→      for (let i = 0; i < larges.length; i++) {
+  1692→        const f = larges[i];
+  1693→        ctx.moveTo(f.x + f.size, f.y);
+  1694→        ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+  1695→      }
+  1696→      ctx.fill();
+  1697→      if (!lowQ) {
+  1698→        // Outer glow ring for large orbs
+  1699→        ctx.shadowBlur = 0;
+  1700→        ctx.strokeStyle = 'rgba(236, 72, 153, 0.4)';
+  1701→        ctx.lineWidth = 2 / zoom;
+  1702→        ctx.beginPath();
+  1703→        for (let i = 0; i < larges.length; i++) {
+  1704→          const f = larges[i];
+  1705→          ctx.moveTo(f.x + f.size + 3, f.y);
+  1706→          ctx.arc(f.x, f.y, f.size + 3, 0, Math.PI * 2);
+  1707→        }
+  1708→        ctx.stroke();
+  1709→      }
+  1710→      ctx.restore();
+  1711→    }
+  1712→  }
+  1713→
+  1714→  // --------------------------------------------------------------------------
+  1715→  // Snake rendering with opacity layering
+  1716→  // --------------------------------------------------------------------------
+  1717→
+  1718→  private drawAllSnakes(ctx: CanvasRenderingContext2D, rc: FrameRenderCtx, now: number): void {
+  1719→    const p = this.player;
+  1720→    if (!p) return;
+  1721→
+  1722→    // Gather all visible snakes.
+  1723→    const allSnakes: SnakeBase[] = [];
+  1724→    for (const bot of this.bots.values()) {
+  1725→      if (!bot.isDead) allSnakes.push(bot);
+  1726→    }
+  1727→    if (!p.isDead) allSnakes.push(p);
+  1728→
+  1729→    // Pre-compute opacity for each snake based on proximity to smaller snakes.
+  1730→    const opacityMap = new Map<string, number>();
+  1731→    for (const snake of allSnakes) {
+  1732→      opacityMap.set(snake.id, 1.0);
+  1733→    }
+  1734→
+  1735→    for (let i = 0; i < allSnakes.length; i++) {
+  1736→      const a = allSnakes[i];
+  1737→      if (a.points.length === 0) continue;
+  1738→      const aTotalScore = INITIAL_SPAWN_SCORE + a.score;
+  1739→
+  1740→      for (let j = 0; j < allSnakes.length; j++) {
+  1741→        if (i === j) continue;
+  1742→        const b = allSnakes[j];
+  1743→        if (b.points.length === 0) continue;
+  1744→        const bTotalScore = INITIAL_SPAWN_SCORE + b.score;
+  1745→
+  1746→        // Check if a is smaller and b is larger.
+  1747→        if (aTotalScore < bTotalScore) {
+  1748→          const d = dist(a.points[0].x, a.points[0].y, b.points[0].x, b.points[0].y);
+  1749→          const proximityThreshold = (a.size + b.size) * OPACITY_PROXIMITY_FACTOR;
+  1750→          if (d < proximityThreshold) {
+  1751→            // The larger snake (b) fades.
+  1752→            const current = opacityMap.get(b.id) ?? 1.0;
+  1753→            opacityMap.set(b.id, Math.min(current, OPACITY_FADE_TO));
+  1754→          }
+  1755→        }
+  1756→      }
+  1757→    }
+  1758→
+  1759→    // Render bots first, player last (on top).
+  1760→    for (const bot of this.bots.values()) {
+  1761→      if (bot.isDead) continue;
+  1762→      const opacity = opacityMap.get(bot.id) ?? 1.0;
+  1763→      ctx.save();
+  1764→      ctx.globalAlpha = opacity;
+  1765→      this.drawSnakeSnapshot(rc, bot);
+  1766→      ctx.restore();
+  1767→    }
+  1768→    if (!p.isDead) {
+  1769→      const opacity = opacityMap.get(p.id) ?? 1.0;
+  1770→      ctx.save();
+  1771→      ctx.globalAlpha = opacity;
+  1772→      this.drawSnakeSnapshot(rc, p);
+  1773→      ctx.restore();
+  1774→    }
+  1775→  }
+  1776→
+  1777→  private drawSnakeSnapshot(rc: FrameRenderCtx, snake: SnakeBase): void {
+  1778→    // Downsample long snakes for the snapshot (cap rendered points at 60).
+  1779→    let pts = snake.points;
+  1780→    if (pts.length > MAX_SNAPSHOT_POINTS) {
+  1781→      const step = pts.length / MAX_SNAPSHOT_POINTS;
+  1782→      const down: Vec2[] = [];
+  1783→      for (let i = 0; i < MAX_SNAPSHOT_POINTS; i++) {
+  1784→        down.push(pts[Math.floor(i * step)]);
+  1785→      }
+  1786→      pts = down;
+  1787→    }
+  1788→    const now = rc.now;
+  1789→    const totalScore = INITIAL_SPAWN_SCORE + snake.score;
+  1790→    drawSnake(rc, {
+  1791→      id: snake.id,
+  1792→      name: snake.name,
+  1793→      userTag: snake.userTag,
+  1794→      points: pts,
+  1795→      angle: snake.angle,
+  1796→      size: snake.size,
+  1797→      color: snake.color,
+  1798→      secondaryColor: snake.secondaryColor,
+  1799→      isPlayer: snake.isPlayer,
+  1800→      isBot: snake.isBot,
+  1801→      carriedChips: 0,
+  1802→      score: totalScore,
+  1803→      isExtracting: snake.isExtracting,
+  1804→      extractionProgress: Math.min(1, snake.extractionProgress / EXTRACT_DURATION_MS),
+  1805→      isDead: snake.isDead,
+  1806→      spawnProtected: now < snake.spawnProtectedUntil,
+  1807→      chatMessage: snake.chatMessage,
+  1808→      country: snake.country,
+  1809→      isBoosting: snake.isBoosting,
+  1810→    });
+  1811→  }
+  1812→
+  1813→  private drawJoystick(ctx: CanvasRenderingContext2D): void {
+  1814→    const js = this.joystick;
+  1815→    if (!js || !js.active) return;
+  1816→    const dx = js.curX - js.originX;
+  1817→    const dy = js.curY - js.originY;
+  1818→    const d = Math.min(JOYSTICK_MAX_RADIUS_PX, Math.hypot(dx, dy));
+  1819→    const a = Math.atan2(dy, dx);
+  1820→    const stickX = js.originX + Math.cos(a) * d;
+  1821→    const stickY = js.originY + Math.sin(a) * d;
+  1822→    ctx.beginPath();
+  1823→    ctx.arc(js.originX, js.originY, JOYSTICK_MAX_RADIUS_PX, 0, Math.PI * 2);
+  1824→    ctx.fillStyle = 'rgba(129, 140, 248, 0.12)';
+  1825→    ctx.fill();
+  1826→    ctx.strokeStyle = 'rgba(129, 140, 248, 0.5)';
+  1827→    ctx.lineWidth = 2;
+  1828→    ctx.stroke();
+  1829→    ctx.beginPath();
+  1830→    ctx.arc(stickX, stickY, 24, 0, Math.PI * 2);
+  1831→    ctx.fillStyle = 'rgba(129, 140, 248, 0.85)';
+  1832→    ctx.fill();
+  1833→  }
+  1834→
+  1835→  // --------------------------------------------------------------------------
+  1836→  // Particles
+  1837→  // --------------------------------------------------------------------------
+  1838→
+  1839→  private updateParticles(dtMs: number): void {
+  1840→    const arr = this.particles;
+  1841→    if (arr.length === 0) return;
+  1842→    const dt = dtMs / 1000;
+  1843→    for (let i = arr.length - 1; i >= 0; i--) {
+  1844→      const p = arr[i];
+  1845→      p.life -= dtMs;
+  1846→      if (p.life <= 0) {
+  1847→        arr.splice(i, 1);
+  1848→        continue;
+  1849→      }
+  1850→      p.x += p.vx * dt;
+  1851→      p.y += p.vy * dt;
+  1852→      p.vx *= 0.96;
+  1853→      p.vy *= 0.96;
+  1854→    }
+  1855→    if (arr.length > MAX_PARTICLES) {
+  1856→      arr.splice(0, arr.length - MAX_PARTICLES);
+  1857→    }
+  1858→  }
+  1859→
+  1860→  private spawnEatParticles(x: number, y: number, size: number, color: string): void {
+  1861→    if (this.lowQuality) return;
+  1862→    const count = 4;
+  1863→    for (let i = 0; i < count; i++) {
+  1864→      const a = Math.random() * Math.PI * 2;
+  1865→      const sp = 30 + Math.random() * 50;
+  1866→      this.particles.push({
+  1867→        x,
+  1868→        y,
+  1869→        vx: Math.cos(a) * sp,
+  1870→        vy: Math.sin(a) * sp,
+  1871→        life: 350 + Math.random() * 150,
+  1872→        maxLife: 500,
+  1873→        color,
+  1874→        size: Math.max(1, size * 0.6),
+  1875→      });
+  1876→    }
+  1877→  }
+  1878→
+  1879→  private spawnDeathParticles(x: number, y: number, color: string): void {
+  1880→    const count = this.lowQuality ? 8 : 24;
+  1881→    for (let i = 0; i < count; i++) {
+  1882→      const a = Math.random() * Math.PI * 2;
+  1883→      const sp = 80 + Math.random() * 180;
+  1884→      this.particles.push({
+  1885→        x,
+  1886→        y,
+  1887→        vx: Math.cos(a) * sp,
+  1888→        vy: Math.sin(a) * sp,
+  1889→        life: 700 + Math.random() * 400,
+  1890→        maxLife: 1100,
+  1891→        color,
+  1892→        size: 3 + Math.random() * 3,
+  1893→      });
+  1894→    }
+  1895→  }
+  1896→
+  1897→  // --------------------------------------------------------------------------
+  1898→  // FPS / adaptive quality
+  1899→  // --------------------------------------------------------------------------
+  1900→
+  1901→  private updateFps(now: number): void {
+  1902→    const acc = this.fpsAccum;
+  1903→    acc.frames += 1;
+  1904→    if (acc.lastSecond === 0) acc.lastSecond = now;
+  1905→    const dt = now - acc.lastSecond;
+  1906→    if (dt >= 1000) {
+  1907→      const measured = (acc.frames * 1000) / dt;
+  1908→      this.fps = Math.round(measured);
+  1909→      if (measured < FPS_LOW_THRESHOLD) {
+  1910→        if (acc.lowSince === 0) acc.lowSince = now;
+  1911→        if (acc.highSince !== 0) acc.highSince = 0;
+  1912→        if (now - acc.lowSince >= FPS_LOW_DURATION_MS && !this.lowQuality) {
+  1913→          this.lowQuality = true;
+  1914→        }
+  1915→      } else if (measured > FPS_HIGH_THRESHOLD) {
+  1916→        if (acc.highSince === 0) acc.highSince = now;
+  1917→        if (acc.lowSince !== 0) acc.lowSince = 0;
+  1918→        if (now - acc.highSince >= FPS_HIGH_DURATION_MS && this.lowQuality) {
+  1919→          this.lowQuality = false;
+  1920→        }
+  1921→      } else {
+  1922→        acc.lowSince = 0;
+  1923→        acc.highSince = 0;
+  1924→      }
+  1925→      acc.frames = 0;
+  1926→      acc.lastSecond = now;
+  1927→    }
+  1928→  }
+  1929→
+  1930→  // --------------------------------------------------------------------------
+  1931→  // State machine
+  1932→  // --------------------------------------------------------------------------
+  1933→
+  1934→  private setState(s: OfflineState): void {
+  1935→    if (this.state === s) return;
+  1936→    this.state = s;
+  1937→    try {
+  1938→      this.onStateChange(s);
+  1939→    } catch {
+  1940→      /* ignore */
+  1941→    }
+  1942→  }
+  1943→
+  1944→  // --------------------------------------------------------------------------
+  1945→  // HUD construction (no chips, no wallet, no minimap, no commission)
+  1946→  // --------------------------------------------------------------------------
+  1947→
+  1948→  private buildHUD(): void {
+  1949→    const parent = this.canvas.parentElement;
+  1950→    if (!parent) return;
+  1951→    if (getComputedStyle(parent).position === 'static') {
+  1952→      parent.style.position = 'relative';
+  1953→    }
+  1954→
+  1955→    const root = document.createElement('div');
+  1956→    root.style.cssText =
+  1957→      'position:absolute;inset:0;pointer-events:none;z-index:30;font-family:ui-monospace,monospace;';
+  1958→    this.overlayRoot = root;
+  1959→
+  1960→    // --- Top-left HUD stack (Score / Kills / Rank / Boost / Bots) ---
+  1961→    const leftStack = document.createElement('div');
+  1962→    leftStack.style.cssText =
+  1963→      'position:absolute;left:12px;top:12px;display:flex;flex-direction:column;gap:8px;max-width:240px;';
+  1964→    leftStack.appendChild(this.makeHudCard([
+  1965→      this.makeHudRow('shield', '#ffffff', 'Score:', () => this.hudEls.score = this.makeSpan('', 'font-weight:bold;color:#fff;')),
+  1966→    ]));
+  1967→    leftStack.appendChild(this.makeHudCard([
+  1968→      this.makeHudRow('skull', '#f43f5e', 'Kills:', () => this.hudEls.kills = this.makeSpan('', 'font-weight:bold;color:#f43f5e;')),
+  1969→      this.makeHudRow('trophy', '#eab308', 'Rank:', () => this.hudEls.rank = this.makeSpan('', 'font-weight:bold;color:#eab308;')),
+  1970→      this.makeHudRow('zap', '#f59e0b', 'Boost:', () => {
+  1971→        const s = this.makeSpan('SPACE', 'font-weight:bold;color:#f59e0b;');
+  1972→        return s;
+  1973→      }),
+  1974→      this.makeHudRow('users', '#cbd5e1', 'Bots:', () => this.hudEls.bots = this.makeSpan('', 'font-weight:bold;color:#cbd5e1;')),
+  1975→    ]));
+  1976→    root.appendChild(leftStack);
+  1977→
+  1978→    // --- Top-right HUD stack (FPS only — no banked chips) ---
+  1979→    const rightStack = document.createElement('div');
+  1980→    rightStack.style.cssText =
+  1981→      'position:absolute;right:12px;top:12px;display:flex;flex-direction:column;align-items:flex-end;gap:6px;';
+  1982→
+  1983→    const fpsRow = document.createElement('div');
+  1984→    fpsRow.style.cssText =
+  1985→      'display:flex;gap:8px;align-items:center;border:1px solid rgba(51,65,85,0.6);background:rgba(2,6,23,0.8);padding:4px 8px;border-radius:6px;font-size:11px;backdrop-filter:blur(4px);';
+  1986→    this.hudEls.fps = this.makeSpan('60 fps', 'color:#94a3b8;');
+  1987→    fpsRow.appendChild(this.hudEls.fps);
+  1988→    rightStack.appendChild(fpsRow);
+  1989→    root.appendChild(rightStack);
+  1990→
+  1991→    // --- Leaderboard panel (top-right, below FPS — ranked by Score) ---
+  1992→    root.appendChild(this.buildLeaderboard());
+  1993→
+  1994→    // --- Top-center extract hint ---
+  1995→    const hint = document.createElement('div');
+  1996→    hint.style.cssText =
+  1997→      'position:absolute;left:50%;top:56px;transform:translateX(-50%);text-align:center;font-size:11px;color:#94a3b8;pointer-events:none;';
+  1998→    hint.innerHTML =
+  1999→      'Hold <kbd style="border:1px solid #475569;background:#1e293b;padding:1px 4px;border-radius:3px;font-size:10px;color:#e2e8f0;">E</kbd> or tap EXTRACT to end your practice run.';
+  2000→    this.hudEls.idleHint = hint;
+
+[showing lines 1-2000 of 2434; use offset=2001 with limit to continue reading]
