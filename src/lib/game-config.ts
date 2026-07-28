@@ -236,8 +236,8 @@ export const WORLD_RADIUS = 4000; // center of 8000x8000 world (used for offline
 export const INITIAL_BODY_LENGTH = 20; // Base body value at spawn (score starts at 20)
 export const INITIAL_SPAWN_SCORE = 20; // Starting score — all food collected adds to this
 export const SEGMENT_SPACING = 6;
-export const BASE_SPEED = 6.4; // normal snake speed
-export const BOOST_SPEED = 11.6; // boost speed
+export const BASE_SPEED = 4.5; // normal snake speed (reduced for better control)
+export const BOOST_SPEED = 8.0; // boost speed (reduced for better control)
 export const EXTRACT_GLIDE_SPEED = 3.2; // speed while extracting
 export const EXTRACT_DURATION_MS = 3000; // 3-second extraction
 export const EXTRACT_COMMISSION = 0.35; // 35% commission when >=4 real players
@@ -252,9 +252,9 @@ export const BROADCAST_MS = 1000 / BROADCAST_RATE_HZ;
 export const MAX_SNAPSHOTS_PER_SECOND = 20;
 
 // Turn rate
-export const TURN_BASE = 0.28; // increased from 0.15 for tighter control
-export const TURN_MIN = 0.06;
-export const TURN_SCORE_FACTOR = 0.0004; // reduced impact of score on turn rate
+export const TURN_BASE = 0.35; // increased for much tighter control
+export const TURN_MIN = 0.08;
+export const TURN_SCORE_FACTOR = 0.0003; // further reduced impact of score on turn rate
 
 // Size formula
 export const SIZE_BASE = 8;
@@ -318,8 +318,8 @@ export const STAR_CHIP_GROW = 3; // score bonus when collecting a star (in addit
 // ----------------------------------------------------------------------------
 // Dynamic Map Scaling (Online Mode)
 // ----------------------------------------------------------------------------
-export const MAP_MIN_RADIUS = 1500;  // radius when 1 player
-export const MAP_MAX_RADIUS = 8000;  // radius when 1000 players (increased for density)
+export const MAP_MIN_RADIUS = 3000;  // radius when 1 player (doubled for comfort)
+export const MAP_MAX_RADIUS = 16000;  // radius when 1000 players (DOUBLED for 1000-player density)
 export const MAP_BREATH_AMPLITUDE = 40;  // breathing oscillation
 export const MAP_BREATH_CYCLE_MS = 10000;
 export const MAX_ARENA_PLAYERS = 1000;
