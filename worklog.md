@@ -229,3 +229,28 @@ Stage Summary:
 - Requirements checklist created at requirements-checklist.md
 - Rules/guide page fully rewritten with accurate info
 - Game server restarted (was down, causing timeouts)
+
+---
+Task ID: 1
+Agent: Main
+Task: Fix online mode timeout + offline mode extreme lag
+
+Work Log:
+- Diagnosed online mode "authenticating then timed out" — game server (port 3001) was not running at all
+- Started game server via supervisor.py to keep it persistent (bun processes were dying silently after ~10s)
+- Verified online mode works through Caddy (port 81): Socket.IO connects, player joins tier-1 arena, plays, dies, replay shows
+- Diagnosed offline mode extreme lag: ALL 1000 bots were in active Map processed every tick (physics, AI, collision, food eating, rendering)
+- Implemented Virtual Bot Pool architecture:
+  - 1000 VirtualBot definitions with cheap position tracking (straight-line wander, deterministic pseudo-random turns)
+  - Only ~60 bots activated near player (within 2500px), rest are virtual
+  - Activation check every 10 ticks to reduce overhead
+  - Dead bots recycled back to virtual pool with new random positions
+  - Hysteresis: activate at 2500px, deactivate at 3500px to prevent flicker
+  - HUD shows "1000" (total virtual count)
+- Verified offline mode at 52 FPS with smooth gameplay, visible bots, food, leaderboard working
+
+Stage Summary:
+- Online: FIXED — game server was simply not running. Started via supervisor.py, verified connection through Caddy port 81.
+- Offline: FIXED — Virtual bot pool reduces processing from 1000 to ~60 active bots. Performance went from "worst lag" to 52 FPS smooth.
+- Files modified: src/components/game/offline-engine.ts (major rewrite of bot management)
+- Game server: Running via supervisor.py (PID managed, auto-restart)
