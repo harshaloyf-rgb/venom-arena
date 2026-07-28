@@ -1,0 +1,147 @@
+// Venom Arena — server-authoritative multiplayer snake game
+// SQLite backing store. Arrays are encoded as JSON strings (SQLite limitation).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Player {
+  id              String   @id @default(cuid())
+  email           String?  @unique // null for guest accounts
+  passwordHash    String?  // null for guests
+  userTag         String   @unique // e.g. VENOM-8291
+  name            String
+  country         String   @default("US")
+  avatar          String?
+
+  // Economy
+  bankedChips     Int      @default(150)
+  totalEarned     Int      @default(150)
+  totalLost       Int      @default(0)
+
+  // Progression
+  level           Int      @default(1)
+  xp              Int      @default(0)
+  lifetimeKills   Int      @default(0)
+  lifetimeDeaths  Int      @default(0)
+  lifetimeExtracts Int     @default(0)
+  bestStreak      Int      @default(0)
+  biggestExtract  Int      @default(0)
+
+  // Daily rewards
+  dailyStreak     Int      @default(0)
+  lastDailyClaim  String?  // ISO date (YYYY-MM-DD)
+
+  // Cosmetics — JSON-encoded arrays/objects (default set in code on register)
+  unlockedSkins   String   @default("[]")
+  currentSkin     String   @default("skin-default")
+  currentTrail    String   @default("trail-none")
+  currentDeath    String   @default("death-default")
+  currentFlag     String?
+  currentBanner   String?
+
+  // Admin / moderation
+  role            String   @default("player") // player | admin
+  banned          Boolean  @default(false)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  lastSeenAt      DateTime @default(now())
+
+  clanTag         String?
+  clan            Clan?    @relation(fields: [clanTag], references: [tag], onDelete: SetNull)
+  clanRank        String?  // Leader | Co-Leader | Viper
+
+  // Relations
+  dailyClaims     DailyClaim[]
+  purchases       Purchase[]
+  sentGifts       Gift[]     @relation("giftFrom")
+  receivedGifts   Gift[]     @relation("giftTo")
+  friendsFrom     Friendship[] @relation("friendshipInitiator")
+  friendsTo       Friendship[] @relation("friendshipRecipient")
+
+  @@index([bankedChips(sort: Desc)])
+  @@index([level(sort: Desc)])
+  @@index([role])
+}
+
+model Clan {
+  tag             String   @id // e.g. "APEX" (3-5 chars)
+  name            String
+  emblem          String   @default("🐍")
+  description     String   @default("")
+  level           Int      @default(1)
+  bankedChips     Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  members         Player[]
+  messages        ClanMessage[]
+}
+
+model ClanMessage {
+  id        String   @id @default(cuid())
+  clanTag   String
+  clan      Clan     @relation(fields: [clanTag], references: [tag], onDelete: Cascade)
+  senderTag String
+  senderName String
+  rank      String   @default("Viper")
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([clanTag, createdAt])
+}
+
+model DailyClaim {
+  id        String   @id @default(cuid())
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId  String
+  day       String   // YYYY-MM-DD
+  reward    Int
+  streak    Int
+  createdAt DateTime @default(now())
+
+  @@unique([playerId, day])
+}
+
+model Purchase {
+  id         String   @id @default(cuid())
+  player     Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId   String
+  itemId     String   // skin id or chip pack id
+  itemType   String   // "skin" | "chip_pack"
+  amountChips Int     // chips spent (skins) or gained (chip packs)
+  createdAt  DateTime @default(now())
+
+  @@index([playerId, createdAt])
+}
+
+model Gift {
+  id         String   @id @default(cuid())
+  from       Player   @relation("giftFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  fromId     String
+  to         Player   @relation("giftTo", fields: [toId], references: [id], onDelete: Cascade)
+  toId       String
+  amount     Int
+  createdAt  DateTime @default(now())
+
+  @@index([fromId, createdAt])
+  @@index([toId, createdAt])
+}
+
+model Friendship {
+  id           String   @id @default(cuid())
+  initiator    Player   @relation("friendshipInitiator", fields: [initiatorId], references: [id], onDelete: Cascade)
+  initiatorId  String
+  recipient    Player   @relation("friendshipRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  recipientId  String
+  status       String   @default("pending") // pending | accepted | blocked
+  createdAt    DateTime @default(now())
+
+  @@unique([initiatorId, recipientId])
+  @@index([recipientId, status])
+}
