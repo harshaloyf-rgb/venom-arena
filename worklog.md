@@ -137,3 +137,19 @@ Stage Summary:
 - ESLint passes clean
 - Both servers running (port 3000 + 3001)
 - Browser verification: page loads correctly with no JS errors
+
+---
+Task ID: 3
+Agent: main
+Task: Fix offline mode 1000 bots, add death replay to both online and offline modes
+
+Work Log:
+- Fixed offline-engine.ts: Changed bot count from `Math.min(1000, this.arena.botsCount)` to `1000` (line 638) and respawn target from `this.arena.botsCount` to `1000` (line 1046)
+- Fixed online replay in game-canvas.tsx: Changed from 30s circular buffer + 5s post-death to 15s pre-death circular (300 frames at 20Hz) + 15s post-death linear (300 frames at 20Hz). Added deathFrameIdx tracking passed through EndOverlay → ReplayPlayer. Added death marker on progress bar and countdown/death indicator in replay overlay
+- Added full death replay system to offline-engine.ts via subagent: ReplayFrame interfaces, circular pre-death buffer (450 frames at 30Hz), linear post-death buffer (450 frames at 30Hz), post-death simulation continuation (bots keep moving/collecting food), replay viewer with canvas rendering, play/pause/speed/zoom controls, progress bar with death marker, frame counter
+
+Stage Summary:
+- offline-engine.ts: 2434 → 3033 lines (+600 lines). Bot count always 1000. Death replay records 15s before + 15s after death
+- game-canvas.tsx: 2780 → 2820 lines. Online replay now 15s pre + 15s post with death marker
+- All changes pass ESLint with zero errors
+- Dev server compiles cleanly, no browser errors

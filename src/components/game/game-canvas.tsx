@@ -234,10 +234,12 @@ interface EndScreenState {
   durationSeconds: number;
   carriedChips: number;
   score: number;
-  /** Last 30s of GameSnapshots for replay playback (death only). */
+  /** Combined replay frames: 15s pre-death + 15s post-death. */
   replayFrames?: GameSnapshot[];
   /** The player's snake id — used to follow them in replay. */
   replayMyId?: string;
+  /** Index in replayFrames array where the death occurs. */
+  replayDeathFrameIdx?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -309,37 +311,53 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
   const mySnakeIdRef = useRef<string | null>(null);
   const phaseRef = useRef<Phase>('connecting');
 
-  // --- Replay buffer: records last 30s of GameSnapshots (20Hz × 30s = 600 frames) ---
-  const REPLAY_MAX_FRAMES = 600;
-  const replayBufferRef = useRef<GameSnapshot[]>([]);
+  // --- Replay buffer: records last 15s pre-death + 15s post-death ---
+  const REPLAY_PRE_MAX = 300; // 15s at 20Hz before death (circular)
+  const REPLAY_POST_MAX = 300; // 15s at 20Hz after death (linear)
+  const replayPreBufferRef = useRef<GameSnapshot[]>([]);
   const replayWriteIdxRef = useRef<number>(0);
-  // Post-death recording: continue recording 100 more frames (5s at 20Hz) after death
+  const replayPostBufferRef = useRef<GameSnapshot[]>([]);
+  const isPostDeathRef = useRef<boolean>(false);
   const postDeathRecordRef = useRef<number>(0);
+  const deathFrameIdxRef = useRef<number>(0); // index in final combined array where death occurs
 
   const recordReplayFrame = useCallback((snap: GameSnapshot) => {
-    const buf = replayBufferRef.current;
-    if (buf.length < REPLAY_MAX_FRAMES) {
-      buf.push(snap);
+    if (isPostDeathRef.current) {
+      // Post-death: append linearly
+      if (replayPostBufferRef.current.length < REPLAY_POST_MAX) {
+        replayPostBufferRef.current.push(snap);
+      }
     } else {
-      buf[replayWriteIdxRef.current % REPLAY_MAX_FRAMES] = snap;
+      // Pre-death: circular buffer
+      const buf = replayPreBufferRef.current;
+      if (buf.length < REPLAY_PRE_MAX) {
+        buf.push(snap);
+      } else {
+        buf[replayWriteIdxRef.current % REPLAY_PRE_MAX] = snap;
+      }
+      replayWriteIdxRef.current++;
     }
-    replayWriteIdxRef.current++;
   }, []);
 
-  /** Extract the last N frames from the circular replay buffer. */
-  const getReplayFrames = useCallback((): GameSnapshot[] => {
-    const buf = replayBufferRef.current;
-    const len = buf.length;
-    if (len === 0) return [];
-    // buf is already in chronological order when < REPLAY_MAX_FRAMES
-    if (len < REPLAY_MAX_FRAMES) return [...buf];
-    // Circular buffer: oldest frame is at writeIdx % maxFrames
-    const start = replayWriteIdxRef.current % REPLAY_MAX_FRAMES;
-    const result: GameSnapshot[] = [];
-    for (let i = 0; i < REPLAY_MAX_FRAMES; i++) {
-      result.push(buf[(start + i) % REPLAY_MAX_FRAMES]);
+  /** Extract combined replay frames: 15s pre-death + 15s post-death. */
+  const getReplayFrames = useCallback((): { frames: GameSnapshot[]; deathFrameIdx: number } => {
+    const preBuf = replayPreBufferRef.current;
+    const postBuf = replayPostBufferRef.current;
+    const len = preBuf.length;
+    const preFrames: GameSnapshot[] = [];
+    if (len === 0) return { frames: [...postBuf], deathFrameIdx: 0 };
+    if (len < REPLAY_PRE_MAX) {
+      // Buffer not full yet, just take all frames in order
+      preFrames.push(...preBuf);
+    } else {
+      // Circular buffer: oldest is at writeIdx % maxFrames
+      const start = replayWriteIdxRef.current % REPLAY_PRE_MAX;
+      for (let i = 0; i < REPLAY_PRE_MAX; i++) {
+        preFrames.push(preBuf[(start + i) % REPLAY_PRE_MAX]);
+      }
     }
-    return result;
+    deathFrameIdxRef.current = preFrames.length;
+    return { frames: [...preFrames, ...postBuf], deathFrameIdx: preFrames.length };
   }, []);
 
   const keysRef = useRef<Set<string>>(new Set());
@@ -601,11 +619,14 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         const data = payload as GameSnapshot;
         if (!data || !Array.isArray(data.snakes) || !Array.isArray(data.foods)) return;
         snapshotRef.current = data;
-        // Record frame for replay: while playing OR during post-death 5s window
+        // Record frame for replay: while playing OR during post-death 15s window
         if (phaseRef.current === 'playing' || postDeathRecordRef.current > 0) {
           recordReplayFrame(data);
           if (postDeathRecordRef.current > 0) {
             postDeathRecordRef.current--;
+            if (postDeathRecordRef.current === 0) {
+              isPostDeathRef.current = false;
+            }
           }
         }
 
@@ -776,8 +797,9 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
               : undefined,
           // Attach replay frames for death
           ...(data.outcome === 'death' ? {
-            replayFrames: getReplayFrames(),
+            replayFrames: getReplayFrames().frames,
             replayMyId: mySnakeIdRef.current ?? undefined,
+            replayDeathFrameIdx: getReplayFrames().deathFrameIdx,
           } : {}),
         });
         // Show level-up toast if applicable.
@@ -832,8 +854,9 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
           : undefined;
         const duration = Math.floor((Date.now() - startTimeRef.current) / 1000);
 
-        // Start post-death recording: 100 frames = 5 seconds at 20Hz
-        postDeathRecordRef.current = 100;
+        // Start post-death recording: 300 frames = 15 seconds at 20Hz
+        isPostDeathRef.current = true;
+        postDeathRecordRef.current = 300;
 
         setPhase('ended');
         if (!isOffline) {
@@ -853,24 +876,28 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         // The replay capture happens after the 5s window in the snapshot handler.
         // But we also set the endScreen now with current replay (pre-death).
         // We'll update it again when post-death recording completes.
+        // Set initial end screen (replay will be updated after 15s post-death)
+        const { frames: initFrames, deathFrameIdx: initDeathIdx } = getReplayFrames();
         setEndScreen({
           outcome: 'death',
           killer,
           durationSeconds: duration,
           carriedChips: carriedRef.current,
           score: scoreRef.current,
-          replayFrames: getReplayFrames(),
+          replayFrames: initFrames,
           replayMyId: mySnakeIdRef.current ?? undefined,
+          replayDeathFrameIdx: initDeathIdx,
         });
 
-        // After 5s post-death recording completes, update endScreen with final frames.
-        // We use a check in the snapshot handler or a setTimeout as fallback.
+        // After 15s post-death recording completes, update endScreen with final frames.
         setTimeout(() => {
+          const { frames: finalFrames, deathFrameIdx: finalDeathIdx } = getReplayFrames();
           setEndScreen(prev => prev?.outcome === 'death' ? {
             ...prev,
-            replayFrames: getReplayFrames(),
+            replayFrames: finalFrames,
+            replayDeathFrameIdx: finalDeathIdx,
           } : prev);
-        }, 5500); // slightly more than 5s to ensure all 100 frames captured
+        }, 15500); // slightly more than 15s to ensure all 300 frames captured
       };
 
       const onChat = (payload: unknown) => {
@@ -1683,8 +1710,11 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
     setConnectingMsg('Rejoining arena…');
     snapshotRef.current = null;
     // Clear replay buffer on reset
-    replayBufferRef.current = [];
+    replayPreBufferRef.current = [];
+    replayPostBufferRef.current = [];
     replayWriteIdxRef.current = 0;
+    isPostDeathRef.current = false;
+    postDeathRecordRef.current = 0;
     camInitRef.current = false;
     particlesRef.current = [];
     socketRef.current.emit('join_arena', { arenaId: arenaIdRef.current });
@@ -2203,18 +2233,19 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
 }
 
 // ---------------------------------------------------------------------------
-// ReplayPlayer sub-component — renders last 30s of gameplay on a canvas
+// ReplayPlayer sub-component — renders 15s pre-death + 15s post-death replay
 // ---------------------------------------------------------------------------
 
 interface ReplayPlayerProps {
   frames: GameSnapshot[];
   myId: string;
+  deathFrameIdx?: number; // index where death occurs in frames
   onClose: () => void;
 }
 
 const REPLAY_SPEEDS = [0.25, 0.5, 1, 2] as const;
 
-function ReplayPlayer({ frames, myId, onClose }: ReplayPlayerProps) {
+function ReplayPlayer({ frames, myId, deathFrameIdx, onClose }: ReplayPlayerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const frameIdxRef = useRef(0);
@@ -2333,8 +2364,13 @@ function ReplayPlayer({ frames, myId, onClose }: ReplayPlayerProps) {
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillText('⏺ REPLAY', 10, 10);
-      const timeStr = `Frame ${frameIdxRef.current + 1}/${totalFrames}`;
-      ctx.fillStyle = 'rgba(226, 232, 240, 0.6)';
+      const isPostDeathFrame = deathFrameIdx != null && frameIdxRef.current >= deathFrameIdx;
+      const preSec2 = deathFrameIdx != null ? Math.min(15, Math.floor(frameIdxRef.current / 20)) : Math.floor(frameIdxRef.current / 20);
+      const postSec2 = deathFrameIdx != null && frameIdxRef.current > deathFrameIdx ? Math.min(15, Math.floor((frameIdxRef.current - deathFrameIdx) / 20)) : 0;
+      const timeStr = isPostDeathFrame
+        ? `⛔ DEATH +${postSec2}s | Frame ${frameIdxRef.current + 1}/${totalFrames}`
+        : `Frame ${frameIdxRef.current + 1}/${totalFrames} | -${Math.max(0, 15 - preSec2)}s to death`;
+      ctx.fillStyle = isPostDeathFrame ? 'rgba(244, 63, 94, 0.9)' : 'rgba(226, 232, 240, 0.6)';
       ctx.font = '10px monospace';
       ctx.fillText(timeStr, 10, 26);
 
@@ -2347,7 +2383,7 @@ function ReplayPlayer({ frames, myId, onClose }: ReplayPlayerProps) {
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [frames, myId, totalFrames]);
+  }, [frames, myId, totalFrames, deathFrameIdx]);
 
   const togglePlay = () => {
     playingRef.current = !playingRef.current;
@@ -2377,6 +2413,7 @@ function ReplayPlayer({ frames, myId, onClose }: ReplayPlayerProps) {
   if (totalFrames === 0) return null;
 
   const progress = totalFrames > 0 ? (frameIdx / (totalFrames - 1)) * 100 : 0;
+  const deathProgress = deathFrameIdx != null && totalFrames > 0 ? (deathFrameIdx / (totalFrames - 1)) * 100 : -1;
 
   return (
     <div className="relative w-full rounded-lg overflow-hidden border border-slate-800 bg-slate-950">
@@ -2387,9 +2424,12 @@ function ReplayPlayer({ frames, myId, onClose }: ReplayPlayerProps) {
         style={{ display: 'block' }}
       />
 
-      {/* Progress bar */}
-      <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-800">
+      {/* Progress bar with death marker */}
+      <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-slate-800">
         <div className="h-full bg-rose-500 transition-all duration-75" style={{ width: `${progress}%` }} />
+        {deathProgress >= 0 && (
+          <div className="absolute top-0 h-full w-0.5 bg-yellow-400" style={{ left: `${deathProgress}%` }} title="💀 Death" />
+        )}
       </div>
 
       {/* Controls */}
@@ -2471,7 +2511,7 @@ function EndOverlay({
   onAddFriend,
   onViewProfile,
 }: EndOverlayProps) {
-  const { outcome, killer, result, durationSeconds, carriedChips, score, replayFrames, replayMyId } = endScreen;
+  const { outcome, killer, result, durationSeconds, carriedChips, score, replayFrames, replayMyId, replayDeathFrameIdx } = endScreen;
   const isExtract = outcome === 'extract';
   const mins = Math.floor(durationSeconds / 60);
   const secs = durationSeconds % 60;
@@ -2648,6 +2688,7 @@ function EndOverlay({
               <ReplayPlayer
                 frames={replayFrames!}
                 myId={replayMyId ?? ''}
+                deathFrameIdx={replayDeathFrameIdx}
                 onClose={() => setShowReplay(false)}
               />
               <button

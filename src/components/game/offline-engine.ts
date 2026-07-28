@@ -141,6 +141,38 @@ interface GridItem {
   foodRef?: Food;
 }
 
+interface ReplaySnakeData {
+  id: string;
+  name: string;
+  points: Vec2[];
+  angle: number;
+  size: number;
+  color: string;
+  secondaryColor?: string;
+  isDead: boolean;
+  score: number;
+  isBoosting: boolean;
+  isPlayer: boolean;
+}
+
+interface ReplayFoodData {
+  x: number;
+  y: number;
+  size: number;
+  value: number;
+  color: string;
+  glowColor: string;
+  orbSize: string;
+}
+
+interface ReplayFrame {
+  snakes: ReplaySnakeData[];
+  foods: ReplayFoodData[];
+  camX: number;
+  camY: number;
+  camZoom: number;
+}
+
 // ----------------------------------------------------------------------------
 // Spatial hash grid — slimmed-down client port of the server's grid.
 // Items are bucketed into square cells; queries return a deduplicated Map.
@@ -248,6 +280,12 @@ const BOT_SPAWN_RADIUS = 2000;
 const OPACITY_PROXIMITY_FACTOR = 3;
 /** Opacity to which the larger snake fades. */
 const OPACITY_FADE_TO = 0.75;
+
+// Replay recording constants
+const REPLAY_PRE_MAX = 450; // 15s at 30Hz before death (circular)
+const REPLAY_POST_MAX = 450; // 15s at 30Hz after death (linear)
+const REPLAY_VISIBLE_RADIUS = 2500; // only record snakes within this radius of camera
+const REPLAY_MAX_SNAKE_POINTS = 30; // downsample snake points for replay
 
 // ----------------------------------------------------------------------------
 // Math helpers
@@ -495,6 +533,28 @@ export class OfflineGameEngine {
   // Cleanup flag
   private stopped: boolean = false;
 
+  // Replay recording
+  private replayPreBuffer: ReplayFrame[] = [];
+  private replayPreWriteIdx: number = 0;
+  private replayPostBuffer: ReplayFrame[] = [];
+  private isPostDeathRecording: boolean = false;
+  private postDeathTicksRemaining: number = 0;
+  private replayDeathFrameIdx: number = 0;
+  private deathCamX: number = 0;
+  private deathCamY: number = 0;
+
+  // Replay playback mode
+  private isReplayMode: boolean = false;
+  private replayFrames: ReplayFrame[] = [];
+  private replayPlaybackIdx: number = 0;
+  private replayPlaying: boolean = true;
+  private replaySpeed: number = 1;
+  private replayZoom: number = 0.8;
+  private replayRafId: number | null = null;
+  private replayLastTime: number = 0;
+  private replayCanvas: HTMLCanvasElement | null = null;
+  private replayCtx: CanvasRenderingContext2D | null = null;
+
   constructor(arena: ArenaTier, playerProfile: PlayerProfile, canvas: HTMLCanvasElement) {
     this.arena = arena;
     this.playerProfile = playerProfile;
@@ -535,6 +595,7 @@ export class OfflineGameEngine {
 
   stop(): void {
     this.stopped = true;
+    this.exitReplayMode();
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
@@ -856,7 +917,16 @@ export class OfflineGameEngine {
 
   private beginExtract(): void {
     const p = this.player;
-    if (!p || p.isDead) return;
+    if (!p) return;
+
+    // During post-death recording, run simplified bot-only physics
+    if (this.isPostDeathRecording) {
+      this.tickPostDeathPhysics(now);
+      this.captureReplaySnapshot();
+      return;
+    }
+
+    if (p.isDead) return;
     if (p.isExtracting) return;
     p.isExtracting = true;
     p.extractionProgress = 0;
@@ -911,7 +981,7 @@ export class OfflineGameEngine {
     this.updateParticles(dt);
 
     // Physics ticks at ~TICK_MS (30 Hz) cadence.
-    if (this.state === 'playing') {
+    if (this.state === 'playing' || this.isPostDeathRecording) {
       this.accumulator += dt;
       let safety = 4;
       while (this.accumulator >= TICK_MS && safety > 0) {
@@ -920,6 +990,14 @@ export class OfflineGameEngine {
         safety--;
       }
       if (safety === 0) this.accumulator = 0;
+    }
+
+    // Post-death recording: count down ticks
+    if (this.isPostDeathRecording) {
+      this.postDeathTicksRemaining--;
+      if (this.postDeathTicksRemaining <= 0) {
+        this.finishPostDeathRecording();
+      }
     }
 
     this.render(now);
@@ -935,7 +1013,16 @@ export class OfflineGameEngine {
   private tickPhysics(now: number): void {
     this.tick++;
     const p = this.player;
-    if (!p || p.isDead) return;
+    if (!p) return;
+
+    // During post-death recording, run simplified bot-only physics
+    if (this.isPostDeathRecording) {
+      this.tickPostDeathPhysics(now);
+      this.captureReplaySnapshot();
+      return;
+    }
+
+    if (p.isDead) return;
 
     // 1) Compute player desired angle + boost.
     const { angle, boost } = this.computePlayerInput();
@@ -1076,11 +1163,11 @@ export class OfflineGameEngine {
       this.bots.set(bot.id, bot);
     }
 
-    // 9) Player death → death screen.
-    if (playerDied) {
+    // 9) Player death → enter post-death recording (15s of continued simulation).
+    if (playerDied && !this.isPostDeathRecording) {
       p.isDead = true;
-      this.handlePlayerDeath();
-      return;
+      this.enterPostDeathRecording();
+      // Don't return — continue to replenish food, expire chat, update camera
     }
 
     // 10) Replenish food toward target (spawn around player).
@@ -1091,6 +1178,9 @@ export class OfflineGameEngine {
 
     // 12) Update camera target.
     this.updateCamera();
+
+    // 13) Capture replay snapshot.
+    this.captureReplaySnapshot();
   }
 
   // --------------------------------------------------------------------------
@@ -1397,16 +1487,207 @@ export class OfflineGameEngine {
   // Player death
   // --------------------------------------------------------------------------
 
-  private handlePlayerDeath(): void {
-    const p = this.player;
-    if (!p) return;
-    this.finalScore = INITIAL_SPAWN_SCORE + p.score;
-    this.finalKills = p.kills;
+  private enterPostDeathRecording(): void {
+    this.isPostDeathRecording = true;
+    this.postDeathTicksRemaining = REPLAY_POST_MAX;
+    this.deathCamX = this.cam.x;
+    this.deathCamY = this.cam.y;
+    // Record death particles at head
+    if (this.player && this.player.points.length > 0) {
+      this.spawnDeathParticles(this.player.points[0].x, this.player.points[0].y, this.player.color);
+    }
+  }
+
+  private tickPostDeathPhysics(now: number): void {
+    // Move bots only (player is dead)
+    for (const bot of this.bots.values()) {
+      this.tickBot(bot, now);
+    }
+
+    // Process boost food drops
+    if (this.boostDropQueue.length > 0) {
+      for (const drop of this.boostDropQueue) {
+        this.foods.push({
+          id: `food-${this.arena.id}-${this.idCounterObj.value++}`,
+          x: drop.x,
+          y: drop.y,
+          size: 3,
+          value: 1,
+          isStarChip: false,
+          color: '#34d399',
+          glowColor: '#10b981',
+          orbSize: 'small',
+        });
+      }
+      this.boostDropQueue.length = 0;
+    }
+
+    // Build spatial grid (bots + food only)
+    this.grid.clear();
+    for (const bot of this.bots.values()) {
+      if (!bot.isDead) this.insertSnakeIntoGrid(bot);
+    }
+    for (const food of this.foods) {
+      this.grid.insert({
+        id: food.id,
+        kind: 'food',
+        x: food.x,
+        y: food.y,
+        radius: food.size,
+        value: food.value,
+        foodRef: food,
+      });
+    }
+
+    // Eat food (bots only)
+    for (const bot of this.bots.values()) {
+      if (!bot.isDead) this.eatFoodForSnake(bot);
+    }
+
+    // Collision detection (bots vs bots only - player already dead)
+    const deaths = this.detectCollisions(now);
+
+    // Apply bot deaths + drop food
+    const newDropFoods: Food[] = [];
+    for (const d of deaths) {
+      const bot = this.bots.get(d.deadId);
+      if (bot) {
+        const botTotal = INITIAL_SPAWN_SCORE + bot.score;
+        newDropFoods.push(...computeDeathFoodDrop(botTotal, bot.points[0].x, bot.points[0].y, this.arena.id, this.idCounterObj));
+        bot.isDead = true;
+      }
+    }
+
+    if (newDropFoods.length > 0) {
+      this.foods.push(...newDropFoods);
+    }
+
+    // Remove dead bots and respawn to maintain count
+    if (deaths.length > 0) {
+      const toRemove: string[] = [];
+      for (const [id, bot] of this.bots) {
+        if (bot.isDead) toRemove.push(id);
+      }
+      for (const id of toRemove) {
+        this.bots.delete(id);
+      }
+    }
+    const cx = this.deathCamX;
+    const cy = this.deathCamY;
+    while (this.bots.size < 1000) {
+      const bot = this.spawnBot(cx, cy);
+      this.bots.set(bot.id, bot);
+    }
+
+    // Replenish food
+    this.replenishFood();
+  }
+
+  private captureReplaySnapshot(): void {
+    const camX = this.isPostDeathRecording ? this.deathCamX : this.cam.x;
+    const camY = this.isPostDeathRecording ? this.deathCamY : this.cam.y;
+    const camZoom = this.cam.zoom;
+
+    const snakes: ReplaySnakeData[] = [];
+    const allSnakes: SnakeBase[] = [];
+    for (const bot of this.bots.values()) {
+      if (!bot.isDead) allSnakes.push(bot);
+    }
+    if (this.player && !this.player.isDead) allSnakes.push(this.player);
+    if (this.player && this.player.isDead && this.postDeathTicksRemaining > REPLAY_POST_MAX - 30) {
+      allSnakes.push(this.player);
+    }
+
+    for (const snake of allSnakes) {
+      if (snake.points.length === 0) continue;
+      const head = snake.points[0];
+      const d = dist(head.x, head.y, camX, camY);
+      if (d > REPLAY_VISIBLE_RADIUS) continue;
+
+      let pts = snake.points;
+      if (pts.length > REPLAY_MAX_SNAKE_POINTS) {
+        const step = pts.length / REPLAY_MAX_SNAKE_POINTS;
+        const downsampled: Vec2[] = [];
+        for (let i = 0; i < REPLAY_MAX_SNAKE_POINTS; i++) {
+          downsampled.push(pts[Math.floor(i * step)]);
+        }
+        pts = downsampled;
+      }
+
+      snakes.push({
+        id: snake.id,
+        name: snake.name,
+        points: pts.map(p => ({ x: p.x, y: p.y })),
+        angle: snake.angle,
+        size: snake.size,
+        color: snake.color,
+        secondaryColor: snake.secondaryColor,
+        isDead: snake.isDead,
+        score: snake.score,
+        isBoosting: snake.isBoosting,
+        isPlayer: snake.isPlayer,
+      });
+    }
+
+    const foods: ReplayFoodData[] = [];
+    for (const f of this.foods) {
+      if (f.value <= 0) continue;
+      const d = dist(f.x, f.y, camX, camY);
+      if (d > REPLAY_VISIBLE_RADIUS) continue;
+      foods.push({
+        x: f.x, y: f.y, size: f.size, value: f.value,
+        color: f.color, glowColor: f.glowColor, orbSize: f.orbSize,
+      });
+    }
+
+    const frame: ReplayFrame = {
+      snakes,
+      foods,
+      camX,
+      camY,
+      camZoom,
+    };
+
+    if (this.isPostDeathRecording) {
+      if (this.replayPostBuffer.length < REPLAY_POST_MAX) {
+        this.replayPostBuffer.push(frame);
+      }
+    } else {
+      const buf = this.replayPreBuffer;
+      if (buf.length < REPLAY_PRE_MAX) {
+        buf.push(frame);
+      } else {
+        buf[this.replayPreWriteIdx % REPLAY_PRE_MAX] = frame;
+      }
+      this.replayPreWriteIdx++;
+    }
+  }
+
+  private finishPostDeathRecording(): void {
+    this.isPostDeathRecording = false;
+    this.finalScore = INITIAL_SPAWN_SCORE + (this.player?.score ?? 0);
+    this.finalKills = this.player?.kills ?? 0;
     this.finalDurationSeconds = Math.floor((performance.now() - this.startTime) / 1000);
-    // Spawn death particles at the head.
-    this.spawnDeathParticles(p.points[0].x, p.points[0].y, p.color);
+
+    const preFrames = this.getPreDeathFrames();
+    this.replayDeathFrameIdx = preFrames.length;
+    this.replayFrames = [...preFrames, ...this.replayPostBuffer];
+
     this.setState('dead');
     this.showEndScreen('death');
+  }
+
+  private getPreDeathFrames(): ReplayFrame[] {
+    const buf = this.replayPreBuffer;
+    const len = buf.length;
+    if (len === 0) return [];
+    if (len < REPLAY_PRE_MAX) return [...buf];
+    const start = this.replayPreWriteIdx % REPLAY_PRE_MAX;
+    const result: ReplayFrame[] = [];
+    for (let i = 0; i < REPLAY_PRE_MAX; i++) {
+      result.push(buf[(start + i) % REPLAY_PRE_MAX]);
+    }
+    return result;
   }
 
   // --------------------------------------------------------------------------
@@ -1512,6 +1793,7 @@ export class OfflineGameEngine {
   // --------------------------------------------------------------------------
 
   private render(now: number): void {
+    if (this.isReplayMode) return; // Replay has its own canvas
     const ctx = this.ctx;
     if (!ctx) return;
     const canvas = this.canvas;
@@ -2370,6 +2652,11 @@ export class OfflineGameEngine {
           }
 
           <div style="margin-top:20px;display:flex;flex-direction:column;gap:8px;">
+            ${!isExtract && this.replayFrames.length > 20 ? `
+            <button id="oe-watch-replay" type="button" style="width:100%;padding:12px;border-radius:12px;border:none;color:#fff;font-weight:bold;font-size:14px;cursor:pointer;background:linear-gradient(to right,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;gap:8px;">
+              📺 WATCH DEATH REPLAY (${this.replayFrames.length} frames)
+            </button>
+            ` : ''}
             <button id="oe-play-again" type="button" style="width:100%;padding:12px;border-radius:12px;border:none;color:#fff;font-weight:bold;font-size:14px;cursor:pointer;background:${
               isExtract ? 'linear-gradient(to right,#10b981,#14b8a6)' : 'linear-gradient(to right,#dc2626,#e11d48)'
             };display:flex;align-items:center;justify-content:center;gap:8px;">
@@ -2388,6 +2675,13 @@ export class OfflineGameEngine {
 
     const playAgainBtn = overlay.querySelector('#oe-play-again') as HTMLButtonElement | null;
     const exitBtn = overlay.querySelector('#oe-exit') as HTMLButtonElement | null;
+    const watchReplayBtn = overlay.querySelector('#oe-watch-replay') as HTMLButtonElement | null;
+    if (watchReplayBtn) {
+      watchReplayBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.enterReplayMode();
+      });
+    }
     if (playAgainBtn) {
       playAgainBtn.addEventListener('click', (e) => {
         e.preventDefault();
@@ -2406,11 +2700,317 @@ export class OfflineGameEngine {
   // End-screen actions
   // --------------------------------------------------------------------------
 
+  private enterReplayMode(): void {
+    if (this.replayFrames.length === 0) return;
+    this.isReplayMode = true;
+    this.replayPlaybackIdx = 0;
+    this.replayPlaying = true;
+    this.replaySpeed = 1;
+    this.replayZoom = 0.8;
+
+    // Hide end screen, show replay canvas
+    if (this.endOverlay) {
+      this.endOverlay.style.display = 'none';
+    }
+
+    // Create replay canvas + controls overlay
+    const parent = this.canvas.parentElement;
+    if (!parent) return;
+
+    const replayWrap = document.createElement('div');
+    replayWrap.id = 'oe-replay-wrap';
+    replayWrap.style.cssText = 'position:absolute;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(2,6,23,0.95);';
+
+    // Replay canvas
+    const replayCanvas = document.createElement('canvas');
+    replayCanvas.id = 'oe-replay-canvas';
+    replayCanvas.style.cssText = 'width:min(90vw,800px);aspect-ratio:16/9;border:1px solid #1e293b;border-radius:12px;background:#020617;display:block;';
+    replayWrap.appendChild(replayCanvas);
+
+    // Controls
+    const controls = document.createElement('div');
+    controls.id = 'oe-replay-controls';
+    controls.style.cssText = 'margin-top:12px;display:flex;align-items:center;gap:8px;';
+    controls.innerHTML = `
+      <button id="oe-replay-restart" type="button" style="width:32px;height:32px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#fff;cursor:pointer;font-size:14px;">↺</button>
+      <button id="oe-replay-toggle" type="button" style="width:36px;height:36px;border-radius:8px;border:none;background:#e11d48;color:#fff;cursor:pointer;font-size:16px;">⏸</button>
+      <button id="oe-replay-speed" type="button" style="height:32px;padding:0 8px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#fff;cursor:pointer;font-size:11px;font-weight:bold;font-family:monospace;">1x</button>
+      <div style="display:flex;align-items:center;gap:4px;">
+        <button id="oe-replay-zout" type="button" style="width:32px;height:32px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#fff;cursor:pointer;font-size:12px;">−</button>
+        <span id="oe-replay-zoom-label" style="width:32px;text-align:center;font-size:10px;color:#94a3b8;font-family:monospace;">80%</span>
+        <button id="oe-replay-zin" type="button" style="width:32px;height:32px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#fff;cursor:pointer;font-size:12px;">+</button>
+      </div>
+      <button id="oe-replay-exit" type="button" style="height:32px;padding:0 12px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#94a3b8;cursor:pointer;font-size:11px;font-weight:bold;">EXIT REPLAY</button>
+    `;
+    replayWrap.appendChild(controls);
+
+    // Progress bar
+    const progressWrap = document.createElement('div');
+    progressWrap.id = 'oe-replay-progress-wrap';
+    progressWrap.style.cssText = 'width:min(90vw,800px);height:6px;background:#1e293b;border-radius:3px;margin-top:8px;position:relative;';
+    const progressBar = document.createElement('div');
+    progressBar.id = 'oe-replay-progress-bar';
+    progressBar.style.cssText = 'height:100%;background:#e11d48;border-radius:3px;width:0%;transition:width 50ms;';
+    progressWrap.appendChild(progressBar);
+    // Death marker
+    if (this.replayDeathFrameIdx > 0 && this.replayFrames.length > 0) {
+      const deathPct = (this.replayDeathFrameIdx / (this.replayFrames.length - 1)) * 100;
+      const marker = document.createElement('div');
+      marker.style.cssText = `position:absolute;top:0;height:100%;width:2px;background:#fbbf24;left:${deathPct}%;`;
+      progressWrap.appendChild(marker);
+    }
+    replayWrap.appendChild(progressWrap);
+
+    // Frame counter
+    const counter = document.createElement('div');
+    counter.id = 'oe-replay-counter';
+    counter.style.cssText = 'margin-top:4px;font-size:11px;color:#94a3b8;font-family:monospace;';
+    counter.textContent = `Frame 1/${this.replayFrames.length}`;
+    replayWrap.appendChild(counter);
+
+    parent.appendChild(replayWrap);
+
+    // Setup canvas
+    this.replayCanvas = replayCanvas;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    replayCanvas.width = replayCanvas.clientWidth * dpr;
+    replayCanvas.height = replayCanvas.clientHeight * dpr;
+    this.replayCtx = replayCanvas.getContext('2d', { alpha: false });
+
+    // Event listeners
+    const toggleBtn = controls.querySelector('#oe-replay-toggle') as HTMLButtonElement;
+    const restartBtn = controls.querySelector('#oe-replay-restart') as HTMLButtonElement;
+    const speedBtn = controls.querySelector('#oe-replay-speed') as HTMLButtonElement;
+    const zinBtn = controls.querySelector('#oe-replay-zin') as HTMLButtonElement;
+    const zoutBtn = controls.querySelector('#oe-replay-zout') as HTMLButtonElement;
+    const exitBtn = controls.querySelector('#oe-replay-exit') as HTMLButtonElement;
+    const zoomLabel = controls.querySelector('#oe-replay-zoom-label') as HTMLSpanElement;
+
+    toggleBtn.onclick = () => {
+      this.replayPlaying = !this.replayPlaying;
+      toggleBtn.textContent = this.replayPlaying ? '⏸' : '▶';
+    };
+    restartBtn.onclick = () => {
+      this.replayPlaybackIdx = 0;
+      this.replayPlaying = true;
+      toggleBtn.textContent = '⏸';
+    };
+    const speeds = [0.25, 0.5, 1, 2];
+    speedBtn.onclick = () => {
+      const ci = speeds.indexOf(this.replaySpeed);
+      this.replaySpeed = speeds[(ci + 1) % speeds.length];
+      speedBtn.textContent = `${this.replaySpeed}x`;
+    };
+    zinBtn.onclick = () => {
+      this.replayZoom = Math.min(2, this.replayZoom + 0.15);
+      zoomLabel.textContent = `${Math.round(this.replayZoom * 100)}%`;
+    };
+    zoutBtn.onclick = () => {
+      this.replayZoom = Math.max(0.3, this.replayZoom - 0.15);
+      zoomLabel.textContent = `${Math.round(this.replayZoom * 100)}%`;
+    };
+    exitBtn.onclick = () => {
+      this.exitReplayMode();
+    };
+
+    // Start replay animation
+    this.replayLastTime = performance.now();
+    this.replayRafId = requestAnimationFrame(this.replayFrame.bind(this));
+  }
+
+  private replayFrame = (now: number): void => {
+    if (!this.isReplayMode || this.stopped) return;
+    this.replayRafId = requestAnimationFrame(this.replayFrame.bind(this));
+
+    const ctx = this.replayCtx;
+    const canvas = this.replayCanvas;
+    if (!ctx || !canvas) return;
+
+    // Advance frame
+    if (this.replayPlaying) {
+      const frameInterval = (1000 / 30) / this.replaySpeed;
+      const dt = now - this.replayLastTime;
+      if (dt >= frameInterval) {
+        this.replayPlaybackIdx = (this.replayPlaybackIdx + 1) % this.replayFrames.length;
+        this.replayLastTime = now;
+      }
+    } else {
+      this.replayLastTime = now;
+    }
+
+    const frame = this.replayFrames[this.replayPlaybackIdx];
+    if (!frame) return;
+
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+    }
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#020617';
+    ctx.fillRect(0, 0, w, h);
+
+    const z = this.replayZoom;
+    const camX = frame.camX;
+    const camY = frame.camY;
+
+    // World transform
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.translate(w / 2, h / 2);
+    ctx.scale(z, z);
+    ctx.translate(-camX, -camY);
+
+    // Grid
+    const gridSize = 60;
+    const viewL = camX - w / 2 / z - gridSize;
+    const viewR = camX + w / 2 / z + gridSize;
+    const viewT = camY - h / 2 / z - gridSize;
+    const viewB = camY + h / 2 / z + gridSize;
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1 / z;
+    ctx.beginPath();
+    const sX = Math.floor(viewL / gridSize) * gridSize;
+    const eX = Math.ceil(viewR / gridSize) * gridSize;
+    const sY = Math.floor(viewT / gridSize) * gridSize;
+    const eY = Math.ceil(viewB / gridSize) * gridSize;
+    for (let x = sX; x <= eX; x += gridSize) { ctx.moveTo(x, viewT); ctx.lineTo(x, viewB); }
+    for (let y = sY; y <= eY; y += gridSize) { ctx.moveTo(viewL, y); ctx.lineTo(viewR, y); }
+    ctx.stroke();
+
+    // Draw food
+    for (const f of frame.foods) {
+      if (f.x < viewL || f.x > viewR || f.y < viewT || f.y > viewB) continue;
+      ctx.fillStyle = f.color;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Draw snakes
+    for (const s of frame.snakes) {
+      if (s.points.length === 0) continue;
+      const head = s.points[0];
+      if (head.x < viewL - 100 || head.x > viewR + 100 || head.y < viewT - 100 || head.y > viewB + 100) continue;
+
+      if (s.points.length >= 2) {
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = s.size * 2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(s.points[0].x, s.points[0].y);
+        for (let i = 1; i < s.points.length; i++) {
+          ctx.lineTo(s.points[i].x, s.points[i].y);
+        }
+        ctx.stroke();
+
+        // Head
+        ctx.fillStyle = s.secondaryColor ?? s.color;
+        ctx.beginPath();
+        ctx.arc(s.points[0].x, s.points[0].y, s.size * 1.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Player highlight
+        if (s.isPlayer && !s.isDead) {
+          ctx.strokeStyle = 'rgba(250, 204, 21, 0.5)';
+          ctx.lineWidth = s.size * 2.5;
+          ctx.beginPath();
+          ctx.moveTo(s.points[0].x, s.points[0].y);
+          for (let i = 1; i < s.points.length; i++) {
+            ctx.lineTo(s.points[i].x, s.points[i].y);
+          }
+          ctx.stroke();
+        }
+
+        // Name tag
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.font = 'bold 10px sans-serif';
+        ctx.fillStyle = s.isPlayer ? '#fcd34d' : '#e2e8f0';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        const screenX = w / 2 + (head.x - camX) * z;
+        const screenY = h / 2 + (head.y - camY) * z - s.size * z * 1.5;
+        ctx.fillText(s.name, screenX, screenY);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.translate(w / 2, h / 2);
+        ctx.scale(z, z);
+        ctx.translate(-camX, -camY);
+      }
+    }
+
+    // Reset transform for overlays
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // Death indicator
+    const isPostDeathFrame = this.replayDeathFrameIdx > 0 && this.replayPlaybackIdx >= this.replayDeathFrameIdx;
+    ctx.font = 'bold 12px monospace';
+    ctx.fillStyle = 'rgba(244, 63, 94, 0.8)';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('⏺ REPLAY', 8, 8);
+
+    if (this.replayDeathFrameIdx > 0) {
+      const preSec = Math.min(15, Math.floor(this.replayPlaybackIdx / 30));
+      const postSec = this.replayPlaybackIdx > this.replayDeathFrameIdx
+        ? Math.min(15, Math.floor((this.replayPlaybackIdx - this.replayDeathFrameIdx) / 30))
+        : 0;
+      ctx.font = '10px monospace';
+      ctx.fillStyle = isPostDeathFrame ? 'rgba(244, 63, 94, 0.9)' : 'rgba(226, 232, 240, 0.6)';
+      const label = isPostDeathFrame
+        ? `⛔ DEATH +${postSec}s | Frame ${this.replayPlaybackIdx + 1}/${this.replayFrames.length}`
+        : `Frame ${this.replayPlaybackIdx + 1}/${this.replayFrames.length} | -${Math.max(0, 15 - preSec)}s to death`;
+      ctx.fillText(label, 8, 24);
+    }
+
+    // Update progress bar
+    const progressEl = document.getElementById('oe-replay-progress-bar');
+    if (progressEl) {
+      const pct = this.replayFrames.length > 1 ? (this.replayPlaybackIdx / (this.replayFrames.length - 1)) * 100 : 0;
+      progressEl.style.width = `${pct}%`;
+    }
+    const counterEl = document.getElementById('oe-replay-counter');
+    if (counterEl) {
+      counterEl.textContent = `Frame ${this.replayPlaybackIdx + 1}/${this.replayFrames.length}`;
+    }
+  };
+
+  private exitReplayMode(): void {
+    this.isReplayMode = false;
+    if (this.replayRafId !== null) {
+      cancelAnimationFrame(this.replayRafId);
+      this.replayRafId = null;
+    }
+    this.replayCanvas = null;
+    this.replayCtx = null;
+
+    // Remove replay overlay
+    const wrap = document.getElementById('oe-replay-wrap');
+    if (wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
+
+    // Show end screen again
+    if (this.endOverlay) {
+      this.endOverlay.style.display = '';
+    }
+  }
+
   private handlePlayAgain(): void {
     if (this.endOverlay && this.endOverlay.parentNode) {
       this.endOverlay.parentNode.removeChild(this.endOverlay);
     }
     this.endOverlay = null;
+    // Clear replay state
+    this.replayPreBuffer = [];
+    this.replayPreWriteIdx = 0;
+    this.replayPostBuffer = [];
+    this.isPostDeathRecording = false;
+    this.postDeathTicksRemaining = 0;
+    this.replayFrames = [];
+    this.replayDeathFrameIdx = 0;
+    this.exitReplayMode();
     this.resetWorld();
     this.startTime = performance.now();
     this.accumulator = 0;
