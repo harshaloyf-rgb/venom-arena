@@ -180,3 +180,52 @@ Stage Summary:
 - game-config.ts: Turn rates improved, safe spawn distances increased, evade radius increased
 - index.ts (game server): Death emitted first, 16s delayed room removal for post-death snapshots
 - All changes pass ESLint with zero errors
+
+---
+Task ID: 5
+Agent: Main Agent + Subagents
+Task: Fix all 8 reported gameplay issues + create requirements checklist + update rules page
+
+Work Log:
+- Read ALL project files thoroughly to understand every detail (game-config, types, game-state, index.ts, game-canvas, offline-engine, render-helpers)
+
+Config Changes (game-config.ts):
+- MAP_MAX_RADIUS: 8000 → 16000 (doubled for 1000 players)
+- MAP_MIN_RADIUS: 1500 → 3000 (doubled for comfort)
+- BASE_SPEED: 6.4 → 4.5 (decreased for better control)
+- BOOST_SPEED: 11.6 → 8.0 (decreased for better control)
+- TURN_BASE: 0.28 → 0.35 (much tighter turns)
+- TURN_MIN: 0.06 → 0.08
+- TURN_SCORE_FACTOR: 0.0004 → 0.0003
+
+Offline Engine Fixes (offline-engine.ts):
+- Initial bot count: `Math.min(1000, arena.botsCount)` → `1000` (always 1000 bots)
+- Bot respawn target: `arena.botsCount` → `1000` (maintain 1000 always)
+- Added rendering culling: only render bots within VIEW_RADIUS(1500px) of camera
+- Simplified safe spawn: check distance from player only (not all 1000 bots)
+- Verified boost, food drops, collision avoidance, neck protection all work
+
+Online Replay Fixes (game-canvas.tsx):
+- Pre-spawn frame filter: hasStartedRecordingRef skips frames before player spawns
+- Death camera: centers on body MIDPOINT (where food drops), not head
+- Spectator camera: stays at death position, follows first entity collecting death food
+- Slow zoom out if no one collects food near death position
+- All spectator camera refs and logic verified working
+
+Safe Spawn (game-state.ts):
+- Added map boundary check: spawn point must be 500px inside map boundary
+- Combined with existing snake head distance check (500px from all heads)
+
+Documentation:
+- Created `/home/z/my-project/requirements-checklist.md` — comprehensive checklist of ALL game requirements (16 categories, 100+ items)
+- Updated `/home/z/my-project/src/components/panels/game-rules-modal.tsx` — complete rewrite with 10 sections covering all mechanics, accurate commission info, no outdated content
+
+Infrastructure:
+- Restarted game server (port 3001) — was not running (caused user's timeout)
+- ESLint passes with zero errors
+
+Stage Summary:
+- 8 gameplay issues addressed: offline bots density/culling, online replay camera, map size doubled, food drops verified, boost verified, safe spawn with boundary, tighter turns, bot collision avoidance verified
+- Requirements checklist created at requirements-checklist.md
+- Rules/guide page fully rewritten with accurate info
+- Game server restarted (was down, causing timeouts)

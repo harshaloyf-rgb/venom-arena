@@ -262,10 +262,20 @@ export function findSafeSpawnPoint(room: ArenaRoom, maxR: number, cx: number = 0
   for (let attempt = 0; attempt < SAFE_SPAWN_ATTEMPTS; attempt++) {
     const pt = randomSpawnPoint(maxR, cx, cy);
     let safe = true;
-    for (const head of allHeads) {
-      if (dist(pt.x, pt.y, head.x, head.y) < SAFE_SPAWN_MIN_DIST) {
-        safe = false;
-        break;
+
+    // Must be at least 500px inside the map boundary to avoid instant map death
+    const distFromCenter = dist(pt.x, pt.y, cx, cy);
+    if (distFromCenter > maxR - 500) {
+      safe = false;
+    }
+
+    // Must be far from all existing snake heads
+    if (safe) {
+      for (const head of allHeads) {
+        if (dist(pt.x, pt.y, head.x, head.y) < SAFE_SPAWN_MIN_DIST) {
+          safe = false;
+          break;
+        }
       }
     }
     if (safe) return pt;

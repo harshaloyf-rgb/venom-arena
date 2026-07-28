@@ -715,7 +715,7 @@ export class OfflineGameEngine {
     };
 
     // Spawn bots in a ring around the origin.
-    const botCount = Math.min(1000, this.arena.botsCount);
+    const botCount = 1000;
     for (let i = 0; i < botCount; i++) {
       const bot = this.spawnBot(0, 0);
       this.bots.set(bot.id, bot);
@@ -1150,35 +1150,16 @@ export class OfflineGameEngine {
     }
     // Respawn bots near the player to maintain count.
     const pHead = p.points[0];
-    while (this.bots.size < this.arena.botsCount) {
+    while (this.bots.size < 1000) {
       const bot = this.spawnBot(pHead.x, pHead.y);
-      // Ensure bots spawn in a safe area (far from player AND other bots)
-      let safe = false;
+      // Simplified safe spawn: ensure >500px from player only.
+      // With 1000 bots, checking all bot distances per attempt is too expensive;
+      // accept that some bots may be near each other — they'll separate naturally.
       for (let attempt = 0; attempt < 20; attempt++) {
         const spawnPt = bot.points[0];
-        const distFromPlayer = dist(spawnPt.x, spawnPt.y, pHead.x, pHead.y);
-        if (distFromPlayer < 500) {
-          // Re-spawn further from player
-          const far = randomPointInCircle(pHead.x, pHead.y, BOT_SPAWN_RADIUS);
-          bot.points = initialBody(far.x, far.y, bot.angle, INITIAL_BODY_LENGTH);
-          continue;
-        }
-        // Also check distance from other bots
-        let tooClose = false;
-        for (const other of this.bots.values()) {
-          if (other.isDead || other.points.length === 0) continue;
-          if (dist(spawnPt.x, spawnPt.y, other.points[0].x, other.points[0].y) < 500) {
-            tooClose = true;
-            break;
-          }
-        }
-        if (tooClose) {
-          const far = randomPointInCircle(pHead.x, pHead.y, BOT_SPAWN_RADIUS);
-          bot.points = initialBody(far.x, far.y, bot.angle, INITIAL_BODY_LENGTH);
-          continue;
-        }
-        safe = true;
-        break;
+        if (dist(spawnPt.x, spawnPt.y, pHead.x, pHead.y) >= 500) break;
+        const far = randomPointInCircle(pHead.x, pHead.y, BOT_SPAWN_RADIUS);
+        bot.points = initialBody(far.x, far.y, bot.angle, INITIAL_BODY_LENGTH);
       }
       this.bots.set(bot.id, bot);
     }
@@ -1210,7 +1191,7 @@ export class OfflineGameEngine {
   private tickSnakeMovement(snake: SnakeBase, desiredAngle: number, wantsBoost: boolean): void {
     if (snake.points.length === 0 || snake.isDead) return;
 
-    // Turn rate: max(0.045, 0.15 - totalScore*0.0006).
+    // Turn rate: max(TURN_MIN, TURN_BASE - totalScore*TURN_SCORE_FACTOR).
     const totalScore = INITIAL_SPAWN_SCORE + snake.score;
     const turnRate = Math.max(TURN_MIN, TURN_BASE - totalScore * TURN_SCORE_FACTOR);
     snake.angle = turnToward(snake.angle, desiredAngle, turnRate);
@@ -2036,12 +2017,20 @@ export class OfflineGameEngine {
     const p = this.player;
     if (!p) return;
 
-    // Gather all visible snakes.
+    // Rendering culling: only process snakes within VIEW_RADIUS of camera center.
+    // With 1000 bots, rendering all is prohibitively expensive.
+    const VIEW_RADIUS = 1500;
+    const camX = this.cam.x;
+    const camY = this.cam.y;
+
+    // Gather only visible snakes.
     const allSnakes: SnakeBase[] = [];
     for (const bot of this.bots.values()) {
-      if (!bot.isDead) allSnakes.push(bot);
+      if (bot.isDead || bot.points.length === 0) continue;
+      if (dist(bot.points[0].x, bot.points[0].y, camX, camY) > VIEW_RADIUS) continue;
+      allSnakes.push(bot);
     }
-    if (!p.isDead) allSnakes.push(p);
+    if (!p.isDead && p.points.length > 0) allSnakes.push(p);
 
     // Pre-compute opacity for each snake based on proximity to smaller snakes.
     const opacityMap = new Map<string, number>();
@@ -2074,15 +2063,15 @@ export class OfflineGameEngine {
     }
 
     // Render bots first, player last (on top).
-    for (const bot of this.bots.values()) {
-      if (bot.isDead) continue;
-      const opacity = opacityMap.get(bot.id) ?? 1.0;
+    for (const snake of allSnakes) {
+      if (snake.isPlayer) continue; // Player rendered last
+      const opacity = opacityMap.get(snake.id) ?? 1.0;
       ctx.save();
       ctx.globalAlpha = opacity;
-      this.drawSnakeSnapshot(rc, bot);
+      this.drawSnakeSnapshot(rc, snake);
       ctx.restore();
     }
-    if (!p.isDead) {
+    if (!p.isDead && p.points.length > 0) {
       const opacity = opacityMap.get(p.id) ?? 1.0;
       ctx.save();
       ctx.globalAlpha = opacity;

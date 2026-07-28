@@ -320,8 +320,19 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
   const isPostDeathRef = useRef<boolean>(false);
   const postDeathRecordRef = useRef<number>(0);
   const deathFrameIdxRef = useRef<number>(0); // index in final combined array where death occurs
+  const hasStartedRecordingRef = useRef<boolean>(false); // skip pre-spawn frames
 
   const recordReplayFrame = useCallback((snap: GameSnapshot) => {
+    // Skip pre-spawn frames: only start recording once the player's snake exists
+    if (!hasStartedRecordingRef.current) {
+      const myId = mySnakeIdRef.current;
+      if (myId && snap.snakes.some((s) => s.id === myId)) {
+        hasStartedRecordingRef.current = true;
+      } else {
+        return; // Don't record until player has spawned
+      }
+    }
+
     if (isPostDeathRef.current) {
       // Post-death: append linearly
       if (replayPostBufferRef.current.length < REPLAY_POST_MAX) {
@@ -1734,6 +1745,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
     replayWriteIdxRef.current = 0;
     isPostDeathRef.current = false;
     postDeathRecordRef.current = 0;
+    hasStartedRecordingRef.current = false;
     camInitRef.current = false;
     particlesRef.current = [];
     socketRef.current.emit('join_arena', { arenaId: arenaIdRef.current });
@@ -2278,6 +2290,12 @@ function ReplayPlayer({ frames, myId, deathFrameIdx, onClose }: ReplayPlayerProp
   const [frameIdx, setFrameIdx] = useState(0);
   const totalFrames = frames.length;
 
+  // Spectator camera state (refs for use inside rAF)
+  const deathCamPosRef = useRef<{ x: number; y: number } | null>(null);
+  const spectatorFollowIdRef = useRef<string | null>(null);
+  const prevFoodsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const deathFoodCollected = useRef(false);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || totalFrames === 0) return;
@@ -2291,6 +2309,12 @@ function ReplayPlayer({ frames, myId, deathFrameIdx, onClose }: ReplayPlayerProp
     canvas.width = w * dpr;
     canvas.height = h * dpr;
     ctx.scale(dpr, dpr);
+
+    // Reset spectator state on mount
+    deathCamPosRef.current = null;
+    spectatorFollowIdRef.current = null;
+    prevFoodsRef.current = new Map();
+    deathFoodCollected.current = false;
 
     const render = (now: number) => {
       if (!playingRef.current) {
@@ -2318,11 +2342,112 @@ function ReplayPlayer({ frames, myId, deathFrameIdx, onClose }: ReplayPlayerProp
       ctx.fillStyle = '#020617';
       ctx.fillRect(0, 0, w, h);
 
-      // Camera follows player
-      const me = snap.snakes.find((s) => s.id === myId);
-      const camX = me?.points?.[0]?.x ?? snap.mapCenterX ?? 4000;
-      const camY = me?.points?.[0]?.y ?? snap.mapCenterY ?? 4000;
+      // --- Spectator Camera Logic ---
+      const isAfterDeath = deathFrameIdx != null && frameIdxRef.current >= deathFrameIdx;
+      let camX: number;
+      let camY: number;
       const z = zoomRef.current;
+
+      if (!isAfterDeath) {
+        // Before death: follow player
+        const me = snap.snakes.find((s) => s.id === myId);
+        camX = me?.points?.[0]?.x ?? snap.mapCenterX ?? 4000;
+        camY = me?.points?.[0]?.y ?? snap.mapCenterY ?? 4000;
+      } else {
+        // At/after death frame
+        if (!deathCamPosRef.current) {
+          // Record death position: center of body (where food drops), not head
+          const deathFrame = frames[Math.min(deathFrameIdx!, frames.length - 1)];
+          const me = deathFrame?.snakes.find((s) => s.id === myId);
+          if (me?.points && me.points.length > 0) {
+            // Center camera on midpoint of body so food spread is visible
+            const midIdx = Math.floor(me.points.length / 2);
+            const midPt = me.points[Math.min(midIdx, me.points.length - 1)];
+            deathCamPosRef.current = {
+              x: midPt.x,
+              y: midPt.y,
+            };
+          } else {
+            deathCamPosRef.current = {
+              x: snap.mapCenterX ?? 4000,
+              y: snap.mapCenterY ?? 4000,
+            };
+          }
+          // Snapshot current food IDs near death for tracking
+          const curFoods = new Map<string, { x: number; y: number }>();
+          for (const f of deathFrame?.foods ?? []) {
+            curFoods.set(f.id, { x: f.x, y: f.y });
+          }
+          prevFoodsRef.current = curFoods;
+        }
+
+        if (!deathFoodCollected.current && spectatorFollowIdRef.current === null) {
+          // Check if any food near death position was collected
+          const deathPos = deathCamPosRef.current;
+          const curFoodIds = new Set<string>();
+          const collectedNearDeath: Array<{ x: number; y: number }> = [];
+
+          for (const f of snap.foods) {
+            curFoodIds.add(f.id);
+          }
+
+          // Find foods from previous frame that are now gone
+          for (const [foodId, fPos] of prevFoodsRef.current) {
+            if (!curFoodIds.has(foodId)) {
+              const dx = fPos.x - deathPos.x;
+              const dy = fPos.y - deathPos.y;
+              if (Math.sqrt(dx * dx + dy * dy) < 300) {
+                collectedNearDeath.push(fPos);
+              }
+            }
+          }
+
+          if (collectedNearDeath.length > 0) {
+            deathFoodCollected.current = true;
+            // Find closest snake to the first collected food position
+            const targetPos = collectedNearDeath[0];
+            let closestSnake: { id: string; dist: number } | null = null;
+            for (const s of snap.snakes) {
+              if (!s.points || s.points.length === 0) continue;
+              const head = s.points[0];
+              const dx = head.x - targetPos.x;
+              const dy = head.y - targetPos.y;
+              const d = Math.sqrt(dx * dx + dy * dy);
+              if (!closestSnake || d < closestSnake.dist) {
+                closestSnake = { id: s.id, dist: d };
+              }
+            }
+            if (closestSnake) {
+              spectatorFollowIdRef.current = closestSnake.id;
+            }
+          }
+
+          // Update prev foods for next frame comparison
+          const newFoods = new Map<string, { x: number; y: number }>();
+          for (const f of snap.foods) {
+            newFoods.set(f.id, { x: f.x, y: f.y });
+          }
+          prevFoodsRef.current = newFoods;
+        }
+
+        if (spectatorFollowIdRef.current) {
+          // Follow the entity that collected death food
+          const target = snap.snakes.find((s) => s.id === spectatorFollowIdRef.current);
+          if (target?.points?.[0]) {
+            camX = target.points[0].x;
+            camY = target.points[0].y;
+          } else {
+            camX = deathCamPosRef.current.x;
+            camY = deathCamPosRef.current.y;
+          }
+        } else {
+          // No one collected food near death — stay at death position
+          camX = deathCamPosRef.current.x;
+          camY = deathCamPosRef.current.y;
+          // Slow zoom out
+          zoomRef.current = Math.max(0.3, zoomRef.current - 0.0003);
+        }
+      }
 
       // World transform
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
