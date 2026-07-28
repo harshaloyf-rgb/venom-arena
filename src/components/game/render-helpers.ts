@@ -1,22 +1,18 @@
 /**
  * Venom Arena — canvas render helpers (pure functions, no React).
  *
- * BUILD-10 changes (game-canvas fix):
- *  - `extractZoneRadius` removed from `FrameRenderCtx` and `MinimapArgs`.
- *    Extraction is button-based (hold to extract anywhere).
- *  - `drawGrid` now renders the BREATHING circular arena boundary
- *    (`#f43f5e`, lineWidth 10, shadowBlur 16) instead of a rectangular grid +
- *    inner extract-zone circle. The arena radius breathes ±40 over a 10 s
- *    cycle (matches `MAP_BASE_RADIUS` / `MAP_BREATH_AMPLITUDE` /
- *    `MAP_BREATH_CYCLE_MS` from game-config). Background is `#020617` clipped
- *    to the arena circle. A subtle grid (`#1e293b`, gridSize 60) is drawn
- *    inside the circle.
- *  - `drawFood`: regular food = filled circle in its color; star chip =
- *    5-pointed GOLD star with `shadowColor #eab308`, `shadowBlur 6`.
- *  - `drawMinimap`: extract-zone circle removed; arena boundary drawn as a
- *    dashed rose circle. Player dot = indigo, bots = rose, other real
- *    players = emerald (matches AUDIT-A radar visual language).
- *  - All skin-pattern rendering (rainbow / neon / metallic / camo) preserved.
+ * Rendering pipeline:
+ *  1. drawGrid — breathing circular arena background + subtle grid + boundary
+ *  2. drawFood — three distinct orb sizes (small/medium/large) + star collectibles
+ *  3. drawSnake / drawSnakeWithLayering — polyline body + head + eyes + labels
+ *     with optional opacity layering for size-proximity interactions
+ *  4. drawChipLabel — Indian-numbered chip display above real-player heads
+ *  5. drawParticles — death/eat particle bursts
+ *  6. drawMinimap — corner radar minimap
+ *  7. drawFullMap — full-screen arena overlay
+ *  8. drawMapBoundary — dynamic-radius neon-rose boundary with breathing
+ *
+ * All skin-pattern rendering (rainbow / neon / metallic / camo) preserved.
  */
 
 import type { FoodSnapshot, SnakeSnapshot } from '@/lib/types';
@@ -103,14 +99,10 @@ function rectContainsPoint(rect: VisibleRect, x: number, y: number): boolean {
 
 /** Returns true if any point in the list is inside the visible rect. */
 function snakeIsVisible(pts: { x: number; y: number }[], rect: VisibleRect): boolean {
-  // Cheap check: head + tail. If both off-screen on the SAME side we still
-  // need to scan all points (snake might span the screen). For most cases
-  // the head check suffices.
   if (pts.length === 0) return false;
   if (rectContainsPoint(rect, pts[0].x, pts[0].y)) return true;
   const last = pts[pts.length - 1];
   if (rectContainsPoint(rect, last.x, last.y)) return true;
-  // Fallback: walk the downsampled polyline.
   const stride = pts.length > 60 ? 4 : 2;
   for (let i = 0; i < pts.length; i += stride) {
     if (rectContainsPoint(rect, pts[i].x, pts[i].y)) return true;
@@ -133,8 +125,6 @@ function getMetallicGradient(
   const cached = rc.metallicCache.get(key);
   if (cached) return cached;
   const { ctx } = rc;
-  // Gradient is built in device pixels — we always rebuild on resize because
-  // the cache Map is reset by the resize handler.
   const g = ctx.createRadialGradient(-bucket * 0.35, -bucket * 0.35, bucket * 0.1, 0, 0, bucket);
   g.addColorStop(0, '#f8fafc');
   g.addColorStop(0.35, secondary || color);
@@ -155,6 +145,34 @@ export function getArenaRadius(now: number): number {
 }
 
 // ---------------------------------------------------------------------------
+// Indian number formatting for chip display
+// ---------------------------------------------------------------------------
+
+/**
+ * Formats a chip count using Indian numbering system.
+ *  - Under 1000: plain number (e.g. "500")
+ *  - 1K to 99K: "1.5K", "25K"
+ *  - 1L (1,00,000) to 99L: "1L", "50L"
+ *  - 1Cr (1,00,00,000)+: "1.2Cr", "15Cr"
+ */
+export function formatChipDisplay(chips: number): string {
+  if (chips < 1000) return String(chips);
+  if (chips < 100_000) {
+    // K range: 1K to 99.9K
+    const k = chips / 1000;
+    return k % 1 === 0 ? `${k}K` : `${k.toFixed(1).replace(/\.0$/, '')}K`;
+  }
+  if (chips < 10_000_000) {
+    // L (lakh) range: 1L to 99.9L
+    const l = chips / 100_000;
+    return l % 1 === 0 ? `${l}L` : `${l.toFixed(1).replace(/\.0$/, '')}L`;
+  }
+  // Cr (crore) range
+  const cr = chips / 10_000_000;
+  return cr % 1 === 0 ? `${cr}Cr` : `${cr.toFixed(1).replace(/\.0$/, '')}Cr`;
+}
+
+// ---------------------------------------------------------------------------
 // Grid + world bounds
 // ---------------------------------------------------------------------------
 
@@ -162,6 +180,8 @@ export function getArenaRadius(now: number): number {
  * Draws the breathing circular arena: background fill (deep slate `#020617`)
  * clipped to the circle, a subtle grid (`#1e293b`, gridSize 60) inside the
  * circle, and the neon-rose boundary (`#f43f5e`, lineWidth 10, shadowBlur 16).
+ *
+ * The radius breathes using the same sinusoidal formula as the server.
  */
 export function drawGrid(rc: FrameRenderCtx): void {
   const { ctx, worldSize, camX, camY, zoom, w, h } = rc;
@@ -171,22 +191,21 @@ export function drawGrid(rc: FrameRenderCtx): void {
 
   // --- Background fill (entire arena disc) ---
   ctx.save();
-  // Clip to arena circle so nothing draws outside.
   ctx.beginPath();
   ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-  ctx.fillStyle = '#020617'; // Deep Slate (AUDIT-A line 2572)
+  ctx.fillStyle = '#020617';
   ctx.fill();
   ctx.clip();
 
   // --- Grid lines (subtle slate-800, gridSize 60) ---
-  const grid = 60; // AUDIT-A line 2578
+  const grid = 60;
   const vis = computeVisibleRect(rc);
   const startX = Math.max(0, Math.floor(vis.left / grid) * grid);
   const endX = Math.min(worldSize, Math.ceil(vis.right / grid) * grid);
   const startY = Math.max(0, Math.floor(vis.top / grid) * grid);
   const endY = Math.min(worldSize, Math.ceil(vis.bottom / grid) * grid);
 
-  ctx.strokeStyle = '#1e293b'; // AUDIT-A line 2576
+  ctx.strokeStyle = '#1e293b';
   ctx.lineWidth = 1 / zoom;
   ctx.beginPath();
   for (let x = startX; x <= endX; x += grid) {
@@ -201,7 +220,6 @@ export function drawGrid(rc: FrameRenderCtx): void {
   ctx.restore(); // remove clip
 
   // --- Outer boundary (neon rose, breathing) ---
-  // AUDIT-A lines 2595-2603: strokeStyle #f43f5e, lineWidth 10, shadowBlur 16.
   ctx.save();
   ctx.lineWidth = 10;
   ctx.strokeStyle = '#f43f5e';
@@ -215,8 +233,7 @@ export function drawGrid(rc: FrameRenderCtx): void {
   ctx.shadowBlur = 0;
   ctx.restore();
 
-  // Silence unused-param lint for camX/camY/w/h (they are part of the public
-  // type even if grid math doesn't need them directly).
+  // Silence unused-param lint for camX/camY/w/h.
   void camX;
   void camY;
   void w;
@@ -224,131 +241,295 @@ export function drawGrid(rc: FrameRenderCtx): void {
 }
 
 // ---------------------------------------------------------------------------
-// Food
+// Dynamic map boundary (for online games with dynamic radius)
+// ---------------------------------------------------------------------------
+
+/**
+ * Draws a circular map boundary with neon-rose glow and a subtle breathing
+ * pulse. Used for online arenas where `mapRadius` comes from the GameSnapshot
+ * rather than the fixed breathing formula.
+ */
+export function drawMapBoundary(
+  ctx: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  radius: number,
+  tick: number,
+): void {
+  // Subtle breathing pulse: ±3px oscillation over a 4-second cycle
+  const breathe = Math.sin(tick * 0.0015) * 3;
+  const r = Math.max(100, radius + breathe);
+
+  ctx.save();
+  // Outer glow
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = '#f43f5e';
+  ctx.shadowColor = '#f43f5e';
+  ctx.shadowBlur = 20;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Inner subtle glow ring
+  ctx.shadowBlur = 8;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(244, 63, 94, 0.35)';
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, r - 6, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// Food orb rendering — three distinct sizes
+// ---------------------------------------------------------------------------
+
+/** Orb type configuration for the three visual tiers. */
+interface OrbConfig {
+  radius: number;
+  color: string;
+  glowColor: string;
+  shadowBlur: number;
+  label: 'small' | 'medium' | 'large';
+}
+
+const ORB_CONFIGS: Record<number, OrbConfig> = {
+  1: { radius: 3, color: '#34d399', glowColor: '#10b981', shadowBlur: 6, label: 'small' },
+  3: { radius: 5, color: '#38bdf8', glowColor: '#0ea5e9', shadowBlur: 10, label: 'medium' },
+  5: { radius: 8, color: '#f472b6', glowColor: '#ec4899', shadowBlur: 16, label: 'large' },
+};
+
+/** Default config used when orbSize doesn't match known values. */
+const DEFAULT_ORB: OrbConfig = ORB_CONFIGS[1];
+
+/**
+ * Draws a single food orb with glow effects. The orbSize determines which
+ * visual tier to use. Falls back to small orb for unknown sizes.
+ */
+export function drawFoodOrb(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  orbSize: number,
+  value: number,
+  color: string,
+  glowColor: string,
+  now: number,
+  lowQuality: boolean,
+): void {
+  // Select config based on value; use provided color/glowColor if different
+  const config = ORB_CONFIGS[value] ?? DEFAULT_ORB;
+  const useColor = color || config.color;
+  const useGlow = glowColor || config.glowColor;
+  const r = Math.max(2, orbSize > 0 ? orbSize : config.radius);
+
+  ctx.save();
+
+  // Large orbs get a subtle pulse animation
+  let animR = r;
+  if (value === 5 && !lowQuality) {
+    const pulse = Math.sin(now * 0.004) * 1.5;
+    animR = r + pulse;
+  }
+
+  // Glow effect (skip in low quality)
+  if (!lowQuality) {
+    ctx.shadowColor = useGlow;
+    ctx.shadowBlur = config.shadowBlur;
+  }
+
+  // Radial gradient for a lit-from-within look
+  const grad = ctx.createRadialGradient(x, y, 0, x, y, animR);
+  grad.addColorStop(0, '#ffffff');
+  grad.addColorStop(0.3, useColor);
+  grad.addColorStop(1, useGlow);
+
+  ctx.beginPath();
+  ctx.arc(x, y, animR, 0, Math.PI * 2);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// Star collectible rendering — 5-pointed star shape
+// ---------------------------------------------------------------------------
+
+/**
+ * Draws a proper 5-pointed star path. Generic helper used by drawStarCollectible.
+ *
+ * @param ctx     Canvas context
+ * @param cx      Center X
+ * @param cy      Center Y
+ * @param outerR  Outer radius (tip of star)
+ * @param innerR  Inner radius (valley between points)
+ * @param points  Number of points (always 5 for stars)
+ * @param rotation Rotation in radians (for spin animation)
+ */
+export function drawStarShape(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  outerR: number,
+  innerR: number,
+  points: number,
+  rotation: number,
+): void {
+  ctx.beginPath();
+  for (let i = 0; i < points * 2; i++) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const angle = (Math.PI / points) * i - Math.PI / 2 + rotation;
+    const px = cx + Math.cos(angle) * r;
+    const py = cy + Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+/**
+ * Draws a 5-pointed star collectible with golden glow, subtle rotation,
+ * and pulsing glow effect. Stars are the rare high-value pickups.
+ */
+export function drawStarCollectible(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  tick: number,
+  lowQuality: boolean,
+): void {
+  const outerR = Math.max(4, size);
+  const innerR = Math.max(2, size * 0.4);
+
+  // Rotation: slow spin based on tick
+  const rotation = tick * 0.002;
+
+  // Pulsing glow: size oscillates ±1.5px over ~1.5s
+  const pulse = lowQuality ? 0 : Math.sin(tick * 0.004) * 1.5;
+  const animOuter = outerR + pulse;
+  const animInner = innerR + pulse * 0.4;
+
+  ctx.save();
+
+  // Glow
+  if (!lowQuality) {
+    ctx.shadowColor = '#f59e0b';
+    ctx.shadowBlur = 12 + Math.sin(tick * 0.003) * 4;
+  }
+
+  // Star shape
+  drawStarShape(ctx, x, y, animOuter, animInner, 5, rotation);
+
+  // Golden radial gradient fill
+  const grad = ctx.createRadialGradient(x, y, 0, x, y, animOuter);
+  grad.addColorStop(0, '#fef3c7'); // bright center
+  grad.addColorStop(0.4, '#fbbf24');
+  grad.addColorStop(1, '#f59e0b');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// Food (main entry point — batches regular orbs, draws stars individually)
 // ---------------------------------------------------------------------------
 
 /**
  * Draws all food in two passes:
- *  1. Regular food — batched by color into a single Path2D + fill per color
- *     (filled circle in its own color).
- *  2. Star chips — drawn individually as 5-pointed gold stars with a soft
- *     `shadowColor #eab308`, `shadowBlur 6` glow.
+ *  1. Regular food orbs — batched by orbSize tier into Path2D groups.
+ *     Each tier (small/medium/large) has its own glow gradient.
+ *  2. Star collectibles — drawn individually as 5-pointed gold stars with
+ *     rotation + pulsing glow.
  */
 export function drawFood(rc: FrameRenderCtx, foods: FoodSnapshot[]): void {
-  const { ctx } = rc;
+  const { ctx, lowQuality } = rc;
   const vis = computeVisibleRect(rc);
 
-  // --- Regular food: batched by color ---
-  // Group foods into a per-color Path2D. The browser keeps one path open
-  // per color, then we issue a single fill() per color. This turns 800
-  // individual fills into ~6 fills (one per palette color).
-  const pathsByColor = new Map<string, Path2D>();
+  // --- Regular food orbs: batch by value tier ---
+  const smallOrbs: FoodSnapshot[] = [];
+  const mediumOrbs: FoodSnapshot[] = [];
+  const largeOrbs: FoodSnapshot[] = [];
   const starChips: FoodSnapshot[] = [];
 
   for (let i = 0; i < foods.length; i++) {
     const f = foods[i];
-    if (
-      f.x < vis.left ||
-      f.x > vis.right ||
-      f.y < vis.top ||
-      f.y > vis.bottom
-    ) {
+    if (f.x < vis.left || f.x > vis.right || f.y < vis.top || f.y > vis.bottom) {
       continue; // culled
     }
     if (f.isStarChip) {
       starChips.push(f);
       continue;
     }
-    let p = pathsByColor.get(f.color);
-    if (!p) {
-      p = new Path2D();
-      pathsByColor.set(f.color, p);
+    // Route to orb tier by value
+    if (f.value >= 5) largeOrbs.push(f);
+    else if (f.value >= 3) mediumOrbs.push(f);
+    else smallOrbs.push(f);
+  }
+
+  // Draw each orb tier
+  const drawOrbBatch = (orbs: FoodSnapshot[]) => {
+    for (let i = 0; i < orbs.length; i++) {
+      const f = orbs[i];
+      drawFoodOrb(ctx, f.x, f.y, f.orbSize ? f.size : f.size, f.value, f.color, f.glowColor ?? '', rc.now, lowQuality);
     }
-    p.moveTo(f.x + f.size, f.y);
-    p.arc(f.x, f.y, f.size, 0, Math.PI * 2);
-  }
+  };
 
-  for (const [color, path] of pathsByColor) {
-    ctx.fillStyle = color;
-    ctx.fill(path);
-  }
+  drawOrbBatch(smallOrbs);
+  drawOrbBatch(mediumOrbs);
+  drawOrbBatch(largeOrbs);
 
-  // --- Star chips: 5-pointed gold star with shadowBlur 6 ---
-  if (starChips.length === 0) return;
-  ctx.save();
-  for (let i = 0; i < starChips.length; i++) {
-    const f = starChips[i];
-    const outer = Math.max(2, f.size + 1);
-    const inner = Math.max(1, f.size / 2);
-    drawStar(ctx, f.x, f.y, 5, outer, inner, f.color || '#fbbf24', rc.lowQuality);
+  // --- Star collectibles: 5-pointed gold stars with rotation + glow ---
+  if (starChips.length > 0) {
+    ctx.save();
+    for (let i = 0; i < starChips.length; i++) {
+      const f = starChips[i];
+      drawStarCollectible(ctx, f.x, f.y, Math.max(6, f.size + 4), rc.now, lowQuality);
+    }
+    ctx.restore();
   }
-  ctx.restore();
-}
-
-/** Draws a 5-pointed star centered at (x,y) with `outer` outer radius and `inner` inner radius. */
-function drawStar(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  points: number,
-  outer: number,
-  inner: number,
-  color: string,
-  lowQuality: boolean,
-): void {
-  ctx.save();
-  if (!lowQuality) {
-    ctx.shadowColor = '#eab308';
-    ctx.shadowBlur = 6;
-  }
-  ctx.beginPath();
-  for (let i = 0; i < points * 2; i++) {
-    const r = i % 2 === 0 ? outer : inner;
-    const angle = (Math.PI / points) * i - Math.PI / 2;
-    const px = x + Math.cos(angle) * r;
-    const py = y + Math.sin(angle) * r;
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-  }
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
-  if (!lowQuality) ctx.shadowBlur = 0;
-  ctx.restore();
 }
 
 // ---------------------------------------------------------------------------
-// Snakes
+// Snake rendering
 // ---------------------------------------------------------------------------
 
 /**
  * Draws a single snake. The body is rendered as ONE thick stroked polyline
- * (with an outline underlay) — not N individual circles — which eliminates
- * per-segment gradient, per-segment shadowBlur, per-segment save/restore,
- * and per-frame object allocation.
- *
- * The head is drawn separately with eyes and (for the player's own snake,
- * high-quality only) a glow halo.
+ * (with an outline underlay). The head is drawn separately with eyes and
+ * (for the player's own snake, high-quality only) a glow halo.
  *
  * Player skin patterns (rainbow / neon / metallic / camo) are applied when
  * `rc.playerSkin.pattern` is set and the snake is the local player.
+ *
+ * @param opacity  Optional global alpha override (0..1). Default = 1.
  */
-export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot): void {
+export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot, opacity?: number): void {
   const pts = snake.points;
-  if (!pts || pts.length === 0) return; // C13 guard
+  if (!pts || pts.length === 0) return;
 
   const vis = computeVisibleRect(rc);
-  if (!snakeIsVisible(pts, vis)) return; // P16 cull
+  if (!snakeIsVisible(pts, vis)) return;
 
   const { ctx, zoom, lowQuality } = rc;
   const isMe = snake.id === rc.myId;
+  const baseAlpha = opacity ?? 1;
 
-  // Downsample long snakes (defensive — server already caps at ~120).
+  // Downsample long snakes
   const stride = pts.length > 60 ? 2 : 1;
 
-  // Body width in world units. `size` is the radius; visual width = 2*size.
+  // Body width in world units
   const radius = Math.max(2, snake.size);
   const width = radius * 2;
+
+  ctx.save();
+  ctx.globalAlpha = baseAlpha;
 
   // --- Outline (underlay) ---
   if (snake.secondaryColor) {
@@ -357,7 +538,7 @@ export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot): void {
     ctx.lineJoin = 'round';
     ctx.lineWidth = width + 4 / zoom;
     ctx.strokeStyle = snake.secondaryColor;
-    ctx.globalAlpha = 0.55;
+    ctx.globalAlpha = baseAlpha * 0.55;
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
     for (let i = stride; i < pts.length; i += stride) {
@@ -369,14 +550,13 @@ export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot): void {
 
   // --- Body ---
   ctx.save();
+  ctx.globalAlpha = baseAlpha;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.lineWidth = width;
 
   const pattern = isMe ? rc.playerSkin?.pattern : undefined;
   if (pattern === 'metallic' && snake.secondaryColor) {
-    // Use cached gradient — keyed by size bucket so we don't re-build per
-    // snake. Stroking still happens per-snake (correct transform).
     const g = getMetallicGradient(rc, radius, snake.color, snake.secondaryColor);
     ctx.strokeStyle = g;
     ctx.beginPath();
@@ -386,8 +566,6 @@ export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot): void {
     }
     ctx.stroke();
   } else if (pattern === 'rainbow' && !lowQuality) {
-    // Rainbow: stroke in hue-cycling chunks. Cheap — only a handful of
-    // stroke() calls per snake.
     const chunkSize = Math.max(4, Math.floor(pts.length / 12));
     ctx.lineWidth = width;
     for (let i = 0; i < pts.length - 1; i += chunkSize) {
@@ -402,7 +580,6 @@ export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot): void {
       ctx.stroke();
     }
   } else if (pattern === 'neon' && !lowQuality) {
-    // Neon: alternate cyan / purple along the body (AUDIT-A line 2762-2765).
     const chunkSize = Math.max(4, Math.floor(pts.length / 10));
     ctx.lineWidth = width;
     let chunkIndex = 0;
@@ -419,7 +596,6 @@ export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot): void {
       chunkIndex += 1;
     }
   } else if (pattern === 'camo') {
-    // Camo: alternating earth-tone segments (AUDIT-A line 2768-2770).
     const camoColors = ['#15803d', '#854d0e', '#78350f', '#166534'];
     const chunkSize = Math.max(4, Math.floor(pts.length / 12));
     let chunkIndex = 0;
@@ -435,7 +611,7 @@ export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot): void {
       chunkIndex += 1;
     }
   } else {
-    // Default: solid snake.color (alternating 2-color handled by outline).
+    // Default: solid snake.color
     ctx.strokeStyle = snake.color;
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
@@ -449,7 +625,7 @@ export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot): void {
   // --- Head ---
   const head = pts[0];
   ctx.save();
-  // Player-only glow halo, high-quality only (FIXES P1).
+  ctx.globalAlpha = baseAlpha;
   if (isMe && !lowQuality) {
     ctx.shadowColor = snake.color;
     ctx.shadowBlur = 14;
@@ -460,7 +636,7 @@ export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot): void {
   ctx.fill();
   if (isMe && !lowQuality) ctx.shadowBlur = 0;
 
-  // Eyes — direction-based positioning.
+  // Eyes
   const eyeOffset = radius * 0.45;
   const eyeR = Math.max(1.5, radius * 0.32);
   const pupilR = Math.max(0.8, radius * 0.18);
@@ -483,7 +659,7 @@ export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot): void {
   ctx.arc(ex2 + Math.cos(angle) * pupilR, ey2 + Math.sin(angle) * pupilR, pupilR, 0, Math.PI * 2);
   ctx.fill();
 
-  // Spawn-protection ring.
+  // Spawn-protection ring
   if (snake.spawnProtected) {
     ctx.strokeStyle = 'rgba(255,255,255,0.6)';
     ctx.lineWidth = 2 / zoom;
@@ -492,7 +668,7 @@ export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot): void {
     ctx.stroke();
   }
 
-  // Extraction ring.
+  // Extraction ring
   if (snake.isExtracting) {
     ctx.strokeStyle = 'rgba(16, 185, 129, 0.95)';
     ctx.lineWidth = 3 / zoom;
@@ -500,13 +676,14 @@ export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot): void {
     ctx.beginPath();
     ctx.arc(head.x, head.y, radius + 8 / zoom, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.setLineDash([]); // RESET — fixes R11
+    ctx.setLineDash([]);
   }
   ctx.restore();
 
   // --- Name label ---
   if (snake.name) {
     ctx.save();
+    ctx.globalAlpha = baseAlpha;
     ctx.font = `${Math.max(10, 12 / zoom)}px monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
@@ -523,9 +700,132 @@ export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot): void {
 
   // --- Chat bubble ---
   if (snake.chatMessage) {
+    ctx.save();
+    ctx.globalAlpha = baseAlpha;
     drawChatBubble(rc, head.x, head.y - radius - 24 / zoom, snake.chatMessage);
+    ctx.restore();
   }
+
+  ctx.restore(); // outer globalAlpha save
 }
+
+// ---------------------------------------------------------------------------
+// Snake opacity layering system
+// ---------------------------------------------------------------------------
+
+/** Proximity threshold for opacity fade (world-space pixels). */
+const LAYERING_PROXIMITY = 30;
+
+/**
+ * Draws a snake with opacity layering: when a smaller snake passes close to a
+ * larger snake, the larger snake fades to 75% opacity. This creates visual
+ * depth when snakes overlap spatially.
+ *
+ * Logic:
+ *  1. For each OTHER snake, check if its head is within ~30px of this snake's head
+ *  2. If a smaller snake (by size) is nearby, this snake fades to 0.75 opacity
+ *  3. Otherwise, render at full opacity
+ */
+export function drawSnakeWithLayering(
+  rc: FrameRenderCtx,
+  snake: SnakeSnapshot,
+  allSnakes: SnakeSnapshot[],
+): void {
+  const pts = snake.points;
+  if (!pts || pts.length === 0) return;
+
+  const myHead = pts[0];
+  let shouldFade = false;
+
+  for (let i = 0; i < allSnakes.length; i++) {
+    const other = allSnakes[i];
+    if (other.id === snake.id) continue;
+    const otherPts = other.points;
+    if (!otherPts || otherPts.length === 0) continue;
+
+    const otherHead = otherPts[0];
+    const dist = Math.hypot(otherHead.x - myHead.x, otherHead.y - myHead.y);
+
+    if (dist < LAYERING_PROXIMITY && snake.size > other.size) {
+      // A smaller snake is close by — fade this (larger) snake
+      shouldFade = true;
+      break;
+    }
+  }
+
+  drawSnake(rc, snake, shouldFade ? 0.75 : 1);
+}
+
+// ---------------------------------------------------------------------------
+// Chip label above snake head
+// ---------------------------------------------------------------------------
+
+/**
+ * Draws a chip count label above the snake's head. Uses Indian numbering
+ * (K, L, Cr). Only meaningful for real players (bots have 0 carriedChips).
+ *
+ * Rendered as a semi-transparent pill with white text, positioned centered
+ * above the head.
+ */
+export function drawChipLabel(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  chips: number,
+  snakeSize: number,
+  zoom: number,
+): void {
+  if (chips <= 0) return; // bots have 0 chips, skip them
+
+  const label = formatChipDisplay(chips);
+  const fontSize = Math.max(9, 10 / zoom);
+  const offset = snakeSize + 12 / zoom;
+
+  ctx.save();
+  ctx.font = `bold ${fontSize}px monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+
+  const metrics = ctx.measureText(label);
+  const padX = 5 / zoom;
+  const padY = 2 / zoom;
+  const tw = metrics.width + padX * 2;
+  const th = fontSize + padY * 2;
+  const rx = x - tw / 2;
+  const ry = y - offset - th;
+  const rr = 4 / zoom;
+
+  // Background pill
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+  ctx.beginPath();
+  ctx.moveTo(rx + rr, ry);
+  ctx.lineTo(rx + tw - rr, ry);
+  ctx.arcTo(rx + tw, ry, rx + tw, ry + rr, rr);
+  ctx.lineTo(rx + tw, ry + th - rr);
+  ctx.arcTo(rx + tw, ry + th, rx + tw - rr, ry + th, rr);
+  ctx.lineTo(rx + rr, ry + th);
+  ctx.arcTo(rx, ry + th, rx, ry + th - rr, rr);
+  ctx.lineTo(rx, ry + rr);
+  ctx.arcTo(rx, ry, rx + rr, ry, rr);
+  ctx.closePath();
+  ctx.fill();
+
+  // Gold accent border
+  ctx.strokeStyle = 'rgba(251, 191, 36, 0.7)';
+  ctx.lineWidth = 1 / zoom;
+  ctx.stroke();
+
+  // Text
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, x, ry + th / 2);
+
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// Chat bubble
+// ---------------------------------------------------------------------------
 
 /** Draws a small chat bubble above a snake head. */
 function drawChatBubble(
@@ -544,9 +844,8 @@ function drawChatBubble(
   const tw = metrics.width + padX * 2;
   const th = 14 / zoom + padY * 2;
   ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
-  ctx.strokeStyle = 'rgba(99, 102, 241, 0.6)'; // indigo (AUDIT-A line 3072)
+  ctx.strokeStyle = 'rgba(99, 102, 241, 0.6)';
   ctx.lineWidth = 1.5 / zoom;
-  // Rounded rect (manual since older canvas may not have roundRect).
   const rx = x - tw / 2;
   const ry = y - th;
   const rr = 4 / zoom;
@@ -613,9 +912,8 @@ export interface MinimapArgs {
   myId: string;
   /**
    * World-space radius around the player the radar should cover. Snakes
-   * outside this range are NOT rendered on the small corner minimap
-   * (BUILD-13: small minimap = "nearby snakes within ~1800px"). Defaults
-   * to WORLD_SIZE/2 (legacy full-radar behaviour) when omitted.
+   * outside this range are NOT rendered on the small corner minimap.
+   * Defaults to WORLD_SIZE/2 (legacy full-radar behaviour) when omitted.
    */
   range?: number;
 }
@@ -625,18 +923,12 @@ export interface MinimapArgs {
  * the centre (the radar is centered on the player's head). The arena
  * boundary is a dashed rose circle. Bots render as rose dots, other real
  * players as emerald dots — matches AUDIT-A radar visual language.
- *
- * BUILD-13: `range` controls how far the radar sees. The small corner
- * minimap passes ~1800 so only nearby snakes are shown; the full-map
- * overlay passes WORLD_SIZE/2 (or simply uses drawFullMap).
  */
 export function drawMinimap(args: MinimapArgs): void {
   const { ctx, x, y, size, worldSize, arenaRadius, snakes, myId } = args;
   const cx = x + size / 2;
   const cy = y + size / 2;
   const r = size / 2;
-  // Radar range — default to WORLD_SIZE/2 (legacy). Small corner minimap
-  // passes 1800 to show only nearby snakes (BUILD-13 spec).
   const radarRange = args.range ?? WORLD_SIZE / 2;
   const scale = r / radarRange;
 
@@ -655,7 +947,7 @@ export function drawMinimap(args: MinimapArgs): void {
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.clip();
 
-  // Concentric rings (AUDIT-A lines 3520-3522).
+  // Concentric rings.
   ctx.strokeStyle = 'rgba(99, 102, 241, 0.10)';
   ctx.lineWidth = 1;
   for (const inset of [2, 5, 8]) {
@@ -674,7 +966,6 @@ export function drawMinimap(args: MinimapArgs): void {
   ctx.stroke();
 
   // Arena boundary (dashed rose) — centered on world center.
-  // World center relative to player's radar position.
   const mySnake = snakes.find((s) => s.id === myId);
   const myHead = mySnake?.points?.[0];
   const px = myHead ? myHead.x : worldSize / 2;
@@ -698,19 +989,19 @@ export function drawMinimap(args: MinimapArgs): void {
     const dx = (head.x - px) * scale;
     const dy = (head.y - py) * scale;
     const dist = Math.hypot(dx, dy);
-    if (dist > r) continue; // off-radar
+    if (dist > r) continue;
     const mx = cx + dx;
     const my = cy + dy;
     ctx.beginPath();
     if (s.id === myId) {
       ctx.arc(mx, my, 3, 0, Math.PI * 2);
-      ctx.fillStyle = '#818cf8'; // indigo-400 (AUDIT-A line 3525)
+      ctx.fillStyle = '#818cf8'; // indigo-400
     } else if (s.isBot) {
       ctx.arc(mx, my, 2, 0, Math.PI * 2);
-      ctx.fillStyle = '#f43f5e'; // rose-500 (AUDIT-A line 3577)
+      ctx.fillStyle = '#f43f5e'; // rose-500
     } else {
       ctx.arc(mx, my, 2, 0, Math.PI * 2);
-      ctx.fillStyle = '#34d399'; // emerald-400 (AUDIT-A line 3577)
+      ctx.fillStyle = '#34d399'; // emerald-400
     }
     ctx.fill();
   }
@@ -718,7 +1009,7 @@ export function drawMinimap(args: MinimapArgs): void {
 }
 
 // ---------------------------------------------------------------------------
-// Full Map overlay (BUILD-13) — drawn in screen-space, no camera transform.
+// Full Map overlay — drawn in screen-space, no camera transform.
 // Press `M` to toggle. Shows the ENTIRE arena with all snakes as dots.
 // ---------------------------------------------------------------------------
 
@@ -744,26 +1035,22 @@ export interface FullMapArgs {
  */
 export function drawFullMap(args: FullMapArgs): void {
   const { ctx, w, h, worldSize, arenaRadius, snakes, myId } = args;
-  // --- Background fill (dim slate) ---
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = 'rgba(2, 6, 23, 0.94)'; // deep slate, near-opaque
+
+  // --- Background fill (dim slate) ---
+  ctx.fillStyle = 'rgba(2, 6, 23, 0.94)';
   ctx.fillRect(0, 0, w, h);
 
   // --- Layout: arena centred on screen ---
   const cx = w / 2;
   const cy = h / 2;
-  // Fit the arena diameter (2 * arenaRadius) plus a small margin into the
-  // smaller of width / height. Margin = 80px so labels fit.
   const margin = 80;
   const fitDim = Math.min(w, h) - margin * 2;
   const arenaDiameter = arenaRadius * 2;
   const scale = fitDim / arenaDiameter;
   const screenR = arenaRadius * scale;
 
-  // World-center → screen mapping. World center = (worldSize/2, worldSize/2).
-  // All snake positions are in world coords; subtract world center, scale,
-  // then add screen center.
   const wcx = worldSize / 2;
   const wcy = worldSize / 2;
   const toScreenX = (wx: number) => cx + (wx - wcx) * scale;
@@ -804,7 +1091,6 @@ export function drawFullMap(args: FullMapArgs): void {
     const sy = toScreenY(head.y);
     ctx.beginPath();
     if (s.id === myId) {
-      // Player: bigger indigo dot + pulsing ring.
       ctx.arc(sx, sy, 5, 0, Math.PI * 2);
       ctx.fillStyle = '#818cf8';
       ctx.fill();
@@ -815,11 +1101,11 @@ export function drawFullMap(args: FullMapArgs): void {
       ctx.stroke();
     } else if (s.isBot) {
       ctx.arc(sx, sy, 2.5, 0, Math.PI * 2);
-      ctx.fillStyle = '#f43f5e'; // rose
+      ctx.fillStyle = '#f43f5e';
       ctx.fill();
     } else {
       ctx.arc(sx, sy, 3, 0, Math.PI * 2);
-      ctx.fillStyle = '#34d399'; // emerald — other humans
+      ctx.fillStyle = '#34d399';
       ctx.fill();
     }
   }
