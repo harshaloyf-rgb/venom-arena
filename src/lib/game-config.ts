@@ -229,28 +229,20 @@ export function getCosmeticById(id: string): Skin | undefined {
 }
 
 // ----------------------------------------------------------------------------
-// World / physics constants — matches original server.ts
+// World / physics constants
 // ----------------------------------------------------------------------------
 export const WORLD_SIZE = 8000;
-export const WORLD_RADIUS = 4000; // center of 8000x8000 world
-export const MAP_BASE_RADIUS = 3800; // circular arena radius (breathes +/- 40)
-export const MAP_BREATH_AMPLITUDE = 40;
-export const MAP_BREATH_CYCLE_MS = 10000;
-export const INITIAL_BODY_LENGTH = 12;
+export const WORLD_RADIUS = 4000; // center of 8000x8000 world (used for offline infinite offset)
+export const INITIAL_BODY_LENGTH = 20; // Base body value at spawn (score starts at 20)
+export const INITIAL_SPAWN_SCORE = 20; // Starting score — all food collected adds to this
 export const SEGMENT_SPACING = 6;
-export const BASE_SPEED = 6.4; // normal snake speed (original: 6.4)
-export const BOOST_SPEED = 11.6; // boost speed (original: 11.6)
+export const BASE_SPEED = 6.4; // normal snake speed
+export const BOOST_SPEED = 11.6; // boost speed
 export const EXTRACT_GLIDE_SPEED = 3.2; // speed while extracting
 export const EXTRACT_DURATION_MS = 3000; // 3-second extraction
-export const EXTRACT_COMMISSION = 0.35; // 35% commission, bank 65%
+export const EXTRACT_COMMISSION = 0.35; // 35% commission when >=4 real players
 export const RESPAWN_INVULN_MS = 4000; // spawn protection
-export const FOOD_COUNT_TARGET = 1200; // food per arena (original: 1200)
-export const STAR_CHIP_VALUE = 5; // min value per star chip drop
-export const REGULAR_FOOD_VALUE_MIN = 2; // regular food value 2-6 (grow only, no chips)
-export const REGULAR_FOOD_VALUE_MAX = 6;
-export const REGULAR_FOOD_GROW = 1; // +1 segment per regular food
-export const STAR_CHIP_GROW = 3; // +3 segments per star chip
-export const MAX_BODY_LENGTH = 120; // cap (original: 120)
+export const MAX_BODY_LENGTH = 200; // cap raised for longer games
 export const BOOST_MIN_LENGTH = 8; // need >8 segments to boost
 export const BOOST_DROP_INTERVAL = 40; // drop 1 tail segment every 40 frames
 export const TICK_RATE_HZ = 30;
@@ -259,22 +251,103 @@ export const BROADCAST_RATE_HZ = 20;
 export const BROADCAST_MS = 1000 / BROADCAST_RATE_HZ;
 export const MAX_SNAPSHOTS_PER_SECOND = 20;
 
-// Turn rate (original: max(0.045, 0.15 - score*0.0006))
+// Turn rate
 export const TURN_BASE = 0.15;
 export const TURN_MIN = 0.045;
 export const TURN_SCORE_FACTOR = 0.0006;
 
-// Size formula (original: 8 + sqrt(score) * 0.4)
+// Size formula
 export const SIZE_BASE = 8;
 export const SIZE_SCORE_FACTOR = 0.4;
 
-// Snake collision hit factor (original: 0.75 of radius sum)
+// Snake collision hit factor
 export const COLLISION_HIT_FACTOR = 0.75;
 
-// Death drops (original)
-export const DEATH_STAR_DROP_MIN = 3;
-export const DEATH_STAR_DROP_MAX = 25;
-export const DEATH_FOOD_DROP_EVERY = 2; // every 2nd segment drops food
+// Head-on collision hit factor (slightly tighter for head-head)
+export const HEAD_ON_HIT_FACTOR = 0.8;
+
+// ----------------------------------------------------------------------------
+// Food Orb System — Three size variants
+// ----------------------------------------------------------------------------
+export type FoodOrbSize = 'small' | 'medium' | 'large';
+
+export interface FoodOrbConfig {
+  size: FoodOrbSize;
+  value: number;  // points added to score
+   radius: number; // visual radius in px
+  color: string;
+  glowColor: string;
+}
+
+export const FOOD_ORB_SMALL: FoodOrbConfig = {
+  size: 'small',
+  value: 1,
+  radius: 3,
+  color: '#34d399',
+  glowColor: '#10b981',
+};
+
+export const FOOD_ORB_MEDIUM: FoodOrbConfig = {
+  size: 'medium',
+  value: 3,
+  radius: 5,
+  color: '#38bdf8',
+  glowColor: '#0ea5e9',
+};
+
+export const FOOD_ORB_LARGE: FoodOrbConfig = {
+  size: 'large',
+  value: 5,
+  radius: 8,
+  color: '#f472b6',
+  glowColor: '#ec4899',
+};
+
+export const ALL_FOOD_ORBS: FoodOrbConfig[] = [FOOD_ORB_SMALL, FOOD_ORB_MEDIUM, FOOD_ORB_LARGE];
+
+// Food spawn distribution weights: 60% small, 30% medium, 10% large
+export const FOOD_ORB_WEIGHTS: number[] = [0.6, 0.3, 0.1];
+
+export const FOOD_COUNT_TARGET = 1200; // total food orbs per arena
+export const REGULAR_FOOD_GROW = 1; // legacy alias (food value IS the grow amount)
+
+// Star collectibles — always exactly 10 dropped on player death
+export const STAR_DROP_COUNT = 10; // ALWAYS exactly 10 stars
+export const STAR_CHIP_GROW = 3; // score bonus when collecting a star (in addition to chip value)
+
+// ----------------------------------------------------------------------------
+// Dynamic Map Scaling (Online Mode)
+// ----------------------------------------------------------------------------
+export const MAP_MIN_RADIUS = 1500;  // radius when 1 player
+export const MAP_MAX_RADIUS = 5000;  // radius when 1000 players
+export const MAP_BREATH_AMPLITUDE = 40;  // breathing oscillation
+export const MAP_BREATH_CYCLE_MS = 10000;
+export const MAX_ARENA_PLAYERS = 1000;
+
+/** Compute dynamic map radius based on real player count. */
+export function getDynamicMapRadius(realPlayerCount: number, elapsedMs?: number): number {
+  const minP = 1;
+  const maxP = MAX_ARENA_PLAYERS;
+  const count = Math.max(minP, Math.min(maxP, realPlayerCount));
+  // sqrt scaling: 1 player -> 1500, ~31 players -> ~3000, 1000 players -> 5000
+  const baseRadius = MAP_MIN_RADIUS + (MAP_MAX_RADIUS - MAP_MIN_RADIUS) * Math.sqrt((count - 1) / (maxP - 1));
+  // Add breathing
+  if (elapsedMs !== undefined) {
+    const cycle = (elapsedMs % MAP_BREATH_CYCLE_MS) / MAP_BREATH_CYCLE_MS;
+    return baseRadius + Math.sin(cycle * Math.PI * 2) * MAP_BREATH_AMPLITUDE;
+  }
+  return baseRadius;
+}
+
+// Legacy alias for backward compat
+export const MAP_BASE_RADIUS = 3800;
+
+// ----------------------------------------------------------------------------
+// Bot Constants
+// ----------------------------------------------------------------------------
+export const BOT_SELF_DESTRUCT_THRESHOLD = 100; // score at which bots self-destruct (online only)
+export const BOT_EVADE_RADIUS = 180; // distance at which bots start evading human players
+export const BOT_FOOD_SCAN_RADIUS = 300; // how far bots scan for food
 
 // ----------------------------------------------------------------------------
 // Daily rewards (7-day cycle, repeats) — original: [10,20,50,100,250,500,1000]

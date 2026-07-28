@@ -53,17 +53,18 @@ export interface MatchResult {
   arenaId: string;
   arenaName: string;
   chipsExtracted: number; // chips taken out (extract) or lost (death)
-  commission: number; // 35% commission on extract
+  commission: number; // 35% commission on extract (0 if <=3 players)
   bankedAmount: number; // actual chips banked after commission
   kills: number;
-  score: number; // body-length score
+  score: number; // body-length score at end
   deaths: number; // 0 or 1
-  xpGained: number;
+  xpGained: number; // XP: floor((score*5 + kills*50) * rewardMultiplier) — only on extract
   newLevel: number;
   newBankedChips: number;
   durationSeconds: number;
   killerName?: string;
   killerTag?: string;
+  isOffline?: boolean; // true if practice mode (no XP, no chips)
 }
 
 // Snake (used in client rendering of server snapshots)
@@ -79,13 +80,15 @@ export interface SnakeSnapshot {
   isPlayer: boolean;
   isBot: boolean;
   carriedChips: number;
-  score: number; // body length score (regular food + star chips grow this)
+  score: number; // body length score (INITIAL_SPAWN_SCORE + all food collected)
   isExtracting: boolean;
   extractionProgress: number; // 0..1
   isDead: boolean;
   spawnProtected: boolean;
   chatMessage?: string;
   country?: string;
+  isBoosting: boolean; // whether snake is actively boosting (for head-on collision rendering)
+  botState?: 'harvesting' | 'selfDestruct'; // online bots only; undefined for players
 }
 
 export interface FoodSnapshot {
@@ -96,6 +99,8 @@ export interface FoodSnapshot {
   value: number;
   isStarChip: boolean;
   color: string;
+  glowColor?: string;
+  orbSize?: 'small' | 'medium' | 'large'; // only for regular food orbs
 }
 
 export interface ArenaLeaderboardEntry {
@@ -115,6 +120,9 @@ export interface GameSnapshot {
   snakes: SnakeSnapshot[];
   foods: FoodSnapshot[];
   worldSize: number;
+  mapRadius: number; // current dynamic map radius (online) or 0 (offline infinite)
+  mapCenterX: number; // center of the map
+  mapCenterY: number;
   leaderId: string | null;
   leaderChips: number;
   /** Number of real (human) players in the arena — bots excluded. */

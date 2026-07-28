@@ -1,0 +1,1039 @@
+     1→// ============================================================================
+     2→// SHARED GAME CONFIG — single source of truth for both Next.js API routes,
+     3→// the Socket.IO game server mini-service, and the React client.
+     4→// ============================================================================
+     5→
+     6→export interface ArenaTier {
+     7→  id: string;
+     8→  name: string;
+     9→  buyIn: number;
+    10→  description: string;
+    11→  difficulty: 'Beginner' | 'Medium' | 'High Stakes' | 'Extreme' | 'Legendary';
+    12→  color: string; // tailwind classes for badges/cards
+    13→  accentColor: string; // hex
+    14→  borderAccent: string; // hex
+    15→  minExtract: number;
+    16→  botsCount: number;
+    17→  rewardMultiplier: number;
+    18→  isPractice?: boolean;
+    19→}
+    20→
+    21→export const ARENA_TIERS: ArenaTier[] = [
+    22→  {
+    23→    id: 'tier-1',
+    24→    name: 'Slum Alley',
+    25→    buyIn: 10,
+    26→    description: 'The starting proving grounds. Low stakes, soft competition.',
+    27→    difficulty: 'Beginner',
+    28→    color: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
+    29→    accentColor: '#10b981',
+    30→    borderAccent: '#059669',
+    31→    minExtract: 15,
+    32→    botsCount: 25,
+    33→    rewardMultiplier: 1.0,
+    34→  },
+    35→  {
+    36→    id: 'tier-2',
+    37→    name: 'Neon Grid',
+    38→    buyIn: 100,
+    39→    description: 'A glowing synthwave arena where speed is key.',
+    40→    difficulty: 'Medium',
+    41→    color: 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400',
+    42→    accentColor: '#06b6d4',
+    43→    borderAccent: '#0891b2',
+    44→    minExtract: 150,
+    45→    botsCount: 30,
+    46→    rewardMultiplier: 1.5,
+    47→  },
+    48→  {
+    49→    id: 'tier-3',
+    50→    name: 'Viper Syndicate',
+    51→    buyIn: 500,
+    52→    description: 'Challenging layout. Aggressive hunters operate here.',
+    53→    difficulty: 'High Stakes',
+    54→    color: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
+    55→    accentColor: '#f59e0b',
+    56→    borderAccent: '#d97706',
+    57→    minExtract: 750,
+    58→    botsCount: 35,
+    59→    rewardMultiplier: 2.2,
+    60→  },
+    61→  {
+    62→    id: 'tier-4',
+    63→    name: 'Championship Hub',
+    64→    buyIn: 2500,
+    65→    description: 'Championship qualifiers. Extraction commission is heavily contested.',
+    66→    difficulty: 'High Stakes',
+    67→    color: 'bg-rose-500/10 border-rose-500/30 text-rose-400',
+    68→    accentColor: '#f43f5e',
+    69→    borderAccent: '#e11d48',
+    70→    minExtract: 4000,
+    71→    botsCount: 40,
+    72→    rewardMultiplier: 3.5,
+    73→  },
+    74→  {
+    75→    id: 'tier-5',
+    76→    name: 'The Apex Vault',
+    77→    buyIn: 15000,
+    78→    description: 'Only the top 1% survive. Ultra-aggressive bots and maximum risk.',
+    79→    difficulty: 'Extreme',
+    80→    color: 'bg-purple-500/10 border-purple-500/30 text-purple-400',
+    81→    accentColor: '#a855f7',
+    82→    borderAccent: '#9333ea',
+    83→    minExtract: 25000,
+    84→    botsCount: 45,
+    85→    rewardMultiplier: 5.0,
+    86→  },
+    87→  {
+    88→    id: 'tier-6',
+    89→    name: 'Venom Syndicate Grand',
+    90→    buyIn: 100000,
+    91→    description: 'The highest tier available in regional championships.',
+    92→    difficulty: 'Legendary',
+    93→    color: 'bg-red-500/10 border-red-500/30 text-red-500',
+    94→    accentColor: '#ef4444',
+    95→    borderAccent: '#dc2626',
+    96→    minExtract: 180000,
+    97→    botsCount: 45,
+    98→    rewardMultiplier: 8.0,
+    99→  },
+   100→  {
+   101→    id: 'tier-7',
+   102→    name: 'Omega Singularity',
+   103→    buyIn: 1000000,
+   104→    description: 'Mythical territory. Extreme risk where fortune is built and lost instantly.',
+   105→    difficulty: 'Legendary',
+   106→    color: 'bg-yellow-500/10 border-yellow-500/30 text-yellow-500',
+   107→    accentColor: '#eab308',
+   108→    borderAccent: '#ca8a04',
+   109→    minExtract: 1500000,
+   110→    botsCount: 50,
+   111→    rewardMultiplier: 15.0,
+   112→  },
+   113→];
+   114→
+   115→export const PRACTICE_TIERS: ArenaTier[] = [
+   116→  {
+   117→    id: 'practice-easy',
+   118→    name: 'Easy Practice Arena',
+   119→    buyIn: 0,
+   120→    description: 'A relaxed learning zone. Slow speeds, lower bot density, and simple AI behavior.',
+   121→    difficulty: 'Beginner',
+   122→    color: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
+   123→    accentColor: '#10b981',
+   124→    borderAccent: '#059669',
+   125→    minExtract: 0,
+   126→    botsCount: 30,
+   127→    rewardMultiplier: 0.0,
+   128→    isPractice: true,
+   129→  },
+   130→  {
+   131→    id: 'practice-medium',
+   132→    name: 'Medium Practice Arena',
+   133→    buyIn: 0,
+   134→    description: 'Standard speed and balanced competitor behavior. Moderate bot density.',
+   135→    difficulty: 'Medium',
+   136→    color: 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400',
+   137→    accentColor: '#06b6d4',
+   138→    borderAccent: '#0891b2',
+   139→    minExtract: 0,
+   140→    botsCount: 50,
+   141→    rewardMultiplier: 0.0,
+   142→    isPractice: true,
+   143→  },
+   144→  {
+   145→    id: 'practice-hard',
+   146→    name: 'Hard Practice Arena',
+   147→    buyIn: 0,
+   148→    description: 'Aggressive bot hunters operate here. Dynamic speed, tight maneuvers, and heavy competition.',
+   149→    difficulty: 'High Stakes',
+   150→    color: 'bg-rose-500/10 border-rose-500/30 text-rose-400',
+   151→    accentColor: '#f43f5e',
+   152→    borderAccent: '#e11d48',
+   153→    minExtract: 0,
+   154→    botsCount: 75,
+   155→    rewardMultiplier: 0.0,
+   156→    isPractice: true,
+   157→  },
+   158→];
+   159→
+   160→export const ALL_ARENAS: ArenaTier[] = [...ARENA_TIERS, ...PRACTICE_TIERS];
+   161→
+   162→export function getArenaById(id: string): ArenaTier | undefined {
+   163→  return ALL_ARENAS.find((a) => a.id === id);
+   164→}
+   165→
+   166→// ----------------------------------------------------------------------------
+   167→// Cosmetics
+   168→// ----------------------------------------------------------------------------
+   169→export type CosmeticType = 'skin' | 'trail' | 'death' | 'flag' | 'banner';
+   170→export type SkinPattern =
+   171→  | 'rainbow'
+   172→  | 'neon'
+   173→  | 'glow'
+   174→  | 'metallic'
+   175→  | 'pulse'
+   176→  | 'zebra'
+   177→  | 'camo'
+   178→  | 'cyber';
+   179→
+   180→export interface Skin {
+   181→  id: string;
+   182→  name: string;
+   183→  cost: number;
+   184→  type: CosmeticType;
+   185→  color: string;
+   186→  secondaryColor?: string;
+   187→  description: string;
+   188→  emoji?: string;
+   189→  pattern?: SkinPattern;
+   190→}
+   191→
+   192→export const ALL_COSMETICS: Skin[] = [
+   193→  // ----- Skins (13) -----
+   194→  { id: 'skin-default', name: 'Toxic Slime', cost: 0, type: 'skin', color: '#22c55e', secondaryColor: '#15803d', description: 'The standard issue bio-luminescent skin.', emoji: '🐍' },
+   195→  { id: 'skin-venom', name: 'Venom Stryker', cost: 40, type: 'skin', color: '#a855f7', secondaryColor: '#6b21a8', description: 'A striking royal purple skin designed to intimidate.', emoji: '👾' },
+   196→  { id: 'skin-cyber', name: 'Cyber Grid', cost: 100, type: 'skin', color: '#06b6d4', secondaryColor: '#0891b2', description: 'Futuristic grid design that flows like computer data.', emoji: '🤖' },
+   197→  { id: 'skin-fish', name: 'The Fish Snake', cost: 200, type: 'skin', color: '#06b6d4', secondaryColor: '#3b82f6', description: 'Aquatic scales with hydrodynamic dorsal fins and bubble bioluminescence.', emoji: '🐟', pattern: 'neon' },
+   198→  { id: 'skin-rainbow', name: 'Chameleon Aurora', cost: 350, type: 'skin', color: '#ec4899', secondaryColor: '#3b82f6', description: 'A high-fidelity skin that transitions smoothly through a full color spectrum.', emoji: '🌈', pattern: 'rainbow' },
+   199→  { id: 'skin-lion', name: 'The Lion Snake', cost: 350, type: 'skin', color: '#f59e0b', secondaryColor: '#b45309', description: 'Golden apex mane headpiece with furious amber predator scales.', emoji: '🦁', pattern: 'camo' },
+   200→  { id: 'skin-neonglow', name: 'Cyber Glow Pulsar', cost: 500, type: 'skin', color: '#06b6d4', secondaryColor: '#a855f7', description: 'Radiates intense neon cyberpunk particles and a glowing high-contrast energy aura.', emoji: '⚡', pattern: 'neon' },
+   201→  { id: 'skin-motorbike', name: 'The Motorbike Snake', cost: 500, type: 'skin', color: '#3b82f6', secondaryColor: '#090d16', description: 'Chrome exhaust head, asphalt dark body segments, and burnout smoke trail.', emoji: '🏍️', pattern: 'metallic' },
+   202→  { id: 'skin-metallic', name: 'Ironclad Titanium', cost: 750, type: 'skin', color: '#64748b', secondaryColor: '#475569', description: 'Sleek metallic armor plating that reflects light with heavy specularity.', emoji: '⚙️', pattern: 'metallic' },
+   203→  { id: 'skin-coin', name: 'The Coin Snake', cost: 750, type: 'skin', color: '#fbbf24', secondaryColor: '#d97706', description: 'Gold dollar medallion crown with stacked casino chip coin segments.', emoji: '🪙', pattern: 'rainbow' },
+   204→  { id: 'skin-camo', name: 'Bio-Desert Camo', cost: 900, type: 'skin', color: '#10b981', secondaryColor: '#d97706', description: 'Tactical jungle and sand digital scales to blend into toxic terrains.', emoji: '🛡️', pattern: 'camo' },
+   205→  { id: 'skin-gold', name: 'Midas Touch', cost: 1200, type: 'skin', color: '#fbbf24', secondaryColor: '#b45309', description: 'A skin layered in solid gold to boast extreme wealth.', emoji: '👑' },
+   206→  { id: 'skin-crimson', name: 'Crimson Fury', cost: 1800, type: 'skin', color: '#ef4444', secondaryColor: '#991b1b', description: 'For players who leave a trail of blood in their wake.', emoji: '🔥' },
+   207→  // ----- Trails (3) -----
+   208→  { id: 'trail-none', name: 'Basic Sparks', cost: 0, type: 'trail', color: '#ffffff', description: 'A simple trail of glowing friction particles.', emoji: '✨' },
+   209→  { id: 'trail-plasma', name: 'Plasma Arc', cost: 80, type: 'trail', color: '#ec4899', description: 'Charged electromagnetic pink plasma particles.', emoji: '⚡' },
+   210→  { id: 'trail-comet', name: 'Stardust Drift', cost: 300, type: 'trail', color: '#3b82f6', description: 'Cosmic tail particles that simulate a falling comet.', emoji: '☄️' },
+   211→  // ----- Death Bursts (2) -----
+   212→  { id: 'death-default', name: 'Toxic Splash', cost: 0, type: 'death', color: '#22c55e', description: 'The standard chemical burst upon disintegration.', emoji: '💥' },
+   213→  { id: 'death-nova', name: 'Hypernova Burst', cost: 180, type: 'death', color: '#f97316', description: 'A dazzling flash resembling a collapsing star.', emoji: '🌌' },
+   214→  // ----- Flags (6) -----
+   215→  { id: 'flag-syndicate', name: 'Syndicate Skull', cost: 50, type: 'flag', color: '#ef4444', description: 'The pirate skull insignia of the Viper Syndicate.', emoji: '🏴‍☠️' },
+   216→  { id: 'flag-pride', name: 'Rainbow Pride', cost: 80, type: 'flag', color: '#ec4899', description: 'Express pride with a rainbow flag on your tail.', emoji: '🏳️‍🌈' },
+   217→  { id: 'flag-stars', name: 'Star Spangled', cost: 100, type: 'flag', color: '#3b82f6', description: 'The patriotic stripes and stars flag.', emoji: '🇺🇸' },
+   218→  { id: 'flag-union', name: 'Union Jack', cost: 100, type: 'flag', color: '#ef4444', description: 'The royal cross of the Union Jack.', emoji: '🇬🇧' },
+   219→  { id: 'flag-tricolor', name: 'Tricolor Saffron', cost: 100, type: 'flag', color: '#f97316', description: 'The elegant tricolor flag with the Ashoka Chakra.', emoji: '🇮🇳' },
+   220→  { id: 'flag-vip', name: 'VIP Gold', cost: 300, type: 'flag', color: '#fbbf24', description: 'The golden flag of elite high stakes participants.', emoji: '🚩' },
+   221→  // ----- Banners (3) -----
+   222→  { id: 'banner-neon', name: 'Synthwave Sunset', cost: 150, type: 'banner', color: 'from-pink-500 via-purple-600 to-indigo-700', description: 'A gorgeous retro-synthwave neon skyline backdrop.', emoji: '🌅' },
+   223→  { id: 'banner-obsidian', name: 'Obsidian Matrix', cost: 200, type: 'banner', color: 'from-slate-900 via-emerald-950 to-slate-950 border-emerald-500/40', description: 'Dark, sleek green terminal hex lines for elite coders.', emoji: '🌌' },
+   224→  { id: 'banner-championship', name: 'Grand Champion', cost: 500, type: 'banner', color: 'from-amber-400 via-yellow-600 to-amber-900 border-amber-400', description: 'Prestige golden frame reserved for championship qualified.', emoji: '🏆' },
+   225→];
+   226→
+   227→export function getCosmeticById(id: string): Skin | undefined {
+   228→  return ALL_COSMETICS.find((c) => c.id === id);
+   229→}
+   230→
+   231→// ----------------------------------------------------------------------------
+   232→// World / physics constants
+   233→// ----------------------------------------------------------------------------
+   234→export const WORLD_SIZE = 8000;
+   235→export const WORLD_RADIUS = 4000; // center of 8000x8000 world (used for offline infinite offset)
+   236→export const INITIAL_BODY_LENGTH = 20; // Base body value at spawn (score starts at 20)
+   237→export const INITIAL_SPAWN_SCORE = 20; // Starting score — all food collected adds to this
+   238→export const SEGMENT_SPACING = 6;
+   239→export const BASE_SPEED = 6.4; // normal snake speed
+   240→export const BOOST_SPEED = 11.6; // boost speed
+   241→export const EXTRACT_GLIDE_SPEED = 3.2; // speed while extracting
+   242→export const EXTRACT_DURATION_MS = 3000; // 3-second extraction
+   243→export const EXTRACT_COMMISSION = 0.35; // 35% commission when >=4 real players
+   244→export const RESPAWN_INVULN_MS = 4000; // spawn protection
+   245→export const MAX_BODY_LENGTH = 200; // cap raised for longer games
+   246→export const BOOST_MIN_LENGTH = 8; // need >8 segments to boost
+   247→export const BOOST_DROP_INTERVAL = 40; // drop 1 tail segment every 40 frames
+   248→export const TICK_RATE_HZ = 30;
+   249→export const TICK_MS = 1000 / TICK_RATE_HZ;
+   250→export const BROADCAST_RATE_HZ = 20;
+   251→export const BROADCAST_MS = 1000 / BROADCAST_RATE_HZ;
+   252→export const MAX_SNAPSHOTS_PER_SECOND = 20;
+   253→
+   254→// Turn rate
+   255→export const TURN_BASE = 0.15;
+   256→export const TURN_MIN = 0.045;
+   257→export const TURN_SCORE_FACTOR = 0.0006;
+   258→
+   259→// Size formula
+   260→export const SIZE_BASE = 8;
+   261→export const SIZE_SCORE_FACTOR = 0.4;
+   262→
+   263→// Snake collision hit factor
+   264→export const COLLISION_HIT_FACTOR = 0.75;
+   265→
+   266→// Head-on collision hit factor (slightly tighter for head-head)
+   267→export const HEAD_ON_HIT_FACTOR = 0.8;
+   268→
+   269→// ----------------------------------------------------------------------------
+   270→// Food Orb System — Three size variants
+   271→// ----------------------------------------------------------------------------
+   272→export type FoodOrbSize = 'small' | 'medium' | 'large';
+   273→
+   274→export interface FoodOrbConfig {
+   275→  size: FoodOrbSize;
+   276→  value: number;  // points added to score
+   277→   radius: number; // visual radius in px
+   278→  color: string;
+   279→  glowColor: string;
+   280→}
+   281→
+   282→export const FOOD_ORB_SMALL: FoodOrbConfig = {
+   283→  size: 'small',
+   284→  value: 1,
+   285→  radius: 3,
+   286→  color: '#34d399',
+   287→  glowColor: '#10b981',
+   288→};
+   289→
+   290→export const FOOD_ORB_MEDIUM: FoodOrbConfig = {
+   291→  size: 'medium',
+   292→  value: 3,
+   293→  radius: 5,
+   294→  color: '#38bdf8',
+   295→  glowColor: '#0ea5e9',
+   296→};
+   297→
+   298→export const FOOD_ORB_LARGE: FoodOrbConfig = {
+   299→  size: 'large',
+   300→  value: 5,
+   301→  radius: 8,
+   302→  color: '#f472b6',
+   303→  glowColor: '#ec4899',
+   304→};
+   305→
+   306→export const ALL_FOOD_ORBS: FoodOrbConfig[] = [FOOD_ORB_SMALL, FOOD_ORB_MEDIUM, FOOD_ORB_LARGE];
+   307→
+   308→// Food spawn distribution weights: 60% small, 30% medium, 10% large
+   309→export const FOOD_ORB_WEIGHTS: number[] = [0.6, 0.3, 0.1];
+   310→
+   311→export const FOOD_COUNT_TARGET = 1200; // total food orbs per arena
+   312→export const REGULAR_FOOD_GROW = 1; // legacy alias (food value IS the grow amount)
+   313→
+   314→// Star collectibles — always exactly 10 dropped on player death
+   315→export const STAR_DROP_COUNT = 10; // ALWAYS exactly 10 stars
+   316→export const STAR_CHIP_GROW = 3; // score bonus when collecting a star (in addition to chip value)
+   317→
+   318→// ----------------------------------------------------------------------------
+   319→// Dynamic Map Scaling (Online Mode)
+   320→// ----------------------------------------------------------------------------
+   321→export const MAP_MIN_RADIUS = 1500;  // radius when 1 player
+   322→export const MAP_MAX_RADIUS = 5000;  // radius when 1000 players
+   323→export const MAP_BREATH_AMPLITUDE = 40;  // breathing oscillation
+   324→export const MAP_BREATH_CYCLE_MS = 10000;
+   325→export const MAX_ARENA_PLAYERS = 1000;
+   326→
+   327→/** Compute dynamic map radius based on real player count. */
+   328→export function getDynamicMapRadius(realPlayerCount: number, elapsedMs?: number): number {
+   329→  const minP = 1;
+   330→  const maxP = MAX_ARENA_PLAYERS;
+   331→  const count = Math.max(minP, Math.min(maxP, realPlayerCount));
+   332→  // sqrt scaling: 1 player -> 1500, ~31 players -> ~3000, 1000 players -> 5000
+   333→  const baseRadius = MAP_MIN_RADIUS + (MAP_MAX_RADIUS - MAP_MIN_RADIUS) * Math.sqrt((count - 1) / (maxP - 1));
+   334→  // Add breathing
+   335→  if (elapsedMs !== undefined) {
+   336→    const cycle = (elapsedMs % MAP_BREATH_CYCLE_MS) / MAP_BREATH_CYCLE_MS;
+   337→    return baseRadius + Math.sin(cycle * Math.PI * 2) * MAP_BREATH_AMPLITUDE;
+   338→  }
+   339→  return baseRadius;
+   340→}
+   341→
+   342→// Legacy alias for backward compat
+   343→export const MAP_BASE_RADIUS = 3800;
+   344→
+   345→// ----------------------------------------------------------------------------
+   346→// Bot Constants
+   347→// ----------------------------------------------------------------------------
+   348→export const BOT_SELF_DESTRUCT_THRESHOLD = 100; // score at which bots self-destruct (online only)
+   349→export const BOT_EVADE_RADIUS = 180; // distance at which bots start evading human players
+   350→export const BOT_FOOD_SCAN_RADIUS = 300; // how far bots scan for food
+   351→
+   352→// ----------------------------------------------------------------------------
+   353→// Daily rewards (7-day cycle, repeats) — original: [10,20,50,100,250,500,1000]
+   354→// ----------------------------------------------------------------------------
+   355→export const DAILY_REWARDS = [10, 20, 50, 100, 250, 500, 1000];
+   356→
+   357→// ----------------------------------------------------------------------------
+   358→// Chip store packs — original: 10 packs, 100 chips = ₹1, yearly cap 25 Lakh
+   359→// ----------------------------------------------------------------------------
+   360→export interface ChipPack {
+   361→  id: string;
+   362→  name: string;
+   363→  chips: number;
+   364→  priceINR: number;
+   365→  priceUSD: string;
+   366→  bonus: string;
+   367→  desc: string;
+   368→  emoji: string;
+   369→}
+   370→
+   371→export const MAX_YEARLY_BUY_CHIPS = 2500000; // 25 Lakh
+   372→export const MAX_DAILY_ADS = 12;
+   373→export const AD_REWARD_CHIPS = 100;
+   374→
+   375→export const CHIP_PACKS: ChipPack[] = [
+   376→  { id: 'pack-10', name: 'Starter Pack', chips: 1000, priceINR: 10, priceUSD: '$0.12', bonus: 'Base Rate', desc: '1,000 Chips at 100 Chips/₹1.', emoji: '🪙' },
+   377→  { id: 'pack-50', name: 'Scout Bundle', chips: 5100, priceINR: 50, priceUSD: '$0.60', bonus: '+2% Bonus', desc: '5,100 Chips with early stakes bonus.', emoji: '💰' },
+   378→  { id: 'pack-100', name: 'Contender Sack', chips: 10500, priceINR: 100, priceUSD: '$1.20', bonus: '+5% Bonus', desc: '10,500 Chips for medium arena buy-ins.', emoji: '🎒' },
+   379→  { id: 'pack-250', name: 'Gladiator Chest', chips: 27500, priceINR: 250, priceUSD: '$3.00', bonus: '+10% Bonus', desc: '27,500 Chips for serious competitors.', emoji: '🧰', },
+   380→  { id: 'pack-500', name: 'High Roller Vault', chips: 57500, priceINR: 500, priceUSD: '$6.00', bonus: '+15% Bonus', desc: '57,500 Chips for VIP Syndicate arenas.', emoji: '💎' },
+   381→  { id: 'pack-1000', name: 'Championship Crate', chips: 120000, priceINR: 1000, priceUSD: '$12.00', bonus: '+20% Bonus', desc: '1,20,000 Chips for Apex Vault entry.', emoji: '🏆' },
+   382→  { id: 'pack-2500', name: 'Syndicate Treasury', chips: 325000, priceINR: 2500, priceUSD: '$30.00', bonus: '+30% Bonus', desc: '3,25,000 Chips for grand tournament runs.', emoji: '🏦' },
+   383→  { id: 'pack-5000', name: 'National Titan Coffer', chips: 700000, priceINR: 5000, priceUSD: '$60.00', bonus: '+40% Bonus', desc: '7,00,000 Chips for country leaderboard pushes.', emoji: ' titan' },
+   384→  { id: 'pack-10000', name: 'World Champion Trove', chips: 1500000, priceINR: 10000, priceUSD: '$120.00', bonus: '+50% Bonus', desc: '15,00,000 Chips for global elite domination.', emoji: '🌍' },
+   385→  { id: 'pack-15000', name: 'MAX ANNUAL CAP PACK', chips: 2500000, priceINR: 15000, priceUSD: '$175.00', bonus: '+66.67% BONUS (INSTANT LOCK)', desc: '25,00,000 Chips! Reaches ₹15,000 annual spending cap and locks store for 365 days.', emoji: '👑' },
+   386→];
+   387→
+   388→// Promo codes
+   389→export const PROMO_CODES: Record<string, number> = {
+   390→  VENOM: 500,
+   391→  CHAMPION: 1000,
+   392→};
+   393→
+   394→// ----------------------------------------------------------------------------
+   395→// Levels / XP — original: xpNeeded = level * 200
+   396→// ----------------------------------------------------------------------------
+   397→export function xpForLevel(level: number): number {
+   398→  return level * 200;
+   399→}
+   400→export function levelFromXp(xp: number): number {
+   401→  return Math.max(1, Math.floor(xp / 200) + 1);
+   402→}
+   403→
+   404→// ----------------------------------------------------------------------------
+   405→// Bot names & skins (server-only use, but defined here to avoid duplication)
+   406→// ----------------------------------------------------------------------------
+   407→export const BOT_NAMES = [
+   408→  'ViperStrike', 'NeonFang', 'CyberCobra', 'ToxicPython', 'ShadowAdder',
+   409→  'ChronoKrait', 'QuantumMamba', 'AeroBoa', 'SavageSerpent', 'GlitchViper',
+   410→  'ApexPredator', 'GhostScale', 'MatrixAsp', 'Synthetix', 'StaticFang',
+   411→  'VectorVenom', 'OmegaSlink', 'BetaByte', 'RattleTech', 'HoloHydra',
+   412→];
+   413→export const BOT_SKINS = [
+   414→  { color: '#22c55e', secondaryColor: '#15803d' },
+   415→  { color: '#a855f7', secondaryColor: '#6b21a8' },
+   416→  { color: '#06b6d4', secondaryColor: '#0891b2' },
+   417→  { color: '#ec4899', secondaryColor: '#8b5cf6' },
+   418→  { color: '#f59e0b', secondaryColor: '#b45309' },
+   419→  { color: '#ef4444', secondaryColor: '#991b1b' },
+   420→];
+   421→
+   422→// ----------------------------------------------------------------------------
+   423→// Countries (12) — matches original PlayerProfile FACTION_COUNTRIES
+   424→// ----------------------------------------------------------------------------
+   425→export const COUNTRIES = [
+   426→  { code: 'US', name: 'United States', flag: '🇺🇸' },
+   427→  { code: 'GB', name: 'United Kingdom', flag: '🇬🇧' },
+   428→  { code: 'DE', name: 'Germany', flag: '🇩🇪' },
+   429→  { code: 'CA', name: 'Canada', flag: '🇨🇦' },
+   430→  { code: 'JP', name: 'Japan', flag: '🇯🇵' },
+   431→  { code: 'KR', name: 'South Korea', flag: '🇰🇷' },
+   432→  { code: 'IN', name: 'India', flag: '🇮🇳' },
+   433→  { code: 'AU', name: 'Australia', flag: '🇦🇺' },
+   434→  { code: 'FR', name: 'France', flag: '🇫🇷' },
+   435→  { code: 'BR', name: 'Brazil', flag: '🇧🇷' },
+   436→  { code: 'SG', name: 'Singapore', flag: '🇸🇬' },
+   437→  { code: 'NL', name: 'Netherlands', flag: '🇳🇱' },
+   438→];
+   439→
+   440→export function countryFlag(code: string): string {
+   441→  const c = COUNTRIES.find((x) => x.code === code);
+   442→  return c?.flag || '🏳️';
+   443→}
+   444→export function countryName(code: string): string {
+   445→  const c = COUNTRIES.find((x) => x.code === code);
+   446→  return c?.name || code;
+   447→}
+   448→
+   449→// ----------------------------------------------------------------------------
+   450→// Milestone tiers (6) — used by Leaderboards + Hall of Fame
+   451→// ----------------------------------------------------------------------------
+   452→export interface MilestoneTier {
+   453→  id: string;
+   454→  name: string;
+   455→  minChips: number;
+   456→  badge: string;
+   457→  color: string; // hex accent
+   458→}
+   459→
+   460→export const MILESTONE_TIERS: MilestoneTier[] = [
+   461→  { id: 'all', name: 'All Milestone Tiers', minChips: 0, badge: '⭐ All Tiers', color: '#94a3b8' },
+   462→  { id: 'omega', name: 'Omega Legend (1 Crore / 10M+)', minChips: 10_000_000, badge: '👑 Omega', color: '#fbbf24' },
+   463→  { id: 'diamond', name: 'Diamond Warlord (50 Lakhs / 5M+)', minChips: 5_000_000, badge: '🔮 Diamond', color: '#06b6d4' },
+   464→  { id: 'platinum', name: 'Platinum Sovereign (25 Lakhs / 2.5M+)', minChips: 2_500_000, badge: '💎 Platinum', color: '#22d3ee' },
+   465→  { id: 'gold', name: 'Gold Apex Vanguard (10 Lakhs / 1M+)', minChips: 1_000_000, badge: '🥇 Gold', color: '#f59e0b' },
+   466→  { id: 'silver', name: 'Silver Commander (5 Lakhs / 500K+)', minChips: 500_000, badge: '🥈 Silver', color: '#cbd5e1' },
+   467→  { id: 'bronze', name: 'Bronze Elite (1 Lakh / 100K+)', minChips: 100_000, badge: '🥉 Bronze', color: '#b45309' },
+   468→];
+   469→
+   470→export function milestoneTierForChips(chips: number): { name: string; badge: string; color: string } {
+   471→  for (const t of MILESTONE_TIERS) {
+   472→    if (t.id !== 'all' && chips >= t.minChips) {
+   473→      return { name: t.name, badge: t.badge, color: t.color };
+   474→    }
+   475→  }
+   476→  return { name: 'Challenger', badge: '🛡️ Rookie', color: '#64748b' };
+   477→}
+   478→
+   479→// ----------------------------------------------------------------------------
+   480→// Mock leaderboard seed (used by Leaderboards when API is sparse)
+   481→// ----------------------------------------------------------------------------
+   482→export const MOCK_LEADERBOARD = [
+   483→  { name: 'ViperX', bankedChips: 285_400, level: 42, country: 'US', rank: 1, userTag: 'US-2854' },
+   484→  { name: 'KobraCommander', bankedChips: 198_250, level: 38, country: 'KR', rank: 2, userTag: 'KR-1982' },
+   485→  { name: 'SlinkySlayer', bankedChips: 142_010, level: 31, country: 'BR', rank: 3, userTag: 'BR-1420' },
+   486→  { name: 'VenomousRex', bankedChips: 95_450, level: 27, country: 'DE', rank: 4, userTag: 'DE-9545' },
+   487→  { name: 'Basilisk_99', bankedChips: 74_200, level: 24, country: 'CA', rank: 5, userTag: 'CA-7420' },
+   488→  { name: 'PythonicPro', bankedChips: 51_900, level: 21, country: 'JP', rank: 6, userTag: 'JP-5190' },
+   489→  { name: 'SidewinderAlpha', bankedChips: 38_700, level: 18, country: 'GB', rank: 7, userTag: 'GB-3870' },
+   490→  { name: 'Naga_Queen', bankedChips: 24_650, level: 15, country: 'IN', rank: 8, userTag: 'IN-2465' },
+   491→  { name: 'Anacondaaa', bankedChips: 19_500, level: 12, country: 'AU', rank: 9, userTag: 'AU-1950' },
+   492→  { name: 'Copperhead', bankedChips: 12_400, level: 10, country: 'FR', rank: 10, userTag: 'FR-1240' },
+   493→];
+   494→
+   495→// ----------------------------------------------------------------------------
+   496→// Hall of Fame — 6 milestone tiers with first achievers
+   497→// ----------------------------------------------------------------------------
+   498→export interface HallOfFameTier {
+   499→  id: string;
+   500→  name: string;
+   501→  chips: number;
+   502→  badge: string;
+   503→  firstAchiever: { name: string; userTag: string; country: string; dateStr: string };
+   504→  totalAchieversCount: number;
+   505→}
+   506→
+   507→export const HALL_OF_FAME_TIERS: HallOfFameTier[] = [
+   508→  {
+   509→    id: 't-1lakh',
+   510→    name: '1 LAKH CHIPS MILESTONE',
+   511→    chips: 100_000,
+   512→    badge: '🥉 Bronze Elite',
+   513→    firstAchiever: { name: 'Rookie_Striker', userTag: '#IND-104', country: 'IN', dateStr: '02 Jan 2026, 09:15 AM UTC' },
+   514→    totalAchieversCount: 14_209,
+   515→  },
+   516→  {
+   517→    id: 't-5lakh',
+   518→    name: '5 LAKH CHIPS MILESTONE',
+   519→    chips: 500_000,
+   520→    badge: '🥈 Silver Commander',
+   521→    firstAchiever: { name: 'Viper_Zero', userTag: '#USA-402', country: 'US', dateStr: '07 Jan 2026, 02:40 PM UTC' },
+   522→    totalAchieversCount: 4_810,
+   523→  },
+   524→  {
+   525→    id: 't-10lakh',
+   526→    name: '10 LAKH CHIPS (1 MILLION) MILESTONE',
+   527→    chips: 1_000_000,
+   528→    badge: '🥇 Gold Apex Vanguard',
+   529→    firstAchiever: { name: 'K-Snake_Master', userTag: '#KOR-114', country: 'KR', dateStr: '11 Jan 2026, 06:30 AM SGT' },
+   530→    totalAchieversCount: 1_290,
+   531→  },
+   532→  {
+   533→    id: 't-25lakh',
+   534→    name: '25 LAKH CHIPS MILESTONE',
+   535→    chips: 2_500_000,
+   536→    badge: '💎 Platinum Sovereign',
+   537→    firstAchiever: { name: 'Apex_Viper', userTag: '#USA-882', country: 'US', dateStr: '16 Jan 2026, 11:10 PM UTC' },
+   538→    totalAchieversCount: 312,
+   539→  },
+   540→  {
+   541→    id: 't-50lakh',
+   542→    name: '50 LAKH CHIPS MILESTONE',
+   543→    chips: 5_000_000,
+   544→    badge: '🔮 Diamond Warlord',
+   545→    firstAchiever: { name: 'Shadow_Ninja', userTag: '#JPN-309', country: 'JP', dateStr: '19 Jan 2026, 08:22 PM JST' },
+   546→    totalAchieversCount: 64,
+   547→  },
+   548→  {
+   549→    id: 't-1crore',
+   550→    name: '1 CRORE CHIPS (10,000,000) LEGENDARY MILESTONE',
+   551→    chips: 10_000_000,
+   552→    badge: '👑 OMEGA IMMORTAL GOD',
+   553→    firstAchiever: { name: 'Hari', userTag: '#IND-001', country: 'IN', dateStr: '23 Jan 2026, 05:00 PM WST' },
+   554→    totalAchieversCount: 3,
+   555→  },
+   556→];
+   557→
+   558→// Hall of Fame live commentary seed entries
+   559→export const INITIAL_COMMENTARY = [
+   560→  { id: 'c1', ts: '13:41:02 UTC', text: '🎙️ ESPORTS DESK: Hari from India (#IND-001) locked in a massive extraction in Tier-05 High Stakes Arena!' },
+   561→  { id: 'c2', ts: '13:40:48 UTC', text: '💥 ARENA BLAST: Apex_Viper eliminated Scavenger_Bot and harvested 12 Star Chips on boundary!' },
+   562→  { id: 'c3', ts: '13:39:15 UTC', text: '👑 MILESTONE NOTICE: User K-Snake_Master reached 2,500,000 banked chips & secured Platinum Sovereign Tier!' },
+   563→];
+   564→
+   565→export const COMMENTARY_NAMES = ['Hari', 'Apex_Viper', 'Shadow_Ninja', 'Elysium_God', 'Ronin_JP', 'Brazil_King'];
+   566→
+   567→// ----------------------------------------------------------------------------
+   568→// Championships — prize tiers + 13 mock contenders
+   569→// ----------------------------------------------------------------------------
+   570→export interface ChampionshipPrize {
+   571→  category: string;
+   572→  title: string;
+   573→  badge: string;
+   574→  chipsReward: number;
+   575→  crownTitle: string;
+   576→  itemReward: string;
+   577→  hallOfFameInduction: boolean;
+   578→}
+   579→
+   580→export const CHAMPIONSHIP_PRIZE_TIERS: ChampionshipPrize[] = [
+   581→  {
+   582→    category: 'RANK_1',
+   583→    title: '👑 RANK 1: GRAND CHAMPION',
+   584→    badge: '🥇 1st Place (World / Region / Country)',
+   585→    chipsReward: 5_000_000,
+   586→    crownTitle: '👑 2026 WORLD VENOM CHAMPION',
+   587→    itemReward: 'Mythic Golden Dragon Skin & World Crown',
+   588→    hallOfFameInduction: true,
+   589→  },
+   590→  {
+   591→    category: 'RANK_2_10',
+   592→    title: '🥈 RANKS 2–10: TOP 10 LEGENDS',
+   593→    badge: '🥈 Top 10 Legends',
+   594→    chipsReward: 2_500_000,
+   595→    crownTitle: '🥈 VENOM ARENA OVERLORD',
+   596→    itemReward: 'Platinum Armor Skin & Crown Effect',
+   597→    hallOfFameInduction: true,
+   598→  },
+   599→  {
+   600→    category: 'RANK_11_50',
+   601→    title: '🥉 RANKS 11–50: ELITE MASTERS',
+   602→    badge: '🥉 Ranks 11–50 Masters',
+   603→    chipsReward: 1_000_000,
+   604→    crownTitle: '🥉 ARENA ELITE MASTER',
+   605→    itemReward: 'Diamond Trail Effect & Master Crest',
+   606→    hallOfFameInduction: true,
+   607→  },
+   608→  {
+   609→    category: 'RANK_51_100',
+   610→    title: '🛡️ RANKS 51–100: CHAMPIONSHIP CONTENDERS',
+   611→    badge: '🛡️ Ranks 51–100 Contenders',
+   612→    chipsReward: 250_000,
+   613→    crownTitle: '🛡️ CHAMPIONSHIP CONTENDER',
+   614→    itemReward: '2,500 Season Pass XP & Contender Badge',
+   615→    hallOfFameInduction: true,
+   616→  },
+   617→];
+   618→
+   619→export interface ChampionshipContender {
+   620→  rank: number;
+   621→  name: string;
+   622→  userTag: string;
+   623→  gamesPlayed: number;
+   624→  walletChips: number;
+   625→  clanTag: string;
+   626→  country: string;
+   627→  region: string;
+   628→  projectedPrize: string;
+   629→}
+   630→
+   631→export const INITIAL_CONTENDERS: ChampionshipContender[] = [
+   632→  { rank: 1, name: 'Hari', userTag: '#IND-001', gamesPlayed: 4820, walletChips: 10_000_000, clanTag: 'APEX', country: 'IN', region: 'APAC', projectedPrize: '5,00,000 Chips + 👑 2026 WORLD CHAMPION' },
+   633→  { rank: 2, name: 'ApexViper_IND', userTag: '#IND-002', gamesPlayed: 6210, walletChips: 9_400_000, clanTag: 'APEX', country: 'IN', region: 'APAC', projectedPrize: '2,500,000 Chips + 🥈 ARENA OVERLORD' },
+   634→  { rank: 3, name: 'VenomKing_US', userTag: '#USA-882', gamesPlayed: 5890, walletChips: 8_800_000, clanTag: 'APEX', country: 'US', region: 'NA', projectedPrize: '2,500,000 Chips + 🥈 ARENA OVERLORD' },
+   635→  { rank: 4, name: 'K-Snake_Master', userTag: '#KOR-114', gamesPlayed: 4120, walletChips: 8_200_000, clanTag: 'NINJA', country: 'KR', region: 'APAC', projectedPrize: '2,500,000 Chips + 🥈 ARENA OVERLORD' },
+   636→  { rank: 5, name: 'ShadowSlinker_JP', userTag: '#JPN-309', gamesPlayed: 3940, walletChips: 7_600_000, clanTag: 'NINJA', country: 'JP', region: 'APAC', projectedPrize: '2,500,000 Chips + 🥈 ARENA OVERLORD' },
+   637→  { rank: 6, name: 'KaiserSlayer_DE', userTag: '#GER-901', gamesPlayed: 5100, walletChips: 6_900_000, clanTag: 'WAR', country: 'DE', region: 'EU', projectedPrize: '2,500,000 Chips + 🥈 ARENA OVERLORD' },
+   638→  { rank: 7, name: 'SambaVenom_BR', userTag: '#BRA-502', gamesPlayed: 4890, walletChips: 6_400_000, clanTag: 'BRZ', country: 'BR', region: 'LATAM', projectedPrize: '2,500,000 Chips + 🥈 ARENA OVERLORD' },
+   639→  { rank: 8, name: 'BritStriker_UK', userTag: '#UK-402', gamesPlayed: 3820, walletChips: 5_800_000, clanTag: 'ROYAL', country: 'GB', region: 'EU', projectedPrize: '2,500,000 Chips + 🥈 ARENA OVERLORD' },
+   640→  { rank: 9, name: 'CobraMaster_IN', userTag: '#IND-8821', gamesPlayed: 2950, walletChips: 5_200_000, clanTag: 'PHNX', country: 'IN', region: 'APAC', projectedPrize: '2,500,000 Chips + 🥈 ARENA OVERLORD' },
+   641→  { rank: 10, name: 'Dragon_Slayer_US', userTag: '#USA-104', gamesPlayed: 4100, walletChips: 4_900_000, clanTag: 'APEX', country: 'US', region: 'NA', projectedPrize: '2,500,000 Chips + 🥈 ARENA OVERLORD' },
+   642→  { rank: 11, name: 'Delhi_King', userTag: '#IND-003', gamesPlayed: 2100, walletChips: 4_500_000, clanTag: 'PHNX', country: 'IN', region: 'APAC', projectedPrize: '1,000,000 Chips + 🥉 ELITE MASTER' },
+   643→  { rank: 12, name: 'Cyber_Wolf_US', userTag: '#USA-102', gamesPlayed: 3200, walletChips: 4_100_000, clanTag: 'CYBER', country: 'US', region: 'NA', projectedPrize: '1,000,000 Chips + 🥉 ELITE MASTER' },
+   644→  { rank: 15, name: 'Ronin_Slayer_JP', userTag: '#JPN-881', gamesPlayed: 1800, walletChips: 3_800_000, clanTag: 'NINJA', country: 'JP', region: 'APAC', projectedPrize: '1,000,000 Chips + 🥉 ELITE MASTER' },
+   645→  { rank: 52, name: 'Challenger_Viper', userTag: '#IND-902', gamesPlayed: 850, walletChips: 1_200_000, clanTag: 'VPR', country: 'IN', region: 'APAC', projectedPrize: '250,000 Chips + 🛡️ CONTENDER' },
+   646→];
+   647→
+   648→// ----------------------------------------------------------------------------
+   649→// Social panel — friends, rivals, global players, public clans
+   650→// ----------------------------------------------------------------------------
+   651→export interface MockFriend {
+   652→  id: string;
+   653→  name: string;
+   654→  userTag: string;
+   655→  status: 'online' | 'idle' | 'in-match' | 'offline';
+   656→  currentArenaId?: string;
+   657→  currentArenaName?: string;
+   658→  level: number;
+   659→  skinColor: string;
+   660→  giftSent: boolean;
+   661→  giftReceived: boolean;
+   662→}
+   663→
+   664→export const INITIAL_FRIENDS: MockFriend[] = [
+   665→  { id: 'f-1', name: 'ApexViper', userTag: 'APEX-1029', status: 'online', currentArenaId: 'tier-1', currentArenaName: 'Training Pit', level: 42, skinColor: '#10b981', giftSent: false, giftReceived: true },
+   666→  { id: 'f-2', name: 'ShadowSlinker', userTag: 'SLNK-9281', status: 'in-match', currentArenaId: 'tier-2', currentArenaName: 'High Stakes Lounge', level: 18, skinColor: '#a855f7', giftSent: false, giftReceived: false },
+   667→  { id: 'f-3', name: 'CoinGobbler', userTag: 'COIN-5432', status: 'offline', level: 29, skinColor: '#eab308', giftSent: true, giftReceived: false },
+   668→  { id: 'f-4', name: 'VenomKing', userTag: 'VNOM-0001', status: 'idle', level: 55, skinColor: '#ef4444', giftSent: false, giftReceived: false },
+   669→];
+   670→
+   671→export interface MockRival {
+   672→  id: string;
+   673→  name: string;
+   674→  userTag: string;
+   675→  status: 'online' | 'idle' | 'in-match' | 'offline';
+   676→  currentArenaName: string;
+   677→  level: number;
+   678→  timesKilledByYou: number;
+   679→  timesKilledYou: number;
+   680→  lastEncounterDate: string;
+   681→}
+   682→
+   683→export const INITIAL_RIVALS: MockRival[] = [
+   684→  { id: 'r-1', name: 'VenomKing', userTag: 'VNOM-0001', status: 'in-match', currentArenaName: 'Venom Pit (5,000 Buy-In)', level: 55, timesKilledByYou: 2, timesKilledYou: 5, lastEncounterDate: 'Today, 2:15 PM' },
+   685→  { id: 'r-2', name: 'ShadowSlinker', userTag: 'SLNK-9281', status: 'online', currentArenaName: 'High Stakes Lounge (1,000 Buy-In)', level: 38, timesKilledByYou: 4, timesKilledYou: 1, lastEncounterDate: 'Yesterday, 8:40 PM' },
+   686→  { id: 'r-3', name: 'ApexViper', userTag: 'APEX-1029', status: 'in-match', currentArenaName: 'Extreme Arena (25,000 Buy-In)', level: 42, timesKilledByYou: 1, timesKilledYou: 3, lastEncounterDate: '2 days ago' },
+   687→];
+   688→
+   689→export interface GlobalPlayer {
+   690→  name: string;
+   691→  userTag: string;
+   692→  country: string;
+   693→  level: number;
+   694→  chips: number;
+   695→  skinColor: string;
+   696→  status: 'online' | 'idle' | 'in-match' | 'offline';
+   697→  connected?: boolean;
+   698→}
+   699→
+   700→export const GLOBAL_COMMUNITY_PLAYERS: GlobalPlayer[] = [
+   701→  { name: 'CobraMaster_IN', userTag: 'IND-8821', country: 'IN', level: 48, chips: 4_500_000, skinColor: '#10b981', status: 'online' },
+   702→  { name: 'Viper_Syndicate', userTag: 'IND-1049', country: 'IN', level: 52, chips: 12_500_000, skinColor: '#eab308', status: 'in-match' },
+   703→  { name: 'Mamba_Strike', userTag: 'USA-4012', country: 'US', level: 39, chips: 2_100_000, skinColor: '#ef4444', status: 'online' },
+   704→  { name: 'Tokyo_Slinker', userTag: 'JPN-9012', country: 'JP', level: 44, chips: 3_800_000, skinColor: '#a855f7', status: 'idle' },
+   705→  { name: 'Seoul_Apex', userTag: 'KOR-2290', country: 'KR', level: 50, chips: 8_900_000, skinColor: '#3b82f6', status: 'online' },
+   706→  { name: 'London_Viper', userTag: 'GBR-5012', country: 'GB', level: 35, chips: 1_800_000, skinColor: '#f43f5e', status: 'in-match' },
+   707→  { name: 'Dragon_Cobra', userTag: 'IND-2201', country: 'IN', level: 41, chips: 2_900_000, skinColor: '#06b6d4', status: 'online' },
+   708→  { name: 'Phoenix_Venom', userTag: 'BRA-7712', country: 'BR', level: 33, chips: 950_000, skinColor: '#84cc16', status: 'offline' },
+   709→  { name: 'Berlin_Predator', userTag: 'DEU-3321', country: 'DE', level: 46, chips: 5_400_000, skinColor: '#ec4899', status: 'online' },
+   710→  { name: 'Sydney_Strike', userTag: 'AUS-6612', country: 'AU', level: 37, chips: 1_400_000, skinColor: '#6366f1', status: 'idle' },
+   711→  { name: 'Zenith_Slither', userTag: 'CAN-8840', country: 'CA', level: 28, chips: 620_000, skinColor: '#14b8a6', status: 'online' },
+   712→  { name: 'Paris_Serpent', userTag: 'FRA-1190', country: 'FR', level: 38, chips: 1_950_000, skinColor: '#8b5cf6', status: 'offline' },
+   713→];
+   714→
+   715→export const SOCIAL_COUNTRY_FILTER = [
+   716→  { code: 'ALL', name: 'All Countries', flag: '🌐' },
+   717→  { code: 'IN', name: 'India', flag: '🇮🇳' },
+   718→  { code: 'US', name: 'United States', flag: '🇺🇸' },
+   719→  { code: 'JP', name: 'Japan', flag: '🇯🇵' },
+   720→  { code: 'KR', name: 'South Korea', flag: '🇰🇷' },
+   721→  { code: 'GB', name: 'United Kingdom', flag: '🇬🇧' },
+   722→  { code: 'DE', name: 'Germany', flag: '🇩🇪' },
+   723→  { code: 'BR', name: 'Brazil', flag: '🇧🇷' },
+   724→  { code: 'AU', name: 'Australia', flag: '🇦🇺' },
+   725→  { code: 'CA', name: 'Canada', flag: '🇨🇦' },
+   726→  { code: 'FR', name: 'France', flag: '🇫🇷' },
+   727→];
+   728→
+   729→// Public clans (SocialPanel.tsx — distinct from ClanSystem.tsx)
+   730→export interface PublicClan {
+   731→  id: string;
+   732→  name: string;
+   733→  tag: string;
+   734→  emblem: string;
+   735→  level: number;
+   736→  bankedChips: number;
+   737→  description: string;
+   738→  members: { name: string; role: string; level: number; chips: number }[];
+   739→}
+   740→
+   741→export const PUBLIC_CLANS: PublicClan[] = [
+   742→  {
+   743→    id: 'c-1',
+   744→    name: 'Apex Predators',
+   745→    tag: 'APEX',
+   746→    emblem: '🦅',
+   747→    level: 8,
+   748→    bankedChips: 15_000,
+   749→    description: 'Elite hunters only. Extract with 100+ chips or get kicked.',
+   750→    members: [
+   751→      { name: 'VenomKing', role: 'Leader', level: 55, chips: 5000 },
+   752→      { name: 'ApexViper', role: 'Co-Leader', level: 42, chips: 3500 },
+   753→      { name: 'StrikeFast', role: 'Viper', level: 22, chips: 1200 },
+   754→    ],
+   755→  },
+   756→  {
+   757→    id: 'c-2',
+   758→    name: 'Slinky Syndicate',
+   759→    tag: 'SLYK',
+   760→    emblem: '🐍',
+   761→    level: 5,
+   762→    bankedChips: 4_500,
+   763→    description: "Casual chip collectors. Let's grow together!",
+   764→    members: [
+   765→      { name: 'CozyCobra', role: 'Leader', level: 31, chips: 2000 },
+   766→      { name: 'ShadowSlinker', role: 'Viper', level: 18, chips: 800 },
+   767→      { name: 'GoldHoarder', role: 'Viper', level: 15, chips: 500 },
+   768→    ],
+   769→  },
+   770→];
+   771→
+   772→export const PRESET_EMBLEMS = ['🐍', '🦅', '🎯', '💀', '💎', '🔥', '👑', '⚡', '🏆', '☣️'];
+   773→
+   774→export const BOT_REPLIES = [
+   775→  'Nice run in the High-Stakes Arena today! 🏆',
+   776→  'That was an insane cut-off! Easy food. 💥',
+   777→  "Don't forget to deposit chips, we need that Level 10 Clan Buff! 💎",
+   778→  'Who is up for some Venom Arena lobbies? 🐍',
+   779→  'Just extracted with 250 chips, feeling like a god! 😎',
+   780→  'Slinky style, baby! 😂',
+   781→  'Be careful of VenomKing, he was hunting everyone in Tier 3!',
+   782→];
+   783→
+   784→// ----------------------------------------------------------------------------
+   785→// ClanSystem.tsx — 3 sample clans
+   786→// ----------------------------------------------------------------------------
+   787→export interface SampleClanMember {
+   788→  name: string;
+   789→  userTag: string;
+   790→  role: 'Leader' | 'Officer' | 'Member';
+   791→  chips: number;
+   792→  level: number;
+   793→  country: string;
+   794→  joinedDate: string;
+   795→}
+   796→
+   797→export interface SampleClanAnnouncement {
+   798→  author: string;
+   799→  text: string;
+   800→  dateStr: string;
+   801→}
+   802→
+   803→export interface SampleClan {
+   804→  id: string;
+   805→  name: string;
+   806→  tag: string;
+   807→  motto: string;
+   808→  level: number;
+   809→  logoEmoji: string;
+   810→  treasuryChips: number;
+   811→  members: SampleClanMember[];
+   812→  maxMembers: number;
+   813→  leaderName: string;
+   814→  leaderTag: string;
+   815→  minLevelReq: number;
+   816→  clanRank: number;
+   817→  announcements: SampleClanAnnouncement[];
+   818→}
+   819→
+   820→export const SAMPLE_CLANS: SampleClan[] = [
+   821→  {
+   822→    id: 'clan-1',
+   823→    name: 'Viper Apex Syndicate',
+   824→    tag: 'APEX',
+   825→    motto: 'Dominate the boundary, extract all chips.',
+   826→    level: 12,
+   827→    logoEmoji: '🐍',
+   828→    treasuryChips: 14_500_000,
+   829→    maxMembers: 30,
+   830→    leaderName: 'Hari',
+   831→    leaderTag: '#IND-001',
+   832→    minLevelReq: 1,
+   833→    clanRank: 1,
+   834→    members: [
+   835→      { name: 'Hari', userTag: '#IND-001', role: 'Leader', chips: 10_000_000, level: 50, country: 'IN', joinedDate: '01 Jan 2027' },
+   836→      { name: 'Apex_Viper', userTag: '#USA-882', role: 'Officer', chips: 9_400_000, level: 49, country: 'US', joinedDate: '03 Jan 2027' },
+   837→      { name: 'K-Snake_Master', userTag: '#KOR-114', role: 'Officer', chips: 8_900_000, level: 49, country: 'KR', joinedDate: '05 Jan 2027' },
+   838→      { name: 'Rookie_Striker', userTag: '#IND-104', role: 'Member', chips: 1_200_000, level: 32, country: 'IN', joinedDate: '12 Jan 2027' },
+   839→    ],
+   840→    announcements: [
+   841→      { author: 'Hari (Leader)', text: '🔥 Self-Sponsored Clan Arena War starts Saturday! Treasury pool funds 1,00,000c prize pool.', dateStr: '2 hours ago' },
+   842→      { author: 'Apex_Viper (Officer)', text: 'Treasury Bank replenished by members for custom clan tournaments!', dateStr: '1 day ago' },
+   843→    ],
+   844→  },
+   845→  {
+   846→    id: 'clan-2',
+   847→    name: 'Cyber Ninja Shadow Squad',
+   848→    tag: 'NINJA',
+   849→    motto: 'Silent extraction, maximum venom.',
+   850→    level: 9,
+   851→    logoEmoji: '🥷',
+   852→    treasuryChips: 8_200_000,
+   853→    maxMembers: 25,
+   854→    leaderName: 'Shadow_Ninja',
+   855→    leaderTag: '#JPN-309',
+   856→    minLevelReq: 15,
+   857→    clanRank: 2,
+   858→    members: [
+   859→      { name: 'Shadow_Ninja', userTag: '#JPN-309', role: 'Leader', chips: 5_000_000, level: 48, country: 'JP', joinedDate: '02 Jan 2027' },
+   860→    ],
+   861→    announcements: [
+   862→      { author: 'Shadow_Ninja', text: 'Recruiting active players for High Stakes Tier 5 extractions!', dateStr: '3 days ago' },
+   863→    ],
+   864→  },
+   865→  {
+   866→    id: 'clan-3',
+   867→    name: 'Phoenix Elite Extraction Corps',
+   868→    tag: 'PHNX',
+   869→    motto: 'From the ashes, we reclaim the arena.',
+   870→    level: 6,
+   871→    logoEmoji: '🔥',
+   872→    treasuryChips: 3_400_000,
+   873→    maxMembers: 20,
+   874→    leaderName: 'Viper_Zero',
+   875→    leaderTag: '#USA-402',
+   876→    minLevelReq: 10,
+   877→    clanRank: 3,
+   878→    members: [],
+   879→    announcements: [],
+   880→  },
+   881→];
+   882→
+   883→// ----------------------------------------------------------------------------
+   884→// Season Pass — 20 free + 20 elite rewards
+   885→// ----------------------------------------------------------------------------
+   886→export interface SeasonReward {
+   887→  title: string;
+   888→  category: string;
+   889→  icon: string;
+   890→  skinName?: string;
+   891→}
+   892→
+   893→export const COSMETIC_FREE_REWARDS: SeasonReward[] = [
+   894→  { title: 'Neon Viper Badge', category: 'Badge', icon: '🏷️' },
+   895→  { title: 'Cyber Pulse Trail FX', category: 'Tail FX', icon: '⚡' },
+   896→  { title: 'Green Venom Frame', category: 'Avatar Border', icon: '🖼️' },
+   897→  { title: 'Serpent Whispers SFX', category: 'Kill Sound', icon: '🔊' },
+   898→  { title: 'Genesis Pioneer Title', category: 'Title', icon: '🎖️' },
+   899→  { title: 'Bio-Hazard Emote Spray', category: 'Spray', icon: '🎨' },
+   900→  { title: 'Emerald Tail Glow', category: 'Tail FX', icon: '✨' },
+   901→  { title: 'Cobra Strike Taunt', category: 'Emote', icon: '🐍' },
+   902→  { title: 'Cyber Samurai Border', category: 'Avatar Border', icon: '⚔️' },
+   903→  { title: 'Toxic Acid DNA Skin', category: 'DNA Skin', icon: '🧪' },
+   904→  { title: 'Quantum Grid Avatar', category: 'Profile Icon', icon: '🌐' },
+   905→  { title: 'Apex Vanguard Emblem', category: 'Badge', icon: '🛡️' },
+   906→  { title: 'Neon Matrix Audio FX', category: 'Kill Sound', icon: '🎵' },
+   907→  { title: 'Plasma Arc Tail Trail', category: 'Tail FX', icon: '⚡' },
+   908→  { title: 'Cyber Warlord Title', category: 'Title', icon: '👑' },
+   909→  { title: 'Solar Flare Emote', category: 'Emote', icon: '☀️' },
+   910→  { title: 'Titanium Viper Skin', category: 'DNA Skin', icon: '🦾' },
+   911→  { title: 'Cyber Void Frame', category: 'Avatar Border', icon: '🌌' },
+   912→  { title: 'Genesis Immortal Badge', category: 'Badge', icon: '🏆' },
+   913→  { title: 'Genesis Master DNA Skin', category: 'DNA Skin', icon: '🐉' },
+   914→];
+   915→
+   916→export const COSMETIC_ELITE_REWARDS: SeasonReward[] = [
+   917→  { title: 'Cyber Serpent God Skin', category: 'DNA Skin', icon: '👑', skinName: 'Cyber Serpent God' },
+   918→  { title: 'Hyper Plasma Arc FX', category: 'Tail FX', icon: '⚡' },
+   919→  { title: 'Cyber Siren Roar SFX', category: 'Kill Sound', icon: '🔊' },
+   920→  { title: 'Royal Throne Taunt', category: 'Emote', icon: '🛋️' },
+   921→  { title: '1 Crore Immortal Badge', category: 'Badge', icon: '🎖️' },
+   922→  { title: 'Modular Venom DNA Skin', category: 'DNA Skin', icon: '🐍', skinName: 'Modular Venom DNA' },
+   923→  { title: 'Holo-Shield Tail Aura', category: 'Tail FX', icon: '🛡️' },
+   924→  { title: 'Golden Viper Frame', category: 'Avatar Border', icon: '🖼️' },
+   925→  { title: 'Galactic Overlord Title', category: 'Title', icon: '🌌' },
+   926→  { title: 'Dark Matter DNA Skin', category: 'DNA Skin', icon: '🌑', skinName: 'Dark Matter DNA' },
+   927→  { title: 'Celestial Fire Trail', category: 'Tail FX', icon: '🔥' },
+   928→  { title: 'Apex Predator Emblem', category: 'Badge', icon: '🦅' },
+   929→  { title: 'Cyber Phantom Skin', category: 'DNA Skin', icon: '👻', skinName: 'Cyber Phantom' },
+   930→  { title: 'Supernova Explosion SFX', category: 'Kill Sound', icon: '💥' },
+   931→  { title: "Emperor's Crown Frame", category: 'Avatar Border', icon: '👑' },
+   932→  { title: 'Diamond Viper DNA Skin', category: 'DNA Skin', icon: '💎', skinName: 'Diamond Viper' },
+   933→  { title: 'Hyper-Drive Trail FX', category: 'Tail FX', icon: '⚡' },
+   934→  { title: 'Genesis Sovereign Title', category: 'Title', icon: '📜' },
+   935→  { title: 'Infinite Horizon Frame', category: 'Avatar Border', icon: '🎆' },
+   936→  { title: 'Serpent God Ascended', category: 'DNA Skin', icon: '🌟', skinName: 'Serpent God Ascended' },
+   937→];
+   938→
+   939→export const ELITE_PASS_COST = 100_000;
+   940→
+   941→// ----------------------------------------------------------------------------
+   942→// ClipShowcase — 3 mock clips
+   943→// ----------------------------------------------------------------------------
+   944→export interface ShowcaseClip {
+   945→  id: string;
+   946→  title: string;
+   947→  creator: string;
+   948→  tag: string;
+   949→  country: string;
+   950→  platform: 'YouTube' | 'Twitch';
+   951→  url: string;
+   952→  extractedChips: number;
+   953→  upvotes: number;
+   954→  dateStr: string;
+   955→  tags: string[];
+   956→}
+   957→
+   958→export const SAMPLE_CLIPS: ShowcaseClip[] = [
+   959→  {
+   960→    id: 'clip-1',
+   961→    title: '1,00,00,000 CHIPS EXTRACTION CLUTCH IN TIER-05 ARENA! 🔥',
+   962→    creator: 'Hari',
+   963→    tag: '#IND-001',
+   964→    country: 'IN',
+   965→    platform: 'YouTube',
+   966→    url: 'https://youtube.com/watch?v=demo_hari_crore',
+   967→    extractedChips: 10_000_000,
+   968→    upvotes: 4210,
+   969→    dateStr: '23 Jan 2027',
+   970→    tags: ['Crore Milestone', 'Tier-05', 'High Stakes'],
+   971→  },
+   972→  {
+   973→    id: 'clip-2',
+   974→    title: 'SOLO 1V3 VIPER TRAP ON EXTRACTION ZONE BOUNDARY 🐍',
+   975→    creator: 'Apex_Viper',
+   976→    tag: '#USA-882',
+   977→    country: 'US',
+   978→    platform: 'Twitch',
+   979→    url: 'https://twitch.tv/videos/demo_apex_clutch',
+   980→    extractedChips: 2_500_000,
+   981→    upvotes: 1890,
+   982→    dateStr: '25 Jan 2027',
+   983→    tags: ['1v3 Clutch', 'Platinum Tier'],
+   984→  },
+   985→  {
+   986→    id: 'clip-3',
+   987→    title: 'NINJA SNAKE DNA SKIN SHOWCASE & SPEED EXTRACTION ⚡',
+   988→    creator: 'Shadow_Ninja',
+   989→    tag: '#JPN-309',
+   990→    country: 'JP',
+   991→    platform: 'YouTube',
+   992→    url: 'https://youtube.com/watch?v=demo_ninja_speed',
+   993→    extractedChips: 5_000_000,
+   994→    upvotes: 1240,
+   995→    dateStr: '22 Jan 2027',
+   996→    tags: ['Skin Showcase', 'Speed Run'],
+   997→  },
+   998→];
+   999→
+  1000→// ----------------------------------------------------------------------------
+  1001→// Player inspector — hardcoded allies, stats, match history, loadout
+  1002→// ----------------------------------------------------------------------------
+  1003→export const INSPECTOR_ALLIES_REGIONAL = [
+  1004→  { name: 'Hari', userTag: '#IND-001', country: 'IN', role: 'Leader' },
+  1005→  { name: 'Rookie_Striker', userTag: '#IND-104', country: 'IN', role: 'Member' },
+  1006→];
+  1007→
+  1008→export const INSPECTOR_ALLIES_GLOBAL = [
+  1009→  { name: 'Apex_Viper', userTag: '#USA-882', country: 'US', role: 'Officer' },
+  1010→  { name: 'K-Snake', userTag: '#KOR-114', country: 'KR', role: 'Ally' },
+  1011→];
+  1012→
+  1013→export const INSPECTOR_BADGES = [
+  1014→  { icon: '👑', title: '1 Crore Immortal', desc: 'Extracted over 10M Chips' },
+  1015→  { icon: '⚡', title: 'Apex Vanguard', desc: 'Top 1% Arena Leaderboard' },
+  1016→];
+  1017→
+  1018→export const INSPECTOR_LOADOUT = [
+  1019→  { label: 'Snake DNA Skin:', value: '👑 Cyber Serpent God' },
+  1020→  { label: 'Tail Trail FX:', value: '⚡ Hyper Plasma Arc' },
+  1021→  { label: 'Kill Sound Effect:', value: '🔊 Cyber Siren Roar' },
+  1022→  { label: 'Victory Emote:', value: '👑 Royal Throne Taunt' },
+  1023→];
+  1024→
+  1025→export interface InspectedPlayer {
+  1026→  name: string;
+  1027→  userTag: string;
+  1028→  country: string;
+  1029→  flag: string;
+  1030→  bankedChips: number;
+  1031→  level: number;
+  1032→  achievedAt?: string;
+  1033→  globalRank?: number;
+  1034→  countryRank?: number;
+  1035→  regionalRank?: number;
+  1036→  clanTag?: string;
+  1037→  clanName?: string;
+  1038→}
+  1039→

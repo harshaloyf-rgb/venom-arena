@@ -32,18 +32,22 @@ import { createServer } from 'http';
 import { Server, type Socket } from 'socket.io';
 import {
   ALL_ARENAS,
+  BOT_SELF_DESTRUCT_THRESHOLD,
   EXTRACT_DURATION_MS,
   INITIAL_BODY_LENGTH,
-  MAP_BASE_RADIUS,
+  INITIAL_SPAWN_SCORE,
   RESPAWN_INVULN_MS,
   SIZE_BASE,
+  SIZE_SCORE_FACTOR,
   TICK_MS,
   WORLD_SIZE,
   getArenaById,
+  getDynamicMapRadius,
 } from '../../src/lib/game-config';
 import {
   type ArenaRoom,
   type BotSession,
+  type PendingDeath,
   type PlayerIdentity,
   type PlayerSession,
   type SnakeBase,
@@ -51,8 +55,9 @@ import {
   collectAllSnakes,
   createArenaRoom,
   detectCollisions,
-  dropFoodAtBody,
-  dropStarChipsAtBody,
+  detectHeadOnCollisions,
+  dropScoreOrbsAtBody,
+  dropStarsAtDeath,
   eatFood,
   ensureBots,
   expireChat,
@@ -425,32 +430,44 @@ function tickRoom(room: ArenaRoom, now: number): void {
     }
   }
 
-  // 6) Collision detection (collect deaths, apply after iteration).
-  let deaths: Awaited<ReturnType<typeof detectCollisions>> = [];
+  // 6) Collision detection (body + head-on).
+  let deaths: PendingDeath[] = [];
   try {
     deaths = detectCollisions(room, now);
+    // Head-on collisions processed AFTER body collisions (already-dead snakes skipped).
+    const headOnDeaths = detectHeadOnCollisions(room, now);
+    deaths = deaths.concat(headOnDeaths);
   } catch (err) {
     log('error', `Collision detection error in ${room.arena.id}: ${(err as Error).message}`);
   }
 
-  // 7) Apply deaths with CORRECT drop rules:
-  //    Body collision death: drop food (all) + star chips (real players only) at body positions.
-  //    Wall death: drop star chips only (real players only). Bots drop nothing on wall death.
+  // 7) Apply deaths with CORRECT drop rules per spec:
+  //    Body/headOn collision: drop score orbs (all snakes) + 10 stars (real players only).
+  //    Wall death: drop 0 food (score destroyed) + 10 stars (real players only).
+  //    Bot in selfDestruct wall death: drop 0 food, 0 stars (vanish cleanly).
   for (const death of deaths) {
     const dead = room.players.get(death.deadId) || (room.bots.get(death.deadId) as SnakeBase | undefined);
     if (!dead || dead.isDead) continue;
     dead.isDead = true;
 
-    if (death.cause === 'body') {
-      // Body collision: drop food at body (ALL snakes) + star chips (real players only).
-      dropFoodAtBody(room, dead.points, dead.color);
+    const isBotSelfDestruct = dead.isBot && (dead as BotSession).botState === 'selfDestruct';
+    const headX = dead.points[0]?.x ?? 0;
+    const headY = dead.points[0]?.y ?? 0;
+
+    if (death.cause === 'wall') {
+      // Wall death: NO food orbs (score destroyed).
+      // Stars: real players always get 10 stars; selfDestruct bots get 0.
       if (dead.isPlayer && dead.carriedChips > 0) {
-        dropStarChipsAtBody(room, dead.points, dead.carriedChips);
+        dropStarsAtDeath(room, headX, headY, dead.carriedChips);
       }
+      // Bot wall death (selfDestruct): 0 food, 0 stars — vanish cleanly.
     } else {
-      // Wall death: drop star chips ONLY (real players only). Bots drop nothing.
-      if (dead.isPlayer && dead.carriedChips > 0) {
-        dropStarChipsAtBody(room, dead.points, dead.carriedChips);
+      // Body or headOn collision: drop score orbs (sum = snake.score) + 10 stars (players only).
+      if (!isBotSelfDestruct) {
+        dropScoreOrbsAtBody(room, dead.points, dead.score, dead.color);
+        if (dead.isPlayer && dead.carriedChips > 0) {
+          dropStarsAtDeath(room, headX, headY, dead.carriedChips);
+        }
       }
     }
 
@@ -733,7 +750,9 @@ async function handleJoinArena(socket: Socket, payload: unknown): Promise<void> 
     return;
   }
 
-  const spawn = randomSpawnPoint(MAP_BASE_RADIUS - 200);
+  const realPlayerCount = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
+  const mapRadius = getDynamicMapRadius(Math.max(1, realPlayerCount));
+  const spawn = randomSpawnPoint(mapRadius - 200, room.mapCenterX, room.mapCenterY);
   const angle = Math.random() * Math.PI * 2;
   const session: PlayerSession = {
     id: socket.id,
@@ -742,13 +761,13 @@ async function handleJoinArena(socket: Socket, payload: unknown): Promise<void> 
     country: identity.country,
     points: initialBody(spawn.x, spawn.y, angle, INITIAL_BODY_LENGTH),
     angle,
-    size: SIZE_BASE,
+    size: SIZE_BASE + Math.sqrt(INITIAL_SPAWN_SCORE) * SIZE_SCORE_FACTOR,
     color: identity.color,
     secondaryColor: identity.secondaryColor,
     isPlayer: true,
     isBot: false,
     carriedChips: 0,
-    score: 0,
+    score: INITIAL_SPAWN_SCORE,
     boostFrameCounter: 0,
     isExtracting: false,
     extractionProgress: 0,
@@ -872,12 +891,12 @@ function handleLeave(socket: Socket, reason: string): void {
 
   const room = session.arenaId ? rooms.get(session.arenaId) : null;
   if (room) {
-    // Forfeit carried chips as star-chips at body positions (no scatter).
+    // Forfeit carried chips as 10 star collectibles at death position.
     if (!session.isDead && !session.matchSettling && session.carriedChips > 0) {
       try {
-        dropStarChipsAtBody(room, session.points, session.carriedChips);
+        dropStarsAtDeath(room, session.points[0]?.x ?? 0, session.points[0]?.y ?? 0, session.carriedChips);
       } catch (err) {
-        log('error', `dropStarChipsAtBody error on leave: ${(err as Error).message}`);
+        log('error', `dropStarsAtDeath error on leave: ${(err as Error).message}`);
       }
     }
     room.players.delete(socket.id);

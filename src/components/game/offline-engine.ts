@@ -3,55 +3,38 @@
 // ============================================================================
 // offline-engine.ts — Pure client-side snake game engine for "Venom Arena".
 // ----------------------------------------------------------------------------
-// This module runs a complete slither.io-style game ENTIRELY in the browser.
-// No Socket.IO connection, no server round-trips, no chips, no minimap. It is
-// used by `game-canvas.tsx` whenever the active arena's id starts with
-// `practice-` (the three free offline practice tiers).
+// Infinite-map offline practice mode. No server connection, no chips, no stars,
+// no wallet, no boundaries. Camera follows the player in an endless world.
 //
-// Design tenets (from the locked BUILD-14 spec):
-//  * **No server connection** — runs purely on requestAnimationFrame.
-//  * **No chips** — chip-less mode. No star chips, no carried chips, no
-//    buy-in, no commission. Food only grows body (+1 score).
-//  * **No map** — mapless. No minimap, no full-map overlay.
-//  * **Ranking by score** (body length), not chips.
-//  * **Leaderboard**: top 10 by score (you + bots), collapsible.
-//  * **Extract any time** — hold 3 s → ends run, shows final score, ZERO XP.
-//  * **Death**: body collision = die + restart. Wall hit = die + restart.
-//    No drops (no food drop, no star drop — chips don't exist).
-//  * **Boost**: costs body length (every 40 frames drops 1 tail segment).
-//
-// Performance:
-//  * Spatial hash grid for collision + food queries (O(n)-ish, not O(n²)).
-//  * Snake bodies capped at MAX_BODY_LENGTH (120); rendered via downsampled
-//    stride-2 polylines (max 60 stroke points).
-//  * Viewport culling (skip off-screen snakes/food).
-//  * Adaptive quality: FPS < 40 for 2 s → low-quality mode (no glow / shadow).
-//  * Particles capped at 200.
-//
-// The engine owns its own DOM HUD overlays (appended to `canvas.parentElement`)
-// and tears them all down on `stop()`. The host React component just has to
-// instantiate, start, and forward the `onExit` / `onStateChange` callbacks.
+// Key changes from the original:
+//  * **Infinite map** — no boundaries, no wall death, no breathing radius.
+//  * **Food orb system** — three sizes (Small/Medium/Large) with weighted spawn.
+//  * **No chips / stars / wallet** — pure score-based gameplay.
+//  * **Death food drop** — dead snakes drop orbs summing to their total score.
+//  * **Head-on collision** — boost-aware resolution rules.
+//  * **Bot AI** — no self-destruct, predictive evasion, food-seeking.
+//  * **Opacity layering** — larger snakes fade when a smaller snake is near.
+//  * **Score model** — INITIAL_SPAWN_SCORE + food eaten, body from score.
 // ============================================================================
 
 import {
+  ALL_FOOD_ORBS,
   BASE_SPEED,
+  BOT_EVADE_RADIUS,
+  BOT_NAMES,
+  BOT_SKINS,
   BOOST_DROP_INTERVAL,
   BOOST_MIN_LENGTH,
   BOOST_SPEED,
-  BOT_NAMES,
-  BOT_SKINS,
   COLLISION_HIT_FACTOR,
   EXTRACT_DURATION_MS,
   EXTRACT_GLIDE_SPEED,
   FOOD_COUNT_TARGET,
+  FOOD_ORB_WEIGHTS,
+  HEAD_ON_HIT_FACTOR,
   INITIAL_BODY_LENGTH,
-  MAP_BASE_RADIUS,
-  MAP_BREATH_AMPLITUDE,
-  MAP_BREATH_CYCLE_MS,
+  INITIAL_SPAWN_SCORE,
   MAX_BODY_LENGTH,
-  REGULAR_FOOD_GROW,
-  REGULAR_FOOD_VALUE_MAX,
-  REGULAR_FOOD_VALUE_MIN,
   RESPAWN_INVULN_MS,
   SEGMENT_SPACING,
   SIZE_BASE,
@@ -60,20 +43,16 @@ import {
   TURN_BASE,
   TURN_MIN,
   TURN_SCORE_FACTOR,
-  WORLD_SIZE,
-  WORLD_RADIUS,
   type ArenaTier,
   getCosmeticById,
+  type FoodOrbConfig,
   type Skin,
 } from '@/lib/game-config';
 import type { PlayerProfile } from '@/lib/types';
 import {
   computeVisibleRect,
-  drawFood,
-  drawGrid,
   drawParticles,
   drawSnake,
-  getArenaRadius,
   type FrameRenderCtx,
   type Particle,
 } from './render-helpers';
@@ -113,6 +92,8 @@ interface SnakeBase {
   secondaryColor?: string;
   isPlayer: boolean;
   isBot: boolean;
+  /** Food-mass score (starts at 0, grows with food, shrinks with boost).
+   *  Display score = INITIAL_SPAWN_SCORE + this value. */
   score: number;
   boostFrameCounter: number;
   isExtracting: boolean;
@@ -124,6 +105,8 @@ interface SnakeBase {
   kills: number;
   desiredAngle: number;
   wantsBoost: boolean;
+  /** Whether the snake is actively boosting (for head-on collision + rendering). */
+  isBoosting: boolean;
 }
 
 interface BotSession extends SnakeBase {
@@ -136,10 +119,13 @@ interface Food {
   id: string;
   x: number;
   y: number;
+  /** Visual radius in px. */
   size: number;
+  /** Score value (1, 3, or 5). */
   value: number;
-  isStarChip: boolean; // always false in offline mode (chip-less)
+  orbSize: 'small' | 'medium' | 'large';
   color: string;
+  glowColor: string;
 }
 
 interface GridItem {
@@ -151,7 +137,7 @@ interface GridItem {
   snakeId?: string;
   segIdx?: number;
   value?: number;
-  foodRef?: { value: number };
+  foodRef?: Food;
 }
 
 // ----------------------------------------------------------------------------
@@ -228,27 +214,17 @@ const JOYSTICK_BOOST_MAGNITUDE = 0.6;
 const MAX_SNAPSHOT_POINTS = 60;
 const BOT_THINK_INTERVAL_MS = 120;
 const BOT_THINK_JITTER_MS = 80;
-const BOT_FOOD_SCAN_RADIUS = 260;
-const BOT_THREAT_SCAN_RADIUS = 150;
-const BOT_EDGE_AVOID_RADIUS = 250;
+const BOT_FOOD_SCAN_RADIUS = 300;
+const BOT_THREAT_SCAN_RADIUS = 200;
 const BOT_MAX_TURN_PER_TICK = 0.22;
+const BOT_PREDICT_AHEAD_TICKS = 8;
+const BOT_PREDICT_SPEED = BASE_SPEED * 1.5;
 const PERSONALITIES: BotPersonality[] = [
   'scavenger',
   'opportunist',
   'hunter',
   'extractor',
   'coward',
-];
-
-const FOOD_COLORS = [
-  '#38bdf8',
-  '#818cf8',
-  '#fb7185',
-  '#34d399',
-  '#fbbf24',
-  '#a78bfa',
-  '#22d3ee',
-  '#f472b6',
 ];
 
 const QUICK_EMOTES = [
@@ -258,6 +234,19 @@ const QUICK_EMOTES = [
   'Get Ripped! 💪',
   'Extracting soon! ⚡',
 ];
+
+/** Food spawn radius around player (primary cluster). */
+const FOOD_SPAWN_RADIUS_NEAR = 1500;
+/** Some food scattered further out. */
+const FOOD_SPAWN_RADIUS_FAR = 2500;
+/** Fraction of replenishment food that spawns far. */
+const FOOD_FAR_FRACTION = 0.15;
+/** Bot spawn radius from origin at game start. */
+const BOT_SPAWN_RADIUS = 2000;
+/** Opacity layering proximity factor (multiplied by sum of sizes). */
+const OPACITY_PROXIMITY_FACTOR = 3;
+/** Opacity to which the larger snake fades. */
+const OPACITY_FADE_TO = 0.75;
 
 // ----------------------------------------------------------------------------
 // Math helpers
@@ -280,12 +269,13 @@ function dist(ax: number, ay: number, bx: number, by: number): number {
   return Math.hypot(ax - bx, ay - by);
 }
 
-function randomSpawnPoint(maxR: number): Vec2 {
+/** Random point within a circle of maxR around center. */
+function randomPointInCircle(cx: number, cy: number, maxR: number): Vec2 {
   const r = Math.sqrt(Math.random()) * maxR;
   const theta = Math.random() * Math.PI * 2;
   return {
-    x: WORLD_RADIUS + Math.cos(theta) * r,
-    y: WORLD_RADIUS + Math.sin(theta) * r,
+    x: cx + Math.cos(theta) * r,
+    y: cy + Math.sin(theta) * r,
   };
 }
 
@@ -298,6 +288,98 @@ function initialBody(headX: number, headY: number, angle: number, length: number
     });
   }
   return pts;
+}
+
+// ----------------------------------------------------------------------------
+// Food orb helpers
+// ----------------------------------------------------------------------------
+
+/** Pick a weighted random FoodOrbConfig. */
+function weightedRandomOrb(): FoodOrbConfig {
+  let r = Math.random();
+  for (let i = 0; i < ALL_FOOD_ORBS.length; i++) {
+    r -= FOOD_ORB_WEIGHTS[i];
+    if (r <= 0) return ALL_FOOD_ORBS[i];
+  }
+  return ALL_FOOD_ORBS[0]; // fallback to small
+}
+
+/** Create a Food object at a random position around the player. */
+function createFoodOrb(idPrefix: string, idCounter: { value: number }, cx: number, cy: number, farSpawn: boolean): Food {
+  const orb = weightedRandomOrb();
+  const radius = farSpawn ? FOOD_SPAWN_RADIUS_FAR : FOOD_SPAWN_RADIUS_NEAR;
+  const pos = randomPointInCircle(cx, cy, radius);
+  return {
+    id: `${idPrefix}-food-${idCounter.value++}`,
+    x: pos.x,
+    y: pos.y,
+    size: orb.radius,
+    value: orb.value,
+    orbSize: orb.size,
+    color: orb.color,
+    glowColor: orb.glowColor,
+  };
+}
+
+/** Create a specific Food object at an exact position (for death drops). */
+function createFoodOrbAt(idPrefix: string, idCounter: { value: number }, x: number, y: number, orb: FoodOrbConfig): Food {
+  return {
+    id: `${idPrefix}-drop-${idCounter.value++}`,
+    x,
+    y,
+    size: orb.radius,
+    value: orb.value,
+    orbSize: orb.size,
+    color: orb.color,
+    glowColor: orb.glowColor,
+  };
+}
+
+// ----------------------------------------------------------------------------
+// Death food drop — greedily split score into Large(5)/Medium(3)/Small(1)
+// ----------------------------------------------------------------------------
+
+interface DeathDropResult {
+  foods: Food[];
+  /** IDs of dead snakes that should drop food. */
+}
+
+function computeDeathFoodDrop(
+  totalScore: number,
+  deathX: number,
+  deathY: number,
+  idPrefix: string,
+  idCounter: { value: number },
+): Food[] {
+  const result: Food[] = [];
+  let remaining = Math.max(0, totalScore);
+
+  // Large orbs (value 5)
+  const largeOrb = ALL_FOOD_ORBS[2]; // FOOD_ORB_LARGE
+  const largeCount = Math.floor(remaining / largeOrb.value);
+  for (let i = 0; i < largeCount; i++) {
+    const offset = randomPointInCircle(deathX, deathY, 30 + largeCount * 0.5);
+    result.push(createFoodOrbAt(idPrefix, idCounter, offset.x, offset.y, largeOrb));
+  }
+  remaining -= largeCount * largeOrb.value;
+
+  // Medium orbs (value 3)
+  const mediumOrb = ALL_FOOD_ORBS[1]; // FOOD_ORB_MEDIUM
+  const mediumCount = Math.floor(remaining / mediumOrb.value);
+  for (let i = 0; i < mediumCount; i++) {
+    const offset = randomPointInCircle(deathX, deathY, 30 + mediumCount * 0.5);
+    result.push(createFoodOrbAt(idPrefix, idCounter, offset.x, offset.y, mediumOrb));
+  }
+  remaining -= mediumCount * mediumOrb.value;
+
+  // Small orbs (value 1) for the remainder
+  const smallOrb = ALL_FOOD_ORBS[0]; // FOOD_ORB_SMALL
+  for (let i = 0; i < remaining; i++) {
+    const offset = randomPointInCircle(deathX, deathY, 30 + remaining * 0.5);
+    result.push(createFoodOrbAt(idPrefix, idCounter, offset.x, offset.y, smallOrb));
+  }
+
+  return result;
 }
 
 // ----------------------------------------------------------------------------
@@ -322,8 +404,7 @@ export class OfflineGameEngine {
   private foods: Food[] = [];
   private grid: SpatialHashGrid = new SpatialHashGrid(120);
   private tick: number = 0;
-  private foodIdCounter: number = 0;
-  private botIdCounter: number = 0;
+  private idCounter: number = 0;
   private startTime: number = 0;
 
   // rAF + sizing
@@ -331,10 +412,10 @@ export class OfflineGameEngine {
   private resizeObserver: ResizeObserver | null = null;
   private lastFrameTime: number = 0;
 
-  // Camera
+  // Camera (follows player, no world bounds)
   private cam: { x: number; y: number; zoom: number } = {
-    x: WORLD_RADIUS,
-    y: WORLD_RADIUS,
+    x: 0,
+    y: 0,
     zoom: 0.9,
   };
   private camInit: boolean = false;
@@ -363,7 +444,6 @@ export class OfflineGameEngine {
     kills?: HTMLSpanElement;
     rank?: HTMLSpanElement;
     bots?: HTMLSpanElement;
-    banked?: HTMLDivElement;
     fps?: HTMLSpanElement;
     extractingBar?: HTMLDivElement;
     extractingPct?: HTMLSpanElement;
@@ -420,9 +500,6 @@ export class OfflineGameEngine {
     this.ctx = canvas.getContext('2d', { alpha: false });
 
     // Resolve the player's equipped skin.
-    // Priority: localStorage `venom_custom_skin_state` (set by CosmeticsShop)
-    // overrides the server-saved `currentSkin` field. Falls back to whatever
-    // `getCosmeticById` returns for the profile's currentSkin.
     this.playerSkin = this.resolvePlayerSkin();
 
     // Pre-bind listeners so removeEventListener works.
@@ -524,14 +601,11 @@ export class OfflineGameEngine {
     this.foods = [];
     this.grid.clear();
     this.tick = 0;
-    this.foodIdCounter = 0;
-    this.botIdCounter = 0;
+    this.idCounter = 0;
     this.particles = [];
     this.camInit = false;
 
-    // Spawn player at world center, facing east.
-    const cx = WORLD_RADIUS;
-    const cy = WORLD_RADIUS;
+    // Spawn player at origin (0,0), facing east.
     const angle = 0;
     const profile = this.playerProfile;
     this.player = {
@@ -539,9 +613,9 @@ export class OfflineGameEngine {
       name: profile.name,
       userTag: profile.userTag,
       country: profile.country,
-      points: initialBody(cx, cy, angle, INITIAL_BODY_LENGTH),
+      points: initialBody(0, 0, angle, INITIAL_BODY_LENGTH),
       angle,
-      size: SIZE_BASE,
+      size: SIZE_BASE + Math.sqrt(INITIAL_SPAWN_SCORE) * SIZE_SCORE_FACTOR,
       color: this.playerSkin?.color ?? '#22c55e',
       secondaryColor: this.playerSkin?.secondaryColor ?? '#15803d',
       isPlayer: true,
@@ -555,33 +629,39 @@ export class OfflineGameEngine {
       kills: 0,
       desiredAngle: angle,
       wantsBoost: false,
+      isBoosting: false,
     };
 
-    // Spawn bots — capped at 1000 (engine supports up to 1000 even though
-    // the highest practice tier only spawns 75).
+    // Spawn bots in a ring around the origin.
     const botCount = Math.min(1000, this.arena.botsCount);
     for (let i = 0; i < botCount; i++) {
-      const bot = this.spawnBot();
+      const bot = this.spawnBot(0, 0);
       this.bots.set(bot.id, bot);
     }
 
-    // Spawn food pellets.
+    // Spawn food orbs around the origin.
     for (let i = 0; i < FOOD_COUNT_TARGET; i++) {
-      this.foods.push(this.spawnRandomFood());
+      const far = Math.random() < FOOD_FAR_FRACTION;
+      this.foods.push(createFoodOrb(this.arena.id, this.idCounterObj, 0, 0, far));
     }
 
     this.setState('playing');
     this.updateHUD();
   }
 
-  private spawnBot(): BotSession {
-    const idx = this.botIdCounter++;
+  /** Helper so we can pass idCounter by reference to food-creation helpers. */
+  private get idCounterObj(): { value: number } {
+    return { value: this.idCounter };
+  }
+
+  private spawnBot(cx: number, cy: number): BotSession {
+    const idx = this.idCounter++;
     const baseName = BOT_NAMES[idx % BOT_NAMES.length];
     const name =
       idx < BOT_NAMES.length ? baseName : `${baseName}-${Math.floor(idx / BOT_NAMES.length) + 1}`;
     const skin = BOT_SKINS[idx % BOT_SKINS.length];
     const personality = PERSONALITIES[idx % PERSONALITIES.length];
-    const spawn = randomSpawnPoint(WORLD_RADIUS - 200);
+    const spawn = randomPointInCircle(cx, cy, BOT_SPAWN_RADIUS);
     const angle = Math.random() * Math.PI * 2;
     const botId = `bot-${this.arena.id}-${idx}`;
     return {
@@ -590,7 +670,7 @@ export class OfflineGameEngine {
       name,
       points: initialBody(spawn.x, spawn.y, angle, INITIAL_BODY_LENGTH),
       angle,
-      size: SIZE_BASE,
+      size: SIZE_BASE + Math.sqrt(INITIAL_SPAWN_SCORE) * SIZE_SCORE_FACTOR,
       color: skin.color,
       secondaryColor: skin.secondaryColor,
       isPlayer: false,
@@ -604,24 +684,9 @@ export class OfflineGameEngine {
       kills: 0,
       desiredAngle: angle,
       wantsBoost: false,
+      isBoosting: false,
       personality,
       nextThinkAt: 0,
-    };
-  }
-
-  private spawnRandomFood(): Food {
-    const id = `food-${this.arena.id}-${this.foodIdCounter++}`;
-    const pos = randomSpawnPoint(MAP_BASE_RADIUS - 20);
-    return {
-      id,
-      x: pos.x,
-      y: pos.y,
-      size: 4 + Math.random() * 3,
-      value:
-        Math.floor(Math.random() * (REGULAR_FOOD_VALUE_MAX - REGULAR_FOOD_VALUE_MIN + 1)) +
-        REGULAR_FOOD_VALUE_MIN,
-      isStarChip: false, // offline mode is chip-less — never star chips
-      color: FOOD_COLORS[Math.floor(Math.random() * FOOD_COLORS.length)],
     };
   }
 
@@ -812,7 +877,7 @@ export class OfflineGameEngine {
     if (this.state !== 'playing') return;
     const p = this.player;
     if (!p) return;
-    this.finalScore = p.score;
+    this.finalScore = INITIAL_SPAWN_SCORE + p.score;
     this.finalKills = p.kills;
     this.finalDurationSeconds = Math.floor((performance.now() - this.startTime) / 1000);
     this.setState('extracted');
@@ -843,8 +908,7 @@ export class OfflineGameEngine {
     this.updateFps(now);
     this.updateParticles(dt);
 
-    // Physics ticks at ~TICK_MS (30 Hz) cadence — we run the sim in fixed
-    // steps but render every rAF. Accumulator pattern prevents spiral-of-death.
+    // Physics ticks at ~TICK_MS (30 Hz) cadence.
     if (this.state === 'playing') {
       this.accumulator += dt;
       let safety = 4;
@@ -875,6 +939,7 @@ export class OfflineGameEngine {
     const { angle, boost } = this.computePlayerInput();
     if (angle !== null) p.desiredAngle = angle;
     p.wantsBoost = boost;
+    p.isBoosting = boost && p.points.length > BOOST_MIN_LENGTH + INITIAL_BODY_LENGTH - 20;
 
     // Extraction progress (3-second hold).
     if (p.isExtracting) {
@@ -900,41 +965,50 @@ export class OfflineGameEngine {
       if (!bot.isDead) this.insertSnakeIntoGrid(bot);
     }
     for (const food of this.foods) {
-      if (food.value > 0) {
-        this.grid.insert({
-          id: food.id,
-          kind: 'food',
-          x: food.x,
-          y: food.y,
-          radius: food.size,
-          value: food.value,
-          foodRef: food,
-        });
-      }
+      this.grid.insert({
+        id: food.id,
+        kind: 'food',
+        x: food.x,
+        y: food.y,
+        radius: food.size,
+        value: food.value,
+        foodRef: food,
+      });
     }
 
-    // 5) Eat food (player + bots). No star chips — only regular food (+1 score).
+    // 5) Eat food (player + bots).
     this.eatFood();
 
-    // 6) Collision detection (head-to-body = death; wall = death).
+    // 6) Collision detection (body collision + head-on collision). NO wall death.
     const deaths = this.detectCollisions(now);
 
-    // 7) Apply deaths.
+    // 7) Apply deaths + drop food.
     let playerDied = false;
+    const newDropFoods: Food[] = [];
     for (const d of deaths) {
       if (d.deadId === p.id) {
         playerDied = true;
+        // Drop player's food
+        const playerTotal = INITIAL_SPAWN_SCORE + p.score;
+        newDropFoods.push(...computeDeathFoodDrop(playerTotal, p.points[0].x, p.points[0].y, this.arena.id, this.idCounterObj));
         continue;
       }
       const bot = this.bots.get(d.deadId);
       if (bot) {
-        // No drops (chip-less mode) — just mark dead + respawn.
+        // Drop bot's food
+        const botTotal = INITIAL_SPAWN_SCORE + bot.score;
+        newDropFoods.push(...computeDeathFoodDrop(botTotal, bot.points[0].x, bot.points[0].y, this.arena.id, this.idCounterObj));
         bot.isDead = true;
         // Credit kill to the killer if it's the player.
         if (d.killerId === p.id) {
           p.kills++;
         }
       }
+    }
+
+    // Add dropped food to the world.
+    if (newDropFoods.length > 0) {
+      this.foods.push(...newDropFoods);
     }
 
     // 8) Remove dead bots and respawn to maintain count.
@@ -947,9 +1021,17 @@ export class OfflineGameEngine {
         this.bots.delete(id);
       }
     }
-    // Respawn bots to maintain count.
+    // Respawn bots near the player to maintain count.
+    const pHead = p.points[0];
     while (this.bots.size < this.arena.botsCount) {
-      const bot = this.spawnBot();
+      const bot = this.spawnBot(pHead.x, pHead.y);
+      // Ensure bots spawn far enough from the player.
+      const spawnDist = dist(bot.points[0].x, bot.points[0].y, pHead.x, pHead.y);
+      if (spawnDist < 400) {
+        // Re-spawn further away
+        const far = randomPointInCircle(pHead.x, pHead.y, BOT_SPAWN_RADIUS);
+        bot.points = initialBody(far.x, far.y, bot.angle, INITIAL_BODY_LENGTH);
+      }
       this.bots.set(bot.id, bot);
     }
 
@@ -960,7 +1042,7 @@ export class OfflineGameEngine {
       return;
     }
 
-    // 10) Replenish food toward target.
+    // 10) Replenish food toward target (spawn around player).
     this.replenishFood();
 
     // 11) Expire chat bubbles.
@@ -977,8 +1059,9 @@ export class OfflineGameEngine {
   private tickSnakeMovement(snake: SnakeBase, desiredAngle: number, wantsBoost: boolean): void {
     if (snake.points.length === 0 || snake.isDead) return;
 
-    // Turn rate: max(0.045, 0.15 - score*0.0006).
-    const turnRate = Math.max(TURN_MIN, TURN_BASE - snake.score * TURN_SCORE_FACTOR);
+    // Turn rate: max(0.045, 0.15 - totalScore*0.0006).
+    const totalScore = INITIAL_SPAWN_SCORE + snake.score;
+    const turnRate = Math.max(TURN_MIN, TURN_BASE - totalScore * TURN_SCORE_FACTOR);
     snake.angle = turnToward(snake.angle, desiredAngle, turnRate);
 
     // Speed.
@@ -987,14 +1070,18 @@ export class OfflineGameEngine {
       speed = EXTRACT_GLIDE_SPEED;
     } else if (wantsBoost && snake.points.length > BOOST_MIN_LENGTH) {
       speed = BOOST_SPEED;
+      snake.isBoosting = true;
       snake.boostFrameCounter++;
       if (snake.boostFrameCounter >= BOOST_DROP_INTERVAL) {
         snake.boostFrameCounter = 0;
         if (snake.points.length > BOOST_MIN_LENGTH) {
           snake.points.pop();
+          // Reduce food-score (score can go below 0 but body is clamped)
           snake.score = Math.max(0, snake.score - 1);
         }
       }
+    } else {
+      snake.isBoosting = false;
     }
 
     // Move head.
@@ -1004,15 +1091,19 @@ export class OfflineGameEngine {
     snake.points.unshift({ x: nx, y: ny });
 
     // Grow / shrink body to target length based on SCORE.
-    const targetLen = Math.min(MAX_BODY_LENGTH, INITIAL_BODY_LENGTH + snake.score);
+    // targetLen = INITIAL_BODY_LENGTH + foodScore, clamped to [BOOST_MIN_LENGTH+1, MAX_BODY_LENGTH]
+    const targetLen = Math.max(
+      BOOST_MIN_LENGTH + 1,
+      Math.min(MAX_BODY_LENGTH, INITIAL_BODY_LENGTH + snake.score),
+    );
     while (snake.points.length > targetLen) snake.points.pop();
 
-    // Size: 8 + sqrt(score) * 0.4.
-    snake.size = SIZE_BASE + Math.sqrt(snake.score) * SIZE_SCORE_FACTOR;
+    // Size: 8 + sqrt(totalScore) * 0.4.
+    snake.size = SIZE_BASE + Math.sqrt(INITIAL_SPAWN_SCORE + snake.score) * SIZE_SCORE_FACTOR;
   }
 
   // --------------------------------------------------------------------------
-  // Bot AI (scavenger / opportunist / hunter / extractor / coward)
+  // Bot AI — no self-destruct, seek food, predictive evasion
   // --------------------------------------------------------------------------
 
   private tickBot(bot: BotSession, now: number): void {
@@ -1022,7 +1113,7 @@ export class OfflineGameEngine {
       bot.nextThinkAt = now + BOT_THINK_INTERVAL_MS + Math.floor(Math.random() * BOT_THINK_JITTER_MS);
       const head = bot.points[0];
 
-      // Find nearest food.
+      // --- Find nearest food ---
       let bestFood: GridItem | null = null;
       let bestFoodDist = Infinity;
       const foodQuery = this.grid.queryRadius(head.x, head.y, BOT_FOOD_SCAN_RADIUS);
@@ -1036,7 +1127,7 @@ export class OfflineGameEngine {
         }
       }
 
-      // Find nearest threat (foreign body segment within threat scan radius).
+      // --- Find nearest threat (foreign body segment) ---
       let threatX = 0;
       let threatY = 0;
       let threatDist = Infinity;
@@ -1060,6 +1151,30 @@ export class OfflineGameEngine {
           bot.personality === 'extractor' ||
           (bot.personality === 'opportunist' && threatDist < 90));
 
+      // --- Predictive evasion against the human player ---
+      const p = this.player;
+      if (p && !p.isDead && p.points.length > 0 && now >= p.spawnProtectedUntil) {
+        const playerHead = p.points[0];
+        const playerDist = dist(head.x, head.y, playerHead.x, playerHead.y);
+        if (playerDist < BOT_EVADE_RADIUS * 2) {
+          // Predict where the player will be in N ticks.
+          const predictedX = playerHead.x + Math.cos(p.angle) * BOT_PREDICT_SPEED * BOT_PREDICT_AHEAD_TICKS;
+          const predictedY = playerHead.y + Math.sin(p.angle) * BOT_PREDICT_AHEAD_TICKS;
+          const distToPredicted = dist(head.x, head.y, predictedX, predictedY);
+
+          // If the bot is on a collision course with the predicted position, evade.
+          if (distToPredicted < (bot.size + p.size) * 3) {
+            // Evade perpendicular to the player's heading.
+            const evadeAngle = p.angle + (Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2);
+            desired = evadeAngle;
+            bot.desiredAngle = desired;
+            const wantsBoost = bot.personality === 'hunter' && bot.score > 10;
+            this.tickSnakeMovement(bot, bot.desiredAngle, wantsBoost);
+            return;
+          }
+        }
+      }
+
       if (shouldFlee) {
         desired = Math.atan2(head.y - threatY, head.x - threatX);
       } else if (bestFood) {
@@ -1068,17 +1183,12 @@ export class OfflineGameEngine {
         desired = bot.angle + (Math.random() - 0.5) * 0.4;
       }
 
-      // Edge avoidance: turn back toward center if near the wall.
-      const headR = Math.hypot(head.x - WORLD_RADIUS, head.y - WORLD_RADIUS);
-      if (headR > MAP_BASE_RADIUS - BOT_EDGE_AVOID_RADIUS) {
-        const toCenter = Math.atan2(WORLD_RADIUS - head.y, WORLD_RADIUS - head.x);
-        desired = turnToward(desired, toCenter, BOT_MAX_TURN_PER_TICK * 2);
-      }
+      // NO edge avoidance — infinite map, no boundaries.
 
       bot.desiredAngle = desired;
     }
 
-    // Hunter personality occasionally boosts (no chips required, just body length).
+    // Hunter personality occasionally boosts.
     const wantsBoost = bot.personality === 'hunter' && bot.score > 5 && Math.random() < 0.05;
     this.tickSnakeMovement(bot, bot.desiredAngle, wantsBoost);
   }
@@ -1089,7 +1199,6 @@ export class OfflineGameEngine {
 
   private insertSnakeIntoGrid(snake: SnakeBase): void {
     const pts = snake.points;
-    // Insert every 2nd segment for performance (collision still resolves fine).
     for (let i = 0; i < pts.length; i += 2) {
       this.grid.insert({
         id: `${snake.id}:${i}`,
@@ -1124,24 +1233,24 @@ export class OfflineGameEngine {
       if ((item.value ?? 0) <= 0) continue;
       const d = dist(head.x, head.y, item.x, item.y);
       if (d < snake.size + (item.radius || 6) + 6) {
-        // Regular food only (+1 score, no chips). No star chips in offline mode.
-        snake.score += REGULAR_FOOD_GROW;
+        // Eat food — add its value to the snake's food-score.
+        snake.score += item.value ?? 0;
         item.value = 0;
         if (item.foodRef) item.foodRef.value = 0;
         // Spawn small particle burst for player only.
         if (snake.isPlayer) {
-          this.spawnEatParticles(item.x, item.y, item.radius || 6);
+          this.spawnEatParticles(item.x, item.y, item.radius || 6, item.foodRef?.color ?? '#fbbf24');
         }
       }
     }
   }
 
   // --------------------------------------------------------------------------
-  // Collision detection
+  // Collision detection (body + head-on) — NO wall death
   // --------------------------------------------------------------------------
 
-  private detectCollisions(now: number): { deadId: string; killerId?: string; cause: 'body' | 'wall' }[] {
-    const deaths: { deadId: string; killerId?: string; cause: 'body' | 'wall' }[] = [];
+  private detectCollisions(now: number): { deadId: string; killerId?: string; cause: 'body' | 'headon' }[] {
+    const deaths: { deadId: string; killerId?: string; cause: 'body' | 'headon' }[] = [];
     const seenDead = new Set<string>();
     const all: SnakeBase[] = [];
     if (this.player && !this.player.isDead) all.push(this.player);
@@ -1149,8 +1258,64 @@ export class OfflineGameEngine {
       if (!bot.isDead) all.push(bot);
     }
 
-    const mapRadius = getArenaRadius(now);
+    // --- Head-to-head collision (checked first, takes priority) ---
+    const headOnChecked = new Set<string>();
+    for (let i = 0; i < all.length; i++) {
+      for (let j = i + 1; j < all.length; j++) {
+        const a = all[i];
+        const b = all[j];
+        if (a.isDead || b.isDead) continue;
+        if (now < a.spawnProtectedUntil || now < b.spawnProtectedUntil) continue;
+        const pairKey = a.id < b.id ? `${a.id}:${b.id}` : `${b.id}:${a.id}`;
+        if (headOnChecked.has(pairKey)) continue;
+        headOnChecked.add(pairKey);
 
+        const ha = a.points[0];
+        const hb = b.points[0];
+        const d = dist(ha.x, ha.y, hb.x, hb.y);
+        const hitDist = (a.size + b.size) * HEAD_ON_HIT_FACTOR;
+        if (d >= hitDist) continue;
+
+        // Head-on collision! Determine winner based on rules.
+        const aBoosting = a.isBoosting;
+        const bBoosting = b.isBoosting;
+        const aTotalScore = INITIAL_SPAWN_SCORE + a.score;
+        const bTotalScore = INITIAL_SPAWN_SCORE + b.score;
+
+        let aDies = false;
+        let bDies = false;
+
+        if (aTotalScore === bTotalScore) {
+          // Tie — both die
+          aDies = true;
+          bDies = true;
+        } else if (aBoosting && !bBoosting) {
+          // A is boosting, B is not → A wins (boost advantage)
+          bDies = true;
+        } else if (bBoosting && !aBoosting) {
+          // B is boosting, A is not → B wins (boost advantage)
+          aDies = true;
+        } else {
+          // Both boosting or neither boosting → higher score wins
+          if (aTotalScore > bTotalScore) {
+            bDies = true;
+          } else {
+            aDies = true;
+          }
+        }
+
+        if (aDies && !seenDead.has(a.id)) {
+          deaths.push({ deadId: a.id, killerId: b.id, cause: 'headon' });
+          seenDead.add(a.id);
+        }
+        if (bDies && !seenDead.has(b.id)) {
+          deaths.push({ deadId: b.id, killerId: a.id, cause: 'headon' });
+          seenDead.add(b.id);
+        }
+      }
+    }
+
+    // --- Body collision: head vs foreign non-head segment ---
     for (const snake of all) {
       if (snake.isDead) continue;
       if (snake.points.length === 0) continue;
@@ -1158,21 +1323,16 @@ export class OfflineGameEngine {
       if (seenDead.has(snake.id)) continue;
       const head = snake.points[0];
 
-      // Wall collision: outside breathing map radius.
-      const distFromCenter = Math.hypot(head.x - WORLD_RADIUS, head.y - WORLD_RADIUS);
-      if (distFromCenter > mapRadius) {
-        deaths.push({ deadId: snake.id, killerId: 'wall', cause: 'wall' });
-        seenDead.add(snake.id);
-        continue;
-      }
+      // NO wall collision — infinite map.
 
-      // Body collision: head vs foreign non-head segment.
       const queryR = snake.size + 30;
       const nearby = this.grid.queryRadius(head.x, head.y, queryR);
       for (const item of nearby.values()) {
         if (item.kind !== 'segment') continue;
+        // Own-collision immunity — skip own segments.
         if (item.snakeId === snake.id) continue;
-        if (item.segIdx === 0) continue; // head-to-head ignored (no self-collision; head-to-head doesn't kill either)
+        // Skip head segments (handled by head-on collision above).
+        if (item.segIdx === 0) continue;
         const d = dist(head.x, head.y, item.x, item.y);
         if (d < (snake.size + item.radius) * COLLISION_HIT_FACTOR) {
           deaths.push({ deadId: snake.id, killerId: item.snakeId, cause: 'body' });
@@ -1191,7 +1351,7 @@ export class OfflineGameEngine {
   private handlePlayerDeath(): void {
     const p = this.player;
     if (!p) return;
-    this.finalScore = p.score;
+    this.finalScore = INITIAL_SPAWN_SCORE + p.score;
     this.finalKills = p.kills;
     this.finalDurationSeconds = Math.floor((performance.now() - this.startTime) / 1000);
     // Spawn death particles at the head.
@@ -1201,16 +1361,23 @@ export class OfflineGameEngine {
   }
 
   // --------------------------------------------------------------------------
-  // Food replenishment
+  // Food replenishment (spawn around the player's current position)
   // --------------------------------------------------------------------------
 
   private replenishFood(): void {
+    // Remove eaten food (value <= 0).
     if (this.foods.some((f) => f.value <= 0)) {
       this.foods = this.foods.filter((f) => f.value > 0);
     }
+
+    // Replenish up to target, spawning around the player.
+    const p = this.player;
+    const cx = p ? p.points[0].x : 0;
+    const cy = p ? p.points[0].y : 0;
     let guard = 0;
     while (this.foods.length < FOOD_COUNT_TARGET && guard < 50) {
-      this.foods.push(this.spawnRandomFood());
+      const far = Math.random() < FOOD_FAR_FRACTION;
+      this.foods.push(createFoodOrb(this.arena.id, this.idCounterObj, cx, cy, far));
       guard++;
     }
   }
@@ -1233,7 +1400,7 @@ export class OfflineGameEngine {
   }
 
   // --------------------------------------------------------------------------
-  // Camera
+  // Camera (follows player, no world bounds)
   // --------------------------------------------------------------------------
 
   private updateCamera(): void {
@@ -1309,7 +1476,6 @@ export class OfflineGameEngine {
     ctx.fillStyle = '#020617';
     ctx.fillRect(0, 0, cssW, cssH);
 
-    // If no player (rare — between reset and first tick), bail after bg.
     if (!this.player) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       return;
@@ -1323,7 +1489,7 @@ export class OfflineGameEngine {
       camX: this.cam.x,
       camY: this.cam.y,
       zoom: this.cam.zoom,
-      worldSize: WORLD_SIZE,
+      worldSize: 1000000, // large placeholder (infinite map)
       lowQuality: this.lowQuality,
       myId: this.player.id,
       now,
@@ -1337,19 +1503,16 @@ export class OfflineGameEngine {
     ctx.scale(this.cam.zoom, this.cam.zoom);
     ctx.translate(-this.cam.x, -this.cam.y);
 
-    // Grid + boundary.
-    drawGrid(rc);
+    // --- Infinite grid (no boundary circle) ---
+    this.drawInfiniteGrid(ctx, rc);
 
-    // Food.
-    drawFood(rc, this.foods);
+    // --- Food orbs (custom rendering with glow per size) ---
+    this.drawFoodOrbs(ctx, rc);
 
-    // Snakes (bots first, player last on top).
-    for (const bot of this.bots.values()) {
-      this.drawSnakeSnapshot(rc, bot);
-    }
-    this.drawSnakeSnapshot(rc, this.player);
+    // --- Snakes with opacity layering ---
+    this.drawAllSnakes(ctx, rc, now);
 
-    // Particles.
+    // --- Particles ---
     drawParticles(rc, this.particles);
 
     // Reset transform for screen-space overlays.
@@ -1357,6 +1520,209 @@ export class OfflineGameEngine {
 
     // Joystick (touch).
     this.drawJoystick(ctx);
+  }
+
+  // --------------------------------------------------------------------------
+  // Infinite grid rendering (no circular boundary)
+  // --------------------------------------------------------------------------
+
+  private drawInfiniteGrid(ctx: CanvasRenderingContext2D, rc: FrameRenderCtx): void {
+    const vis = computeVisibleRect(rc);
+    const gridSize = 60;
+    const zoom = rc.zoom;
+
+    // Clamp to avoid drawing extreme ranges.
+    const startX = Math.floor(vis.left / gridSize) * gridSize;
+    const endX = Math.ceil(vis.right / gridSize) * gridSize;
+    const startY = Math.floor(vis.top / gridSize) * gridSize;
+    const endY = Math.ceil(vis.bottom / gridSize) * gridSize;
+
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1 / zoom;
+    ctx.beginPath();
+    for (let x = startX; x <= endX; x += gridSize) {
+      ctx.moveTo(x, startY);
+      ctx.lineTo(x, endY);
+    }
+    for (let y = startY; y <= endY; y += gridSize) {
+      ctx.moveTo(startX, y);
+      ctx.lineTo(endX, y);
+    }
+    ctx.stroke();
+
+    // Origin crosshair (subtle).
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 1.5 / zoom;
+    ctx.beginPath();
+    ctx.moveTo(startX, 0);
+    ctx.lineTo(endX, 0);
+    ctx.moveTo(0, startY);
+    ctx.lineTo(0, endY);
+    ctx.stroke();
+  }
+
+  // --------------------------------------------------------------------------
+  // Food orb rendering (three sizes with distinct glow)
+  // --------------------------------------------------------------------------
+
+  private drawFoodOrbs(ctx: CanvasRenderingContext2D, rc: FrameRenderCtx): void {
+    const vis = computeVisibleRect(rc);
+    const zoom = rc.zoom;
+    const lowQ = rc.lowQuality;
+
+    // Batch by orb size for efficient rendering.
+    // Small: tiny glowing dot, green
+    // Medium: medium circle, blue
+    // Large: larger circle, pink with brighter glow
+    const smalls: Food[] = [];
+    const mediums: Food[] = [];
+    const larges: Food[] = [];
+
+    for (let i = 0; i < this.foods.length; i++) {
+      const f = this.foods[i];
+      if (f.value <= 0) continue;
+      if (f.x < vis.left || f.x > vis.right || f.y < vis.top || f.y > vis.bottom) continue;
+
+      if (f.orbSize === 'small') smalls.push(f);
+      else if (f.orbSize === 'medium') mediums.push(f);
+      else larges.push(f);
+    }
+
+    // --- Small orbs: batched simple circles ---
+    if (smalls.length > 0) {
+      if (!lowQ) {
+        ctx.save();
+        ctx.shadowColor = '#10b981';
+        ctx.shadowBlur = 4;
+      }
+      ctx.fillStyle = '#34d399';
+      ctx.beginPath();
+      for (let i = 0; i < smalls.length; i++) {
+        const f = smalls[i];
+        ctx.moveTo(f.x + f.size, f.y);
+        ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+      }
+      ctx.fill();
+      if (!lowQ) {
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
+    }
+
+    // --- Medium orbs: batched circles with medium glow ---
+    if (mediums.length > 0) {
+      if (!lowQ) {
+        ctx.save();
+        ctx.shadowColor = '#0ea5e9';
+        ctx.shadowBlur = 8;
+      }
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      for (let i = 0; i < mediums.length; i++) {
+        const f = mediums[i];
+        ctx.moveTo(f.x + f.size, f.y);
+        ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+      }
+      ctx.fill();
+      if (!lowQ) {
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
+    }
+
+    // --- Large orbs: individual rendering with brighter glow + outer ring ---
+    if (larges.length > 0) {
+      ctx.save();
+      if (!lowQ) {
+        ctx.shadowColor = '#ec4899';
+        ctx.shadowBlur = 14;
+      }
+      ctx.fillStyle = '#f472b6';
+      ctx.beginPath();
+      for (let i = 0; i < larges.length; i++) {
+        const f = larges[i];
+        ctx.moveTo(f.x + f.size, f.y);
+        ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
+      }
+      ctx.fill();
+      if (!lowQ) {
+        // Outer glow ring for large orbs
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = 'rgba(236, 72, 153, 0.4)';
+        ctx.lineWidth = 2 / zoom;
+        ctx.beginPath();
+        for (let i = 0; i < larges.length; i++) {
+          const f = larges[i];
+          ctx.moveTo(f.x + f.size + 3, f.y);
+          ctx.arc(f.x, f.y, f.size + 3, 0, Math.PI * 2);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Snake rendering with opacity layering
+  // --------------------------------------------------------------------------
+
+  private drawAllSnakes(ctx: CanvasRenderingContext2D, rc: FrameRenderCtx, now: number): void {
+    const p = this.player;
+    if (!p) return;
+
+    // Gather all visible snakes.
+    const allSnakes: SnakeBase[] = [];
+    for (const bot of this.bots.values()) {
+      if (!bot.isDead) allSnakes.push(bot);
+    }
+    if (!p.isDead) allSnakes.push(p);
+
+    // Pre-compute opacity for each snake based on proximity to smaller snakes.
+    const opacityMap = new Map<string, number>();
+    for (const snake of allSnakes) {
+      opacityMap.set(snake.id, 1.0);
+    }
+
+    for (let i = 0; i < allSnakes.length; i++) {
+      const a = allSnakes[i];
+      if (a.points.length === 0) continue;
+      const aTotalScore = INITIAL_SPAWN_SCORE + a.score;
+
+      for (let j = 0; j < allSnakes.length; j++) {
+        if (i === j) continue;
+        const b = allSnakes[j];
+        if (b.points.length === 0) continue;
+        const bTotalScore = INITIAL_SPAWN_SCORE + b.score;
+
+        // Check if a is smaller and b is larger.
+        if (aTotalScore < bTotalScore) {
+          const d = dist(a.points[0].x, a.points[0].y, b.points[0].x, b.points[0].y);
+          const proximityThreshold = (a.size + b.size) * OPACITY_PROXIMITY_FACTOR;
+          if (d < proximityThreshold) {
+            // The larger snake (b) fades.
+            const current = opacityMap.get(b.id) ?? 1.0;
+            opacityMap.set(b.id, Math.min(current, OPACITY_FADE_TO));
+          }
+        }
+      }
+    }
+
+    // Render bots first, player last (on top).
+    for (const bot of this.bots.values()) {
+      if (bot.isDead) continue;
+      const opacity = opacityMap.get(bot.id) ?? 1.0;
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      this.drawSnakeSnapshot(rc, bot);
+      ctx.restore();
+    }
+    if (!p.isDead) {
+      const opacity = opacityMap.get(p.id) ?? 1.0;
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      this.drawSnakeSnapshot(rc, p);
+      ctx.restore();
+    }
   }
 
   private drawSnakeSnapshot(rc: FrameRenderCtx, snake: SnakeBase): void {
@@ -1371,6 +1737,7 @@ export class OfflineGameEngine {
       pts = down;
     }
     const now = rc.now;
+    const totalScore = INITIAL_SPAWN_SCORE + snake.score;
     drawSnake(rc, {
       id: snake.id,
       name: snake.name,
@@ -1383,13 +1750,14 @@ export class OfflineGameEngine {
       isPlayer: snake.isPlayer,
       isBot: snake.isBot,
       carriedChips: 0,
-      score: snake.score,
+      score: totalScore,
       isExtracting: snake.isExtracting,
       extractionProgress: Math.min(1, snake.extractionProgress / EXTRACT_DURATION_MS),
       isDead: snake.isDead,
       spawnProtected: now < snake.spawnProtectedUntil,
       chatMessage: snake.chatMessage,
       country: snake.country,
+      isBoosting: snake.isBoosting,
     });
   }
 
@@ -1440,7 +1808,7 @@ export class OfflineGameEngine {
     }
   }
 
-  private spawnEatParticles(x: number, y: number, size: number): void {
+  private spawnEatParticles(x: number, y: number, size: number, color: string): void {
     if (this.lowQuality) return;
     const count = 4;
     for (let i = 0; i < count; i++) {
@@ -1453,7 +1821,7 @@ export class OfflineGameEngine {
         vy: Math.sin(a) * sp,
         life: 350 + Math.random() * 150,
         maxLife: 500,
-        color: '#fbbf24',
+        color,
         size: Math.max(1, size * 0.6),
       });
     }
@@ -1525,13 +1893,12 @@ export class OfflineGameEngine {
   }
 
   // --------------------------------------------------------------------------
-  // HUD construction
+  // HUD construction (no chips, no wallet, no minimap, no commission)
   // --------------------------------------------------------------------------
 
   private buildHUD(): void {
     const parent = this.canvas.parentElement;
     if (!parent) return;
-    // The parent must be positioned (relative/absolute/fixed). Force it.
     if (getComputedStyle(parent).position === 'static') {
       parent.style.position = 'relative';
     }
@@ -1559,30 +1926,20 @@ export class OfflineGameEngine {
     ]));
     root.appendChild(leftStack);
 
-    // --- Top-right HUD stack (BANKED + FPS + ping) ---
+    // --- Top-right HUD stack (FPS only — no banked chips) ---
     const rightStack = document.createElement('div');
     rightStack.style.cssText =
       'position:absolute;right:12px;top:12px;display:flex;flex-direction:column;align-items:flex-end;gap:6px;';
-    const banked = document.createElement('div');
-    banked.style.cssText =
-      'border:1px solid rgba(245,158,11,0.3);background:rgba(2,6,23,0.8);padding:4px 10px;border-radius:6px;backdrop-filter:blur(4px);text-align:right;';
-    banked.innerHTML =
-      '<div style="font-size:10px;letter-spacing:0.05em;text-transform:uppercase;color:#64748b;">BANKED</div>' +
-      `<div style="font-size:14px;font-weight:bold;color:#fbbf24;">${this.playerProfile.bankedChips.toLocaleString()}c</div>`;
-    this.hudEls.banked = banked;
-    rightStack.appendChild(banked);
 
     const fpsRow = document.createElement('div');
     fpsRow.style.cssText =
       'display:flex;gap:8px;align-items:center;border:1px solid rgba(51,65,85,0.6);background:rgba(2,6,23,0.8);padding:4px 8px;border-radius:6px;font-size:11px;backdrop-filter:blur(4px);';
     this.hudEls.fps = this.makeSpan('60 fps', 'color:#94a3b8;');
-    const ping = this.makeSpan('— ms', 'color:#64748b;');
     fpsRow.appendChild(this.hudEls.fps);
-    fpsRow.appendChild(ping);
     rightStack.appendChild(fpsRow);
     root.appendChild(rightStack);
 
-    // --- Leaderboard panel (top-right, below BANKED) ---
+    // --- Leaderboard panel (top-right, below FPS — ranked by Score) ---
     root.appendChild(this.buildLeaderboard());
 
     // --- Top-center extract hint ---
@@ -1640,7 +1997,6 @@ export class OfflineGameEngine {
   ): HTMLDivElement {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;gap:6px;';
-    // Use a unicode dot instead of an SVG icon to keep the file lean.
     const dot = document.createElement('span');
     dot.style.cssText = `display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};`;
     row.appendChild(dot);
@@ -1662,14 +2018,14 @@ export class OfflineGameEngine {
   private buildLeaderboard(): HTMLDivElement {
     const wrap = document.createElement('div');
     wrap.style.cssText =
-      'position:absolute;right:12px;top:108px;width:220px;border:1px solid rgba(51,65,85,0.6);background:rgba(2,6,23,0.85);border-radius:8px;backdrop-filter:blur(4px);overflow:hidden;';
+      'position:absolute;right:12px;top:52px;width:220px;border:1px solid rgba(51,65,85,0.6);background:rgba(2,6,23,0.85);border-radius:8px;backdrop-filter:blur(4px);overflow:hidden;';
 
     const header = document.createElement('div');
     header.style.cssText =
       'display:flex;align-items:center;justify-content:space-between;padding:6px 10px;cursor:pointer;background:rgba(15,23,42,0.8);';
     const title = document.createElement('span');
     title.style.cssText = 'font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;';
-    title.textContent = 'Arena Leaderboard';
+    title.textContent = 'Score Leaderboard';
     const toggle = document.createElement('button');
     toggle.type = 'button';
     toggle.textContent = '▾';
@@ -1678,6 +2034,18 @@ export class OfflineGameEngine {
     header.appendChild(title);
     header.appendChild(toggle);
     wrap.appendChild(header);
+
+    // Column header
+    const colHeader = document.createElement('div');
+    colHeader.style.cssText =
+      'display:flex;justify-content:space-between;padding:3px 10px;font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;border-bottom:1px solid rgba(51,65,85,0.4);';
+    const colLeft = document.createElement('span');
+    colLeft.textContent = 'Player';
+    const colRight = document.createElement('span');
+    colRight.textContent = 'Score';
+    colHeader.appendChild(colLeft);
+    colHeader.appendChild(colRight);
+    wrap.appendChild(colHeader);
 
     const rows = document.createElement('div');
     rows.style.cssText =
@@ -1821,29 +2189,28 @@ export class OfflineGameEngine {
   private updateHUD(): void {
     const p = this.player;
     if (!p) return;
-    if (this.hudEls.score) this.hudEls.score.textContent = p.score.toLocaleString();
+    const totalScore = INITIAL_SPAWN_SCORE + p.score;
+    if (this.hudEls.score) this.hudEls.score.textContent = totalScore.toLocaleString();
     if (this.hudEls.kills) this.hudEls.kills.textContent = String(p.kills);
     if (this.hudEls.bots) this.hudEls.bots.textContent = String(this.bots.size);
     if (this.hudEls.fps) this.hudEls.fps.textContent = `${this.fps} fps`;
 
-    // Rank by score (player + bots).
-    const all: { id: string; name: string; score: number; isPlayer: boolean }[] = [
-      { id: p.id, name: p.name, score: p.score, isPlayer: true },
+    // Rank by total score (player + bots).
+    const all: { id: string; name: string; totalScore: number; isPlayer: boolean }[] = [
+      { id: p.id, name: p.name, totalScore, isPlayer: true },
     ];
     for (const b of this.bots.values()) {
-      all.push({ id: b.id, name: b.name, score: b.score, isPlayer: false });
+      all.push({ id: b.id, name: b.name, totalScore: INITIAL_SPAWN_SCORE + b.score, isPlayer: false });
     }
-    all.sort((a, b) => b.score - a.score);
+    all.sort((a, b) => b.totalScore - a.totalScore);
     const rank = all.findIndex((s) => s.isPlayer);
     if (this.hudEls.rank) this.hudEls.rank.textContent = `#${rank >= 0 ? rank + 1 : 1}`;
 
-    // Leaderboard (top 10).
+    // Leaderboard (top 10 by score).
     if (this.hudEls.leaderboardRows) {
       const top = all.slice(0, 10);
       const rows = this.hudEls.leaderboardRows;
-      // Rebuild only when the order or scores changed (cheap heuristic: compare a
-      // joined string).
-      const sig = top.map((s) => `${s.id}:${s.score}`).join('|');
+      const sig = top.map((s) => `${s.id}:${s.totalScore}`).join('|');
       if (sig !== this.lastLeaderboardSig) {
         this.lastLeaderboardSig = sig;
         rows.innerHTML = '';
@@ -1865,7 +2232,7 @@ export class OfflineGameEngine {
           left.appendChild(nm);
           const sc = document.createElement('span');
           sc.style.cssText = 'font-weight:bold;';
-          sc.textContent = String(s.score);
+          sc.textContent = String(s.totalScore);
           row.appendChild(left);
           row.appendChild(sc);
           rows.appendChild(row);
@@ -1884,7 +2251,7 @@ export class OfflineGameEngine {
   private lastLeaderboardSig: string = '';
 
   // --------------------------------------------------------------------------
-  // End screen (death / extract)
+  // End screen (death / extract) — no XP, no chips
   // --------------------------------------------------------------------------
 
   private showEndScreen(outcome: 'death' | 'extract'): void {
@@ -1912,8 +2279,8 @@ export class OfflineGameEngine {
       ? 'linear-gradient(to right,#eab308,#f59e0b)'
       : '#dc2626';
     const subtitle = isExtract
-      ? `Practice run finished! You eliminated ${this.finalKills} training bots, reached a max size of ${this.finalScore}, and survived for ${mins}m ${secs}s.`
-      : 'Offline Training — No chips lost.';
+      ? `Practice run finished! You eliminated ${this.finalKills} training bots, reached a score of ${this.finalScore}, and survived for ${mins}m ${secs}s.`
+      : `Your snake was destroyed! Final score: ${this.finalScore}. No chips were wagered or lost — offline practice only.`;
 
     overlay.innerHTML = `
       <div style="width:min(94vw,520px);border:1px solid #1e293b;background:#020617;border-radius:16px;box-shadow:0 25px 60px rgba(0,0,0,0.6);overflow:hidden;">
@@ -1929,12 +2296,12 @@ export class OfflineGameEngine {
 
           <div style="margin-top:16px;border:1px solid #1e293b;background:rgba(15,23,42,0.6);border-radius:8px;padding:12px;font-size:12px;">
             <div style="display:flex;justify-content:space-between;">
-              <span style="color:#94a3b8;">Opponents Eliminated:</span>
-              <span style="color:#fff;">${this.finalKills} Kills</span>
+              <span style="color:#94a3b8;">Final Score:</span>
+              <span style="color:#fff;">${this.finalScore.toLocaleString()}</span>
             </div>
             <div style="display:flex;justify-content:space-between;margin-top:4px;">
-              <span style="color:#94a3b8;">Max Length:</span>
-              <span style="color:#fff;">${this.finalScore}</span>
+              <span style="color:#94a3b8;">Opponents Eliminated:</span>
+              <span style="color:#fff;">${this.finalKills} Kills</span>
             </div>
             <div style="display:flex;justify-content:space-between;margin-top:4px;">
               <span style="color:#94a3b8;">Survival Time:</span>
@@ -1946,7 +2313,7 @@ export class OfflineGameEngine {
             isExtract
               ? `<div style="margin-top:12px;border:1px solid #1e293b;background:rgba(15,23,42,0.6);border-radius:8px;padding:12px;text-align:center;">
                    <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#fbbf24;">Offline Training Complete</div>
-                   <div style="margin-top:4px;font-size:11px;color:#94a3b8;">No buy-in or banking fees. Great job sharpening your skills and maneuvers!</div>
+                   <div style="margin-top:4px;font-size:11px;color:#94a3b8;">No chips, no XP — just pure practice. Great job sharpening your skills!</div>
                  </div>`
               : `<div style="margin-top:12px;border:1px solid rgba(15,23,42,0.6);background:rgba(15,23,42,0.4);border-radius:8px;padding:10px;text-align:center;font-size:11px;color:#94a3b8;">
                    No chips were wagered or lost — offline practice only.

@@ -1,0 +1,755 @@
+     1	     1	// ============================================================================
+     2	     2	// game-state.ts — In-memory per-arena game state + pure game logic.
+     3	     3	// ----------------------------------------------------------------------------
+     4	     4	// All Socket.IO / HTTP glue lives in index.ts; this module is pure game
+     5	     5	// state and physics so it can be reasoned about (and later tested) in
+     6	     6	// isolation.
+     7	     7	//
+     8	     8	// Key design decisions that FIX the old server's bugs:
+     9	     9	//  * NO client-supplied position — the server is the sole authority on
+    10	    10	//    snake coordinates. Client only sends a desired `angle`.
+    11	    11	//  * Bounded body length — a snake's `points` array is capped at
+    12	    12	//    `MAX_BODY_POINTS` so a runaway chip count can't OOM the server.
+    13	    13	//  * All `points[0]` accesses are guarded; an empty `points` array
+    14	    14	//    short-circuits the snake's tick (no TypeError crash).
+    15	    15	//  * Map iteration + late-removal: dead snakes are collected into an
+    16	    16	//    array and removed AFTER iteration completes (no Map mutation mid-iter).
+    17	    17	//  * Bot AI reuses the same grid queries as players and never allocates
+    18	    18	//    new arrays per tick (it walks the query Map directly).
+    19	    19	// ============================================================================
+    20	    20	
+    21	    21	import {
+    22	    22	  BASE_SPEED,
+    23	    23	  BOOST_DROP_INTERVAL,
+    24	    24	  BOOST_MIN_LENGTH,
+    25	    25	  BOOST_SPEED,
+    26	    26	  BOT_NAMES,
+    27	    27	  BOT_SKINS,
+    28	    28	  COLLISION_HIT_FACTOR,
+    29	    29	  DEATH_FOOD_DROP_EVERY,
+    30	    30	  DEATH_STAR_DROP_MAX,
+    31	    31	  DEATH_STAR_DROP_MIN,
+    32	    32	  EXTRACT_DURATION_MS,
+    33	    33	  EXTRACT_GLIDE_SPEED,
+    34	    34	  FOOD_COUNT_TARGET,
+    35	    35	  INITIAL_BODY_LENGTH,
+    36	    36	  MAP_BASE_RADIUS,
+    37	    37	  MAP_BREATH_AMPLITUDE,
+    38	    38	  MAP_BREATH_CYCLE_MS,
+    39	    39	  MAX_BODY_LENGTH,
+    40	    40	  REGULAR_FOOD_GROW,
+    41	    41	  REGULAR_FOOD_VALUE_MAX,
+    42	    42	  REGULAR_FOOD_VALUE_MIN,
+    43	    43	  RESPAWN_INVULN_MS,
+    44	    44	  SEGMENT_SPACING,
+    45	    45	  SIZE_BASE,
+    46	    46	  SIZE_SCORE_FACTOR,
+    47	    47	  STAR_CHIP_GROW,
+    48	    48	  STAR_CHIP_VALUE,
+    49	    49	  TICK_MS,
+    50	    50	  TURN_BASE,
+    51	    51	  TURN_MIN,
+    52	    52	  TURN_SCORE_FACTOR,
+    53	    53	  WORLD_SIZE,
+    54	    54	  WORLD_RADIUS,
+    55	    55	  type ArenaTier,
+    56	    56	} from '../../src/lib/game-config';
+    57	    57	import type {
+    58	    58	  FoodSnapshot,
+    59	    59	  GameSnapshot,
+    60	    60	  SnakeSnapshot,
+    61	    61	} from '../../src/lib/types';
+    62	    62	import { SpatialHashGrid, type GridItem } from './spatial-grid.js';
+    63	    63	
+    64	    64	// ----------------------------------------------------------------------------
+    65	    65	// Types
+    66	    66	// ----------------------------------------------------------------------------
+    67	    67	
+    68	    68	export interface Vec2 {
+    69	    69	  x: number;
+    70	    70	  y: number;
+    71	    71	}
+    72	    72	
+    73	    73	/** Identity returned by POST /api/match/verify. Treated as immutable trust. */
+    74	    74	export interface PlayerIdentity {
+    75	    75	  id: string;
+    76	    76	  userTag: string;
+    77	    77	  name: string;
+    78	    78	  country: string;
+    79	    79	  level: number;
+    80	    80	  bankedChips?: number;
+    81	    81	  currentSkin: string;
+    82	    82	  currentTrail: string;
+    83	    83	  currentDeath: string;
+    84	    84	  currentFlag: string | null;
+    85	    85	  color: string;
+    86	    86	  secondaryColor?: string;
+    87	    87	  pattern?: string;
+    88	    88	  unlockedSkins: string[];
+    89	    89	  clanTag: string | null;
+    90	    90	  clanRank: string | null;
+    91	    91	  role: 'player' | 'admin';
+    92	    92	}
+    93	    93	
+    94	    94	/** Shared shape between human players and bots. */
+    95	    95	export interface SnakeBase {
+    96	    96	  id: string;
+    97	    97	  name: string;
+    98	    98	  userTag?: string;
+    99	    99	  country?: string;
+   100	   100	  /** Body points; index 0 is the head. */
+   101	   101	  points: Vec2[];
+   102	   102	  angle: number;
+   103	   103	  /** Visual radius in px; used for both rendering and collision. */
+   104	   104	  size: number;
+   105	   105	  color: string;
+   106	   106	  secondaryColor?: string;
+   107	   107	  isPlayer: boolean;
+   108	   108	  isBot: boolean;
+   109	   109	  /** Chips carried in-match (ONLY from star chips). Lost on death, banked on extract. */
+   110	   110	  carriedChips: number;
+   111	   111	  /** Body-length score: regular food +1, star chip +3. Determines body length & size. */
+   112	   112	  score: number;
+   113	   113	  /** Frame counter for boost drop interval. */
+   114	   114	  boostFrameCounter: number;
+   115	   115	  isExtracting: boolean;
+   116	   116	  /** ms accumulated toward EXTRACT_DURATION_MS. */
+   117	   117	  extractionProgress: number;
+   118	   118	  isDead: boolean;
+   119	   119	  /** epoch ms; snake is invulnerable until this timestamp. */
+   120	   120	  spawnProtectedUntil: number;
+   121	   121	  chatMessage?: string;
+   122	   122	  chatExpiry?: number;
+   123	   123	}
+   124	   124	
+   125	   125	/** A human-controlled snake. */
+   126	   126	export interface PlayerSession extends SnakeBase {
+   127	   127	  identity: PlayerIdentity;
+   128	   128	  /** Last validated desired angle sent by the client. */
+   129	   129	  desiredAngle: number;
+   130	   130	  wantsBoost: boolean;
+   131	   131	  kills: number;
+   132	   132	  joinedAt: number;
+   133	   133	  lastInputAt: number;
+   134	   134	  /** Counts consecutive rate-limit drops; logged when abusey. */
+   135	   135	  inputDropCount: number;
+   136	   136	  lastChatAt: number;
+   137	   137	  arenaId: string | null;
+   138	   138	  /** True while we're awaiting /api/match/result response — prevents double-report. */
+   139	   139	  matchSettling: boolean;
+   140	   140	}
+   141	   141	
+   142	   142	export type BotPersonality = 'scavenger' | 'opportunist' | 'hunter' | 'extractor' | 'coward';
+   143	   143	
+   144	   144	/** An AI-controlled snake. */
+   145	   145	export interface BotSession extends SnakeBase {
+   146	   146	  botId: string;
+   147	   147	  personality: BotPersonality;
+   148	   148	  /** epoch ms; next time the bot re-evaluates its target angle. */
+   149	   149	  nextThinkAt: number;
+   150	   150	  /** Cached desired angle between re-thinks. */
+   151	   151	  desiredAngle: number;
+   152	   152	}
+   153	   153	
+   154	   154	export interface Food {
+   155	   155	  id: string;
+   156	   156	  x: number;
+   157	   157	  y: number;
+   158	   158	  size: number;
+   159	   159	  value: number;
+   160	   160	  isStarChip: boolean;
+   161	   161	  color: string;
+   162	   162	}
+   163	   163	
+   164	   164	/** One arena's full in-memory state. */
+   165	   165	export interface ArenaRoom {
+   166	   166	  arena: ArenaTier;
+   167	   167	  players: Map<string, PlayerSession>;
+   168	   168	  bots: Map<string, BotSession>;
+   169	   169	  foods: Food[];
+   170	   170	  grid: SpatialHashGrid;
+   171	   171	  tick: number;
+   172	   172	  lastBroadcast: number;
+   173	   173	  leaderId: string | null;
+   174	   174	  leaderChips: number;
+   175	   175	  /** Monotonic counter for food ids within this arena. */
+   176	   176	  foodIdCounter: number;
+   177	   177	  /** Monotonic counter for bot ids within this arena. */
+   178	   178	  botIdCounter: number;
+   179	   179	}
+   180	   180	
+   181	   181	// ----------------------------------------------------------------------------
+   182	   182	// Constants
+   183	   183	// ----------------------------------------------------------------------------
+   184	   184	
+   185	   185	/** Max turn rate per tick (radians) for bots. Prevents instant 180° snaps. */
+   186	   186	const MAX_TURN_PER_TICK = 0.22;
+   187	   187	/** Max points emitted in a snapshot — longer bodies are downsampled. */
+   188	   188	const MAX_SNAPSHOT_POINTS = 60;
+   189	   189	
+   190	   190	// ----------------------------------------------------------------------------
+   191	   191	// Math helpers
+   192	   192	// ----------------------------------------------------------------------------
+   193	   193	
+   194	   194	/** Smallest angular difference from `current` to `desired`, in [-π, π]. */
+   195	   195	function angularDelta(current: number, desired: number): number {
+   196	   196	  let diff = desired - current;
+   197	   197	  while (diff > Math.PI) diff -= 2 * Math.PI;
+   198	   198	  while (diff < -Math.PI) diff += 2 * Math.PI;
+   199	   199	  return diff;
+   200	   200	}
+   201	   201	
+   202	   202	/** Step `current` toward `desired` by at most `maxStep` radians. */
+   203	   203	export function turnToward(current: number, desired: number, maxStep: number): number {
+   204	   204	  const diff = angularDelta(current, desired);
+   205	   205	  if (Math.abs(diff) <= maxStep) return desired;
+   206	   206	  return current + Math.sign(diff) * maxStep;
+   207	   207	}
+   208	   208	
+   209	   209	/** Distance between two points. */
+   210	   210	function dist(ax: number, ay: number, bx: number, by: number): number {
+   211	   211	  return Math.hypot(ax - bx, ay - by);
+   212	   212	}
+   213	   213	
+   214	   214	// ----------------------------------------------------------------------------
+   215	   215	// Spawning
+   216	   216	// ----------------------------------------------------------------------------
+   217	   217	
+   218	   218	/** Random point inside a disc of radius `maxR` centered on the WORLD center. */
+   219	   219	export function randomSpawnPoint(maxR: number): Vec2 {
+   220	   220	  // sqrt for uniform area distribution (avoids clustering at center)
+   221	   221	  const r = Math.sqrt(Math.random()) * maxR;
+   222	   222	  const theta = Math.random() * Math.PI * 2;
+   223	   223	  return { x: WORLD_RADIUS + Math.cos(theta) * r, y: WORLD_RADIUS + Math.sin(theta) * r };
+   224	   224	}
+   225	   225	
+   226	   226	/** Breathing map radius — oscillates +/- MAP_BREATH_AMPLITUDE every MAP_BREATH_CYCLE_MS. */
+   227	   227	export function getMapRadius(elapsedMs: number): number {
+   228	   228	  const cycle = (elapsedMs % MAP_BREATH_CYCLE_MS) / MAP_BREATH_CYCLE_MS;
+   229	   229	  return MAP_BASE_RADIUS + Math.sin(cycle * Math.PI * 2) * MAP_BREATH_AMPLITUDE;
+   230	   230	}
+   231	   231	
+   232	   232	/**
+   233	   233	 * Build an initial body: `length` points strung out behind the head at
+   234	   234	 * SEGMENT_SPACING px apart, all along the angle's reverse direction.
+   235	   235	 */
+   236	   236	export function initialBody(headX: number, headY: number, angle: number, length: number): Vec2[] {
+   237	   237	  const pts: Vec2[] = [];
+   238	   238	  for (let i = 0; i < length; i++) {
+   239	   239	    pts.push({
+   240	   240	      x: headX - Math.cos(angle) * i * SEGMENT_SPACING,
+   241	   241	      y: headY - Math.sin(angle) * i * SEGMENT_SPACING,
+   242	   242	    });
+   243	   243	  }
+   244	   244	  return pts;
+   245	   245	}
+   246	   246	
+   247	   247	/** Factory: create a fresh ArenaRoom for the given tier (no bots spawned yet). */
+   248	   248	export function createArenaRoom(arena: ArenaTier): ArenaRoom {
+   249	   249	  return {
+   250	   250	    arena,
+   251	   251	    players: new Map(),
+   252	   252	    bots: new Map(),
+   253	   253	    foods: [],
+   254	   254	    grid: new SpatialHashGrid(120),
+   255	   255	    tick: 0,
+   256	   256	    lastBroadcast: 0,
+   257	   257	    leaderId: null,
+   258	   258	    leaderChips: 0,
+   259	   259	    foodIdCounter: 0,
+   260	   260	    botIdCounter: 0,
+   261	   261	  };
+   262	   262	}
+   263	   263	
+   264	   264	/** Spawn a single bot with a random personality and safe location. */
+   265	   265	export function spawnBot(room: ArenaRoom): BotSession {
+   266	   266	  const idx = room.botIdCounter++;
+   267	   267	  const name = BOT_NAMES[idx % BOT_NAMES.length] + (idx >= BOT_NAMES.length ? '-' + Math.floor(idx / BOT_NAMES.length) : '');
+   268	   268	  const skin = BOT_SKINS[idx % BOT_SKINS.length];
+   269	   269	  const personalities: BotPersonality[] = ['scavenger', 'opportunist', 'hunter', 'extractor', 'coward'];
+   270	   270	  const personality = personalities[idx % personalities.length];
+   271	   271	  const spawn = randomSpawnPoint(WORLD_RADIUS - 200);
+   272	   272	  const angle = Math.random() * Math.PI * 2;
+   273	   273	  const botId = `bot-${room.arena.id}-${idx}`;
+   274	   274	  return {
+   275	   275	    id: botId,
+   276	   276	    botId,
+   277	   277	    name,
+   278	   278	    points: initialBody(spawn.x, spawn.y, angle, INITIAL_BODY_LENGTH),
+   279	   279	    angle,
+   280	   280	    size: SIZE_BASE,
+   281	   281	    color: skin.color,
+   282	   282	    secondaryColor: skin.secondaryColor,
+   283	   283	    isPlayer: false,
+   284	   284	    isBot: true,
+   285	   285	    carriedChips: 0,
+   286	   286	    score: 0,
+   287	   287	    boostFrameCounter: 0,
+   288	   288	    isExtracting: false,
+   289	   289	    extractionProgress: 0,
+   290	   290	    isDead: false,
+   291	   291	    spawnProtectedUntil: Date.now() + RESPAWN_INVULN_MS,
+   292	   292	    personality,
+   293	   293	    nextThinkAt: 0,
+   294	   294	    desiredAngle: angle,
+   295	   295	  };
+   296	   296	}
+   297	   297	
+   298	   298	/** Ensure the arena has `arena.botsCount` bots, spawning new ones as needed. */
+   299	   299	export function ensureBots(room: ArenaRoom): void {
+   300	   300	  while (room.bots.size < room.arena.botsCount) {
+   301	   301	    const bot = spawnBot(room);
+   302	   302	    room.bots.set(bot.id, bot);
+   303	   303	  }
+   304	   304	}
+   305	   305	
+   306	   306	/** Spawn one regular food pellet at a random in-world location. Original: value 2-6, 8 colors. */
+   307	   307	const FOOD_COLORS = ['#38bdf8', '#818cf8', '#fb7185', '#34d399', '#fbbf24', '#a78bfa', '#22d3ee', '#f472b6'];
+   308	   308	export function spawnRandomFood(room: ArenaRoom): Food {
+   309	   309	  const id = `food-${room.arena.id}-${room.foodIdCounter++}`;
+   310	   310	  const pos = randomSpawnPoint(MAP_BASE_RADIUS - 20);
+   311	   311	  return {
+   312	   312	    id,
+   313	   313	    x: pos.x,
+   314	   314	    y: pos.y,
+   315	   315	    size: 4 + Math.random() * 3,
+   316	   316	    value: Math.floor(Math.random() * (REGULAR_FOOD_VALUE_MAX - REGULAR_FOOD_VALUE_MIN + 1)) + REGULAR_FOOD_VALUE_MIN,
+   317	   317	    isStarChip: false,
+   318	   318	    color: FOOD_COLORS[Math.floor(Math.random() * FOOD_COLORS.length)],
+   319	   319	  };
+   320	   320	}
+   321	   321	
+   322	   322	/**
+   323	   323	 * Drop star chips at body segment positions (NO scatter).
+   324	   324	 * ONLY for real players (bots never have chips).
+   325	   325	 * Called on BOTH body-collision death AND wall death for real players.
+   326	   326	 */
+   327	   327	export function dropStarChipsAtBody(room: ArenaRoom, bodyPoints: Vec2[], chips: number): void {
+   328	   328	  if (!bodyPoints || bodyPoints.length === 0 || chips <= 0) return;
+   329	   329	  const dropCount = Math.min(DEATH_STAR_DROP_MAX, Math.max(DEATH_STAR_DROP_MIN, Math.floor(chips / 5)));
+   330	   330	  const valuePerDrop = Math.max(1, Math.floor(chips / dropCount));
+   331	   331	  for (let i = 0; i < dropCount; i++) {
+   332	   332	    // Distribute along the body — no scatter radius.
+   333	   333	    const segIdx = Math.min(bodyPoints.length - 1, Math.floor((i / dropCount) * bodyPoints.length));
+   334	   334	    const pt = bodyPoints[segIdx];
+   335	   335	    const id = `food-${room.arena.id}-${room.foodIdCounter++}`;
+   336	   336	    room.foods.push({
+   337	   337	      id,
+   338	   338	      x: pt.x,
+   339	   339	      y: pt.y,
+   340	   340	      size: 9 + Math.random() * 2,
+   341	   341	      value: valuePerDrop,
+   342	   342	      isStarChip: true,
+   343	   343	      color: '#fbbf24',
+   344	   344	    });
+   345	   345	  }
+   346	   346	}
+   347	   347	
+   348	   348	/**
+   349	   349	 * Drop regular food at body segment positions (NO scatter).
+   350	   350	 * Called ONLY on body-collision death (NOT wall death).
+   351	   351	 * Both real players and bots drop food on body-collision death.
+   352	   352	 */
+   353	   353	export function dropFoodAtBody(room: ArenaRoom, bodyPoints: Vec2[], color: string): void {
+   354	   354	  if (!bodyPoints || bodyPoints.length === 0) return;
+   355	   355	  // Every 2nd segment drops food (original logic).
+   356	   356	  for (let i = 0; i < bodyPoints.length; i += DEATH_FOOD_DROP_EVERY) {
+   357	   357	    const pt = bodyPoints[i];
+   358	   358	    const id = `food-${room.arena.id}-${room.foodIdCounter++}`;
+   359	   359	    room.foods.push({
+   360	   360	      id,
+   361	   361	      x: pt.x,
+   362	   362	      y: pt.y,
+   363	   363	      size: 4 + Math.random() * 3,
+   364	   364	      value: Math.floor(Math.random() * (REGULAR_FOOD_VALUE_MAX - REGULAR_FOOD_VALUE_MIN + 1)) + REGULAR_FOOD_VALUE_MIN,
+   365	   365	      isStarChip: false,
+   366	   366	      color: color,
+   367	   367	    });
+   368	   368	  }
+   369	   369	}
+   370	   370	
+   371	   371	// ----------------------------------------------------------------------------
+   372	   372	// Snake movement
+   373	   373	// ----------------------------------------------------------------------------
+   374	   374	
+   375	   375	/**
+   376	   376	 * Move a snake one tick. The server is the sole authority on coordinates:
+   377	   377	 * `desiredAngle` is the only client influence (via rate-limited turn speed).
+   378	   378	 *
+   379	   379	 * ORIGINAL MECHANICS (matching server.ts):
+   380	   380	 *  * Regular food = +1 score (grows body), NO chips.
+   381	   381	 *  * Star chips = +chips to carriedChips, +3 score.
+   382	   382	 *  * Boost costs BODY LENGTH: every 40 frames drops 1 tail segment (score -1).
+   383	   383	 *  * Boost requires body.length > 8.
+   384	   384	 *  * Turn rate: max(0.045, 0.15 - score*0.0006) — bigger snakes turn slower.
+   385	   385	 *  * Size: 8 + sqrt(score) * 0.4.
+   386	   386	 *  * Extraction glide speed = 3.2 (can still steer while extracting).
+   387	   387	 *  * Body length = INITIAL_BODY_LENGTH + score, capped at MAX_BODY_LENGTH (120).
+   388	   388	 */
+   389	   389	export function tickSnakeMovement(
+   390	   390	  snake: SnakeBase,
+   391	   391	  desiredAngle: number,
+   392	   392	  wantsBoost: boolean,
+   393	   393	): void {
+   394	   394	  if (snake.points.length === 0) return;
+   395	   395	  if (snake.isDead) return;
+   396	   396	
+   397	   397	  // 1) Turn — rate-limited, bigger snakes turn slower (original formula).
+   398	   398	  const turnRate = Math.max(TURN_MIN, TURN_BASE - snake.score * TURN_SCORE_FACTOR);
+   399	   399	  snake.angle = turnToward(snake.angle, desiredAngle, turnRate);
+   400	   400	
+   401	   401	  // 2) Speed: extracting glide < normal < boost.
+   402	   402	  let speed = BASE_SPEED;
+   403	   403	  if (snake.isExtracting) {
+   404	   404	    speed = EXTRACT_GLIDE_SPEED;
+   405	   405	  } else if (wantsBoost && snake.points.length > BOOST_MIN_LENGTH) {
+   406	   406	    speed = BOOST_SPEED;
+   407	   407	    // Boost cost: drop 1 tail segment every BOOST_DROP_INTERVAL frames.
+   408	   408	    snake.boostFrameCounter++;
+   409	   409	    if (snake.boostFrameCounter >= BOOST_DROP_INTERVAL) {
+   410	   410	      snake.boostFrameCounter = 0;
+   411	   411	      if (snake.points.length > BOOST_MIN_LENGTH) {
+   412	   412	        snake.points.pop();
+   413	   413	        snake.score = Math.max(BOOST_MIN_LENGTH, snake.score - 1);
+   414	   414	      }
+   415	   415	    }
+   416	   416	  }
+   417	   417	
+   418	   418	  // 3) Move head.
+   419	   419	  const head = snake.points[0];
+   420	   420	  const nx = head.x + Math.cos(snake.angle) * speed;
+   421	   421	  const ny = head.y + Math.sin(snake.angle) * speed;
+   422	   422	
+   423	   423	  // 4) Unshift new head — body trails naturally. NO world clamp (wall = death).
+   424	   424	  snake.points.unshift({ x: nx, y: ny });
+   425	   425	
+   426	   426	  // 5) Grow/shrink body to target length based on SCORE (not chips).
+   427	   427	  const targetLen = Math.min(
+   428	   428	    MAX_BODY_LENGTH,
+   429	   429	    INITIAL_BODY_LENGTH + snake.score,
+   430	   430	  );
+   431	   431	  while (snake.points.length > targetLen) snake.points.pop();
+   432	   432	
+   433	   433	  // 6) Size formula: 8 + sqrt(score) * 0.4 (original).
+   434	   434	  snake.size = SIZE_BASE + Math.sqrt(snake.score) * SIZE_SCORE_FACTOR;
+   435	   435	}
+   436	   436	
+   437	   437	// ----------------------------------------------------------------------------
+   438	   438	// Bot AI
+   439	   439	// ----------------------------------------------------------------------------
+   440	   440	
+   441	   441	/**
+   442	   442	 * Cheap per-bot AI. Re-evaluates a target angle every ~150ms; between
+   443	   443	 * re-thinks it just moves toward the cached angle. The bot seeks the
+   444	   444	 * nearest food pellet and flees from any foreign body segment within a
+   445	   445	 * threat radius. No allocations on the hot path — we walk the grid query
+   446	   446	 * Map directly.
+   447	   447	 */
+   448	   448	export function tickBot(bot: BotSession, room: ArenaRoom, now: number): void {
+   449	   449	  if (bot.points.length === 0 || bot.isDead) return;
+   450	   450	
+   451	   451	  if (now >= bot.nextThinkAt) {
+   452	   452	    bot.nextThinkAt = now + 120 + Math.floor(Math.random() * 80);
+   453	   453	    const head = bot.points[0];
+   454	   454	
+   455	   455	    // Find nearest food (scan ~250px radius).
+   456	   456	    let bestFood: GridItem | null = null;
+   457	   457	    let bestFoodDist = Infinity;
+   458	   458	    const foodQuery = room.grid.queryRadius(head.x, head.y, 260);
+   459	   459	    for (const item of foodQuery.values()) {
+   460	   460	      if (item.kind !== 'food') continue;
+   461	   461	      if ((item.value ?? 0) <= 0) continue;
+   462	   462	      const d = dist(head.x, head.y, item.x, item.y);
+   463	   463	      if (d < bestFoodDist) {
+   464	   464	        bestFoodDist = d;
+   465	   465	        bestFood = item;
+   466	   466	      }
+   467	   467	    }
+   468	   468	
+   469	   469	    // Find nearest threat (foreign body segment within ~140px).
+   470	   470	    let threatX = 0;
+   471	   471	    let threatY = 0;
+   472	   472	    let threatDist = Infinity;
+   473	   473	    const threatQuery = room.grid.queryRadius(head.x, head.y, 150);
+   474	   474	    for (const item of threatQuery.values()) {
+   475	   475	      if (item.kind !== 'segment') continue;
+   476	   476	      if (item.snakeId === bot.id) continue;
+   477	   477	      if (item.segIdx === 0) continue; // ignore head-on collisions
+   478	   478	      const d = dist(head.x, head.y, item.x, item.y);
+   479	   479	      if (d < threatDist) {
+   480	   480	        threatDist = d;
+   481	   481	        threatX = item.x;
+   482	   482	        threatY = item.y;
+   483	   483	      }
+   484	   484	    }
+   485	   485	
+   486	   486	    let desired: number;
+   487	   487	    const cowardFleeDist = 140;
+   488	   488	    const opportunistFleeDist = 90;
+   489	   489	    const shouldFlee =
+   490	   490	      threatDist < cowardFleeDist &&
+   491	   491	      (bot.personality === 'coward' ||
+   492	   492	        bot.personality === 'extractor' ||
+   493	   493	        (bot.personality === 'opportunist' && threatDist < opportunistFleeDist));
+   494	   494	
+   495	   495	    if (shouldFlee) {
+   496	   496	      // Flee directly away from the threat segment.
+   497	   497	      desired = Math.atan2(head.y - threatY, head.x - threatX);
+   498	   498	    } else if (bestFood) {
+   499	   499	      desired = Math.atan2(bestFood.y - head.y, bestFood.x - head.x);
+   500	   500	    } else {
+   501	   501	      // Wander: nudge current angle slightly. Avoids getting stuck on walls.
+   502	   502	      desired = bot.angle + (Math.random() - 0.5) * 0.4;
+   503	   503	    }
+   504	   504	
+   505	   505	    // Edge avoidance: if near world border, turn back toward center.
+   506	   506	    const headR = Math.hypot(head.x, head.y);
+   507	   507	    if (headR > WORLD_RADIUS - 250) {
+   508	   508	      const toCenter = Math.atan2(-head.y, -head.x);
+   509	   509	      desired = turnToward(desired, toCenter, MAX_TURN_PER_TICK * 2);
+   510	   510	    }
+   511	   511	
+   512	   512	    bot.desiredAngle = desired;
+   513	   513	  }
+   514	   514	
+   515	   515	  // Hunter personality occasionally boosts.
+   516	   516	  const wantsBoost = bot.personality === 'hunter' && bot.carriedChips > 5 && Math.random() < 0.05;
+   517	   517	  tickSnakeMovement(bot, bot.desiredAngle, wantsBoost);
+   518	   518	}
+   519	   519	
+   520	   520	// ----------------------------------------------------------------------------
+   521	   521	// Collision detection
+   522	   522	// ----------------------------------------------------------------------------
+   523	   523	
+   524	   524	/** A pending death detected during collision iteration; applied after iteration. */
+   525	   525	export interface PendingDeath {
+   526	   526	  deadId: string;
+   527	   527	  killerId?: string;
+   528	   528	  cause: 'body' | 'wall';
+   529	   529	}
+   530	   530	
+   531	   531	/**
+   532	   532	 * Detect head-to-body collisions via the spatial grid. For each living,
+   533	   533	 * non-spawn-protected snake's head, query nearby segments; if any
+   534	   534	 * foreign non-head segment is within `head.size + seg.radius`, the head's
+   535	   535	 * owner dies (and the segment's owner is the killer).
+   536	   536	 *
+   537	   537	 * Returns the list of deaths. Caller must apply them AFTER iteration.
+   538	   538	 */
+   539	   539	export function detectCollisions(room: ArenaRoom, now: number): PendingDeath[] {
+   540	   540	  const deaths: PendingDeath[] = [];
+   541	   541	  const seenDead = new Set<string>();
+   542	   542	
+   543	   543	  const allSnakes: SnakeBase[] = collectAllSnakes(room);
+   544	   544	  for (const snake of allSnakes) {
+   545	   545	    if (snake.isDead) continue;
+   546	   546	    if (snake.points.length === 0) continue;
+   547	   547	    if (now < snake.spawnProtectedUntil) continue;
+   548	   548	    if (seenDead.has(snake.id)) continue;
+   549	   549	
+   550	   550	    const head = snake.points[0];
+   551	   551	
+   552	   552	    // Wall collision: death if outside the breathing map radius.
+   553	   553	    const mapRadius = getMapRadius(now);
+   554	   554	    const distFromCenter = Math.hypot(head.x - WORLD_RADIUS, head.y - WORLD_RADIUS);
+   555	   555	    if (distFromCenter > mapRadius) {
+   556	   556	      deaths.push({ deadId: snake.id, killerId: 'wall', cause: 'wall' });
+   557	   557	      seenDead.add(snake.id);
+   558	   558	      continue;
+   559	   559	    }
+   560	   560	
+   561	   561	    const queryR = snake.size + 30;
+   562	   562	    const nearby = room.grid.queryRadius(head.x, head.y, queryR);
+   563	   563	
+   564	   564	    for (const item of nearby.values()) {
+   565	   565	      if (item.kind !== 'segment') continue;
+   566	   566	      if (item.snakeId === snake.id) continue;
+   567	   567	      if (item.segIdx === 0) continue; // skip head-to-head (head-to-body only)
+   568	   568	      const d = dist(head.x, head.y, item.x, item.y);
+   569	   569	      // Original hit factor: (radiusA + radiusB) * 0.75
+   570	   570	      if (d < (snake.size + item.radius) * COLLISION_HIT_FACTOR) {
+   571	   571	        deaths.push({ deadId: snake.id, killerId: item.snakeId, cause: 'body' });
+   572	   572	        seenDead.add(snake.id);
+   573	   573	        break;
+   574	   574	      }
+   575	   575	    }
+   576	   576	  }
+   577	   577	
+   578	   578	  return deaths;
+   579	   579	}
+   580	   580	
+   581	   581	/**
+   582	   582	 * Eat food via the spatial grid. RULES:
+   583	   583	 *  * Regular food (isStarChip=false): +1 score (grows body), NO chips. ALL snakes eat this.
+   584	   584	 *  * Star chip (isStarChip=true): +value chips to carriedChips, +3 score. ONLY real players eat this.
+   585	   585	 *  * Bots NEVER collect star chips (they have no economic role).
+   586	   586	 * Eaten food is zeroed on both the grid item AND the real Food object.
+   587	   587	 */
+   588	   588	export function eatFood(room: ArenaRoom): void {
+   589	   589	  const allSnakes: SnakeBase[] = collectAllSnakes(room);
+   590	   590	  for (const snake of allSnakes) {
+   591	   591	    if (snake.isDead) continue;
+   592	   592	    if (snake.points.length === 0) continue;
+   593	   593	    const head = snake.points[0];
+   594	   594	    const nearby = room.grid.queryRadius(head.x, head.y, snake.size + 20);
+   595	   595	    for (const item of nearby.values()) {
+   596	   596	      if (item.kind !== 'food') continue;
+   597	   597	      if ((item.value ?? 0) <= 0) continue;
+   598	   598	      const d = dist(head.x, head.y, item.x, item.y);
+   599	   599	      if (d < snake.size + (item.radius || 6) + 6) {
+   600	   600	        if (item.isStarChip) {
+   601	   601	          // Star chip: ONLY real players collect (bots skip).
+   602	   602	          if (!snake.isPlayer) continue;
+   603	   603	          snake.carriedChips += item.value ?? 0;
+   604	   604	          snake.score += STAR_CHIP_GROW;
+   605	   605	        } else {
+   606	   606	          // Regular food: all snakes eat (+1 score, no chips).
+   607	   607	          snake.score += REGULAR_FOOD_GROW;
+   608	   608	        }
+   609	   609	        // Zero BOTH the grid item (intra-tick sentinel) AND the real food object.
+   610	   610	        item.value = 0;
+   611	   611	        if (item.foodRef) item.foodRef.value = 0;
+   612	   612	      }
+   613	   613	    }
+   614	   614	  }
+   615	   615	}
+   616	   616	
+   617	   617	// ----------------------------------------------------------------------------
+   618	   618	// Snapshot
+   619	   619	// ----------------------------------------------------------------------------
+   620	   620	
+   621	   621	/** Iterator helper: yield every living-or-dead snake (player + bot) in the room. */
+   622	   622	export function collectAllSnakes(room: ArenaRoom): SnakeBase[] {
+   623	   623	  const out: SnakeBase[] = [];
+   624	   624	  for (const p of room.players.values()) out.push(p);
+   625	   625	  for (const b of room.bots.values()) out.push(b);
+   626	   626	  return out;
+   627	   627	}
+   628	   628	
+   629	   629	/**
+   630	   630	 * Build the broadcast GameSnapshot for an arena.
+   631	   631	 * @param viewerId — the socket ID of the player receiving this snapshot (for yourRank computation).
+   632	   632	 */
+   633	   633	export function buildSnapshot(room: ArenaRoom, viewerId?: string): GameSnapshot {
+   634	   634	  const snakes: SnakeSnapshot[] = [];
+   635	   635	  const now = Date.now();
+   636	   636	  for (const snake of collectAllSnakes(room)) {
+   637	   637	    let points = snake.points;
+   638	   638	    if (points.length > MAX_SNAPSHOT_POINTS) {
+   639	   639	      const step = points.length / MAX_SNAPSHOT_POINTS;
+   640	   640	      const downsampled: Vec2[] = [];
+   641	   641	      for (let i = 0; i < MAX_SNAPSHOT_POINTS; i++) {
+   642	   642	        downsampled.push(points[Math.floor(i * step)]);
+   643	   643	      }
+   644	   644	      points = downsampled;
+   645	   645	    }
+   646	   646	    snakes.push({
+   647	   647	      id: snake.id,
+   648	   648	      name: snake.name,
+   649	   649	      userTag: snake.userTag,
+   650	   650	      points,
+   651	   651	      angle: snake.angle,
+   652	   652	      size: snake.size,
+   653	   653	      color: snake.color,
+   654	   654	      secondaryColor: snake.secondaryColor,
+   655	   655	      isPlayer: snake.isPlayer,
+   656	   656	      isBot: snake.isBot,
+   657	   657	      carriedChips: Math.floor(snake.carriedChips),
+   658	   658	      score: snake.score,
+   659	   659	      isExtracting: snake.isExtracting,
+   660	   660	      extractionProgress: Math.min(1, snake.extractionProgress / EXTRACT_DURATION_MS),
+   661	   661	      isDead: snake.isDead,
+   662	   662	      spawnProtected: now < snake.spawnProtectedUntil,
+   663	   663	      chatMessage: snake.chatMessage,
+   664	   664	      country: snake.country,
+   665	   665	    });
+   666	   666	  }
+   667	   667	
+   668	   668	  const foods: FoodSnapshot[] = room.foods.map((f) => ({
+   669	   669	    id: f.id,
+   670	   670	    x: f.x,
+   671	   671	    y: f.y,
+   672	   672	    size: f.size,
+   673	   673	    value: f.value,
+   674	   674	    isStarChip: f.isStarChip,
+   675	   675	    color: f.color,
+   676	   676	  }));
+   677	   677	
+   678	   678	  // Build arena leaderboard from REAL players only, sorted by carriedChips desc.
+   679	   679	  const realPlayers = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling);
+   680	   680	  const sorted = realPlayers.sort((a, b) => b.carriedChips - a.carriedChips);
+   681	   681	  const arenaLeaderboard = sorted.slice(0, 10).map(p => ({
+   682	   682	    id: p.id,
+   683	   683	    name: p.name,
+   684	   684	    userTag: p.userTag,
+   685	   685	    carriedChips: Math.floor(p.carriedChips),
+   686	   686	    score: p.score,
+   687	   687	    kills: p.kills,
+   688	   688	    isPlayer: p.id === viewerId,
+   689	   689	    country: p.country,
+   690	   690	  }));
+   691	   691	
+   692	   692	  // Your rank: position in sorted real players by carriedChips.
+   693	   693	  const yourRank = viewerId ? sorted.findIndex(p => p.id === viewerId) + 1 : 0;
+   694	   694	
+   695	   695	  // Dynamic commission: 0% if <=3 real players, 35% if >=4.
+   696	   696	  const realPlayerCount = realPlayers.length;
+   697	   697	  const commissionRate = realPlayerCount <= 3 ? 0 : 0.35;
+   698	   698	
+   699	   699	  return {
+   700	   700	    arenaId: room.arena.id,
+   701	   701	    tick: room.tick,
+   702	   702	    snakes,
+   703	   703	    foods,
+   704	   704	    worldSize: WORLD_SIZE,
+   705	   705	    leaderId: room.leaderId,
+   706	   706	    leaderChips: room.leaderChips,
+   707	   707	    realPlayerCount,
+   708	   708	    yourRank: yourRank > 0 ? yourRank : 0,
+   709	   709	    arenaLeaderboard,
+   710	   710	    commissionRate,
+   711	   711	  };
+   712	   712	}
+   713	   713	
+   714	   714	/**
+   715	   715	 * Recompute the arena leader (highest carriedChips). Called once per tick
+   716	   716	 * after collisions + food have been resolved.
+   717	   717	 */
+   718	   718	export function recomputeLeader(room: ArenaRoom): void {
+   719	   719	  let topId: string | null = null;
+   720	   720	  let topChips = 0;
+   721	   721	  for (const snake of collectAllSnakes(room)) {
+   722	   722	    if (snake.carriedChips > topChips) {
+   723	   723	      topChips = snake.carriedChips;
+   724	   724	      topId = snake.id;
+   725	   725	    }
+   726	   726	  }
+   727	   727	  room.leaderId = topId;
+   728	   728	  room.leaderChips = Math.floor(topChips);
+   729	   729	}
+   730	   730	
+   731	   731	/** Re-populate food up to FOOD_COUNT_TARGET. Called once per tick. */
+   732	   732	export function replenishFood(room: ArenaRoom): void {
+   733	   733	  // Filter out eaten food first (sentinel: value === 0).
+   734	   734	  if (room.foods.some((f) => f.value <= 0)) {
+   735	   735	    room.foods = room.foods.filter((f) => f.value > 0);
+   736	   736	  }
+   737	   737	  let guard = 0;
+   738	   738	  while (room.foods.length < FOOD_COUNT_TARGET && guard < 50) {
+   739	   739	    room.foods.push(spawnRandomFood(room));
+   740	   740	    guard++;
+   741	   741	  }
+   742	   742	}
+   743	   743	
+   744	   744	/** Expire chat bubbles whose TTL has elapsed. */
+   745	   745	export function expireChat(room: ArenaRoom, now: number): void {
+   746	   746	  for (const snake of collectAllSnakes(room)) {
+   747	   747	    if (snake.chatExpiry && now > snake.chatExpiry) {
+   748	   748	      snake.chatMessage = undefined;
+   749	   749	      snake.chatExpiry = undefined;
+   750	   750	    }
+   751	   751	  }
+   752	   752	}
+   753	   753	
+   754	   754	// Re-export the TICK_MS for the index module's timers.
+   755	   755	export { TICK_MS };
