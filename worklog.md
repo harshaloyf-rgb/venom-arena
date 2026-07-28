@@ -153,3 +153,30 @@ Stage Summary:
 - game-canvas.tsx: 2780 → 2820 lines. Online replay now 15s pre + 15s post with death marker
 - All changes pass ESLint with zero errors
 - Dev server compiles cleanly, no browser errors
+
+---
+Task ID: 4
+Agent: main + 2 subagents
+Task: Fix 8 issues: bot density, online replay, map size, food spread, boost, safe spawn, turn radius, bot dodge
+
+Work Log:
+- Increased BOT_SPAWN_RADIUS from 2000 to 6000 for wider bot distribution
+- Bots now spawn with random initial scores (0-80) and varied body lengths for visual variety
+- ALL bot personalities now dodge body segments (shouldFlee threshold 150px)
+- Added bot-to-bot predictive evasion (200px scan, 8-tick prediction)
+- BOT_THREAT_SCAN_RADIUS increased from 200 to 250
+- Fixed computeDeathFoodDrop to spread food ALONG the body (not at death point)
+- Added computeDeathOrbs helper function for proper S/M/L distribution
+- BOT_EVADE_RADIUS increased from 250 to 300
+- SAFE_SPAWN_MIN_DIST increased from 300 to 500, SAFE_SPAWN_ATTEMPTS from 20 to 30
+- TURN_BASE increased from 0.15 to 0.28, TURN_MIN from 0.045 to 0.06, TURN_SCORE_FACTOR from 0.0006 to 0.0004
+- Fixed online replay: death event now emitted BEFORE match_result, delayed room player removal (16s timeout)
+- MAP_MAX_RADIUS confirmed at 8000 for 1000-player support
+- Boost mechanism verified working (boostDropQueue + tickSnakeMovement)
+
+Stage Summary:
+- offline-engine.ts: Bot density fixed (6000 radius), food spread along body, all bots dodge, tighter turns
+- game-canvas.tsx: Safe timeout for replay update
+- game-config.ts: Turn rates improved, safe spawn distances increased, evade radius increased
+- index.ts (game server): Death emitted first, 16s delayed room removal for post-death snapshots
+- All changes pass ESLint with zero errors

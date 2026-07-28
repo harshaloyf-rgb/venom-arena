@@ -766,6 +766,24 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
           return;
         }
         matchEndedRef.current = true;
+
+        // Defensive: if onDeath hasn't fired yet (e.g. event reordering),
+        // set up post-death recording here so the replay still captures 15 s
+        // after death.  The server now emits death before match_result, but
+        // we guard against edge-cases.
+        if (data.outcome === 'death' && postDeathRecordRef.current === 0) {
+          isPostDeathRef.current = true;
+          postDeathRecordRef.current = 300;
+          safeTimeout(() => {
+            const { frames: finalFrames, deathFrameIdx: finalDeathIdx } = getReplayFrames();
+            setEndScreen(prev => prev?.outcome === 'death' ? {
+              ...prev,
+              replayFrames: finalFrames,
+              replayDeathFrameIdx: finalDeathIdx,
+            } : prev);
+          }, 15500);
+        }
+
         const result: MatchResult = {
           outcome: data.outcome,
           arenaId: data.arenaId,
@@ -890,7 +908,8 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         });
 
         // After 15s post-death recording completes, update endScreen with final frames.
-        setTimeout(() => {
+        // Use safeTimeout so the callback is skipped if the component unmounts.
+        safeTimeout(() => {
           const { frames: finalFrames, deathFrameIdx: finalDeathIdx } = getReplayFrames();
           setEndScreen(prev => prev?.outcome === 'death' ? {
             ...prev,
