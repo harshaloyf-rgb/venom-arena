@@ -506,7 +506,67 @@ export default function Home() {
                     footRight="Shop"
                   />
 
-                  {/* Gate 7: Friends, Global Search & Syndicate Hub (wide) */}
+                  {/* Gate 7: Championships */}
+                  <BentoGate
+                    onClick={() => setActiveTab('championships')}
+                    icon={Crown}
+                    accent="amber"
+                    badge="Tournament"
+                    title="Championships"
+                    desc="Enter elite championship events. Compete against top-ranked operators for massive chip prizes and exclusive titles."
+                    footLeft="SEASONAL EVENTS"
+                    footRight="Compete"
+                  />
+
+                  {/* Gate 8: Hall of Fame */}
+                  <BentoGate
+                    onClick={() => setActiveTab('halloffame')}
+                    icon={Award}
+                    accent="yellow"
+                    badge="Legends"
+                    title="Hall of Fame"
+                    desc="View legendary players and record-breaking performances. The greatest venom operators of all time."
+                    footLeft="LEGENDARY RANKINGS"
+                    footRight="View Legends"
+                  />
+
+                  {/* Gate 9: Syndicates */}
+                  <BentoGate
+                    onClick={() => setActiveTab('clans')}
+                    icon={Shield}
+                    accent="violet"
+                    badge="Team Ops"
+                    title="Syndicates"
+                    desc="Create or join a syndicate. Team up with allies, pool resources, and dominate arenas together."
+                    footLeft="CLAN WARFARE"
+                    footRight="Assemble"
+                  />
+
+                  {/* Gate 10: Season Pass */}
+                  <BentoGate
+                    onClick={() => setActiveTab('seasonpass')}
+                    icon={Sparkles}
+                    accent="purple"
+                    badge="Season XP"
+                    title="Season Pass"
+                    desc="Track your seasonal progression. Unlock exclusive rewards, cosmetics, and bonus chip multipliers as you level up."
+                    footLeft="FREE TIER REWARDS"
+                    footRight="Progress"
+                  />
+
+                  {/* Gate 11: Highlights */}
+                  <BentoGate
+                    onClick={() => setActiveTab('clips')}
+                    icon={Film}
+                    accent="red"
+                    badge="Replays"
+                    title="Highlights"
+                    desc="Watch and share your greatest moments. Review match replays, clutch extractions, and legendary eliminations."
+                    footLeft="MATCH HIGHLIGHTS"
+                    footRight="Watch"
+                  />
+
+                  {/* Gate 12: Friends, Global Search & Syndicate Hub (wide) */}
                   <BentoGate
                     onClick={() => setActiveTab('social')}
                     icon={Users}
