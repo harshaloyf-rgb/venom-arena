@@ -480,3 +480,61 @@ Stage Summary:
 - Section 0 fully implemented: Register, Guest Play, AND Guest Upgrade
 - Guest upgrade preserves all progress (chips, stats, cosmetics, friends, challenges)
 - No git commits (per user instruction)
+---
+Task ID: 2
+Agent: main
+Task: Comprehensive audit + implementation of ALL Rules & Guide features
+
+Work Log:
+- Read full Rules & Guide modal (SOURCE OF TRUTH) — all 14 sections (0-13)
+- Audited every section against existing code
+- Identified 3 missing features:
+  1. Challenge Progress Tracking (challenges created but progress never incremented)
+  2. Enhanced Leaderboard API (country filter, world summit, milestone badges)
+  3. Watch Video Reward (+50 chips, 60s cooldown)
+
+- Implemented Challenge Progress Integration:
+  - Updated `/api/match/result/route.ts` with `updateChallengeProgress()` function
+  - Handles: kill, extract, star_collect, score, arena_entry categories
+  - Auto-completes challenges where current >= target
+  - Created `/api/player/challenges/progress/route.ts` for real-time progress
+
+- Enhanced Leaderboard API:
+  - Added `?view=global|national|world_summit` parameter
+  - Added `?country=XX` for National Boards
+  - Added `?milestone=gold|silver|bronze|...` for Milestone Tier filtering
+  - Each entry now includes `milestoneBadge` and `milestoneColor`
+
+- Created Watch Video Reward API:
+  - `POST /api/player/video-reward` (+50 chips, 60s cooldown)
+  - In-memory cooldown tracking with cleanup
+
+- Verified all game mechanics match Rules & Guide:
+  - Food orbs: 93% small, 4% medium, 3% large ✓
+  - Base speed 4.5, boost 8.0 ✓
+  - Boost min length: >8 segments ✓
+  - Neck protection: 5 segments ✓
+  - Bot self-destruct: score ≥ 100 (online) ✓
+  - Map breathing: ±40px ✓
+  - Commission: 0% ≤3 players, 35% ≥4 ✓
+  - Death replay: 15s before + 15s after ✓
+  - Quick chat emotes: 5 emotes, keys 1-5 ✓
+  - 7 Arena Tiers + 3 Practice Tiers ✓
+  - 7 Milestone Badges ✓
+  - 3 Daily + 2 Weekly Challenges ✓
+
+- Browser verified:
+  - Login/Register/Guest flow ✓
+  - Registration with 4-digit PIN ✓
+  - 150 starter chips ✓
+  - Dashboard with all 8 bento gates ✓
+  - 3 Daily + 2 Weekly Challenges displayed ✓
+  - Rules & Guide modal opens with all 14 sections ✓
+  - Arena Selector with 7 Online tiers ✓
+  - All lobby navigation panels visible ✓
+
+Stage Summary:
+- All 14 Rules & Guide sections verified against code — every feature implemented
+- 3 new APIs created: challenge progress, enhanced leaderboard, video reward
+- ESLint clean, dev server running without errors
+- Rules & Guide modal NEVER edited (SOURCE OF TRUTH preserved)
