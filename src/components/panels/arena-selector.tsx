@@ -31,6 +31,16 @@ import {
   type ToastFn,
 } from './_panel-primitives';
 
+// ── Short-form chip formatter ──────────────────────────────────────────
+// e.g. 10 → "10c", 1500 → "1.5Kc", 1000000 → "1Mc", 1000000000 → "1Bc"
+function formatChips(n: number): string {
+  if (n === 0) return 'FREE';
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}Bc`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}Mc`;
+  if (n >= 1_000) return `${(n / 1_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}Kc`;
+  return `${n}c`;
+}
+
 // ── Difficulty filter groups ──────────────────────────────────────────
 
 const DIFFICULTY_GROUPS = [
@@ -230,7 +240,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
               className="text-[10px] font-sans text-emerald-400/70 hover:text-emerald-400 transition-colors cursor-pointer flex items-center gap-1"
             >
               <Zap className="w-3 h-3" />
-              Jump to highest affordable: {highestAffordableTier.name} ({highestAffordableTier.buyIn.toLocaleString()}c)
+              Jump to highest affordable: {highestAffordableTier.name} ({formatChips(highestAffordableTier.buyIn)})
             </button>
           </div>
         )}
@@ -304,9 +314,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                         unaffordable ? 'text-red-400' : 'text-emerald-400'
                       }`}
                     >
-                      {tier.buyIn === 0
-                        ? 'FREE'
-                        : `${tier.buyIn.toLocaleString()} c`}
+                      {formatChips(tier.buyIn)}
                     </span>
                   </div>
                   <ChevronRight
@@ -321,8 +329,8 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
         </div>
       </div>
 
-      {/* RIGHT: selected arena detail card */}
-      <div className="lg:col-span-5 flex flex-col justify-between bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
+      {/* RIGHT: selected arena detail card — sticky so BUY IN stays visible */}
+      <div className="lg:col-span-5 lg:sticky lg:top-4 lg:self-start flex flex-col justify-between bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
         {/* Glow */}
         <div
           aria-hidden="true"
@@ -358,7 +366,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
               value={
                 selectedTier.buyIn === 0
                   ? 'FREE'
-                  : `${selectedTier.buyIn.toLocaleString()} CHIPS`
+                  : `${formatChips(selectedTier.buyIn)}`
               }
               valueClass="text-white"
             />
@@ -436,7 +444,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
             <Play className="w-4 h-4 fill-current" />
             {isOnline
               ? canPlay
-                ? `BUY IN ARENA (-${selectedTier.buyIn.toLocaleString()} c)`
+                ? `BUY IN ARENA (-${formatChips(selectedTier.buyIn)})`
                 : 'STAKE AMOUNT EXCEEDS BANK'
               : 'START PRACTICE MODE (FREE)'}
           </button>
