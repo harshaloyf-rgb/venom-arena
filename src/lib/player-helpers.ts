@@ -38,6 +38,8 @@ export function toProfile(p: Player): PlayerProfile {
     currentBanner: p.currentBanner,
     clanTag: p.clanTag,
     clanRank: p.clanRank,
+    securityPin: !!p.securityPin,
+    oauthProvider: p.oauthProvider,
     createdAt: p.createdAt.toISOString(),
     lastSeenAt: p.lastSeenAt.toISOString(),
   };

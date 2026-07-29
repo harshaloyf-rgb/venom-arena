@@ -87,7 +87,7 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
           {/* 0. ACCOUNTS & GETTING STARTED */}
           {/* ================================================================= */}
           <Section icon={<Landmark className="w-4 h-4" />} title="0. ACCOUNTS &amp; GETTING STARTED" accent="text-emerald-400">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <div className="bg-emerald-950/20 border border-emerald-500/30 p-3 rounded-xl space-y-1.5">
                 <span className="font-bold text-emerald-300 flex items-center gap-1.5 text-xs">
                   <LogIn className="w-3.5 h-3.5" /> Register (Recommended)
@@ -99,6 +99,18 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                   <li>Receive a unique <strong>VENOM-XXXX</strong> tag (your permanent ID)</li>
                   <li>Start with <strong>150 starter chips</strong> (free!)</li>
                   <li>Your progress is <strong>saved permanently</strong></li>
+                </ul>
+              </div>
+              <div className="bg-violet-950/20 border border-violet-500/30 p-3 rounded-xl space-y-1.5">
+                <span className="font-bold text-violet-300 flex items-center gap-1.5 text-xs">
+                  <Globe className="w-3.5 h-3.5" /> Social Login
+                </span>
+                <ul className="list-disc pl-4 space-y-1 text-slate-400 text-[11px]">
+                  <li>Sign in with <strong>Google</strong>, <strong>Facebook</strong>, or <strong>Apple</strong></li>
+                  <li>No password needed — uses your existing account</li>
+                  <li>Also starts with <strong>150 starter chips</strong> and a VENOM-XXXX tag</li>
+                  <li>If your social email matches an existing account, it <strong>links automatically</strong></li>
+                  <li>You can also set a password later in Profile → Security Settings</li>
                 </ul>
               </div>
               <div className="bg-amber-950/20 border border-amber-500/30 p-3 rounded-xl space-y-1.5">
@@ -120,6 +132,24 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                 <li>Start with 150 chips. Earn more by: extracting from arenas, daily login rewards, chip store, or gifting from friends (+25 per friend)</li>
                 <li>Buy into arenas costs chips. If you die, you lose your carried chips. If you extract, you bank them!</li>
                 <li>Need more chips? Visit the Chip Store (free packs) or claim Daily Rewards</li>
+              </ul>
+            </InfoCard>
+            <InfoCard title="🔑 Password Recovery (Forgot Password)" accent="text-cyan-300">
+              <ul className="list-disc pl-4 space-y-0.5">
+                <li>On the Login page, click <strong>&quot;Forgot Password?&quot;</strong></li>
+                <li>Enter your <strong>registered email</strong> and your <strong>4-digit Security PIN</strong></li>
+                <li>Set a new password (min 6 chars) and confirm it</li>
+                <li>Your password is updated instantly — no email verification needed</li>
+                <li><strong>Important:</strong> If you didn&apos;t set a Security PIN during registration, password recovery is not available. Contact support or set a PIN in Profile → Security Settings before you forget your password!</li>
+              </ul>
+            </InfoCard>
+            <InfoCard title="🔒 Managing Your Security PIN" accent="text-emerald-300">
+              <ul className="list-disc pl-4 space-y-0.5">
+                <li>Your PIN is set during <strong>registration</strong> (optional but recommended)</li>
+                <li>Change or set your PIN anytime in <strong>Profile → Security Settings</strong></li>
+                <li>If you already have a PIN, you must enter your current PIN before setting a new one</li>
+                <li>The PIN is your <strong>only recovery method</strong> — memorize it or store it securely</li>
+                <li>Guest accounts cannot set a PIN (they have no password to recover)</li>
               </ul>
             </InfoCard>
           </Section>
@@ -704,6 +734,10 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
               <FaqItem q="How does the Watch Video reward work?" a="After a match ends, click the Watch Video button on the results screen. A 5-second ad plays, then you claim +50 free chips. One ad reward per 60 seconds cooldown." />
               <FaqItem q="What are the milestone badges (Rookie, Bronze, Silver, Gold, Platinum, Diamond, Omega)?" a="Milestone badges represent your lifetime achievement level. They are automatically assigned based on your total banked chips: Rookie (0-99K), Bronze (100K+), Silver (500K+), Gold (1M+), Platinum (2.5M+), Diamond (5M+), Omega (10M+). Your badge upgrades instantly when you cross a threshold, and can downgrade if your banked chips drop below the requirement." />
               <FaqItem q="Can I lose my milestone badge?" a="Yes. Your badge is calculated from your current banked chip balance in real-time. If you buy into an arena with a high buy-in and die (losing those chips), your banked balance may drop below your tier threshold, causing a downgrade. Only extracted chips count!" />
+              <FaqItem q="How do I reset my password if I forgot it?" a="Go to the Login page → click &quot;Forgot Password?&quot; → enter your registered email + 4-digit Security PIN → set a new password. This works instantly — no email verification needed. Important: you must have set a Security PIN during registration or in Profile → Security Settings. Without a PIN, password recovery is not available." />
+              <FaqItem q="How do I change or set my Security PIN?" a="Go to Profile → Dossier tab → Security Settings card. If you already have a PIN, enter your current PIN first, then set a new one. If you don&apos;t have a PIN yet, you can set one without entering a current PIN. Your PIN is required for password recovery — don&apos;t forget it!" />
+              <FaqItem q="How does social login (Google, Facebook, Apple) work?" a="Click the provider button on the login page. You&apos;ll be redirected to sign in with your social account. After authorization, a Venom Arena account is automatically created (or linked if your social email matches an existing account). You get 150 starter chips and a VENOM-XXXX tag just like regular registration. No separate password needed." />
+              <FaqItem q="Can I link a password to my social login account?" a="Yes! Go to Profile → Dossier tab → Security Settings. You can change your Security PIN there. If you need a full password (for email login), contact support. Your social login always works regardless." />
             </div>
           </Section>
 

@@ -34,6 +34,9 @@ export interface PlayerProfile {
   clanTag: string | null;
   clanRank: string | null;
 
+  securityPin: boolean;       // true if PIN is set
+  oauthProvider: string | null; // "google" | "facebook" | "apple" | null
+
   createdAt: string;
   lastSeenAt: string;
 }
