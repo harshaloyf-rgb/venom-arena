@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
 import {
   CHIP_PACKS,
@@ -72,10 +72,10 @@ export function ChipStore({ onToast }: ChipStoreProps) {
   const [adState, setAdState] = useState({ date: '', count: 0 });
 
   // Init from localStorage on mount
-  useState(() => {
+  useEffect(() => {
     setYearlyPurchased(getYearlyPurchased());
     setAdState(getTodayAdCount());
-  });
+  }, []);
 
   if (loading) return <PanelSkeleton count={4} height="h-44" />;
   if (!player) return <NotSignedIn />;
