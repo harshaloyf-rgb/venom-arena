@@ -31,14 +31,21 @@ import {
   type ToastFn,
 } from './_panel-primitives';
 
-// ── Short-form chip formatter ──────────────────────────────────────────
-// e.g. 10 → "10c", 1500 → "1.5Kc", 1000000 → "1Mc", 1000000000 → "1Bc"
-function formatChips(n: number): string {
-  if (n === 0) return 'FREE';
+// ── Chip formatting helpers ────────────────────────────────────────────
+// Returns short form only: e.g. 1500 → "1.5Kc"
+function chipShort(n: number): string {
   if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}Bc`;
   if (n >= 1_000_000) return `${(n / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}Mc`;
   if (n >= 1_000) return `${(n / 1_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}Kc`;
   return `${n}c`;
+}
+// Returns full number + short form: e.g. 1500 → "1,500c (1.5Kc)"
+// Values below 1,000 return just the number (no short form needed)
+function chipFull(n: number): string {
+  if (n === 0) return 'FREE';
+  const full = `${n.toLocaleString()}c`;
+  if (n >= 1_000) return `${full} (${chipShort(n)})`;
+  return full;
 }
 
 // ── Difficulty filter groups ──────────────────────────────────────────
@@ -240,7 +247,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
               className="text-[10px] font-sans text-emerald-400/70 hover:text-emerald-400 transition-colors cursor-pointer flex items-center gap-1"
             >
               <Zap className="w-3 h-3" />
-              Jump to highest affordable: {highestAffordableTier.name} ({formatChips(highestAffordableTier.buyIn)})
+              Jump to highest affordable: {highestAffordableTier.name} ({chipFull(highestAffordableTier.buyIn)})
             </button>
           </div>
         )}
@@ -310,12 +317,17 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                       Buy-In
                     </span>
                     <span
-                      className={`text-sm font-bold font-mono ${
+                      className={`text-sm font-bold font-mono block ${
                         unaffordable ? 'text-red-400' : 'text-emerald-400'
                       }`}
                     >
-                      {formatChips(tier.buyIn)}
+                      {tier.buyIn === 0 ? 'FREE' : `${tier.buyIn.toLocaleString()}c`}
                     </span>
+                    {tier.buyIn >= 1_000 && (
+                      <span className={`text-[9px] font-mono block mt-0.5 ${unaffordable ? 'text-red-400/50' : 'text-emerald-400/50'}`}>
+                        {chipShort(tier.buyIn)}
+                      </span>
+                    )}
                   </div>
                   <ChevronRight
                     className={`w-4 h-4 text-slate-500 transition-transform ${
@@ -366,7 +378,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
               value={
                 selectedTier.buyIn === 0
                   ? 'FREE'
-                  : `${formatChips(selectedTier.buyIn)}`
+                  : `${chipFull(selectedTier.buyIn)}`
               }
               valueClass="text-white"
             />
@@ -444,7 +456,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
             <Play className="w-4 h-4 fill-current" />
             {isOnline
               ? canPlay
-                ? `BUY IN ARENA (-${formatChips(selectedTier.buyIn)})`
+                ? `BUY IN ARENA (-${chipFull(selectedTier.buyIn)})`
                 : 'STAKE AMOUNT EXCEEDS BANK'
               : 'START PRACTICE MODE (FREE)'}
           </button>

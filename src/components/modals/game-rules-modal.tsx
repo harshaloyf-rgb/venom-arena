@@ -44,10 +44,11 @@ import { ARENA_TIERS, PRACTICE_TIERS, MILESTONE_TIERS } from '@/lib/game-config'
 // ── Short-form chip formatter for tier tables ──
 function fmtShort(n: number): string {
   if (n === 0) return 'FREE';
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}Bc`;
-  if (n >= 1_000_000) return `${(n / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}Mc`;
-  if (n >= 1_000) return `${(n / 1_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}Kc`;
-  return `${n}c`;
+  const full = `${n.toLocaleString()}c`;
+  if (n >= 1_000_000_000) return `${full} (${(n / 1_000_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}Bc)`;
+  if (n >= 1_000_000) return `${full} (${(n / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}Mc)`;
+  if (n >= 1_000) return `${full} (${(n / 1_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}Kc)`;
+  return full;
 }
 
 interface GameRulesModalProps {
