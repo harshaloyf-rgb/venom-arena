@@ -155,7 +155,9 @@ export async function POST(req: NextRequest) {
   const xpGained = Math.floor((score * 5 + kills * 50) * arena.rewardMultiplier);
 
   // Use a transaction so stats and challenge progress are atomic
-  const updated = await db.$transaction(async (tx) => {
+  let updated;
+  try {
+    updated = await db.$transaction(async (tx) => {
     const p = await tx.player.findUnique({ where: { id: player.id } });
     if (!p) throw new Error('player missing');
 
@@ -193,7 +195,10 @@ export async function POST(req: NextRequest) {
     });
 
     return updatedPlayer;
-  });
+    });
+  } catch (err) {
+    return NextResponse.json({ error: 'Database error processing match result.' }, { status: 500 });
+  }
 
   return NextResponse.json({
     player: toProfile(updated),

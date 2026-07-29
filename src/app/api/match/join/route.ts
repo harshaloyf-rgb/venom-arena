@@ -22,7 +22,9 @@ export async function POST(req: NextRequest) {
   if (!arena) return NextResponse.json({ ok: false, reason: 'invalid_arena' }, { status: 400 });
 
   // Use a transaction to atomically check balance + deduct buyIn
-  const result = await db.$transaction(async (tx) => {
+  let result;
+  try {
+    result = await db.$transaction(async (tx) => {
     const p = await tx.player.findUnique({ where: { userTag } });
     if (!p) return { ok: false as const, reason: 'player_not_found' };
     if (p.banned) return { ok: false as const, reason: 'banned' };
@@ -57,7 +59,10 @@ export async function POST(req: NextRequest) {
         clanRank: p.clanRank,
       },
     };
-  });
+    });
+  } catch (err) {
+    return NextResponse.json({ ok: false, reason: 'database_error' }, { status: 500 });
+  }
 
   if (!result.ok) {
     return NextResponse.json(result, { status: 400 });

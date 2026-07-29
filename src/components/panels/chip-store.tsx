@@ -131,32 +131,45 @@ export function ChipStore({ onToast }: ChipStoreProps) {
     }
   }
 
-  function handlePromo() {
+  async function handlePromo() {
     const code = promoCode.trim().toUpperCase();
     if (!code) return;
     setPromoBusy(true);
-    setTimeout(() => {
-      const reward = PROMO_CODES[code];
-      if (reward) {
-        notify(`Promo Code redeemed successfully: +${reward} CHIPS credited!`, 'success', onToast);
-        setPromoCode('');
-        void refresh();
-        // Promo codes don't count toward yearly cap
-      } else {
-        notify(`Invalid or expired promotional code. Try code "VENOM" or "CHAMPION"!`, 'error', onToast);
+    try {
+      const res = await fetch('/api/player/promo-reward', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; reward?: number; newBankedChips?: number };
+      if (!res.ok) {
+        notify(data?.error || 'Invalid or expired promo code.', 'error', onToast);
+        return;
       }
+      notify(`Promo Code redeemed: +${data.reward?.toLocaleString('en-IN')} CHIPS credited!`, 'success', onToast);
+      setPromoCode('');
+      void refresh();
+    } catch {
+      notify('Network error redeeming promo code.', 'error', onToast);
+    } finally {
       setPromoBusy(false);
-    }, 600);
+    }
   }
 
-  function handleWatchAd() {
+  async function handleWatchAd() {
     if (adsRemaining <= 0) {
       notify('Daily Ad Limit Reached (12/12)! Resets at 00:00 UTC.', 'error', onToast);
       return;
     }
     setAdBusy(true);
     notify('Launching high-definition sponsor video... Keep active.', 'info', onToast);
-    setTimeout(() => {
+    try {
+      const res = await fetch('/api/player/video-reward', { method: 'POST' });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; reward?: number; newBankedChips?: number };
+      if (!res.ok) {
+        notify(data?.error || 'Failed to claim ad reward.', 'error', onToast);
+        return;
+      }
       const newCount = adState.count + 1;
       const today = new Date().toISOString().slice(0, 10);
       const newState = { date: today, count: newCount };
@@ -164,10 +177,13 @@ export function ChipStore({ onToast }: ChipStoreProps) {
       if (typeof window !== 'undefined') {
         localStorage.setItem(DAILY_ADS_KEY, JSON.stringify(newState));
       }
-      notify(`Sponsor Ad Completed: +${AD_REWARD_CHIPS} FREE CHIPS deposited! (${newCount}/12 ads today)`, 'success', onToast);
-      setAdBusy(false);
+      notify(`Sponsor Ad Completed: +${data.reward || AD_REWARD_CHIPS} FREE CHIPS deposited! (${newCount}/12 ads today)`, 'success', onToast);
       void refresh();
-    }, 2000);
+    } catch {
+      notify('Network error claiming ad reward.', 'error', onToast);
+    } finally {
+      setAdBusy(false);
+    }
   }
 
   return (
