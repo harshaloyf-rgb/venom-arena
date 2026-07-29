@@ -3,22 +3,17 @@
 /**
  * BUILD-11 — `ArenaSelector` panel.
  *
- * Faithful replica of `/upload/extracted/src/components/ArenaSelector.tsx`
- * (328 lines). Adapted to read player chips from `useAuth()` instead of a
- * `playerStats` prop, and to expose an `onPlay(arenaId, isOnline)` callback.
+ * Displays 30 online competitive tiers (10c → 1B) grouped by difficulty
+ * with filter tabs, plus 3 offline practice arenas.
  *
- * All textual strings, the inline Online/Offline toggle, the 7 ARENA_TIERS
- * cards, the 3 free PRACTICE_TIERS, the selected-arena detail card with its
- * "Stake Buy-In / Target Value / Active Challengers / XP Multiplier" rows,
- * the mode-warning paragraph (65% / 35% commission for online, risk-free
- * training for offline), and the three launch-button label variants
- * ("BUY IN ARENA (-N c)" / "STAKE AMOUNT EXCEEDS BANK" / "START PRACTICE
- * MODE (FREE)") are preserved verbatim from the original.
+ * Difficulty groups: Beginner (1-6) · Medium (7-12) · High Stakes (13-18) ·
+ *                     Extreme (19-24) · Legendary (25-30)
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ChevronRight,
+  Filter,
   Landmark,
   Play,
   Shield,
@@ -36,6 +31,17 @@ import {
   type ToastFn,
 } from './_panel-primitives';
 
+// ── Difficulty filter groups ──────────────────────────────────────────
+
+const DIFFICULTY_GROUPS = [
+  { label: 'All',       difficulty: null as const,            accent: 'text-slate-400' },
+  { label: 'Beginner',   difficulty: 'Beginner' as const,    accent: 'text-emerald-400' },
+  { label: 'Medium',     difficulty: 'Medium' as const,      accent: 'text-amber-400' },
+  { label: 'High Stakes', difficulty: 'High Stakes' as const, accent: 'text-rose-400' },
+  { label: 'Extreme',    difficulty: 'Extreme' as const,     accent: 'text-red-400' },
+  { label: 'Legendary',  difficulty: 'Legendary' as const,  accent: 'text-yellow-400' },
+] as const;
+
 interface ArenaSelectorProps {
   onPlay: (arenaId: string, isOnline: boolean) => void;
   onToast?: ToastFn;
@@ -50,6 +56,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
   const { player, loading } = useAuth();
   const [isOnline, setIsOnline] = useState(true);
   const [selectedTierId, setSelectedTierId] = useState<string>('tier-1');
+  const [difficultyFilter, setDifficultyFilter] = useState<string | null>(null);
   const [arenaStats, setArenaStats] = useState<
     Record<string, ArenaStats>
   >({});
@@ -78,10 +85,26 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
     };
   }, [isOnline]);
 
+  // Filtered tier list for online mode (hook before early returns)
+  const filteredOnlineTiers = useMemo(() => {
+    if (!difficultyFilter) return ARENA_TIERS;
+    return ARENA_TIERS.filter((t) => t.difficulty === difficultyFilter);
+  }, [difficultyFilter]);
+
+  // Find highest affordable tier (hook before early returns)
+  const highestAffordableTier = useMemo(() => {
+    if (!isOnline) return null;
+    if (!player) return null;
+    for (let i = ARENA_TIERS.length - 1; i >= 0; i--) {
+      if (player.bankedChips >= ARENA_TIERS[i].buyIn) return ARENA_TIERS[i];
+    }
+    return null;
+  }, [isOnline, player]);
+
   if (loading) return <PanelSkeleton count={4} height="h-40" />;
   if (!player) return <NotSignedIn />;
 
-  const tiersList = isOnline ? ARENA_TIERS : PRACTICE_TIERS;
+  const tiersList = isOnline ? filteredOnlineTiers : PRACTICE_TIERS;
   const selectedTier =
     tiersList.find((t) => t.id === selectedTierId) || tiersList[0];
   const canAfford = player.bankedChips >= selectedTier.buyIn;
@@ -90,6 +113,25 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
   const tierIndex = isOnline
     ? ARENA_TIERS.findIndex((t) => t.id === selectedTier.id) + 1
     : 0;
+
+  function handleModeSwitch(online: boolean) {
+    setIsOnline(online);
+    if (online) {
+      setDifficultyFilter(null);
+      setSelectedTierId('tier-1');
+    } else {
+      setSelectedTierId('practice-easy');
+    }
+  }
+
+  function handleDifficultyFilter(diff: string | null) {
+    setDifficultyFilter(diff);
+    // Auto-select first visible tier
+    const target = diff
+      ? ARENA_TIERS.find((t) => t.difficulty === diff)
+      : ARENA_TIERS[0];
+    if (target) setSelectedTierId(target.id);
+  }
 
   function handleEnterArena() {
     if (isOnline && !canAfford) {
@@ -110,13 +152,14 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
     >
       {/* LEFT: tier list */}
       <div className="lg:col-span-7 flex flex-col gap-3">
+        {/* Header row: title + mode toggle */}
         <div className="flex items-center justify-between px-2">
           <div>
             <h3 className="text-sm font-bold font-sans uppercase tracking-wider text-slate-400">
               {isOnline ? 'Online PvP Shards' : 'Practice Arenas'}
             </h3>
             <p className="text-xs text-slate-500 font-sans mt-0.5">
-              Choose your buy-in risk level
+              {isOnline ? '30 tiers · 10c → 1B chips' : 'Choose your difficulty'}
             </p>
           </div>
 
@@ -124,37 +167,76 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
           <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800/80">
             <button
               type="button"
-              onClick={() => {
-                setIsOnline(true);
-                setSelectedTierId('tier-1');
-              }}
+              onClick={() => handleModeSwitch(true)}
               className={`px-3 py-1 rounded-md text-xs font-sans font-medium flex items-center gap-1 transition-all ${
                 isOnline
                   ? 'bg-indigo-600/25 text-indigo-300 border border-indigo-500/20'
                   : 'text-slate-500 hover:text-slate-300'
               }`}
             >
-              <Users className="w-3.5 h-3.5" /> Online Arena
+              <Users className="w-3.5 h-3.5" /> Online
             </button>
             <button
               type="button"
-              onClick={() => {
-                setIsOnline(false);
-                setSelectedTierId('practice-easy');
-              }}
+              onClick={() => handleModeSwitch(false)}
               className={`px-3 py-1 rounded-md text-xs font-sans font-medium flex items-center gap-1 transition-all ${
                 !isOnline
                   ? 'bg-amber-600/25 text-amber-300 border border-amber-500/20'
                   : 'text-slate-500 hover:text-slate-300'
               }`}
             >
-              <Swords className="w-3.5 h-3.5" /> Offline Mode
+              <Swords className="w-3.5 h-3.5" /> Offline
             </button>
           </div>
         </div>
 
-        {/* Tiers scroll */}
-        <div className="flex flex-col gap-2.5 max-h-[460px] overflow-y-auto va-scroll pr-1">
+        {/* Difficulty filter tabs (online mode only) */}
+        {isOnline && (
+          <div className="flex items-center gap-1.5 px-2 flex-wrap">
+            <Filter className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+            {DIFFICULTY_GROUPS.map((group) => {
+              const isActive = difficultyFilter === group.difficulty;
+              const count = group.difficulty
+                ? ARENA_TIERS.filter((t) => t.difficulty === group.difficulty).length
+                : ARENA_TIERS.length;
+              return (
+                <button
+                  key={group.label}
+                  type="button"
+                  onClick={() => handleDifficultyFilter(group.difficulty)}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-sans font-bold uppercase tracking-wider border transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-slate-800 border-slate-600 text-white'
+                      : 'bg-slate-950 border-slate-800/80 text-slate-500 hover:text-slate-300 hover:border-slate-700'
+                  }`}
+                >
+                  {group.label}
+                  <span className="ml-1 text-slate-600">({count})</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Highest affordable badge (online mode) */}
+        {isOnline && highestAffordableTier && (
+          <div className="px-2">
+            <button
+              type="button"
+              onClick={() => {
+                setDifficultyFilter(null);
+                setSelectedTierId(highestAffordableTier.id);
+              }}
+              className="text-[10px] font-sans text-emerald-400/70 hover:text-emerald-400 transition-colors cursor-pointer flex items-center gap-1"
+            >
+              <Zap className="w-3 h-3" />
+              Jump to highest affordable: {highestAffordableTier.name} ({highestAffordableTier.buyIn.toLocaleString()}c)
+            </button>
+          </div>
+        )}
+
+        {/* Tiers list — no max-height needed since filter shows max 6 tiers */}
+        <div className="flex flex-col gap-2.5 pr-1">
           {tiersList.map((tier) => {
             const active = tier.id === selectedTierId;
             const unaffordable =
@@ -291,7 +373,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
             <DetailRow
               icon={<Users className="w-3.5 h-3.5 text-slate-500" />}
               label="Bot Population"
-              value={`${selectedTier.botsCount} Bots`}
+              value={`${selectedTier.botsCount.toLocaleString()} Bots`}
               valueClass="text-cyan-400"
             />
 
@@ -330,7 +412,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
               ) : (
                 <span>
                   <strong>OFFLINE PRACTICE MODE:</strong> Risk-free training
-                  ground. Test your skills against bots without wagering,
+                  ground. Test your skills against {selectedTier.botsCount.toLocaleString()} bots without wagering,
                   losing, or earning any of your banked chips!
                 </span>
               )}

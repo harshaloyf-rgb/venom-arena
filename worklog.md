@@ -726,3 +726,37 @@ Stage Summary:
 - Rules & Guide auto-updates from config (30-row tier reference table)
 - All 8 improvement suggestions implemented
 - Pushed to GitHub
+
+---
+Task ID: arena-corrections
+Agent: main
+Task: Correct arena tiers (10c→1B not 100B), restore practice bots to 1000, add difficulty filter UI, update rules
+
+Work Log:
+- Fixed ARENA_TIERS: redesigned 30 tiers from 10c to 1B (previously went to 100B)
+  - Beginner (1-6): 10c to 300c (Scrap Alley, Rust Market, Copper Lane, Neon Grid, Iron District, Bronze Arena)
+  - Medium (7-12): 500c to 15Kc (Silver Strip, Jade Corridor, Amber Crossing, Gold Quarter, Ruby Den, Sapphire Hall)
+  - High Stakes (13-18): 30Kc to 750Kc (Viper Pit, Championship Hub, Emerald Court, Diamond Nexus, Apex Vault, Obsidian Core)
+  - Extreme (19-24): 1.5Mc to 40Mc (Crimson Abyss, Shadow Realm, Void Station, Phantom Reach, Inferno Gate, Tartarus Pit)
+  - Legendary (25-30): 75Mc to 1Bc (Venom Grand, Omega Station, Singularity Core, Eternity Vault, Abyssal Throne, The Singularity)
+- Fixed PRACTICE_TIERS: botsCount restored from 30 to 1000 for all 3 practice arenas
+- Redesigned ArenaSelector UI with difficulty group filter tabs:
+  - Added 6 filter buttons: All(30), Beginner(6), Medium(6), High Stakes(6), Extreme(6), Legendary(6)
+  - Each group shows only 6 tiers — no more endless scrolling
+  - Added "Jump to highest affordable" quick link
+  - Removed max-height scroll container (not needed with filtering)
+  - Detail card shows bot count with locale formatting (e.g., "1,000 Bots")
+- Updated Rules & Guide modal:
+  - Tier table title: "30 Competitive Tiers (10c → 1B)"
+  - Online bots: "30 bots per tier"
+  - Practice bots: "1,000 AI bots of varied sizes"
+  - Practice table title: "3 Free Tiers — 1,000 Bots Each"
+- Moved useMemo hooks before early returns to fix React hooks lint error
+
+Stage Summary:
+- 30 online tiers now span 10c to 1B (corrected from 100B)
+- Each online tier has exactly 30 bots
+- Practice tiers have 1000 bots each (corrected from 30)
+- Arena selector has difficulty filter tabs for easy browsing
+- Rules & Guide fully updated for all changes
+- Lint passes cleanly, browser verification successful
