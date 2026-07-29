@@ -19,13 +19,13 @@
 import { useEffect, useState } from 'react';
 import {
   ChevronRight,
-  Compass,
   Landmark,
   Play,
   Shield,
   Swords,
   Trophy,
   Users,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
 import { ARENA_TIERS, PRACTICE_TIERS } from '@/lib/game-config';
@@ -86,6 +86,10 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
     tiersList.find((t) => t.id === selectedTierId) || tiersList[0];
   const canAfford = player.bankedChips >= selectedTier.buyIn;
   const canPlay = !isOnline || canAfford;
+  // Derive tier index (1-based) for display
+  const tierIndex = isOnline
+    ? ARENA_TIERS.findIndex((t) => t.id === selectedTier.id) + 1
+    : 0;
 
   function handleEnterArena() {
     if (isOnline && !canAfford) {
@@ -253,6 +257,11 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
 
           <h2 className="text-2xl font-bold font-sans tracking-tight text-white mt-4 flex items-center gap-2">
             {selectedTier.name}
+            {isOnline && tierIndex > 0 && (
+              <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-950/60 px-2 py-0.5 rounded-full border border-slate-800">
+                TIER {tierIndex} / {ARENA_TIERS.length}
+              </span>
+            )}
           </h2>
 
           <p className="text-sm text-slate-300 font-sans mt-2.5 leading-relaxed">
@@ -301,7 +310,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
             )}
 
             <DetailRow
-              icon={<Compass className="w-3.5 h-3.5 text-slate-500" />}
+              icon={<Zap className="w-3.5 h-3.5 text-slate-500" />}
               label="XP Multiplier"
               value={`x${selectedTier.rewardMultiplier} Multi`}
               valueClass="text-indigo-400"

@@ -2685,7 +2685,7 @@ function ReplayPlayer({ frames, myId, deathFrameIdx, onClose }: ReplayPlayerProp
 
 interface EndOverlayProps {
   endScreen: EndScreenState;
-  arena: { name: string; buyIn: number; minExtract: number };
+  arena: { name: string; buyIn: number };
   isOffline: boolean;
   previousLevel: number;
   previousBankedChips: number;

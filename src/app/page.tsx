@@ -205,7 +205,7 @@ export default function Home() {
   );
 
   const handlePlayArena = useCallback(
-    (arenaId: string) => {
+    (arenaId: string, _isOnline?: boolean) => {
       if (!player) return;
       setActiveArenaId(arenaId);
     },
@@ -864,7 +864,7 @@ export default function Home() {
 
             {/* Tab content */}
             <div className="w-full">
-              {activeTab === 'arena' && <ArenaSelector onPlay={handlePlayArena} />}
+              {activeTab === 'arena' && <ArenaSelector onPlay={handlePlayArena} onToast={toastFn} />}
 
               {activeTab === 'shop' && <CosmeticsShop />}
               {activeTab === 'profile' && <PlayerProfilePanel />}

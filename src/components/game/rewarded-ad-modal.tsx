@@ -17,6 +17,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, Tv, X, Gift, CheckCircle, Clock } from 'lucide-react';
+import { AD_REWARD_CHIPS } from '@/lib/game-config';
 
 interface RewardedAdModalProps {
   open: boolean;
@@ -28,7 +29,6 @@ interface RewardedAdModalProps {
 }
 
 const AD_DURATION_SECONDS = 5;
-const REWARD_AMOUNT = 50;
 
 type Phase = 'watching' | 'claimable' | 'claiming' | 'success' | 'error';
 
@@ -118,7 +118,7 @@ export function RewardedAdModal({ open, onClose, onRewardClaimed, onToast }: Rew
             <h3 className="text-base font-bold text-white">Rewarded Ad</h3>
           </div>
           <p className="text-xs text-slate-400 mb-5">
-            Watch the ad to earn <span className="text-emerald-400 font-bold">+{REWARD_AMOUNT} free chips</span>
+            Watch the ad to earn <span className="text-emerald-400 font-bold">+{AD_REWARD_CHIPS} free chips</span>
           </p>
 
           {/* Ad Content Area */}
@@ -169,7 +169,7 @@ export function RewardedAdModal({ open, onClose, onRewardClaimed, onToast }: Rew
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/15 border border-emerald-500/30 mb-2">
                   <Gift className="h-8 w-8 text-emerald-400" />
                 </div>
-                <p className="text-lg font-bold text-emerald-300">+{REWARD_AMOUNT} Chips!</p>
+                <p className="text-lg font-bold text-emerald-300">+{AD_REWARD_CHIPS} Chips!</p>
                 <p className="text-xs text-slate-400 mt-1">Reward credited to your account</p>
               </div>
             )}
@@ -198,7 +198,7 @@ export function RewardedAdModal({ open, onClose, onRewardClaimed, onToast }: Rew
               className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 transition cursor-pointer"
             >
               <Gift className="h-4 w-4" />
-              CLAIM +{REWARD_AMOUNT} CHIPS
+              CLAIM +{AD_REWARD_CHIPS} CHIPS
             </button>
           )}
 
