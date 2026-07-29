@@ -1789,6 +1789,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
   // (Offline practice arenas return early before this point, so this only
   //  matters for the online-mode edge case where realPlayerCount === 0.)
   const isOfflineMode = isOffline;
+  const starsInArena = (snapshotRef.current?.foods ?? []).filter(f => f.isStarChip).length;
   // Rank display:
   //  - Online (realPlayerCount > 1): "#X of Y" using server yourRank.
   //  - Online with <= 1 real player: "#1 of 1".
@@ -1884,6 +1885,19 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
               </div>
               <div className="text-sm font-bold text-amber-400 tabular-nums">
                 +{Math.max(0, hudCarried - (arena?.buyIn ?? 0)).toLocaleString()}<span className="ml-0.5 text-xs">c</span>
+              </div>
+            </div>
+          )}
+
+          {/* Stars in Arena card (online only) — shows how many golden star collectibles are on the floor */}
+          {!isOfflineMode && starsInArena > 0 && (
+            <div className="rounded-lg border border-yellow-500/30 bg-slate-950/80 px-3 py-1.5 backdrop-blur-sm">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-500">
+                <Star className="h-3 w-3 text-yellow-400" />
+                <span>Stars in Arena</span>
+              </div>
+              <div className="text-sm font-bold text-yellow-300 tabular-nums">
+                {starsInArena}
               </div>
             </div>
           )}

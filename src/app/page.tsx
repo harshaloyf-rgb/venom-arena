@@ -15,7 +15,7 @@
  * sticky footer (`min-h-screen flex flex-col` + `mt-auto`).
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Landmark,
@@ -37,6 +37,8 @@ import {
   BookOpen,
   Crown,
   Loader2,
+  Sunrise,
+  Star,
 } from 'lucide-react';
 
 import { useAuth } from '@/components/providers/auth-provider';
@@ -83,6 +85,7 @@ type TabId =
 
 interface Mission {
   id: string;
+  type: 'daily' | 'weekly';
   title: string;
   description: string;
   reward: number;
@@ -90,6 +93,7 @@ interface Mission {
   current: number;
   completed: boolean;
   claimed: boolean;
+  periodStart: string;
 }
 
 interface TabDef {
@@ -116,48 +120,7 @@ const TABS: TabDef[] = [
   { id: 'admin', label: 'Admin', icon: Shield, activeColor: 'text-red-400 bg-red-600/10 border-red-500/30', adminOnly: true },
 ];
 
-const INITIAL_MISSIONS: Mission[] = [
-  {
-    id: 'mission-1',
-    title: 'Survive and Thrive',
-    description: 'Successfully extract with at least 50 chips in a single match.',
-    reward: 25,
-    target: 1,
-    current: 0,
-    completed: false,
-    claimed: false,
-  },
-  {
-    id: 'mission-2',
-    title: 'Apex Hunter',
-    description: 'Eliminate 5 rival snakes (head-to-body collisions) in any arena.',
-    reward: 50,
-    target: 5,
-    current: 0,
-    completed: false,
-    claimed: false,
-  },
-  {
-    id: 'mission-3',
-    title: 'Star Grabber',
-    description: 'Collect 15 star-chips dropped by fallen opponents.',
-    reward: 40,
-    target: 15,
-    current: 0,
-    completed: false,
-    claimed: false,
-  },
-  {
-    id: 'mission-4',
-    title: 'High Stakes Entry',
-    description: 'Enter Neon Grid (100 chips buy-in) or higher arena.',
-    reward: 30,
-    target: 1,
-    current: 0,
-    completed: false,
-    claimed: false,
-  },
-];
+// Challenges are fetched from the server — no more hardcoded INITIAL_MISSIONS.
 
 // ---------------------------------------------------------------------------
 // Component
@@ -169,7 +132,8 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [activeArenaId, setActiveArenaId] = useState<string | null>(null);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
-  const [missions, setMissions] = useState<Mission[]>(INITIAL_MISSIONS);
+  const [missions, setMissions] = useState<Mission[]>([]);
+  const [challengesLoading, setChallengesLoading] = useState(false);
   const [lastResult, setLastResult] = useState<MatchResult | undefined>(undefined);
   const [inspectedPlayer, setInspectedPlayer] = useState<InspectedPlayer | null>(null);
   const [toastFn] = useState<(msg: string, type?: 'success' | 'error' | 'info') => void>(() => (msg: string, type?: 'success' | 'error' | 'info') => {
@@ -192,6 +156,29 @@ export default function Home() {
   // Handlers
   // -------------------------------------------------------------------------
 
+  // Fetch challenges from the server
+  const fetchChallenges = useCallback(async () => {
+    setChallengesLoading(true);
+    try {
+      const res = await fetch('/api/player/challenges');
+      if (res.ok) {
+        const data = await res.json();
+        setMissions(data.challenges || []);
+      }
+    } catch {
+      // Silently fail — challenges are non-critical
+    } finally {
+      setChallengesLoading(false);
+    }
+  }, []);
+
+  // Fetch challenges on mount and when player changes
+  useEffect(() => {
+    if (player) {
+      void fetchChallenges();
+    }
+  }, [player, fetchChallenges]);
+
   const handleExitGame = useCallback(
     (result?: MatchResult) => {
       setActiveArenaId(null);
@@ -201,41 +188,22 @@ export default function Home() {
           toast.success(
             `🏆 Extracted ${result.chipsExtracted.toLocaleString()}c from ${result.arenaName}! +${result.xpGained} XP`,
           );
-          // Mark the "Survive and Thrive" mission progress if applicable
-          if (result.chipsExtracted >= 50) {
-            setMissions((prev) =>
-              prev.map((m) =>
-                m.id === 'mission-1' && !m.completed
-                  ? { ...m, current: m.target, completed: true }
-                  : m,
-              ),
-            );
-          }
         } else {
           toast.error(`💀 Eliminated in ${result.arenaName}. ${result.kills} kill(s) this match.`);
         }
       }
       // Refresh player profile so header chips reflect the new bank balance.
       void refresh();
+      // Re-fetch challenges to see any progress updates
+      void fetchChallenges();
     },
-    [refresh],
+    [refresh, fetchChallenges],
   );
 
   const handlePlayArena = useCallback(
     (arenaId: string) => {
       if (!player) return;
       setActiveArenaId(arenaId);
-      // Mark the "High Stakes Entry" mission progress (buy-in ≥ 100c) — flavor.
-      // The real buy-in accounting happens server-side in /api/match/join.
-      if (arenaId === 'tier-2' || arenaId === 'tier-3' || arenaId === 'tier-4' || arenaId === 'tier-5') {
-        setMissions((prev) =>
-          prev.map((m) =>
-            m.id === 'mission-4' && !m.completed
-              ? { ...m, current: m.target, completed: true }
-              : m,
-          ),
-        );
-      }
     },
     [player],
   );
@@ -248,16 +216,27 @@ export default function Home() {
   }, [logout]);
 
   const claimMission = useCallback(
-    (mission: Mission) => {
+    async (mission: Mission) => {
       if (!mission.completed || mission.claimed) return;
-      setMissions((prev) =>
-        prev.map((m) => (m.id === mission.id ? { ...m, claimed: true } : m)),
-      );
-      toast.success(`Challenge reward claimed: +${mission.reward}c!`);
-      // In a future iteration this should POST to /api/player/mission-claim
-      // to credit the banked chips server-side. For now we just refresh so
-      // any other concurrent changes show up.
-      void refresh();
+      try {
+        const res = await fetch('/api/player/challenges', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ challengeId: mission.id }),
+        });
+        if (res.ok) {
+          setMissions((prev) =>
+            prev.map((m) => (m.id === mission.id ? { ...m, claimed: true } : m)),
+          );
+          toast.success(`Challenge reward claimed: +${mission.reward}c!`);
+          void refresh();
+        } else {
+          const data = await res.json().catch(() => ({}));
+          toast.error(data.error || 'Failed to claim reward.');
+        }
+      } catch {
+        toast.error('Network error while claiming reward.');
+      }
     },
     [refresh],
   );
@@ -548,7 +527,7 @@ export default function Home() {
               <section
                 id="challenges-dashboard-panel"
                 className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 shadow-xl flex flex-col gap-4"
-                aria-label="Daily tactical challenges"
+                aria-label="Tactical challenges"
               >
                 <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                   <div className="flex items-center gap-2">
@@ -560,65 +539,168 @@ export default function Home() {
                   <Sparkles className="w-4 h-4 text-indigo-400" />
                 </div>
 
-                <div className="flex flex-col gap-3.5">
-                  {missions.map((m) => {
-                    const percent = Math.min(100, Math.floor((m.current / m.target) * 100));
-                    return (
-                      <div
-                        key={m.id}
-                        className="p-3.5 bg-slate-950/90 rounded-xl border border-slate-800 flex flex-col gap-2.5"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <h4 className="text-xs font-bold text-white font-sans leading-snug">
-                              {m.title}
-                            </h4>
-                            <p className="text-[10.5px] text-slate-400 font-sans mt-1 leading-normal">
-                              {m.description}
-                            </p>
+                {challengesLoading && missions.length === 0 ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
+                    <span className="text-xs text-slate-400 ml-2">Loading challenges…</span>
+                  </div>
+                ) : missions.length === 0 ? (
+                  <div className="text-center py-6">
+                    <p className="text-xs text-slate-500 font-sans">No challenges available right now.</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-4 max-h-[480px] overflow-y-auto pr-1 custom-scrollbar">
+                    {/* Daily Challenges */}
+                    {(() => {
+                      const dailies = missions.filter((m) => m.type === 'daily');
+                      if (dailies.length === 0) return null;
+                      return (
+                        <div className="flex flex-col gap-2.5">
+                          <div className="flex items-center gap-2">
+                            <Sunrise className="w-3.5 h-3.5 text-amber-400" />
+                            <span className="text-[10px] font-bold text-amber-400 font-sans uppercase tracking-widest">
+                              Daily Challenges ({dailies.length})
+                            </span>
+                            <span className="text-[9px] font-mono text-slate-600 ml-auto">
+                              Resets daily at UTC midnight
+                            </span>
                           </div>
+                          {dailies.map((m) => {
+                            const percent = Math.min(100, Math.floor((m.current / m.target) * 100));
+                            return (
+                              <div
+                                key={m.id}
+                                className="p-3.5 bg-slate-950/90 rounded-xl border border-slate-800 flex flex-col gap-2.5"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <h4 className="text-xs font-bold text-white font-sans leading-snug">
+                                      {m.title}
+                                    </h4>
+                                    <p className="text-[10.5px] text-slate-400 font-sans mt-1 leading-normal">
+                                      {m.description}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 mt-0.5">
+                                  <span>PROGRESS:</span>
+                                  <span>
+                                    {m.current} / {m.target} ({percent}%)
+                                  </span>
+                                </div>
+                                <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800/60">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-300 ${
+                                      m.claimed
+                                        ? 'bg-emerald-600'
+                                        : m.completed
+                                          ? 'bg-gradient-to-r from-emerald-400 to-teal-500'
+                                          : 'bg-gradient-to-r from-amber-500 to-orange-500'
+                                    }`}
+                                    style={{ width: `${percent}%` }}
+                                  />
+                                </div>
+                                <div className="flex justify-between items-center mt-1 pt-2 border-t border-slate-900/40">
+                                  <span className="text-[10px] font-mono font-bold text-emerald-400">
+                                    +{m.reward} CHIPS
+                                  </span>
+                                  <button
+                                    onClick={() => void claimMission(m)}
+                                    disabled={!m.completed || m.claimed}
+                                    className={`px-3 py-1 rounded-lg text-[10px] font-sans font-bold transition-all cursor-pointer ${
+                                      m.claimed
+                                        ? 'bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed'
+                                        : m.completed
+                                          ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 text-black shadow shadow-emerald-950/20'
+                                          : 'bg-slate-900 text-slate-500 border border-slate-800 cursor-not-allowed'
+                                    }`}
+                                  >
+                                    {m.claimed ? 'Claimed ✓' : 'Claim'}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
+                      );
+                    })()}
 
-                        <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 mt-0.5">
-                          <span>PROGRESS:</span>
-                          <span>
-                            {m.current} / {m.target} ({percent}%)
-                          </span>
+                    {/* Weekly Challenges */}
+                    {(() => {
+                      const weeklies = missions.filter((m) => m.type === 'weekly');
+                      if (weeklies.length === 0) return null;
+                      return (
+                        <div className="flex flex-col gap-2.5">
+                          <div className="flex items-center gap-2 border-t border-slate-800 pt-3 mt-1">
+                            <Star className="w-3.5 h-3.5 text-violet-400" />
+                            <span className="text-[10px] font-bold text-violet-400 font-sans uppercase tracking-widest">
+                              Weekly Challenges ({weeklies.length})
+                            </span>
+                            <span className="text-[9px] font-mono text-slate-600 ml-auto">
+                              Resets every Monday UTC
+                            </span>
+                          </div>
+                          {weeklies.map((m) => {
+                            const percent = Math.min(100, Math.floor((m.current / m.target) * 100));
+                            return (
+                              <div
+                                key={m.id}
+                                className="p-3.5 bg-slate-950/90 rounded-xl border border-violet-500/20 flex flex-col gap-2.5"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <h4 className="text-xs font-bold text-white font-sans leading-snug">
+                                      {m.title}
+                                    </h4>
+                                    <p className="text-[10.5px] text-slate-400 font-sans mt-1 leading-normal">
+                                      {m.description}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 mt-0.5">
+                                  <span>PROGRESS:</span>
+                                  <span>
+                                    {m.current} / {m.target} ({percent}%)
+                                  </span>
+                                </div>
+                                <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800/60">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-300 ${
+                                      m.claimed
+                                        ? 'bg-emerald-600'
+                                        : m.completed
+                                          ? 'bg-gradient-to-r from-emerald-400 to-teal-500'
+                                          : 'bg-gradient-to-r from-violet-500 to-purple-500'
+                                    }`}
+                                    style={{ width: `${percent}%` }}
+                                  />
+                                </div>
+                                <div className="flex justify-between items-center mt-1 pt-2 border-t border-slate-900/40">
+                                  <span className="text-[10px] font-mono font-bold text-emerald-400">
+                                    +{m.reward} CHIPS
+                                  </span>
+                                  <button
+                                    onClick={() => void claimMission(m)}
+                                    disabled={!m.completed || m.claimed}
+                                    className={`px-3 py-1 rounded-lg text-[10px] font-sans font-bold transition-all cursor-pointer ${
+                                      m.claimed
+                                        ? 'bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed'
+                                        : m.completed
+                                          ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 text-black shadow shadow-emerald-950/20'
+                                          : 'bg-slate-900 text-slate-500 border border-slate-800 cursor-not-allowed'
+                                    }`}
+                                  >
+                                    {m.claimed ? 'Claimed ✓' : 'Claim'}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
-
-                        <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800/60">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${
-                              m.claimed
-                                ? 'bg-emerald-600'
-                                : 'bg-gradient-to-r from-indigo-500 to-indigo-600'
-                            }`}
-                            style={{ width: `${percent}%` }}
-                          />
-                        </div>
-
-                        <div className="flex justify-between items-center mt-1 pt-2 border-t border-slate-900/40">
-                          <span className="text-[10px] font-mono font-bold text-emerald-400">
-                            +{m.reward} CHIPS
-                          </span>
-                          <button
-                            onClick={() => claimMission(m)}
-                            disabled={!m.completed || m.claimed}
-                            className={`px-3 py-1 rounded-lg text-[10px] font-sans font-bold transition-all cursor-pointer ${
-                              m.claimed
-                                ? 'bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed'
-                                : m.completed
-                                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 text-black shadow shadow-emerald-950/20'
-                                  : 'bg-slate-900 text-slate-500 border border-slate-800 cursor-not-allowed'
-                            }`}
-                          >
-                            {m.claimed ? 'Claimed ✓' : 'Claim'}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })()}
+                  </div>
+                )}
 
                 {/* Last-match summary */}
                 {lastResult && (

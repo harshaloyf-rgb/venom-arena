@@ -305,8 +305,8 @@ export const FOOD_ORB_LARGE: FoodOrbConfig = {
 
 export const ALL_FOOD_ORBS: FoodOrbConfig[] = [FOOD_ORB_SMALL, FOOD_ORB_MEDIUM, FOOD_ORB_LARGE];
 
-// Food spawn distribution weights: 60% small, 30% medium, 10% large
-export const FOOD_ORB_WEIGHTS: number[] = [0.6, 0.3, 0.1];
+// Food spawn distribution weights: 93% small, 4% medium, 3% large
+export const FOOD_ORB_WEIGHTS: number[] = [0.93, 0.04, 0.03];
 
 export const FOOD_COUNT_TARGET = 1200; // total food orbs per arena
 export const REGULAR_FOOD_GROW = 1; // legacy alias (food value IS the grow amount)
@@ -1228,4 +1228,18 @@ export interface InspectedPlayer {
   regionalRank?: number;
   clanTag?: string;
   clanName?: string;
+  // Career stats (optional — populated when available)
+  lifetimeKills?: number;
+  lifetimeDeaths?: number;
+  lifetimeExtracts?: number;
+  bestStreak?: number;
+  biggestExtract?: number;
+  totalEarned?: number;
+  totalLost?: number;
+  // Equipped cosmetics (optional — populated when available)
+  currentSkin?: string;
+  currentTrail?: string;
+  currentDeath?: string;
+  currentFlag?: string | null;
+  currentBanner?: string | null;
 }

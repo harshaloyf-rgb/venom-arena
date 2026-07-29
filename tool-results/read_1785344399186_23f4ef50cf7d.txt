@@ -1,0 +1,1074 @@
+     1→'use client';
+     2→
+     3→import { useMemo, useState } from 'react';
+     4→import { useAuth } from '@/components/providers/auth-provider';
+     5→import {
+     6→  INITIAL_FRIENDS,
+     7→  INITIAL_RIVALS,
+     8→  GLOBAL_COMMUNITY_PLAYERS,
+     9→  SOCIAL_COUNTRY_FILTER,
+    10→  PUBLIC_CLANS,
+    11→  PRESET_EMBLEMS,
+    12→  BOT_REPLIES,
+    13→  countryFlag,
+    14→  countryName,
+    15→  ARENA_TIERS,
+    16→  type MockFriend,
+    17→  type MockRival,
+    18→  type GlobalPlayer,
+    19→} from '@/lib/game-config';
+    20→import {
+    21→  GlowBlob,
+    22→  MicroLabel,
+    23→  NotSignedIn,
+    24→  notify,
+    25→  type ToastFn,
+    26→} from './_panel-primitives';
+    27→import {
+    28→  Users,
+    29→  Shield,
+    30→  Swords,
+    31→  Globe,
+    32→  UserPlus,
+    33→  Gift,
+    34→  Eye,
+    35→  Send,
+    36→  X,
+    37→  Check,
+    38→  Coins,
+    39→  MessageSquare,
+    40→  Search,
+    41→  Plus,
+    42→  LogOut,
+    43→  Award,
+    44→} from 'lucide-react';
+    45→
+    46→interface SocialPanelProps {
+    47→  onToast?: ToastFn;
+    48→  onSpectateFriend?: (name: string, color: string) => void;
+    49→  onJoinArena?: (arenaId: string) => void;
+    50→}
+    51→
+    52→type TopTab = 'friends' | 'syndicate';
+    53→type FriendsSubTab = 'friends' | 'rivals' | 'search';
+    54→
+    55→const FRIEND_CHIPS: Record<string, number> = {
+    56→  ApexViper: 1200,
+    57→  ShadowSlinker: 150,
+    58→  CoinGobbler: 40,
+    59→  VenomKing: 250000,
+    60→};
+    61→
+    62→function friendChips(name: string, level: number): number {
+    63→  if (FRIEND_CHIPS[name] !== undefined) return FRIEND_CHIPS[name];
+    64→  return level * 45;
+    65→}
+    66→
+    67→const STATUS_LABELS: Record<MockFriend['status'] | MockRival['status'], string> = {
+    68→  online: 'Lobby',
+    69→  idle: 'Idle',
+    70→  'in-match': 'In-Arena',
+    71→  offline: 'Offline',
+    72→};
+    73→
+    74→const STATUS_BADGES: Record<MockRival['status'], string> = {
+    75→  'in-match': '⚔️ Playing Arena',
+    76→  online: '🟢 Online',
+    77→  idle: '🟢 Online',
+    78→  offline: '⚪ Offline',
+    79→};
+    80→
+    81→export function SocialPanel({ onToast, onSpectateFriend, onJoinArena }: SocialPanelProps) {
+    82→  const { player, refresh } = useAuth();
+    83→  const [topTab, setTopTab] = useState<TopTab>('friends');
+    84→  const [friendsSub, setFriendsSub] = useState<FriendsSubTab>('friends');
+    85→  const [friends, setFriends] = useState<MockFriend[]>(INITIAL_FRIENDS);
+    86→  const [rivals, setRivals] = useState<MockRival[]>(INITIAL_RIVALS);
+    87→  const [search, setSearch] = useState('');
+    88→  const [countryFilter, setCountryFilter] = useState('ALL');
+    89→  const [addFriendInput, setAddFriendInput] = useState('');
+    90→  const [joinedClanId, setJoinedClanId] = useState<string | null>(null);
+    91→  const [showCreateClan, setShowCreateClan] = useState(false);
+    92→  const [clanForm, setClanForm] = useState({ name: '', tag: '', emblem: PRESET_EMBLEMS[0], description: '' });
+    93→  const [clanChat, setClanChat] = useState<{ author: string; text: string; ts: string }[]>([]);
+    94→  const [chatInput, setChatInput] = useState('');
+    95→  const [depositAmount, setDepositAmount] = useState('');
+    96→  const [coOpFriend, setCoOpFriend] = useState<MockFriend | null>(null);
+    97→
+    98→  const filteredGlobalPlayers = useMemo(() => {
+    99→    return GLOBAL_COMMUNITY_PLAYERS.filter((p) => {
+   100→      if (countryFilter !== 'ALL' && p.country !== countryFilter) return false;
+   101→      if (search.trim()) {
+   102→        const q = search.toLowerCase();
+   103→        return p.name.toLowerCase().includes(q) || p.userTag.toLowerCase().includes(q);
+   104→      }
+   105→      return true;
+   106→    });
+   107→  }, [search, countryFilter]);
+   108→
+   109→  if (!player) return <NotSignedIn />;
+   110→
+   111→  const joinedClan = joinedClanId ? PUBLIC_CLANS.find((c) => c.id === joinedClanId) : null;
+   112→
+   113→  function handleAddFriend() {
+   114→    const name = addFriendInput.trim();
+   115→    if (!name) {
+   116→      notify('Please enter a player tag or name.', 'error', onToast);
+   117→      return;
+   118→    }
+   119→    const tagNum = Math.floor(1000 + Math.random() * 9000);
+   120→    const finalTag = name.substring(0, 4).toUpperCase() + '-' + tagNum;
+   121→    const newFriend: MockFriend = {
+   122→      id: `f-${Date.now()}`,
+   123→      name,
+   124→      userTag: finalTag,
+   125→      status: 'offline',
+   126→      level: 5 + Math.floor(Math.random() * 30),
+   127→      skinColor: '#22d3ee',
+   128→      giftSent: false,
+   129→      giftReceived: false,
+   130→    };
+   131→    setFriends((prev) => [...prev, newFriend]);
+   132→    setAddFriendInput('');
+   133→    notify(`Friend request sent to ${name} (${finalTag})! 🤝`, 'success', onToast);
+   134→  }
+   135→
+   136→  function handleSendGift(f: MockFriend) {
+   137→    setFriends((prev) => prev.map((x) => (x.id === f.id ? { ...x, giftSent: true } : x)));
+   138→    notify(`Sent 25 Daily Chips Gift to ${f.name}! 🎁`, 'success', onToast);
+   139→  }
+   140→
+   141→  function handleClaimGift(f: MockFriend) {
+   142→    setFriends((prev) => prev.map((x) => (x.id === f.id ? { ...x, giftReceived: false } : x)));
+   143→    notify(`Claimed 25 chips gift from ${f.name}! 🪙`, 'success', onToast);
+   144→    void refresh();
+   145→  }
+   146→
+   147→  function handleSpectate(f: MockFriend) {
+   148→    if (f.status !== 'in-match') return;
+   149→    if (onSpectateFriend) onSpectateFriend(f.name, f.skinColor);
+   150→    else notify(`Joining spectating server for ${f.name}... 👁️`, 'info', onToast);
+   151→  }
+   152→
+   153→  function handleInviteFriend(f: MockFriend) {
+   154→    if (f.status === 'offline') return;
+   155→    setCoOpFriend(f);
+   156→  }
+   157→
+   158→  function handleRemoveFriend(f: MockFriend) {
+   159→    setFriends((prev) => prev.filter((x) => x.id !== f.id));
+   160→    notify(`Removed ${f.name} from friends list.`, 'info', onToast);
+   161→  }
+   162→
+   163→  function handleHuntRival(r: MockRival) {
+   164→    notify(`⚔️ HUNT INITIATED: Entering ${r.currentArenaName} to take down ${r.name}!`, 'info', onToast);
+   165→    if (onJoinArena) onJoinArena('tier-2');
+   166→  }
+   167→
+   168→  function handleConvertRival(r: MockRival) {
+   169→    setFriends((prev) => [...prev, {
+   170→      id: `f-${Date.now()}`,
+   171→      name: r.name,
+   172→      userTag: r.userTag,
+   173→      status: r.status,
+   174→      currentArenaName: r.currentArenaName,
+   175→      level: r.level,
+   176→      skinColor: '#22d3ee',
+   177→      giftSent: false,
+   178→      giftReceived: false,
+   179→    }]);
+   180→    setRivals((prev) => prev.filter((x) => x.id !== r.id));
+   181→    notify(`${r.name} converted from rival to friend!`, 'success', onToast);
+   182→  }
+   183→
+   184→  function handleRemoveRival(r: MockRival) {
+   185→    setRivals((prev) => prev.filter((x) => x.id !== r.id));
+   186→    notify(`Removed ${r.name} from rivals list.`, 'info', onToast);
+   187→  }
+   188→
+   189→  function handleJoinClan(clanId: string) {
+   190→    const clan = PUBLIC_CLANS.find((c) => c.id === clanId);
+   191→    if (!clan) return;
+   192→    if (joinedClanId) {
+   193→      notify('You are already in a clan! Leave your current clan first.', 'error', onToast);
+   194→      return;
+   195→    }
+   196→    setJoinedClanId(clanId);
+   197→    setClanChat([
+   198→      { author: clan.members[0]?.name || 'Leader', text: BOT_REPLIES[Math.floor(Math.random() * BOT_REPLIES.length)], ts: 'just now' },
+   199→    ]);
+   200→    notify(`Welcome to ${clan.name} [${clan.tag}]! 🛡️`, 'success', onToast);
+   201→  }
+   202→
+   203→  function handleLeaveClan() {
+   204→    if (!joinedClan) return;
+   205→    notify(`Left ${joinedClan.name} [${joinedClan.tag}].`, 'info', onToast);
+   206→    setJoinedClanId(null);
+   207→    setClanChat([]);
+   208→  }
+   209→
+   210→  function handleCreateClan() {
+   211→    if (clanForm.name.length < 4) {
+   212→      notify('Syndicate Name must be at least 4 characters.', 'error', onToast);
+   213→      return;
+   214→    }
+   215→    if (clanForm.tag.length < 3 || clanForm.tag.length > 4) {
+   216→      notify('Clan Tag must be 3-4 characters.', 'error', onToast);
+   217→      return;
+   218→    }
+   219→    if (player.bankedChips < 500) {
+   220→      notify('You need at least 500 chips to register a Syndicate.', 'error', onToast);
+   221→      return;
+   222→    }
+   223→    notify(`Syndicate "${clanForm.name}" [${clanForm.tag.toUpperCase()}] established!`, 'success', onToast);
+   224→    setShowCreateClan(false);
+   225→    setClanForm({ name: '', tag: '', emblem: PRESET_EMBLEMS[0], description: '' });
+   226→  }
+   227→
+   228→  function handleDeposit() {
+   229→    const amt = parseInt(depositAmount, 10);
+   230→    if (!amt || amt <= 0) {
+   231→      notify('Enter a valid deposit amount.', 'error', onToast);
+   232→      return;
+   233→    }
+   234→    if (amt > player.bankedChips) {
+   235→      notify('Insufficient chips to deposit.', 'error', onToast);
+   236→      return;
+   237→    }
+   238→    notify(`Deposited ${amt}c to syndicate vault (+${Math.floor(amt * 0.1)} Clan XP)!`, 'success', onToast);
+   239→    setDepositAmount('');
+   240→    void refresh();
+   241→  }
+   242→
+   243→  function handleSendChat() {
+   244→    if (!chatInput.trim() || !joinedClan) return;
+   245→    const msg = { author: player.name, text: chatInput.trim(), ts: 'just now' };
+   246→    setClanChat((prev) => [...prev, msg]);
+   247→    setChatInput('');
+   248→    // Bot reply
+   249→    setTimeout(() => {
+   250→      const botMsg = BOT_REPLIES[Math.floor(Math.random() * BOT_REPLIES.length)];
+   251→      const botAuthor = joinedClan.members[Math.floor(Math.random() * joinedClan.members.length)]?.name || 'Member';
+   252→      setClanChat((prev) => [...prev, { author: botAuthor, text: botMsg, ts: 'just now' }]);
+   253→    }, 1500);
+   254→  }
+   255→
+   256→  return (
+   257→    <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 overflow-hidden">
+   258→      <GlowBlob color="bg-violet-500/10" className="-top-12 -right-12 w-56 h-56" />
+   259→
+   260→      {/* TOP TABS */}
+   261→      <div className="relative flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800/60 mb-5">
+   262→        <button
+   263→          type="button"
+   264→          onClick={() => setTopTab('friends')}
+   265→          className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition border ${topTab === 'friends' ? 'bg-violet-500/20 border-violet-500/40 text-violet-300' : 'text-slate-500 hover:text-slate-300 border-transparent'}`}
+   266→        >
+   267→          <Users className="w-3.5 h-3.5" /> Friends &amp; Global Search ({friends.length})
+   268→        </button>
+   269→        <button
+   270→          type="button"
+   271→          onClick={() => setTopTab('syndicate')}
+   272→          className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition border ${topTab === 'syndicate' ? 'bg-violet-500/20 border-violet-500/40 text-violet-300' : 'text-slate-500 hover:text-slate-300 border-transparent'}`}
+   273→        >
+   274→          <Shield className="w-3.5 h-3.5" /> Competitive Syndicate {joinedClan ? `[${joinedClan.tag}]` : ''}
+   275→        </button>
+   276→      </div>
+   277→
+   278→      {/* FRIENDS TAB */}
+   279→      {topTab === 'friends' && (
+   280→        <div className="space-y-4">
+   281→          {/* Sub-tabs */}
+   282→          <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800/60">
+   283→            <SubTabBtn active={friendsSub === 'friends'} onClick={() => setFriendsSub('friends')} icon={Users} label={`My Friends (${friends.length})`} />
+   284→            <SubTabBtn active={friendsSub === 'rivals'} onClick={() => setFriendsSub('rivals')} icon={Swords} label={`My Rivals (${rivals.length})`} />
+   285→            <SubTabBtn active={friendsSub === 'search'} onClick={() => setFriendsSub('search')} icon={Globe} label="Search Global Players" />
+   286→          </div>
+   287→
+   288→          {/* Add friend bar */}
+   289→          <div className="flex items-center gap-2">
+   290→            <input
+   291→              type="text"
+   292→              value={addFriendInput}
+   293→              onChange={(e) => setAddFriendInput(e.target.value)}
+   294→              placeholder="Enter Player Tag or Name (e.g. Cobra-4231)..."
+   295→              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-violet-500/50"
+   296→            />
+   297→            <button
+   298→              type="button"
+   299→              onClick={handleAddFriend}
+   300→              className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs uppercase tracking-wider transition flex items-center gap-1.5"
+   301→            >
+   302→              <UserPlus className="w-3.5 h-3.5" /> Add Friend
+   303→            </button>
+   304→          </div>
+   305→
+   306→          {/* My Friends */}
+   307→          {friendsSub === 'friends' && (
+   308→            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+   309→              {friends.length === 0 ? (
+   310→                <div className="md:col-span-2 p-6 rounded-xl border border-slate-800 bg-slate-950/60 text-center">
+   311→                  <Users className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+   312→                  <h4 className="text-sm font-bold text-white">Your Friends List is Empty</h4>
+   313→                  <p className="text-xs text-slate-400 mt-1">
+   314→                    Use &quot;Search Global Players&quot; above or enter rival tags to connect,
+   315→                    gift daily free chips, and play!
+   316→                  </p>
+   317→                </div>
+   318→              ) : (
+   319→                friends.map((f) => (
+   320→                  <FriendCard
+   321→                    key={f.id}
+   322→                    f={f}
+   323→                    onSendGift={() => handleSendGift(f)}
+   324→                    onClaimGift={() => handleClaimGift(f)}
+   325→                    onSpectate={() => handleSpectate(f)}
+   326→                    onInvite={() => handleInviteFriend(f)}
+   327→                    onRemove={() => handleRemoveFriend(f)}
+   328→                  />
+   329→                ))
+   330→              )}
+   331→            </div>
+   332→          )}
+   333→
+   334→          {/* My Rivals */}
+   335→          {friendsSub === 'rivals' && (
+   336→            <div className="space-y-3">
+   337→              <div className="flex items-center justify-between flex-wrap gap-2">
+   338→                <div>
+   339→                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">RIVALRY &amp; REVENGE TRACKER</h3>
+   340→                  <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+   341→                    Players who eliminated you or collided with you in arena matches.
+   342→                    Track their online status and join their exact arena to seek revenge!
+   343→                  </p>
+   344→                </div>
+   345→                <span className="text-[10px] font-mono bg-rose-500/10 border border-rose-500/30 text-rose-300 px-2 py-0.5 rounded-full">
+   346→                  {rivals.length} Active Rivals
+   347→                </span>
+   348→              </div>
+   349→              {rivals.length === 0 ? (
+   350→                <div className="p-6 rounded-xl border border-slate-800 bg-slate-950/60 text-center">
+   351→                  <Swords className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+   352→                  <h4 className="text-sm font-bold text-white">No Rivals in Your List</h4>
+   353→                  <p className="text-xs text-slate-400 mt-1">
+   354→                    When you get eliminated or collide with players in matches,
+   355→                    click &quot;ADD RIVAL&quot; on the game-over screen to track them here!
+   356→                  </p>
+   357→                </div>
+   358→              ) : (
+   359→                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+   360→                  {rivals.map((r) => (
+   361→                    <RivalCard
+   362→                      key={r.id}
+   363→                      r={r}
+   364→                      onHunt={() => handleHuntRival(r)}
+   365→                      onConvert={() => handleConvertRival(r)}
+   366→                      onRemove={() => handleRemoveRival(r)}
+   367→                    />
+   368→                  ))}
+   369→                </div>
+   370→              )}
+   371→            </div>
+   372→          )}
+   373→
+   374→          {/* Global Search */}
+   375→          {friendsSub === 'search' && (
+   376→            <div className="space-y-3">
+   377→              <div className="flex flex-wrap items-center gap-2">
+   378→                <div className="relative flex-1 min-w-[200px]">
+   379→                  <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+   380→                  <input
+   381→                    type="text"
+   382→                    value={search}
+   383→                    onChange={(e) => setSearch(e.target.value)}
+   384→                    placeholder="Search players globally by Name or Tag (e.g. Cobra, #IND-8821)..."
+   385→                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-violet-500/50"
+   386→                  />
+   387→                </div>
+   388→                <select
+   389→                  value={countryFilter}
+   390→                  onChange={(e) => setCountryFilter(e.target.value)}
+   391→                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-violet-500/50"
+   392→                >
+   393→                  {SOCIAL_COUNTRY_FILTER.map((c) => (
+   394→                    <option key={c.code} value={c.code}>
+   395→                      {c.flag} {c.name}
+   396→                    </option>
+   397→                  ))}
+   398→                </select>
+   399→              </div>
+   400→
+   401→              <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
+   402→                <ol className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll">
+   403→                  {filteredGlobalPlayers.length === 0 ? (
+   404→                    <li className="p-6 text-center text-xs text-slate-500">No players match your search.</li>
+   405→                  ) : (
+   406→                    filteredGlobalPlayers.map((p) => {
+   407→                      const connected = friends.some((f) => f.userTag === p.userTag);
+   408→                      return (
+   409→                        <li key={p.userTag} className="px-4 py-3 text-sm flex items-center justify-between gap-3 hover:bg-slate-900/40 transition-colors">
+   410→                          <div className="flex items-center gap-3 min-w-0">
+   411→                            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: `${p.skinColor}20`, border: `1px solid ${p.skinColor}40` }} aria-hidden>
+   412→                              {countryFlag(p.country)}
+   413→                            </div>
+   414→                            <div className="min-w-0">
+   415→                              <div className="font-bold text-white truncate flex items-center gap-1.5">
+   416→                                {p.name}
+   417→                                <span className="text-[10px] font-mono text-slate-500">#{p.userTag}</span>
+   418→                              </div>
+   419→                              <div className="text-[10px] font-mono text-slate-400">
+   420→                                🪙 {(p.chips / 1000).toFixed(0)}k · Lvl {p.level} · {STATUS_LABELS[p.status]}
+   421→                              </div>
+   422→                            </div>
+   423→                          </div>
+   424→                          {connected ? (
+   425→                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded-full">
+   426→                              <Check className="w-3 h-3" /> Connected
+   427→                            </span>
+   428→                          ) : (
+   429→                            <button
+   430→                              type="button"
+   431→                              onClick={() => {
+   432→                                setFriends((prev) => [...prev, {
+   433→                                  id: `f-${Date.now()}`,
+   434→                                  name: p.name,
+   435→                                  userTag: p.userTag,
+   436→                                  status: p.status,
+   437→                                  level: p.level,
+   438→                                  skinColor: p.skinColor,
+   439→                                  giftSent: false,
+   440→                                  giftReceived: false,
+   441→                                }]);
+   442→                                notify(`Connected with ${p.name}! 🤝`, 'success', onToast);
+   443→                              }}
+   444→                              className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-violet-600/20 border border-violet-500/40 text-violet-300 hover:bg-violet-600 hover:text-white transition flex items-center gap-1"
+   445→                            >
+   446→                              <UserPlus className="w-3 h-3" /> Connect
+   447→                            </button>
+   448→                          )}
+   449→                        </li>
+   450→                      );
+   451→                    })
+   452→                  )}
+   453→                  {/* Custom tag not in presets */}
+   454→                  {search.trim() && filteredGlobalPlayers.length === 0 && (
+   455→                    <li className="p-4 text-center text-xs text-slate-400">
+   456→                      <p className="font-bold text-white">Custom Player Tag: &quot;{search}&quot;</p>
+   457→                      <p className="mt-1">Found on Global Server. Connect &amp; send invite request.</p>
+   458→                      <button
+   459→                        type="button"
+   460→                        onClick={() => {
+   461→                          setFriends((prev) => [...prev, {
+   462→                            id: `f-${Date.now()}`,
+   463→                            name: search.trim(),
+   464→                            userTag: search.trim().toUpperCase(),
+   465→                            status: 'offline',
+   466→                            level: 1,
+   467→                            skinColor: '#22d3ee',
+   468→                            giftSent: false,
+   469→                            giftReceived: false,
+   470→                          }]);
+   471→                          notify(`Connected with ${search}! 🤝`, 'success', onToast);
+   472→                        }}
+   473→                        className="mt-3 px-3 py-1.5 rounded-lg text-[10px] font-bold bg-violet-600 hover:bg-violet-500 text-white transition inline-flex items-center gap-1"
+   474→                      >
+   475→                        <UserPlus className="w-3 h-3" /> Connect
+   476→                      </button>
+   477→                    </li>
+   478→                  )}
+   479→                </ol>
+   480→              </div>
+   481→            </div>
+   482→          )}
+   483→        </div>
+   484→      )}
+   485→
+   486→      {/* SYNDICATE TAB */}
+   487→      {topTab === 'syndicate' && (
+   488→        <div className="space-y-4">
+   489→          {!joinedClan ? (
+   490→            <>
+   491→              <div className="flex items-center justify-between gap-3 flex-wrap">
+   492→                <div>
+   493→                  <h3 className="text-lg font-black text-white flex items-center gap-2">
+   494→                    <Shield className="w-5 h-5 text-violet-400" /> Choose Your Combat Syndicate
+   495→                  </h3>
+   496→                  <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+   497→                    Syndicates are competitive teams of Venom Arena players. Work cooperatively,
+   498→                    pool chip assets to unlock level-based buffs, compete on Clan Leaderboards,
+   499→                    and chat in private feeds!
+   500→                  </p>
+   501→                </div>
+   502→                <button
+   503→                  type="button"
+   504→                  onClick={() => setShowCreateClan(true)}
+   505→                  className="px-3 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs uppercase tracking-wider transition flex items-center gap-1.5"
+   506→                >
+   507→                  <Plus className="w-3.5 h-3.5" /> Register Syndicate (500c)
+   508→                </button>
+   509→              </div>
+   510→
+   511→              <div className="flex items-center gap-2">
+   512→                <div className="relative flex-1">
+   513→                  <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+   514→                  <input
+   515→                    type="text"
+   516→                    placeholder="Search public Syndicates..."
+   517→                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-violet-500/50"
+   518→                  />
+   519→                </div>
+   520→              </div>
+   521→
+   522→              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   523→                {PUBLIC_CLANS.map((clan) => (
+   524→                  <div key={clan.id} className="p-4 rounded-2xl border border-slate-800 bg-slate-950/70 shadow-md">
+   525→                    <div className="flex items-start justify-between gap-2 mb-2">
+   526→                      <div className="flex items-center gap-3">
+   527→                        <span className="text-3xl" aria-hidden>{clan.emblem}</span>
+   528→                        <div>
+   529→                          <h4 className="text-sm font-bold text-white">{clan.name}</h4>
+   530→                          <span className="text-[10px] font-mono text-violet-300 bg-violet-500/10 border border-violet-500/30 px-2 py-0.5 rounded">[{clan.tag}]</span>
+   531→                        </div>
+   532→                      </div>
+   533→                      <span className="text-[9px] font-mono text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">Lvl {clan.level}</span>
+   534→                    </div>
+   535→                    <p className="text-[11px] text-slate-400 italic mb-3">&quot;{clan.description}&quot;</p>
+   536→                    <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+   537→                      <div className="p-2 bg-slate-900/60 rounded border border-slate-800">
+   538→                        <MicroLabel>Members</MicroLabel>
+   539→                        <div className="text-white text-xs mt-0.5">{clan.members.length}</div>
+   540→                      </div>
+   541→                      <div className="p-2 bg-slate-900/60 rounded border border-slate-800">
+   542→                        <MicroLabel>Clan Bank</MicroLabel>
+   543→                        <div className="text-emerald-400 text-xs mt-0.5">{clan.bankedChips.toLocaleString()}c</div>
+   544→                      </div>
+   545→                    </div>
+   546→                    <button
+   547→                      type="button"
+   548→                      onClick={() => handleJoinClan(clan.id)}
+   549→                      className="mt-3 w-full py-2 rounded-lg bg-slate-900 hover:bg-violet-600 text-violet-300 hover:text-white border border-violet-500/30 text-xs font-bold transition"
+   550→                    >
+   551→                      Join Syndicate
+   552→                    </button>
+   553→                  </div>
+   554→                ))}
+   555→              </div>
+   556→            </>
+   557→          ) : (
+   558→            <div className="space-y-4">
+   559→              <div className="flex items-center justify-between gap-3 flex-wrap">
+   560→                <div>
+   561→                  <h3 className="text-lg font-black text-white flex items-center gap-2">
+   562→                    <span className="text-2xl" aria-hidden>{joinedClan.emblem}</span>
+   563→                    {joinedClan.name}
+   564→                    <span className="text-[10px] font-mono text-violet-300 bg-violet-500/10 border border-violet-500/30 px-2 py-0.5 rounded">[{joinedClan.tag}]</span>
+   565→                  </h3>
+   566→                  <p className="text-[11px] text-slate-400 mt-1">Level {joinedClan.level} · {joinedClan.members.length} Members</p>
+   567→                </div>
+   568→                <button
+   569→                  type="button"
+   570→                  onClick={handleLeaveClan}
+   571→                  className="px-3 py-2 rounded-xl bg-slate-950 hover:bg-rose-950/40 text-slate-300 hover:text-rose-400 border border-slate-800 hover:border-rose-500/30 text-xs font-bold transition flex items-center gap-1.5"
+   572→                >
+   573→                  <LogOut className="w-3.5 h-3.5" /> Leave Syndicate
+   574→                </button>
+   575→              </div>
+   576→
+   577→              {/* Level bar */}
+   578→              <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/60">
+   579→                <div className="flex items-center justify-between text-xs mb-1">
+   580→                  <span className="inline-flex items-center gap-1 text-amber-300 font-bold">
+   581→                    <Award className="w-3.5 h-3.5" /> Syndicate level {joinedClan.level}
+   582→                  </span>
+   583→                  <span className="font-mono text-slate-400 text-[10px]">{joinedClan.level * 800} / {joinedClan.level * 1000} XP</span>
+   584→                </div>
+   585→                <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
+   586→                  <div className="h-full bg-gradient-to-r from-violet-500 to-amber-500 rounded-full" style={{ width: `${(joinedClan.level * 800 / (joinedClan.level * 1000)) * 100}%` }} />
+   587→                </div>
+   588→              </div>
+   589→
+   590→              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+   591→                {/* Vault + members */}
+   592→                <div className="lg:col-span-1 space-y-3">
+   593→                  <div className="p-4 rounded-xl border border-slate-800 bg-slate-950/60">
+   594→                    <div className="flex items-center gap-2 mb-1">
+   595→                      <Coins className="w-4 h-4 text-emerald-400" />
+   596→                      <span className="text-sm font-bold text-white">Co-Op Syndicate Vault</span>
+   597→                    </div>
+   598→                    <p className="text-[11px] text-slate-400 leading-relaxed mb-2">
+   599→                      Deposit excess banked chips to grow the vault balance. Deposits earn 10% value
+   600→                      in Clan XP! Current Vault: <span className="font-mono font-bold text-emerald-400">{player.bankedChips.toLocaleString()} c</span>
+   601→                    </p>
+   602→                    <div className="flex items-center gap-2">
+   603→                      <input
+   604→                        type="number"
+   605→                        value={depositAmount}
+   606→                        onChange={(e) => setDepositAmount(e.target.value)}
+   607→                        placeholder="Amt (e.g. 100)"
+   608→                        className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-emerald-500/50"
+   609→                      />
+   610→                      <button
+   611→                        type="button"
+   612→                        onClick={handleDeposit}
+   613→                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1"
+   614→                      >
+   615→                        <Coins className="w-3 h-3" /> Deposit
+   616→                      </button>
+   617→                    </div>
+   618→                  </div>
+   619→
+   620→                  <div className="p-4 rounded-xl border border-slate-800 bg-slate-950/60">
+   621→                    <h4 className="text-xs font-bold text-white mb-2 flex items-center gap-1.5">
+   622→                      <Users className="w-3.5 h-3.5 text-violet-400" /> Active Members ({joinedClan.members.length}/30)
+   623→                    </h4>
+   624→                    <div className="text-[10px] text-slate-500 mb-2">Leader: 👑 {joinedClan.members.find((m) => m.role === 'Leader')?.name || 'None'}</div>
+   625→                    <ul className="space-y-1.5 max-h-48 overflow-y-auto va-scroll">
+   626→                      {joinedClan.members.map((m) => (
+   627→                        <li key={m.name} className="flex items-center justify-between text-[11px] py-1 border-b border-slate-900/60">
+   628→                          <div className="flex items-center gap-1.5">
+   629→                            <span className="font-bold text-white">{m.name}</span>
+   630→                            <span className="text-[9px] font-mono text-slate-500">{m.role}</span>
+   631→                          </div>
+   632→                          <span className="font-mono text-amber-400">Lvl {m.level}</span>
+   633→                        </li>
+   634→                      ))}
+   635→                    </ul>
+   636→                  </div>
+   637→                </div>
+   638→
+   639→                {/* Chat */}
+   640→                <div className="lg:col-span-2 flex flex-col rounded-xl border border-slate-800 bg-slate-950/60 overflow-hidden">
+   641→                  <div className="px-4 py-2.5 border-b border-slate-800 flex items-center justify-between">
+   642→                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
+   643→                      <MessageSquare className="w-3.5 h-3.5 text-violet-400" /> Syndicate HQ Feed
+   644→                    </span>
+   645→                    <span className="text-[10px] font-mono text-slate-500">Active conversation channel</span>
+   646→                  </div>
+   647→                  <div className="flex-1 overflow-y-auto va-scroll p-3 space-y-2 max-h-[300px] min-h-[200px]">
+   648→                    {clanChat.length === 0 ? (
+   649→                      <div className="text-center text-xs text-slate-500 py-8">No messages yet. Say hi to your syndicate!</div>
+   650→                    ) : (
+   651→                      clanChat.map((m, i) => (
+   652→                        <div key={i} className={`flex flex-col ${m.author === player.name ? 'items-end' : 'items-start'}`}>
+   653→                          <span className="text-[9px] font-mono text-slate-500">{m.author} · {m.ts}</span>
+   654→                          <div className={`px-3 py-1.5 rounded-xl text-xs ${m.author === player.name ? 'bg-violet-600 text-white' : 'bg-slate-900 text-slate-200 border border-slate-800'}`}>
+   655→                            {m.text}
+   656→                          </div>
+   657→                        </div>
+   658→                      ))
+   659→                    )}
+   660→                  </div>
+   661→                  <div className="p-2 border-t border-slate-800 flex items-center gap-2">
+   662→                    <input
+   663→                      type="text"
+   664→                      value={chatInput}
+   665→                      onChange={(e) => setChatInput(e.target.value)}
+   666→                      onKeyDown={(e) => { if (e.key === 'Enter') handleSendChat(); }}
+   667→                      placeholder="Type message to Syndicate..."
+   668→                      className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-violet-500/50"
+   669→                    />
+   670→                    <button
+   671→                      type="button"
+   672→                      onClick={handleSendChat}
+   673→                      className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition flex items-center gap-1"
+   674→                    >
+   675→                      <Send className="w-3 h-3" /> Send
+   676→                    </button>
+   677→                  </div>
+   678→                </div>
+   679→              </div>
+   680→            </div>
+   681→          )}
+   682→
+   683→          {/* CREATE CLAN MODAL */}
+   684→          {showCreateClan && (
+   685→            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+   686→              <div className="relative w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-5">
+   687→                <div className="flex items-center justify-between mb-4">
+   688→                  <h3 className="text-base font-black text-white">Syndicate Charter Registration</h3>
+   689→                  <button
+   690→                    type="button"
+   691→                    onClick={() => setShowCreateClan(false)}
+   692→                    className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800"
+   693→                  >
+   694→                    <X className="w-4 h-4" />
+   695→                  </button>
+   696→                </div>
+   697→                <div className="space-y-3">
+   698→                  <div>
+   699→                    <label className="text-[10px] font-mono uppercase tracking-widest text-slate-500 block mb-1">Syndicate Name</label>
+   700→                    <input
+   701→                      type="text"
+   702→                      value={clanForm.name}
+   703→                      onChange={(e) => setClanForm((f) => ({ ...f, name: e.target.value }))}
+   704→                      placeholder="e.g. Poison Fangs"
+   705→                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500/50"
+   706→                    />
+   707→                  </div>
+   708→                  <div>
+   709→                    <label className="text-[10px] font-mono uppercase tracking-widest text-slate-500 block mb-1">Clan Tag (3-4 Chars)</label>
+   710→                    <input
+   711→                      type="text"
+   712→                      value={clanForm.tag}
+   713→                      onChange={(e) => setClanForm((f) => ({ ...f, tag: e.target.value.toUpperCase() }))}
+   714→                      placeholder="e.g. FANG"
+   715→                      maxLength={4}
+   716→                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-violet-500/50"
+   717→                    />
+   718→                  </div>
+   719→                  <div>
+   720→                    <label className="text-[10px] font-mono uppercase tracking-widest text-slate-500 block mb-1">Select Emblem Symbol</label>
+   721→                    <div className="flex flex-wrap gap-1.5">
+   722→                      {PRESET_EMBLEMS.map((em) => (
+   723→                        <button
+   724→                          key={em}
+   725→                          type="button"
+   726→                          onClick={() => setClanForm((f) => ({ ...f, emblem: em }))}
+   727→                          className={`w-9 h-9 rounded-lg text-lg flex items-center justify-center border transition ${clanForm.emblem === em ? 'bg-violet-500/20 border-violet-500/50' : 'bg-slate-950 border-slate-800 hover:border-slate-700'}`}
+   728→                        >
+   729→                          {em}
+   730→                        </button>
+   731→                      ))}
+   732→                    </div>
+   733→                  </div>
+   734→                  <div>
+   735→                    <label className="text-[10px] font-mono uppercase tracking-widest text-slate-500 block mb-1">Description / Manifesto</label>
+   736→                    <textarea
+   737→                      value={clanForm.description}
+   738→                      onChange={(e) => setClanForm((f) => ({ ...f, description: e.target.value }))}
+   739→                      placeholder="Write your squad's focus, rules or motto..."
+   740→                      rows={3}
+   741→                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500/50"
+   742→                    />
+   743→                  </div>
+   744→                  <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+   745→                    <span className="text-[10px] font-mono text-slate-400">Cost: <span className="text-emerald-400 font-bold">500 c</span></span>
+   746→                    <div className="flex gap-2">
+   747→                      <button
+   748→                        type="button"
+   749→                        onClick={() => setShowCreateClan(false)}
+   750→                        className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-400 hover:text-white text-xs font-bold transition"
+   751→                      >
+   752→                        Cancel
+   753→                      </button>
+   754→                      <button
+   755→                        type="button"
+   756→                        onClick={handleCreateClan}
+   757→                        className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition flex items-center gap-1.5"
+   758→                      >
+   759→                        <Check className="w-3.5 h-3.5" /> Establish Charter
+   760→                      </button>
+   761→                    </div>
+   762→                  </div>
+   763→                </div>
+   764→              </div>
+   765→            </div>
+   766→          )}
+   767→        </div>
+   768→      )}
+   769→
+   770→      {/* CO-OP INVITE MODAL */}
+   771→      {coOpFriend && (
+   772→        <CoOpInviteModal
+   773→          friend={coOpFriend}
+   774→          playerChips={player.bankedChips}
+   775→          onClose={() => setCoOpFriend(null)}
+   776→          onSend={(tierId) => {
+   777→            notify(`Co-Op invite sent to ${coOpFriend.name} for ${ARENA_TIERS.find((t) => t.id === tierId)?.name || 'arena'}! 🤝`, 'success', onToast);
+   778→            setCoOpFriend(null);
+   779→          }}
+   780→        />
+   781→      )}
+   782→    </div>
+   783→  );
+   784→}
+   785→
+   786→interface SubTabBtnProps {
+   787→  active: boolean;
+   788→  onClick: () => void;
+   789→  icon: typeof Users;
+   790→  label: string;
+   791→}
+   792→
+   793→function SubTabBtn({ active, onClick, icon: Icon, label }: SubTabBtnProps) {
+   794→  return (
+   795→    <button
+   796→      type="button"
+   797→      onClick={onClick}
+   798→      className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition border ${active ? 'bg-violet-500/20 border-violet-500/40 text-violet-300' : 'text-slate-500 hover:text-slate-300 border-transparent'}`}
+   799→    >
+   800→      <Icon className="w-3.5 h-3.5" /> {label}
+   801→    </button>
+   802→  );
+   803→}
+   804→
+   805→interface FriendCardProps {
+   806→  f: MockFriend;
+   807→  onSendGift: () => void;
+   808→  onClaimGift: () => void;
+   809→  onSpectate: () => void;
+   810→  onInvite: () => void;
+   811→  onRemove: () => void;
+   812→}
+   813→
+   814→function FriendCard({ f, onSendGift, onClaimGift, onSpectate, onInvite, onRemove }: FriendCardProps) {
+   815→  return (
+   816→    <div className="p-4 rounded-2xl border border-slate-800 bg-slate-950/70 shadow-md flex flex-col gap-2">
+   817→      <div className="flex items-start justify-between">
+   818→        <div className="flex items-center gap-2.5 min-w-0">
+   819→          <div className="w-10 h-10 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: `${f.skinColor}20`, border: `1px solid ${f.skinColor}40` }} aria-hidden>
+   820→            🐍
+   821→          </div>
+   822→          <div className="min-w-0">
+   823→            <div className="font-bold text-white truncate">{f.name}</div>
+   824→            <div className="text-[10px] font-mono text-slate-500 truncate">#{f.userTag}</div>
+   825→          </div>
+   826→        </div>
+   827→        <button
+   828→          type="button"
+   829→          onClick={onRemove}
+   830→          className="p-1 rounded text-slate-500 hover:text-rose-400 transition"
+   831→          title="Remove Friend"
+   832→        >
+   833→          <X className="w-3.5 h-3.5" />
+   834→        </button>
+   835→      </div>
+   836→
+   837→      <div className="flex items-center justify-between text-[10px] font-mono">
+   838→        <span className={`inline-flex items-center gap-1 ${f.status === 'online' ? 'text-emerald-400' : f.status === 'in-match' ? 'text-rose-400' : f.status === 'idle' ? 'text-amber-400' : 'text-slate-500'}`}>
+   839→          <span className={`w-1.5 h-1.5 rounded-full ${f.status === 'online' ? 'bg-emerald-400' : f.status === 'in-match' ? 'bg-rose-400' : f.status === 'idle' ? 'bg-amber-400' : 'bg-slate-600'}`} />
+   840→          {STATUS_LABELS[f.status]}
+   841→        </span>
+   842→        <span className="text-amber-400">Lvl {f.level}</span>
+   843→      </div>
+   844→
+   845→      {f.currentArenaName && (
+   846→        <div className="text-[10px] text-slate-400 truncate">
+   847→          📍 {f.currentArenaName}
+   848→        </div>
+   849→      )}
+   850→
+   851→      <div className="flex flex-wrap gap-1.5 pt-1">
+   852→        {f.giftReceived ? (
+   853→          <button
+   854→            type="button"
+   855→            onClick={onClaimGift}
+   856→            className="px-2 py-1 rounded-lg text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1"
+   857→          >
+   858→            <Gift className="w-3 h-3" /> Claim +25c
+   859→          </button>
+   860→        ) : (
+   861→          <span className="px-2 py-1 rounded-lg text-[10px] text-slate-500 bg-slate-900 border border-slate-800">No pending gift</span>
+   862→        )}
+   863→        {f.status === 'in-match' && (
+   864→          <button
+   865→            type="button"
+   866→            onClick={onSpectate}
+   867→            className="px-2 py-1 rounded-lg text-[10px] font-bold bg-cyan-600/20 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-600 hover:text-white transition flex items-center gap-1"
+   868→          >
+   869→            <Eye className="w-3 h-3" /> Spectate
+   870→          </button>
+   871→        )}
+   872→        <button
+   873→          type="button"
+   874→          onClick={onInvite}
+   875→          disabled={f.status === 'offline'}
+   876→          className="px-2 py-1 rounded-lg text-[10px] font-bold bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600 hover:text-white transition flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+   877→        >
+   878→          <Swords className="w-3 h-3" /> Invite
+   879→        </button>
+   880→        <button
+   881→          type="button"
+   882→          onClick={onSendGift}
+   883→          disabled={f.giftSent}
+   884→          className={`px-2 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 ${f.giftSent ? 'bg-slate-900 text-slate-500 border border-slate-800 cursor-not-allowed' : 'bg-amber-600/20 border border-amber-500/30 text-amber-300 hover:bg-amber-600 hover:text-white'}`}
+   885→        >
+   886→          <Send className="w-3 h-3" /> {f.giftSent ? 'Sent Today' : 'Send Gift'}
+   887→        </button>
+   888→      </div>
+   889→    </div>
+   890→  );
+   891→}
+   892→
+   893→interface RivalCardProps {
+   894→  r: MockRival;
+   895→  onHunt: () => void;
+   896→  onConvert: () => void;
+   897→  onRemove: () => void;
+   898→}
+   899→
+   900→function RivalCard({ r, onHunt, onConvert, onRemove }: RivalCardProps) {
+   901→  return (
+   902→    <div className="p-4 rounded-2xl border border-rose-500/30 bg-slate-950/70 shadow-md flex flex-col gap-2">
+   903→      <div className="flex items-start justify-between">
+   904→        <div className="flex items-center gap-2.5 min-w-0">
+   905→          <div className="w-10 h-10 rounded-lg flex items-center justify-center text-base shrink-0 bg-rose-500/10 border border-rose-500/30" aria-hidden>
+   906→            ⚔️
+   907→          </div>
+   908→          <div className="min-w-0">
+   909→            <div className="font-bold text-white truncate">{r.name}</div>
+   910→            <div className="text-[10px] font-mono text-slate-500 truncate">#{r.userTag} · Lvl {r.level}</div>
+   911→          </div>
+   912→        </div>
+   913→        <div className="flex gap-1">
+   914→          <button
+   915→            type="button"
+   916→            onClick={onConvert}
+   917→            className="p-1 rounded text-slate-500 hover:text-emerald-400 transition"
+   918→            title="Convert to Friend"
+   919→          >
+   920→            <UserPlus className="w-3.5 h-3.5" />
+   921→          </button>
+   922→          <button
+   923→            type="button"
+   924→            onClick={onRemove}
+   925→            className="p-1 rounded text-slate-500 hover:text-rose-400 transition"
+   926→            title="Remove Rival"
+   927→          >
+   928→            <X className="w-3.5 h-3.5" />
+   929→          </button>
+   930→        </div>
+   931→      </div>
+   932→
+   933→      <div className="flex items-center justify-between text-[10px] font-mono">
+   934→        <span className={`inline-flex items-center gap-1 ${r.status === 'in-match' ? 'text-rose-400' : r.status === 'online' ? 'text-emerald-400' : 'text-slate-500'}`}>
+   935→          {STATUS_BADGES[r.status]}
+   936→        </span>
+   937→        <span className="text-slate-500">🕒 {r.lastEncounterDate}</span>
+   938→      </div>
+   939→
+   940→      <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-[11px]">
+   941→        <MicroLabel>Head-To-Head Record:</MicroLabel>
+   942→        <div className="flex items-center gap-3 mt-0.5 font-mono">
+   943→          <span className="text-emerald-400">You: {r.timesKilledByYou}</span>
+   944→          <span className="text-slate-500">-</span>
+   945→          <span className="text-rose-400">Rival: {r.timesKilledYou}</span>
+   946→        </div>
+   947→      </div>
+   948→
+   949→      <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-[11px]">
+   950→        <MicroLabel>CURRENT ARENA TABLE:</MicroLabel>
+   951→        <div className="text-amber-300 mt-0.5 truncate">{r.currentArenaName}</div>
+   952→      </div>
+   953→
+   954→      <button
+   955→        type="button"
+   956→        onClick={onHunt}
+   957→        className="w-full py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5"
+   958→      >
+   959→        <Swords className="w-3.5 h-3.5" /> HUNT / JOIN ARENA
+   960→      </button>
+   961→    </div>
+   962→  );
+   963→}
+   964→
+   965→interface CoOpInviteModalProps {
+   966→  friend: MockFriend;
+   967→  playerChips: number;
+   968→  onClose: () => void;
+   969→  onSend: (tierId: string) => void;
+   970→}
+   971→
+   972→function CoOpInviteModal({ friend, playerChips, onClose, onSend }: CoOpInviteModalProps) {
+   973→  const [selectedTier, setSelectedTier] = useState(ARENA_TIERS[0].id);
+   974→  const friendChipsAmt = friendChips(friend.name, friend.level);
+   975→  const tier = ARENA_TIERS.find((t) => t.id === selectedTier) || ARENA_TIERS[0];
+   976→  const youCanAfford = playerChips >= tier.buyIn;
+   977→  const friendCanAfford = friendChipsAmt >= tier.buyIn;
+   978→
+   979→  return (
+   980→    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+   981→      <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-5">
+   982→        <div className="flex items-center justify-between mb-4">
+   983→          <div>
+   984→            <h3 className="text-base font-black text-white">Co-Op Lobby Invite</h3>
+   985→            <p className="text-[10px] text-slate-500 mt-0.5">Assemble a squad with your allies</p>
+   986→          </div>
+   987→          <button
+   988→            type="button"
+   989→            onClick={onClose}
+   990→            className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800"
+   991→          >
+   992→            <X className="w-4 h-4" />
+   993→          </button>
+   994→        </div>
+   995→
+   996→        <div className="grid grid-cols-2 gap-3 mb-4">
+   997→          <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/60 text-center">
+   998→            <MicroLabel>Your Balance</MicroLabel>
+   999→            <div className="text-emerald-400 font-mono font-bold mt-1">{playerChips.toLocaleString()}c</div>
+  1000→          </div>
+  1001→          <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/60 text-center">
+  1002→            <MicroLabel>{friend.name}</MicroLabel>
+  1003→            <div className="text-emerald-400 font-mono font-bold mt-1">{friendChipsAmt.toLocaleString()}c</div>
+  1004→          </div>
+  1005→        </div>
+  1006→
+  1007→        <label className="text-[10px] font-mono uppercase tracking-widest text-slate-500 block mb-2">Select Arena Stakes</label>
+  1008→        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[200px] overflow-y-auto va-scroll mb-3">
+  1009→          {ARENA_TIERS.map((t) => {
+  1010→            const sel = selectedTier === t.id;
+  1011→            return (
+  1012→              <button
+  1013→                key={t.id}
+  1014→                type="button"
+  1015→                onClick={() => setSelectedTier(t.id)}
+  1016→                className={`p-2.5 rounded-xl border text-left transition ${sel ? 'bg-violet-500/20 border-violet-500/50' : 'bg-slate-950 border-slate-800 hover:border-slate-700'}`}
+  1017→              >
+  1018→                <div className="text-xs font-bold text-white">{t.name}</div>
+  1019→                <div className="text-[10px] font-mono text-slate-400 mt-0.5">Buy-In: {t.buyIn} c</div>
+  1020→              </button>
+  1021→            );
+  1022→          })}
+  1023→        </div>
+  1024→
+  1025→        <div className="flex items-center justify-center gap-2 mb-4">
+  1026→          {!youCanAfford && (
+  1027→            <span className="text-[10px] font-bold text-rose-300 bg-rose-500/10 border border-rose-500/30 px-2 py-1 rounded-full">You can&apos;t afford</span>
+  1028→          )}
+  1029→          {!friendCanAfford && (
+  1030→            <span className="text-[10px] font-bold text-rose-300 bg-rose-500/10 border border-rose-500/30 px-2 py-1 rounded-full">They can&apos;t afford</span>
+  1031→          )}
+  1032→          {youCanAfford && friendCanAfford && (
+  1033→            <span className="text-[10px] font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded-full">Eligible 🤝</span>
+  1034→          )}
+  1035→        </div>
+  1036→
+  1037→        {!youCanAfford && (
+  1038→          <div className="mb-3 p-2 rounded-lg bg-slate-950 border border-slate-800 text-[10px] text-slate-400">
+  1039→            Sorry! I don&apos;t have enough chips for {tier.name} (need {tier.buyIn} c, only have {playerChips} c).
+  1040→            Let&apos;s join the &quot;{ARENA_TIERS[0].name}&quot; (Buy-In: {ARENA_TIERS[0].buyIn} c) instead! Re-invite me?
+  1041→            <button
+  1042→              type="button"
+  1043→              onClick={() => setSelectedTier(ARENA_TIERS[0].id)}
+  1044→              className="ml-2 px-2 py-0.5 rounded bg-violet-600 hover:bg-violet-500 text-white text-[10px] font-bold"
+  1045→            >
+  1046→              🤝 Accept Proposal &amp; Invite
+  1047→            </button>
+  1048→          </div>
+  1049→        )}
+  1050→
+  1051→        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+  1052→          <button
+  1053→            type="button"
+  1054→            onClick={onClose}
+  1055→            className="px-4 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-400 hover:text-white text-xs font-bold transition"
+  1056→          >
+  1057→            Cancel
+  1058→          </button>
+  1059→          <button
+  1060→            type="button"
+  1061→            onClick={() => onSend(selectedTier)}
+  1062→            disabled={!youCanAfford || !friendCanAfford}
+  1063→            className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed"
+  1064→          >
+  1065→            Send Co-Op Invite
+  1066→          </button>
+  1067→        </div>
+  1068→      </div>
+  1069→    </div>
+  1070→  );
+  1071→}
+  1072→
+  1073→export default SocialPanel;
+  1074→

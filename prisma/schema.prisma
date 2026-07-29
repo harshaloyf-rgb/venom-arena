@@ -14,6 +14,7 @@ model Player {
   id              String   @id @default(cuid())
   email           String?  @unique // null for guest accounts
   passwordHash    String?  // null for guests
+  securityPin     String?  // optional 4-digit PIN for password recovery
   userTag         String   @unique // e.g. VENOM-8291
   name            String
   country         String   @default("US")
@@ -64,6 +65,7 @@ model Player {
   receivedGifts   Gift[]     @relation("giftTo")
   friendsFrom     Friendship[] @relation("friendshipInitiator")
   friendsTo       Friendship[] @relation("friendshipRecipient")
+  challenges      Challenge[]
 
   @@index([bankedChips(sort: Desc)])
   @@index([level(sort: Desc)])
@@ -144,4 +146,36 @@ model Friendship {
 
   @@unique([initiatorId, recipientId])
   @@index([recipientId, status])
+}
+
+model Challenge {
+  id          String   @id @default(cuid())
+  playerId    String
+  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  type        String   // "daily" | "weekly"
+  category    String   // "kill" | "extract" | "star_collect" | "score" | "arena_entry"
+  title       String
+  description String
+  target      Int      // target value to complete
+  current     Int      @default(0) // progress so far
+  reward      Int      // chips reward
+  completed   Boolean  @default(false)
+  claimed     Boolean  @default(false)
+  periodStart String   // ISO date when this challenge period started (YYYY-MM-DD)
+  createdAt   DateTime @default(now())
+
+  @@index([playerId, type])
+  @@index([playerId, periodStart])
+}
+
+model ChallengeProgress {
+  id          String   @id @default(cuid())
+  playerId    String
+  category    String   // "kill" | "extract" | "star_collect" | "score" | "arena_entry"
+  periodType  String   // "daily" | "weekly"
+  periodStart String   // ISO date
+  increment   Int      @default(1) // how much to add per event
+  createdAt   DateTime @default(now())
+
+  @@unique([playerId, category, periodType, periodStart])
 }

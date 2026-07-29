@@ -1,0 +1,1305 @@
+  1700→    boostHoldRef.current = true;
+  1701→    keysRef.current.add(' '); // reuse keyboard-boost path
+  1702→  };
+  1703→  const onBoostPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+  1704→    if (!boostHoldRef.current) return;
+  1705→    e.preventDefault();
+  1706→    try {
+  1707→      (e.currentTarget as HTMLButtonElement).releasePointerCapture(e.pointerId);
+  1708→    } catch {
+  1709→      /* ignore */
+  1710→    }
+  1711→    boostHoldRef.current = false;
+  1712→    keysRef.current.delete(' ');
+  1713→  };
+  1714→
+  1715→  // =========================================================================
+  1716→  // Chat submit
+  1717→  // =========================================================================
+  1718→  const submitChat = () => {
+  1719→    const msg = chatInput.trim();
+  1720→    if (!msg) {
+  1721→      setChatOpen(false);
+  1722→      return;
+  1723→    }
+  1724→    socketRef.current?.emit('chat', { message: msg.slice(0, 200) });
+  1725→    setChatInput('');
+  1726→    setChatOpen(false);
+  1727→  };
+  1728→
+  1729→  // Quick chat emote bar (AUDIT-A Section H)
+  1730→  const triggerEmote = (msg: string) => {
+  1731→    socketRef.current?.emit('chat', { message: msg });
+  1732→  };
+  1733→
+  1734→  // =========================================================================
+  1735→  // Play Again — re-emit join_arena, reset local state.
+  1736→  // =========================================================================
+  1737→  const playAgain = () => {
+  1738→    if (!socketRef.current) return;
+  1739→    matchEndedRef.current = false;
+  1740→    killsRef.current = 0;
+  1741→    setHudKills(0);
+  1742→    setHudCarried(0);
+  1743→    setHudScore(0);
+  1744→    setHudRank(1);
+  1745→    // BUILD-13: reset arena-leaderboard HUD state on re-join.
+  1746→    setHudCommissionRate(0);
+  1747→    setHudLeaderboard([]);
+  1748→    setHudYourRank(0);
+  1749→    setHudRealPlayerCount(1);
+  1750→    setFullMapOpen(false);
+  1751→    setEndScreen(null);
+  1752→    setExtracting(false);
+  1753→    setExtractProgress(0);
+  1754→    setPhase('connecting');
+  1755→    setConnectingMsg('Rejoining arena…');
+  1756→    snapshotRef.current = null;
+  1757→    // Clear replay buffer on reset
+  1758→    replayPreBufferRef.current = [];
+  1759→    replayPostBufferRef.current = [];
+  1760→    replayWriteIdxRef.current = 0;
+  1761→    isPostDeathRef.current = false;
+  1762→    postDeathRecordRef.current = 0;
+  1763→    hasStartedRecordingRef.current = false;
+  1764→    camInitRef.current = false;
+  1765→    particlesRef.current = [];
+  1766→    socketRef.current.emit('join_arena', { arenaId: arenaIdRef.current });
+  1767→  };
+  1768→
+  1769→  const exitNow = () => {
+  1770→    const result = endScreen?.result;
+  1771→    onExitRef.current(result);
+  1772→  };
+  1773→
+  1774→  // =========================================================================
+  1775→  // Derived display values
+  1776→  // =========================================================================
+  1777→  const pingColor =
+  1778→    ping < 0
+  1779→      ? 'text-muted-foreground'
+  1780→      : ping < 80
+  1781→        ? 'text-emerald-400'
+  1782→        : ping < 160
+  1783→          ? 'text-amber-400'
+  1784→          : 'text-rose-400';
+  1785→  const snakeLength = hudScore; // Score = body length
+  1786→
+  1787→  // BUILD-13: offline-mode flag (practice arena OR server reports 0 real
+  1788→  // players). Drives chips-display hiding + rank/leaderboard formatting.
+  1789→  // (Offline practice arenas return early before this point, so this only
+  1790→  //  matters for the online-mode edge case where realPlayerCount === 0.)
+  1791→  const isOfflineMode = isOffline;
+  1792→  // Rank display:
+  1793→  //  - Online (realPlayerCount > 1): "#X of Y" using server yourRank.
+  1794→  //  - Online with <= 1 real player: "#1 of 1".
+  1795→  //  - Offline: "#X" (computed from score vs bots).
+  1796→  const rankDisplay = isOfflineMode
+  1797→    ? `#${hudRank}`
+  1798→    : hudRealPlayerCount <= 1
+  1799→      ? '#1 of 1'
+  1800→      : `#${hudYourRank || hudRank} of ${hudRealPlayerCount}`;
+  1801→
+  1802→  // =========================================================================
+  1803→  // JSX
+  1804→  // =========================================================================
+  1805→  // OFFLINE MODE (BUILD-14): the OfflineGameEngine owns the game loop,
+  1806→  // rendering, input, HUD, death screen, and extract screen. React only
+  1807→  // renders the bare <canvas>; all overlays are DOM nodes the engine
+  1808→  // appends to the canvas's parent element.
+  1809→  if (isOffline) {
+  1810→    return (
+  1811→      <div className="fixed inset-0 overflow-hidden bg-background select-none">
+  1812→        <canvas
+  1813→          ref={canvasRef}
+  1814→          className="va-game-canvas absolute inset-0 h-full w-full"
+  1815→          aria-label="Venom Arena offline practice canvas"
+  1816→          style={{ touchAction: 'none' }}
+  1817→        />
+  1818→      </div>
+  1819→    );
+  1820→  }
+  1821→
+  1822→  return (
+  1823→    <div className="fixed inset-0 overflow-hidden bg-background select-none">
+  1824→      {/* Canvas */}
+  1825→      <canvas
+  1826→        ref={canvasRef}
+  1827→        className="va-game-canvas absolute inset-0 h-full w-full"
+  1828→        aria-label="Venom Arena game canvas"
+  1829→        style={{ touchAction: 'none' }}
+  1830→      />
+  1831→
+  1832→      {/* Connecting / error overlay */}
+  1833→      {phase === 'connecting' && (
+  1834→        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-background/80 backdrop-blur-sm">
+  1835→          {connectionError ? (
+  1836→            <>
+  1837→              <AlertTriangle className="h-12 w-12 text-rose-500" />
+  1838→              <p className="max-w-sm text-center text-lg font-semibold text-foreground">
+  1839→                {connectionError}
+  1840→              </p>
+  1841→              <Button variant="outline" onClick={exitNow}>
+  1842→                <LogOut className="mr-2 h-4 w-4" /> Back to lobby
+  1843→              </Button>
+  1844→            </>
+  1845→          ) : (
+  1846→            <>
+  1847→              <Loader2 className="h-10 w-10 animate-spin text-primary" />
+  1848→              <p className="text-sm text-muted-foreground">{connectingMsg || 'Connecting…'}</p>
+  1849→            </>
+  1850→          )}
+  1851→        </div>
+  1852→      )}
+  1853→
+  1854→      {/* Reconnecting banner */}
+  1855→      {isReconnecting && phase === 'playing' && (
+  1856→        <div className="absolute left-1/2 top-3 -translate-x-1/2 flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-500/10 px-4 py-1.5 text-xs font-medium text-amber-300 backdrop-blur-sm">
+  1857→          <WifiOff className="h-3.5 w-3.5" />
+  1858→          Reconnecting…
+  1859→        </div>
+  1860→      )}
+  1861→
+  1862→      {/* HUD: top-left (Carried Chips + Rank/Score/Kills/Boost + Real Players/Bots) — AUDIT-A Section A */}
+  1863→      {phase !== 'connecting' && (
+  1864→        <div className="pointer-events-none absolute left-3 top-3 z-40 flex max-w-sm flex-col gap-2 font-mono">
+  1865→          {/* Carried Chips card — BUILD-13: hidden when isOfflineMode (no chips in offline). */}
+  1866→          {!isOfflineMode && (
+  1867→            <div className="rounded-lg border border-emerald-500/30 bg-slate-950/80 px-3 py-2 backdrop-blur-sm">
+  1868→              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-500">
+  1869→                <Landmark className="h-3 w-3 text-emerald-400" />
+  1870→                <span>Carried Chips</span>
+  1871→              </div>
+  1872→              <div className="text-2xl font-bold text-emerald-400 tabular-nums">
+  1873→                {hudCarried.toLocaleString()}<span className="ml-0.5 text-base">c</span>
+  1874→              </div>
+  1875→            </div>
+  1876→          )}
+  1877→
+  1878→          {/* Stars Earned card (online only) — shows extra chips collected from star chips */}
+  1879→          {!isOfflineMode && hudCarried > (arena?.buyIn ?? 0) && (
+  1880→            <div className="rounded-lg border border-amber-500/30 bg-slate-950/80 px-3 py-1.5 backdrop-blur-sm">
+  1881→              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-500">
+  1882→                <Star className="h-3 w-3 text-amber-400" />
+  1883→                <span>Stars Earned</span>
+  1884→              </div>
+  1885→              <div className="text-sm font-bold text-amber-400 tabular-nums">
+  1886→                +{Math.max(0, hudCarried - (arena?.buyIn ?? 0)).toLocaleString()}<span className="ml-0.5 text-xs">c</span>
+  1887→              </div>
+  1888→            </div>
+  1889→          )}
+  1890→
+  1891→          {/* Rank / Score / Kills / Boost card */}
+  1892→          <div className="rounded-lg border border-slate-700/60 bg-slate-950/80 px-3 py-2 backdrop-blur-sm">
+  1893→            <div className="flex items-center gap-2 text-xs">
+  1894→              <Trophy className="h-3.5 w-3.5 text-yellow-500" />
+  1895→              <span className="text-slate-400">Rank:</span>
+  1896→              <span className="font-bold text-yellow-400">{rankDisplay}</span>
+  1897→            </div>
+  1898→            <div className="mt-1 flex items-center gap-2 text-xs">
+  1899→              <Shield className="h-3.5 w-3.5 text-indigo-400" />
+  1900→              <span className="text-slate-400">Score:</span>
+  1901→              <span className="font-bold text-white">{snakeLength.toLocaleString()}</span>
+  1902→            </div>
+  1903→            <div className="mt-1 flex items-center gap-2 text-xs">
+  1904→              <Skull className="h-3.5 w-3.5 text-rose-500" />
+  1905→              <span className="text-slate-400">Kills:</span>
+  1906→              <span className="font-bold text-rose-400">{hudKills}</span>
+  1907→            </div>
+  1908→            <div className="mt-1 flex items-center gap-2 text-xs">
+  1909→              <Zap className="h-3.5 w-3.5 text-amber-500" />
+  1910→              <span className="text-slate-400">Boost:</span>
+  1911→              <span className="font-bold text-amber-400">SPACE</span>
+  1912→            </div>
+  1913→          </div>
+  1914→
+  1915→          {/* Active competitors card */}
+  1916→          <div className="rounded-lg border border-slate-700/60 bg-slate-950/80 px-3 py-2 backdrop-blur-sm text-xs">
+  1917→            {isOfflineMode ? (
+  1918→              <div className="flex items-center gap-2">
+  1919→                <span className="text-slate-400">Offline Mode:</span>
+  1920→                <span className="font-bold text-amber-400">1 Player</span>
+  1921→              </div>
+  1922→            ) : (
+  1923→              <div className="flex items-center gap-2">
+  1924→                <span className="text-slate-400">Real Players:</span>
+  1925→                <span className="font-bold text-indigo-400 animate-pulse">
+  1926→                  {hudRealPlayerCount || hudRealPlayers} Active
+  1927→                </span>
+  1928→              </div>
+  1929→            )}
+  1930→            <div className="mt-1 flex items-center gap-2">
+  1931→              <Users className="h-3.5 w-3.5 text-slate-400" />
+  1932→              <span className="text-slate-400">Bots:</span>
+  1933→              <span className="font-bold text-slate-300">{hudBots}</span>
+  1934→            </div>
+  1935→          </div>
+  1936→        </div>
+  1937→      )}
+  1938→
+  1939→      {/* HUD: top-right (Banked / FPS / Ping) — AUDIT-A Section A */}
+  1940→      {phase !== 'connecting' && (
+  1941→        <div className="pointer-events-none absolute right-3 top-3 z-40 flex flex-col items-end gap-1.5 font-mono">
+  1942→          <div className="rounded-md border border-amber-500/30 bg-slate-950/80 px-2.5 py-1 text-right backdrop-blur-sm">
+  1943→            <div className="text-[10px] uppercase tracking-wider text-slate-500">BANKED</div>
+  1944→            <div className="text-sm font-bold text-amber-300 tabular-nums">
+  1945→              {player.bankedChips.toLocaleString()}c
+  1946→            </div>
+  1947→          </div>
+  1948→          <div className="flex items-center gap-2 rounded-md border border-slate-700/60 bg-slate-950/80 px-2 py-1 text-[11px] backdrop-blur-sm">
+  1949→            <span className="text-slate-400">{fps} fps</span>
+  1950→            <span className={pingColor}>
+  1951→              <Signal className="inline h-3 w-3" /> {ping < 0 ? '—' : `${ping}ms`}
+  1952→            </span>
+  1953→            {lowQuality && (
+  1954→              <span className="rounded bg-amber-500/20 px-1 text-amber-300" title="Low quality mode (adaptive)">
+  1955→                🎨 LQ
+  1956→              </span>
+  1957→            )}
+  1958→          </div>
+  1959→        </div>
+  1960→      )}
+  1961→
+  1962→      {/* BUILD-13: Chat + Minimap-toggle row (top-right, below BANKED/FPS). */}
+  1963→      {phase === 'playing' && (
+  1964→        <div className="absolute right-3 top-[92px] z-20 flex items-center gap-2 font-mono">
+  1965→          <Button
+  1966→            variant="outline"
+  1967→            size="icon"
+  1968→            className="h-9 w-9 rounded-full border-primary/40 bg-card/80 backdrop-blur-sm"
+  1969→            onClick={() => setChatOpen(true)}
+  1970→            aria-label="Open chat"
+  1971→          >
+  1972→            <MessageSquare className="h-4 w-4" />
+  1973→          </Button>
+  1974→          <Button
+  1975→            variant="outline"
+  1976→            size="sm"
+  1977→            className="h-9 rounded-full border-primary/40 bg-card/80 px-3 text-[10px] uppercase tracking-wider backdrop-blur-sm"
+  1978→            onClick={() => setMinimapVisible((v) => !v)}
+  1979→            aria-label={minimapVisible ? 'Collapse minimap' : 'Show minimap'}
+  1980→          >
+  1981→            <MapIcon className="h-3.5 w-3.5" />
+  1982→            <span className="hidden sm:inline">{minimapVisible ? 'Collapse' : 'Show Minimap'}</span>
+  1983→          </Button>
+  1984→        </div>
+  1985→      )}
+  1986→
+  1987→      {/* BUILD-13: Arena Leaderboard panel (top-right, below chat/minimap row).
+  1988→          Online mode: top 10 real players by carriedChips (server-provided).
+  1989→          Offline-mode edge case (realPlayerCount === 0): top 10 by score
+  1990→          (you + bots). Collapsible — collapsed state renders a small icon
+  1991→          button (mobile-friendly). */}
+  1992→      {phase !== 'connecting' && (
+  1993→        <div className="absolute right-3 top-[140px] z-20 max-h-[60vh] font-mono">
+  1994→          {leaderboardOpen ? (
+  1995→            <div className="w-[240px] max-w-[80vw] overflow-hidden rounded-lg border border-slate-700/60 bg-slate-950/90 backdrop-blur-md">
+  1996→              {/* Header */}
+  1997→              <div className="flex items-center justify-between border-b border-slate-800 px-3 py-2">
+  1998→                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-500">
+  1999→                  <Trophy className="h-3 w-3 text-yellow-500" />
+  2000→                  <span>Arena Leaders</span>
+  2001→                </div>
+  2002→                <button
+  2003→                  type="button"
+  2004→                  onClick={() => setLeaderboardOpen(false)}
+  2005→                  className="text-slate-400 hover:text-white"
+  2006→                  aria-label="Collapse leaderboard"
+  2007→                >
+  2008→                  <ChevronUp className="h-3.5 w-3.5" />
+  2009→                </button>
+  2010→              </div>
+  2011→              {/* List */}
+  2012→              <div className="max-h-72 overflow-y-auto p-1.5 va-scroll">
+  2013→                {hudLeaderboard.length === 0 ? (
+  2014→                  <div className="px-2 py-3 text-center text-[10px] text-slate-500">
+  2015→                    No real players yet.
+  2016→                  </div>
+  2017→                ) : (
+  2018→                  hudLeaderboard.map((entry, i) => (
+  2019→                    <div
+  2020→                      key={entry.id || i}
+  2021→                      className={`mb-0.5 flex items-center gap-1.5 rounded px-2 py-1 text-[11px] ${
+  2022→                        entry.isPlayer
+  2023→                          ? 'border border-indigo-500/30 bg-indigo-500/15'
+  2024→                          : ''
+  2025→                      }`}
+  2026→                    >
+  2027→                      <span className="w-5 shrink-0 text-right text-slate-500 tabular-nums">{i + 1}</span>
+  2028→                      {entry.country && (
+  2029→                        <span className="shrink-0 text-xs leading-none">
+  2030→                          {countryFlag(entry.country)}
+  2031→                        </span>
+  2032→                      )}
+  2033→                      <span
+  2034→                        className={`flex-1 truncate ${
+  2035→                          entry.isPlayer ? 'font-bold text-indigo-300' : 'text-slate-300'
+  2036→                        }`}
+  2037→                        title={entry.name}
+  2038→                      >
+  2039→                        {entry.name || 'Unknown'}
+  2040→                      </span>
+  2041→                      {entry.isPlayer && (
+  2042→                        <span className="shrink-0 rounded bg-indigo-500/30 px-1 text-[9px] font-bold text-indigo-200">
+  2043→                          YOU
+  2044→                        </span>
+  2045→                      )}
+  2046→                      {isOfflineMode ? (
+  2047→                        <span className="shrink-0 text-indigo-300 tabular-nums">
+  2048→                          {entry.score.toLocaleString()}
+  2049→                        </span>
+  2050→                      ) : (
+  2051→                        <span className="shrink-0 text-emerald-400 tabular-nums">
+  2052→                          {entry.carriedChips.toLocaleString()}c
+  2053→                        </span>
+  2054→                      )}
+  2055→                    </div>
+  2056→                  ))
+  2057→                )}
+  2058→              </div>
+  2059→            </div>
+  2060→          ) : (
+  2061→            <button
+  2062→              type="button"
+  2063→              onClick={() => setLeaderboardOpen(true)}
+  2064→              className="flex h-9 items-center gap-1.5 rounded-full border border-slate-700 bg-slate-950/85 px-3 text-[10px] uppercase tracking-wider text-slate-400 backdrop-blur-sm hover:text-white"
+  2065→              aria-label="Show leaderboard"
+  2066→            >
+  2067→              <ChevronDown className="h-3.5 w-3.5 text-yellow-500" />
+  2068→              <span className="hidden sm:inline">Show Leaderboard</span>
+  2069→            </button>
+  2070→          )}
+  2071→        </div>
+  2072→      )}
+  2073→
+  2074→      {/* BUILD-13: Full-screen arena map overlay close button (M key toggle).
+  2075→          The map itself is canvas-drawn; this is the HTML close affordance. */}
+  2076→      {fullMapOpen && phase === 'playing' && (
+  2077→        <button
+  2078→          type="button"
+  2079→          onClick={() => setFullMapOpen(false)}
+  2080→          className="absolute right-4 top-4 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-slate-700 bg-slate-900/80 text-slate-300 backdrop-blur-sm hover:text-white"
+  2081→          aria-label="Close full map"
+  2082→        >
+  2083→          <X className="h-4 w-4" />
+  2084→        </button>
+  2085→      )}
+  2086→
+  2087→      {/* Death vignette: 3-second red radial fade after death, before end screen. z-30 (above canvas, below HUD z-40, below EndOverlay z-50). */}
+  2088→      {showDeathVignette && (
+  2089→        <div
+  2090→          className="absolute inset-0 z-30 pointer-events-none animate-[fadeIn_300ms_ease-out]"
+  2091→          style={{
+  2092→            background: 'radial-gradient(ellipse at center, transparent 30%, rgba(220, 38, 38, 0.6) 100%)',
+  2093→          }}
+  2094→          aria-hidden="true"
+  2095→        />
+  2096→      )}
+  2097→
+  2098→      {/* Quick Chat Emotes Bar (bottom-left) — AUDIT-A Section H */}
+  2099→      {phase === 'playing' && (
+  2100→        <div className="absolute bottom-2 left-2 sm:bottom-4 sm:left-4 z-20 w-[min(60vw,280px)] rounded-xl border border-slate-800 bg-slate-950/90 p-2.5 backdrop-blur-md">
+  2101→          <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-slate-400">
+  2102→            <MessageSquare className="h-3 w-3 text-indigo-400" />
+  2103→            <span>Emotes (Keys 1-5)</span>
+  2104→          </div>
+  2105→          <div className="flex flex-wrap gap-1">
+  2106→            <button
+  2107→              type="button"
+  2108→              onClick={() => triggerEmote('GG! 🏆')}
+  2109→              className="rounded-md border border-slate-800 bg-slate-900 px-2 py-1 text-[10px] font-medium text-slate-300 hover:bg-slate-800"
+  2110→            >
+  2111→              GG! 🏆
+  2112→            </button>
+  2113→            <button
+  2114→              type="button"
+  2115→              onClick={() => triggerEmote('Target Spot! 🎯')}
+  2116→              className="rounded-md border border-slate-800 bg-slate-900 px-2 py-1 text-[10px] font-medium text-slate-300 hover:bg-slate-800"
+  2117→            >
+  2118→              Target! 🎯
+  2119→            </button>
+  2120→            <button
+  2121→              type="button"
+  2122→              onClick={() => triggerEmote('Fleeing! 🏃💨')}
+  2123→              className="rounded-md border border-slate-800 bg-slate-900 px-2 py-1 text-[10px] font-medium text-slate-300 hover:bg-slate-800"
+  2124→            >
+  2125→              Flee! 🏃💨
+  2126→            </button>
+  2127→            <button
+  2128→              type="button"
+  2129→              onClick={() => triggerEmote('Get Ripped! 💪')}
+  2130→              className="rounded-md border border-slate-800 bg-slate-900 px-2 py-1 text-[10px] font-medium text-slate-300 hover:bg-slate-800"
+  2131→            >
+  2132→              Ripped! 💪
+  2133→            </button>
+  2134→            <button
+  2135→              type="button"
+  2136→              onClick={() => triggerEmote('Extracting soon! ⚡')}
+  2137→              className="rounded-md border border-slate-800 bg-slate-900 px-2 py-1 text-[10px] font-medium text-slate-300 hover:bg-slate-800"
+  2138→            >
+  2139→              Extracting! ⚡
+  2140→            </button>
+  2141→          </div>
+  2142→        </div>
+  2143→      )}
+  2144→
+  2145→      {/* Hold-to-Extract popup (top-center) — AUDIT-A hold-to-extract HUD */}
+  2146→      {phase === 'playing' && !endScreen && (
+  2147→        <div className="pointer-events-none absolute left-1/2 top-14 -translate-x-1/2 flex flex-col items-center gap-1 text-center">
+  2148→          <p className="text-[11px] font-mono text-slate-400">
+  2149→            Hold <kbd className="rounded border border-slate-600 bg-slate-800 px-1 text-[10px] text-slate-200">E</kbd> or press the button below to cash out safely!
+  2150→          </p>
+  2151→          {extracting ? (
+  2152→            <div className="rounded-lg border border-amber-500/40 bg-slate-950/85 px-4 py-2 backdrop-blur-sm">
+  2153→              <div className="text-xs font-bold text-amber-400">
+  2154→                EXTRACTING CHIPS ({Math.round(extractProgress * 100)}%)
+  2155→              </div>
+  2156→              <div className="mt-1 h-2 w-48 overflow-hidden rounded-full bg-slate-800">
+  2157→                <div
+  2158→                  className="h-full rounded-full bg-gradient-to-r from-yellow-500 to-amber-500 transition-[width] duration-100"
+  2159→                  style={{ width: `${extractProgress * 100}%` }}
+  2160→                />
+  2161→              </div>
+  2162→              {/* BUILD-13: dynamic commission display. */}
+  2163→              {!isOfflineMode && (
+  2164→                <div className="mt-1.5 text-[10px] font-mono">
+  2165→                  {hudCommissionRate > 0 ? (
+  2166→                    <span className="text-yellow-500">
+  2167→                      FEE: {Math.round(hudCommissionRate * 100)}%
+  2168→                    </span>
+  2169→                  ) : (
+  2170→                    <span className="text-emerald-400">
+  2171→                      FEE: 0% (LOW POPULATION)
+  2172→                    </span>
+  2173→                  )}
+  2174→                </div>
+  2175→              )}
+  2176→            </div>
+  2177→          ) : (
+  2178→            <div className="text-[11px] font-bold text-emerald-400">
+  2179→              {isOffline ? 'HOLD TO LEAVE PRACTICE ARENA' : 'HOLD TO EXTRACT SUCCESSFUL!'}
+  2180→            </div>
+  2181→          )}
+  2182→        </div>
+  2183→      )}
+  2184→
+  2185→      {/* Mobile controls: BOOST + EXTRACT (bottom-right) — AUDIT-A Section G */}
+  2186→      {phase === 'playing' && (
+  2187→        <div className="absolute bottom-6 right-6 flex items-end gap-3">
+  2188→          <button
+  2189→            type="button"
+  2190→            aria-label="Boost"
+  2191→            onPointerDown={onBoostPointerDown}
+  2192→            onPointerUp={onBoostPointerUp}
+  2193→            onPointerCancel={onBoostPointerUp}
+  2194→            onContextMenu={(e) => e.preventDefault()}
+  2195→            className="flex h-16 w-16 touch-none select-none flex-col items-center justify-center rounded-full border border-amber-400/50 bg-amber-500/20 text-amber-300 shadow-lg transition-transform active:scale-95"
+  2196→          >
+  2197→            <Zap className="h-6 w-6" />
+  2198→            <span className="text-[10px] font-bold">BOOST</span>
+  2199→          </button>
+  2200→          <button
+  2201→            type="button"
+  2202→            aria-label="Extract chips"
+  2203→            onPointerDown={onExtractPointerDown}
+  2204→            onPointerUp={onExtractPointerUp}
+  2205→            onPointerCancel={onExtractPointerUp}
+  2206→            onContextMenu={(e) => e.preventDefault()}
+  2207→            className={`flex h-20 w-20 touch-none select-none flex-col items-center justify-center rounded-full border shadow-lg transition-transform active:scale-95 ${
+  2208→              extracting
+  2209→                ? 'border-emerald-400 bg-emerald-500/40 text-white'
+  2210→                : 'border-emerald-400/60 bg-emerald-500/15 text-emerald-300'
+  2211→            }`}
+  2212→          >
+  2213→            <Trophy className="h-6 w-6" />
+  2214→            <span className="text-[10px] font-bold">
+  2215→              {extracting ? `${Math.round(extractProgress * 100)}%` : 'EXTRACT'}
+  2216→            </span>
+  2217→          </button>
+  2218→        </div>
+  2219→      )}
+  2220→
+  2221→      {/* Exit button (always visible bottom-left of controls area) */}
+  2222→      {phase === 'playing' && (
+  2223→        <button
+  2224→          type="button"
+  2225→          onClick={exitNow}
+  2226→          className="absolute bottom-6 left-3 sm:left-28 flex h-10 items-center gap-1.5 rounded-full border border-slate-700 bg-slate-950/80 px-3 text-xs font-medium text-slate-400 backdrop-blur-sm hover:text-foreground"
+  2227→          aria-label="Leave arena"
+  2228→        >
+  2229→          <LogOut className="h-3.5 w-3.5" /> Leave
+  2230→        </button>
+  2231→      )}
+  2232→
+  2233→      {/* End screen: death or extract */}
+  2234→      {phase === 'ended' && endScreen && (
+  2235→        <EndOverlay
+  2236→          endScreen={endScreen}
+  2237→          arena={arena}
+  2238→          isOffline={isOffline}
+  2239→          previousLevel={player.level}
+  2240→          previousBankedChips={player.bankedChips}
+  2241→          onPlayAgain={playAgain}
+  2242→          onExit={exitNow}
+  2243→          onAddRival={() => {
+  2244→            if (endScreen.killer?.name) {
+  2245→              toast({
+  2246→                title: 'Rival Added',
+  2247→                description: `⚔️ ${endScreen.killer.name} added to your Rival List! Hunt them in future lobbies!`,
+  2248→              });
+  2249→            }
+  2250→          }}
+  2251→          onAddFriend={() => {
+  2252→            if (endScreen.killer?.name) {
+  2253→              toast({
+  2254→                title: 'Friend Added',
+  2255→                description: `🤝 Added ${endScreen.killer.name} (${endScreen.killer.tag ?? '?'}) to your Friends list!`,
+  2256→              });
+  2257→            }
+  2258→          }}
+  2259→          onViewProfile={() => {
+  2260→            if (endScreen.killer?.tag) {
+  2261→              toast({
+  2262→                title: 'Viewing Profile',
+  2263→                description: `👁️ Viewing ${endScreen.killer.name}'s profile (${endScreen.killer.tag})`,
+  2264→              });
+  2265→            }
+  2266→          }}
+  2267→        />
+  2268→      )}
+  2269→
+  2270→      {/* Chat dialog */}
+  2271→      <Dialog open={chatOpen} onOpenChange={setChatOpen}>
+  2272→        <DialogContent className="sm:max-w-md" showCloseButton>
+  2273→          <DialogHeader>
+  2274→            <DialogTitle>Send a message</DialogTitle>
+  2275→          </DialogHeader>
+  2276→          <div className="flex gap-2">
+  2277→            <Input
+  2278→              autoFocus
+  2279→              maxLength={200}
+  2280→              value={chatInput}
+  2281→              onChange={(e) => setChatInput(e.target.value)}
+  2282→              onKeyDown={(e) => {
+  2283→                if (e.key === 'Enter') {
+  2284→                  e.preventDefault();
+  2285→                  submitChat();
+  2286→                }
+  2287→              }}
+  2288→              placeholder="Type a message…"
+  2289→            />
+  2290→            <Button onClick={submitChat} disabled={!chatInput.trim()}>
+  2291→              <Send className="h-4 w-4" /> Send
+  2292→            </Button>
+  2293→          </div>
+  2294→          <DialogFooter>
+  2295→            <Button variant="outline" onClick={() => setChatOpen(false)}>
+  2296→              Cancel
+  2297→            </Button>
+  2298→          </DialogFooter>
+  2299→        </DialogContent>
+  2300→      </Dialog>
+  2301→    </div>
+  2302→  );
+  2303→}
+  2304→
+  2305→// ---------------------------------------------------------------------------
+  2306→// ReplayPlayer sub-component — renders 15s pre-death + 15s post-death replay
+  2307→// ---------------------------------------------------------------------------
+  2308→
+  2309→interface ReplayPlayerProps {
+  2310→  frames: GameSnapshot[];
+  2311→  myId: string;
+  2312→  deathFrameIdx?: number; // index where death occurs in frames
+  2313→  onClose: () => void;
+  2314→}
+  2315→
+  2316→const REPLAY_SPEEDS = [0.25, 0.5, 1, 2] as const;
+  2317→
+  2318→function ReplayPlayer({ frames, myId, deathFrameIdx, onClose }: ReplayPlayerProps) {
+  2319→  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  2320→  const rafRef = useRef<number | null>(null);
+  2321→  const frameIdxRef = useRef(0);
+  2322→  const playingRef = useRef(true);
+  2323→  const speedRef = useRef(1);
+  2324→  const zoomRef = useRef(0.8);
+  2325→  const lastTimeRef = useRef(0);
+  2326→  const [playing, setPlaying] = useState(true);
+  2327→  const [speed, setSpeed] = useState(1);
+  2328→  const [zoom, setZoom] = useState(0.8);
+  2329→  const [frameIdx, setFrameIdx] = useState(0);
+  2330→  const totalFrames = frames.length;
+  2331→
+  2332→  // Spectator camera state (refs for use inside rAF)
+  2333→  const deathCamPosRef = useRef<{ x: number; y: number } | null>(null);
+  2334→  const spectatorFollowIdRef = useRef<string | null>(null);
+  2335→  const prevFoodsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  2336→  const deathFoodCollected = useRef(false);
+  2337→
+  2338→  useEffect(() => {
+  2339→    const canvas = canvasRef.current;
+  2340→    if (!canvas || totalFrames === 0) return;
+  2341→
+  2342→    const ctx = canvas.getContext('2d');
+  2343→    if (!ctx) return;
+  2344→
+  2345→    const w = canvas.clientWidth;
+  2346→    const h = canvas.clientHeight;
+  2347→    const dpr = window.devicePixelRatio || 1;
+  2348→    canvas.width = w * dpr;
+  2349→    canvas.height = h * dpr;
+  2350→    ctx.scale(dpr, dpr);
+  2351→
+  2352→    // Reset spectator state on mount
+  2353→    deathCamPosRef.current = null;
+  2354→    spectatorFollowIdRef.current = null;
+  2355→    prevFoodsRef.current = new Map();
+  2356→    deathFoodCollected.current = false;
+  2357→
+  2358→    const render = (now: number) => {
+  2359→      if (!playingRef.current) {
+  2360→        lastTimeRef.current = now;
+  2361→        rafRef.current = requestAnimationFrame(render);
+  2362→        return;
+  2363→      }
+  2364→
+  2365→      const dt = now - lastTimeRef.current;
+  2366→      const frameInterval = 50 / speedRef.current; // 50ms per frame at 1x
+  2367→      if (dt >= frameInterval) {
+  2368→        frameIdxRef.current = (frameIdxRef.current + 1) % totalFrames;
+  2369→        lastTimeRef.current = now;
+  2370→        setFrameIdx(frameIdxRef.current);
+  2371→      }
+  2372→
+  2373→      const snap = frames[frameIdxRef.current];
+  2374→      if (!snap) {
+  2375→        rafRef.current = requestAnimationFrame(render);
+  2376→        return;
+  2377→      }
+  2378→
+  2379→      // Clear
+  2380→      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  2381→      ctx.fillStyle = '#020617';
+  2382→      ctx.fillRect(0, 0, w, h);
+  2383→
+  2384→      // --- Spectator Camera Logic ---
+  2385→      const isAfterDeath = deathFrameIdx != null && frameIdxRef.current >= deathFrameIdx;
+  2386→      let camX: number;
+  2387→      let camY: number;
+  2388→      const z = zoomRef.current;
+  2389→
+  2390→      if (!isAfterDeath) {
+  2391→        // Before death: follow player
+  2392→        const me = snap.snakes.find((s) => s.id === myId);
+  2393→        camX = me?.points?.[0]?.x ?? snap.mapCenterX ?? 4000;
+  2394→        camY = me?.points?.[0]?.y ?? snap.mapCenterY ?? 4000;
+  2395→      } else {
+  2396→        // At/after death frame
+  2397→        if (!deathCamPosRef.current) {
+  2398→          // Record death position: center of body (where food drops), not head
+  2399→          const deathFrame = frames[Math.min(deathFrameIdx!, frames.length - 1)];
+  2400→          const me = deathFrame?.snakes.find((s) => s.id === myId);
+  2401→          if (me?.points && me.points.length > 0) {
+  2402→            // Center camera on midpoint of body so food spread is visible
+  2403→            const midIdx = Math.floor(me.points.length / 2);
+  2404→            const midPt = me.points[Math.min(midIdx, me.points.length - 1)];
+  2405→            deathCamPosRef.current = {
+  2406→              x: midPt.x,
+  2407→              y: midPt.y,
+  2408→            };
+  2409→          } else {
+  2410→            deathCamPosRef.current = {
+  2411→              x: snap.mapCenterX ?? 4000,
+  2412→              y: snap.mapCenterY ?? 4000,
+  2413→            };
+  2414→          }
+  2415→          // Snapshot current food IDs near death for tracking
+  2416→          const curFoods = new Map<string, { x: number; y: number }>();
+  2417→          for (const f of deathFrame?.foods ?? []) {
+  2418→            curFoods.set(f.id, { x: f.x, y: f.y });
+  2419→          }
+  2420→          prevFoodsRef.current = curFoods;
+  2421→        }
+  2422→
+  2423→        if (!deathFoodCollected.current && spectatorFollowIdRef.current === null) {
+  2424→          // Check if any food near death position was collected
+  2425→          const deathPos = deathCamPosRef.current;
+  2426→          const curFoodIds = new Set<string>();
+  2427→          const collectedNearDeath: Array<{ x: number; y: number }> = [];
+  2428→
+  2429→          for (const f of snap.foods) {
+  2430→            curFoodIds.add(f.id);
+  2431→          }
+  2432→
+  2433→          // Find foods from previous frame that are now gone
+  2434→          for (const [foodId, fPos] of prevFoodsRef.current) {
+  2435→            if (!curFoodIds.has(foodId)) {
+  2436→              const dx = fPos.x - deathPos.x;
+  2437→              const dy = fPos.y - deathPos.y;
+  2438→              if (Math.sqrt(dx * dx + dy * dy) < 300) {
+  2439→                collectedNearDeath.push(fPos);
+  2440→              }
+  2441→            }
+  2442→          }
+  2443→
+  2444→          if (collectedNearDeath.length > 0) {
+  2445→            deathFoodCollected.current = true;
+  2446→            // Find closest snake to the first collected food position
+  2447→            const targetPos = collectedNearDeath[0];
+  2448→            let closestSnake: { id: string; dist: number } | null = null;
+  2449→            for (const s of snap.snakes) {
+  2450→              if (!s.points || s.points.length === 0) continue;
+  2451→              const head = s.points[0];
+  2452→              const dx = head.x - targetPos.x;
+  2453→              const dy = head.y - targetPos.y;
+  2454→              const d = Math.sqrt(dx * dx + dy * dy);
+  2455→              if (!closestSnake || d < closestSnake.dist) {
+  2456→                closestSnake = { id: s.id, dist: d };
+  2457→              }
+  2458→            }
+  2459→            if (closestSnake) {
+  2460→              spectatorFollowIdRef.current = closestSnake.id;
+  2461→            }
+  2462→          }
+  2463→
+  2464→          // Update prev foods for next frame comparison
+  2465→          const newFoods = new Map<string, { x: number; y: number }>();
+  2466→          for (const f of snap.foods) {
+  2467→            newFoods.set(f.id, { x: f.x, y: f.y });
+  2468→          }
+  2469→          prevFoodsRef.current = newFoods;
+  2470→        }
+  2471→
+  2472→        if (spectatorFollowIdRef.current) {
+  2473→          // Follow the entity that collected death food
+  2474→          const target = snap.snakes.find((s) => s.id === spectatorFollowIdRef.current);
+  2475→          if (target?.points?.[0]) {
+  2476→            camX = target.points[0].x;
+  2477→            camY = target.points[0].y;
+  2478→          } else {
+  2479→            camX = deathCamPosRef.current.x;
+  2480→            camY = deathCamPosRef.current.y;
+  2481→          }
+  2482→        } else {
+  2483→          // No one collected food near death — stay at death position
+  2484→          camX = deathCamPosRef.current.x;
+  2485→          camY = deathCamPosRef.current.y;
+  2486→          // Slow zoom out
+  2487→          zoomRef.current = Math.max(0.3, zoomRef.current - 0.0003);
+  2488→        }
+  2489→      }
+  2490→
+  2491→      // World transform
+  2492→      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  2493→      ctx.translate(w / 2, h / 2);
+  2494→      ctx.scale(z, z);
+  2495→      ctx.translate(-camX, -camY);
+  2496→
+  2497→      // Draw grid (minimal)
+  2498→      const gridSize = 80;
+  2499→      const viewL = camX - w / 2 / z - gridSize;
+  2500→      const viewR = camX + w / 2 / z + gridSize;
+  2501→      const viewT = camY - h / 2 / z - gridSize;
+  2502→      const viewB = camY + h / 2 / z + gridSize;
+  2503→      ctx.strokeStyle = '#1e293b';
+  2504→      ctx.lineWidth = 0.5;
+  2505→      ctx.beginPath();
+  2506→      const sX = Math.floor(viewL / gridSize) * gridSize;
+  2507→      const eX = Math.ceil(viewR / gridSize) * gridSize;
+  2508→      const sY = Math.floor(viewT / gridSize) * gridSize;
+  2509→      const eY = Math.ceil(viewB / gridSize) * gridSize;
+  2510→      for (let x = sX; x <= eX; x += gridSize) { ctx.moveTo(x, viewT); ctx.lineTo(x, viewB); }
+  2511→      for (let y = sY; y <= eY; y += gridSize) { ctx.moveTo(viewL, y); ctx.lineTo(viewR, y); }
+  2512→      ctx.stroke();
+  2513→
+  2514→      // Draw food
+  2515→      for (const f of snap.foods) {
+  2516→        if (f.x < viewL || f.x > viewR || f.y < viewT || f.y > viewB) continue;
+  2517→        if (f.isStarChip) {
+  2518→          drawStarCollectible(ctx, f.x, f.y, Math.max(6, f.size + 4), now, false);
+  2519→        } else {
+  2520→          drawFoodOrb(ctx, f.x, f.y, f.size, f.value, f.color, f.glowColor ?? '', now, true);
+  2521→        }
+  2522→      }
+  2523→
+  2524→      // Draw snakes
+  2525→      for (const s of snap.snakes) {
+  2526→        if (!s.points || s.points.length === 0) continue;
+  2527→        const head = s.points[0];
+  2528→        if (head.x < viewL - 100 || head.x > viewR + 100 || head.y < viewT - 100 || head.y > viewB + 100) continue;
+  2529→
+  2530→        const rc: FrameRenderCtx = {
+  2531→          ctx, w, h, camX, camY, zoom: z,
+  2532→          worldSize: snap.worldSize, lowQuality: true,
+  2533→          myId, now, metallicCache: new Map(), playerSkin: undefined, dpr,
+  2534→        };
+  2535→        drawSnake(rc, s);
+  2536→      }
+  2537→
+  2538→      // Draw map boundary
+  2539→      if (snap.mapRadius && snap.mapRadius > 0) {
+  2540→        drawMapBoundary(ctx, snap.mapCenterX ?? 4000, snap.mapCenterY ?? 4000, snap.mapRadius, now);
+  2541→      }
+  2542→
+  2543→      // Draw replay watermark
+  2544→      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  2545→      ctx.font = 'bold 12px monospace';
+  2546→      ctx.fillStyle = 'rgba(244, 63, 94, 0.8)';
+  2547→      ctx.textAlign = 'left';
+  2548→      ctx.textBaseline = 'top';
+  2549→      ctx.fillText('⏺ REPLAY', 10, 10);
+  2550→      const isPostDeathFrame = deathFrameIdx != null && frameIdxRef.current >= deathFrameIdx;
+  2551→      const preSec2 = deathFrameIdx != null ? Math.min(15, Math.floor(frameIdxRef.current / 20)) : Math.floor(frameIdxRef.current / 20);
+  2552→      const postSec2 = deathFrameIdx != null && frameIdxRef.current > deathFrameIdx ? Math.min(15, Math.floor((frameIdxRef.current - deathFrameIdx) / 20)) : 0;
+  2553→      const timeStr = isPostDeathFrame
+  2554→        ? `⛔ DEATH +${postSec2}s | Frame ${frameIdxRef.current + 1}/${totalFrames}`
+  2555→        : `Frame ${frameIdxRef.current + 1}/${totalFrames} | -${Math.max(0, 15 - preSec2)}s to death`;
+  2556→      ctx.fillStyle = isPostDeathFrame ? 'rgba(244, 63, 94, 0.9)' : 'rgba(226, 232, 240, 0.6)';
+  2557→      ctx.font = '10px monospace';
+  2558→      ctx.fillText(timeStr, 10, 26);
+  2559→
+  2560→      rafRef.current = requestAnimationFrame(render);
+  2561→    };
+  2562→
+  2563→    lastTimeRef.current = performance.now();
+  2564→    rafRef.current = requestAnimationFrame(render);
+  2565→
+  2566→    return () => {
+  2567→      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+  2568→    };
+  2569→  }, [frames, myId, totalFrames, deathFrameIdx]);
+  2570→
+  2571→  const togglePlay = () => {
+  2572→    playingRef.current = !playingRef.current;
+  2573→    setPlaying(playingRef.current);
+  2574→  };
+  2575→
+  2576→  const cycleSpeed = () => {
+  2577→    const curIdx = REPLAY_SPEEDS.indexOf(speed as 0.25 | 0.5 | 1 | 2);
+  2578→    const nextIdx = (curIdx + 1) % REPLAY_SPEEDS.length;
+  2579→    const newSpeed = REPLAY_SPEEDS[nextIdx];
+  2580→    speedRef.current = newSpeed;
+  2581→    setSpeed(newSpeed);
+  2582→  };
+  2583→
+  2584→  const adjustZoom = (delta: number) => {
+  2585→    zoomRef.current = Math.max(0.3, Math.min(2, zoomRef.current + delta));
+  2586→    setZoom(zoomRef.current);
+  2587→  };
+  2588→
+  2589→  const restart = () => {
+  2590→    frameIdxRef.current = 0;
+  2591→    playingRef.current = true;
+  2592→    setPlaying(true);
+  2593→    setFrameIdx(0);
+  2594→  };
+  2595→
+  2596→  if (totalFrames === 0) return null;
+  2597→
+  2598→  const progress = totalFrames > 0 ? (frameIdx / (totalFrames - 1)) * 100 : 0;
+  2599→  const deathProgress = deathFrameIdx != null && totalFrames > 0 ? (deathFrameIdx / (totalFrames - 1)) * 100 : -1;
+  2600→
+  2601→  return (
+  2602→    <div className="relative w-full rounded-lg overflow-hidden border border-slate-800 bg-slate-950">
+  2603→      {/* Replay canvas */}
+  2604→      <canvas
+  2605→        ref={canvasRef}
+  2606→        className="w-full aspect-video cursor-crosshair"
+  2607→        style={{ display: 'block' }}
+  2608→      />
+  2609→
+  2610→      {/* Progress bar with death marker */}
+  2611→      <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-slate-800">
+  2612→        <div className="h-full bg-rose-500 transition-all duration-75" style={{ width: `${progress}%` }} />
+  2613→        {deathProgress >= 0 && (
+  2614→          <div className="absolute top-0 h-full w-0.5 bg-yellow-400" style={{ left: `${deathProgress}%` }} title="💀 Death" />
+  2615→        )}
+  2616→      </div>
+  2617→
+  2618→      {/* Controls */}
+  2619→      <div className="absolute bottom-3 left-0 right-0 flex items-center justify-center gap-2">
+  2620→        <button
+  2621→          type="button"
+  2622→          onClick={restart}
+  2623→          className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-900/80 text-white hover:bg-slate-800 transition-colors"
+  2624→          title="Restart"
+  2625→        >
+  2626→          <RotateCcw className="h-3.5 w-3.5" />
+  2627→        </button>
+  2628→        <button
+  2629→          type="button"
+  2630→          onClick={togglePlay}
+  2631→          className="flex h-9 w-9 items-center justify-center rounded-md bg-rose-600 text-white hover:bg-rose-700 transition-colors"
+  2632→        >
+  2633→          {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+  2634→        </button>
+  2635→        <button
+  2636→          type="button"
+  2637→          onClick={cycleSpeed}
+  2638→          className="flex h-8 items-center justify-center rounded-md bg-slate-900/80 px-2.5 text-white text-xs font-mono font-bold hover:bg-slate-800 transition-colors"
+  2639→        >
+  2640→          {speed}x
+  2641→        </button>
+  2642→        <div className="flex items-center gap-1">
+  2643→          <button
+  2644→            type="button"
+  2645→            onClick={() => adjustZoom(-0.15)}
+  2646→            className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-900/80 text-white hover:bg-slate-800 transition-colors"
+  2647→            title="Zoom out"
+  2648→          >
+  2649→            <ZoomOut className="h-3.5 w-3.5" />
+  2650→          </button>
+  2651→          <span className="text-[10px] text-slate-400 font-mono w-8 text-center">
+  2652→            {Math.round(zoom * 100)}%
+  2653→          </span>
+  2654→          <button
+  2655→            type="button"
+  2656→            onClick={() => adjustZoom(0.15)}
+  2657→            className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-900/80 text-white hover:bg-slate-800 transition-colors"
+  2658→            title="Zoom in"
+  2659→          >
+  2660→            <ZoomIn className="h-3.5 w-3.5" />
+  2661→          </button>
+  2662→        </div>
+  2663→      </div>
+  2664→    </div>
+  2665→  );
+  2666→}
+  2667→
+  2668→// ---------------------------------------------------------------------------
+  2669→// EndOverlay sub-component (death or extract) — matches AUDIT-A Sections B+C
+  2670→// ---------------------------------------------------------------------------
+  2671→
+  2672→interface EndOverlayProps {
+  2673→  endScreen: EndScreenState;
+  2674→  arena: { name: string; buyIn: number; minExtract: number };
+  2675→  isOffline: boolean;
+  2676→  previousLevel: number;
+  2677→  previousBankedChips: number;
+  2678→  onPlayAgain: () => void;
+  2679→  onExit: () => void;
+  2680→  onAddRival: () => void;
+  2681→  onAddFriend: () => void;
+  2682→  onViewProfile: () => void;
+  2683→}
+  2684→
+  2685→function EndOverlay({
+  2686→  endScreen,
+  2687→  arena,
+  2688→  isOffline,
+  2689→  previousLevel,
+  2690→  previousBankedChips,
+  2691→  onPlayAgain,
+  2692→  onExit,
+  2693→  onAddRival,
+  2694→  onAddFriend,
+  2695→  onViewProfile,
+  2696→}: EndOverlayProps) {
+  2697→  const { outcome, killer, result, durationSeconds, carriedChips, score, replayFrames, replayMyId, replayDeathFrameIdx } = endScreen;
+  2698→  const isExtract = outcome === 'extract';
+  2699→  const mins = Math.floor(durationSeconds / 60);
+  2700→  const secs = durationSeconds % 60;
+  2701→  const durationStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+  2702→  const snakeLength = score;
+  2703→  const kills = result?.kills ?? 0;
+  2704→  const leveledUp = result && result.newLevel > previousLevel;
+  2705→
+  2706→  // Replay toggle (death only)
+  2707→  const [showReplay, setShowReplay] = useState(false);
+  2708→  const hasReplay = !isExtract && replayFrames && replayFrames.length > 10;
+  2709→
+  2710→  // Online extract: banked chips after graduated commission (0% if <=3 players, 35% if >=4).
+  2711→  // The server computes the actual commission and reports it in result.commission.
+  2712→  const commission = result?.commission ?? 0;
+  2713→  const bankedAmount = result?.bankedAmount ?? (isExtract && !isOffline ? carriedChips : 0);
+  2714→  const finalBankedChips = result?.newBankedChips ?? previousBankedChips;
+  2715→
+  2716→  // Title logic — AUDIT-A Section C
+  2717→  const extractTitle = isOffline
+  2718→    ? 'Practice Run Completed!'
+  2719→    : carriedChips > 0
+  2720→      ? 'Extraction Completed!'
+  2721→      : 'Secure Extraction!';
+  2722→
+  2723→  return (
+  2724→    <div
+  2725→      className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md"
+  2726→      role="dialog"
+  2727→      aria-modal="true"
+  2728→      aria-label={isExtract ? 'Extraction successful' : 'You died'}
+  2729→    >
+  2730→      <div className="w-[min(94vw,520px)] rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl">
+  2731→        {/* Top accent bar */}
+  2732→        <div
+  2733→          className={`h-1.5 w-full rounded-t-2xl ${
+  2734→            isExtract
+  2735→              ? 'bg-gradient-to-r from-yellow-500 to-amber-500'
+  2736→              : 'bg-red-600'
+  2737→          }`}
+  2738→        />
+  2739→
+  2740→        <div className="p-6">
+  2741→          {/* Icon */}
+  2742→          <div
+  2743→            className={`mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl border ${
+  2744→              isExtract
+  2745→                ? 'border-yellow-500/20 bg-yellow-500/10'
+  2746→                : 'border-red-500/20 bg-red-500/10'
+  2747→            }`}
+  2748→          >
+  2749→            {isExtract ? (
+  2750→              <Compass className={`h-9 w-9 text-yellow-400 ${extractTitle === 'Practice Run Completed!' ? '' : 'animate-spin'}`} style={{ animationDuration: '6s' }} />
+  2751→            ) : (
+  2752→              <Skull className="h-9 w-9 text-red-500" />
+  2753→            )}
+  2754→          </div>
+  2755→
+  2756→          {/* Title */}
+  2757→          <h3 className="text-center text-2xl font-bold text-white">
+  2758→            {isExtract ? extractTitle : 'Arena Disintegration!'}
+  2759→          </h3>
+  2760→
+  2761→          {/* Subtitle */}
+  2762→          {isExtract ? (
+  2763→            <p className="mt-1 text-center text-xs text-slate-400">
+  2764→              {isOffline
+  2765→                ? `Practice run finished! You eliminated ${kills} training bots, reached a max size of ${snakeLength}, and survived for ${mins}m ${secs}s.`
+  2766→                : carriedChips > 0
+  2767→                  ? `Tactical extraction successful! You secured ${carriedChips.toLocaleString()} star chips, eliminated ${kills} rivals, reached a max size of ${snakeLength}, and survived for ${mins}m ${secs}s.`
+  2768→                  : `Tactical extraction successful! You exited safely after surviving for ${mins}m ${secs}s, eliminating ${kills} rivals, with a final snake size of ${snakeLength}.`}
+  2769→            </p>
+  2770→          ) : (
+  2771→            <p className="mt-1 text-center text-xs text-slate-400">
+  2772→              {isOffline
+  2773→                ? 'Offline Training — No chips lost.'
+  2774→                : 'Your snake head collided with a rival. All unbanked carried chips were lost in-match.'}
+  2775→            </p>
+  2776→          )}
+  2777→
+  2778→          {/* Death stats panel — AUDIT-A Section B */}
+  2779→          {!isExtract && !isOffline && (
+  2780→            <div className="mt-4 rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs font-mono">
+  2781→              <div className="flex items-center justify-between">
+  2782→                <span className="text-slate-400">Stakes Buy-In Cost:</span>
+  2783→                <span className="text-red-400">-{arena.buyIn.toLocaleString()} chips</span>
+  2784→              </div>
+  2785→              <div className="mt-1 flex items-center justify-between">
+  2786→                <span className="text-slate-400">Match Carried Value Forfeited:</span>
+  2787→                <span className="text-slate-500">-{carriedChips.toLocaleString()} c</span>
+  2788→              </div>
+  2789→              <div className="mt-1 flex items-center justify-between">
+  2790→                <span className="text-slate-400">Opponents Eliminated:</span>
+  2791→                <span className="text-white">{kills} Kills</span>
+  2792→              </div>
+  2793→            </div>
+  2794→          )}
+  2795→          {!isExtract && isOffline && (
+  2796→            <div className="mt-4 rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs font-mono">
+  2797→              <div className="flex items-center justify-between">
+  2798→                <span className="text-slate-400">Opponents Eliminated:</span>
+  2799→                <span className="text-white">{kills} Kills</span>
+  2800→              </div>
+  2801→            </div>
+  2802→          )}
+  2803→
+  2804→          {/* Killer card (death only) — AUDIT-A Section B */}
+  2805→          {!isExtract && killer && (
+  2806→            <div className="mt-3 rounded-lg border border-rose-900/50 bg-slate-900/60 p-3">
+  2807→              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-rose-400 font-mono">
+  2808→                <Skull className="h-3 w-3" />
+  2809→                <span>Collided With / Eliminated By</span>
+  2810→              </div>
+  2811→              {killer.tag && (
+  2812→                <div className="mt-1 inline-block rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-mono text-slate-400">
+  2813→                  {killer.tag}
+  2814→                </div>
+  2815→              )}
+  2816→              <div className="mt-2 flex items-center gap-2">
+  2817→                <div
+  2818→                  className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white"
+  2819→                  style={{ background: killer.color ?? '#f43f5e' }}
+  2820→                >
+  2821→                  {killer.name ? killer.name.substring(0, 2).toUpperCase() : '??'}
+  2822→                </div>
+  2823→                <div>
+  2824→                  <div className="text-xs font-bold text-white">{killer.name}</div>
+  2825→                  <div className="text-[10px] text-slate-400">
+  2826→                    {killer.isBot === false ? 'Online Rival Player' : 'Arena AI Combatant'}
+  2827→                  </div>
+  2828→                </div>
+  2829→              </div>
+  2830→              {/* Social buttons: only for real players (not bots) */}
+  2831→              {killer.isBot === false && (
+  2832→                <div className="mt-3 flex gap-2">
+  2833→                  <button
+  2834→                    type="button"
+  2835→                    onClick={onViewProfile}
+  2836→                    className="flex items-center gap-1 rounded-md bg-slate-700 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-slate-600"
+  2837→                  >
+  2838→                    <User className="h-3 w-3" /> View Profile
+  2839→                  </button>
+  2840→                  <button
+  2841→                    type="button"
+  2842→                    onClick={onAddRival}
+  2843→                    className="flex items-center gap-1 rounded-md bg-rose-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-rose-700"
+  2844→                  >
+  2845→                    <Swords className="h-3 w-3" /> Add Rival
+  2846→                  </button>
+  2847→                  <button
+  2848→                    type="button"
+  2849→                    onClick={onAddFriend}
+  2850→                    className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-slate-700"
+  2851→                  >
+  2852→                    <UserPlus className="h-3 w-3" /> Add Friend
+  2853→                  </button>
+  2854→                </div>
+  2855→              )}
+  2856→            </div>
+  2857→          )}
+  2858→
+  2859→          {/* Replay viewer (death only) */}
+  2860→          {hasReplay && !showReplay && (
+  2861→            <button
+  2862→              type="button"
+  2863→              onClick={() => setShowReplay(true)}
+  2864→              className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-indigo-500/30 bg-indigo-500/10 py-2.5 text-xs font-bold text-indigo-300 hover:bg-indigo-500/20 transition-colors"
+  2865→            >
+  2866→              📺 Watch Death Replay
+  2867→            </button>
+  2868→          )}
+  2869→          {hasReplay && showReplay && (
+  2870→            <div className="mt-3">
+  2871→              <ReplayPlayer
+  2872→                frames={replayFrames!}
+  2873→                myId={replayMyId ?? ''}
+  2874→                deathFrameIdx={replayDeathFrameIdx}
+  2875→                onClose={() => setShowReplay(false)}
+  2876→              />
+  2877→              <button
+  2878→                type="button"
+  2879→                onClick={() => setShowReplay(false)}
+  2880→                className="mt-2 flex w-full items-center justify-center gap-1 rounded-md bg-slate-800 py-1.5 text-[10px] font-bold text-slate-300 hover:bg-slate-700 transition-colors"
+  2881→              >
+  2882→                Hide Replay
+  2883→              </button>
+  2884→            </div>
+  2885→          )}
+  2886→
+  2887→          {/* Extract performance stats — AUDIT-A Section C */}
+  2888→          {isExtract && (
+  2889→            <>
+  2890→              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+  2891→                <div className="rounded-md border border-slate-800 bg-slate-900/60 p-2">
+  2892→                  <div className="text-[10px] uppercase tracking-wider text-slate-500">Kills</div>
+  2893→                  <div className="text-lg font-bold text-rose-400">{kills}</div>
+  2894→                </div>
+  2895→                <div className="rounded-md border border-slate-800 bg-slate-900/60 p-2">
+  2896→                  <div className="text-[10px] uppercase tracking-wider text-slate-500">Max Length</div>
+  2897→                  <div className="text-lg font-bold text-indigo-400">{snakeLength}</div>
+  2898→                </div>
+  2899→                <div className="rounded-md border border-slate-800 bg-slate-900/60 p-2">
+  2900→                  <div className="text-[10px] uppercase tracking-wider text-slate-500">Survival Time</div>
+  2901→                  <div className="text-lg font-bold text-sky-400">{durationStr}</div>
+  2902→                </div>
+  2903→              </div>
+  2904→
+  2905→              {/* Online results table — AUDIT-A Section C */}
+  2906→              {!isOffline && (
+  2907→                <div className="mt-3 rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs font-mono">
+  2908→                  <div className="flex items-center justify-between">
+  2909→                    <span className="text-slate-400">Carried Value:</span>
+  2910→                    <span className="text-white">{carriedChips.toLocaleString()} chips</span>
+  2911→                  </div>
+  2912→                  <div className="mt-1 flex items-center justify-between">
+  2913→                    <span className="text-slate-400">System Commission{commission > 0 ? ` (${Math.round((commission / Math.max(1, carriedChips)) * 100)}%)` : ' (0% — Low Density)'}:</span>
+  2914→                    <span className="text-yellow-500">-{commission.toLocaleString()} chips</span>
+  2915→                  </div>
+  2916→                  <div className="mt-1 flex items-center justify-between">
+  2917→                    <span className="font-bold text-slate-300">BANKED TO ACCOUNT:</span>
+  2918→                    <span className="font-bold text-emerald-400">+{bankedAmount.toLocaleString()} c</span>
+  2919→                  </div>
+  2920→                </div>
+  2921→              )}
+  2922→
+  2923→              {/* Offline results — AUDIT-A Section C */}
+  2924→              {isOffline && (
+  2925→                <div className="mt-3 rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-center">
+  2926→                  <div className="text-xs font-mono uppercase tracking-wider text-amber-400/95">
+  2927→                    Offline Training Complete
+  2928→                  </div>
+  2929→                  <div className="mt-1 text-[11px] text-slate-400">
+  2930→                    No buy-in or banking fees. Great job sharpening your skills and maneuvers!
+  2931→                  </div>
+  2932→                </div>
+  2933→              )}
+  2934→
+  2935→              {/* Final banked chips + level (if server reported) */}
+  2936→              {result && (
+  2937→                <div className="mt-3 rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs font-mono">
+  2938→                  <div className="flex items-center justify-between">
+  2939→                    <span className="text-slate-400">Total Banked:</span>
+  2940→                    <span className="font-semibold text-amber-300">{finalBankedChips.toLocaleString()}c</span>
+  2941→                  </div>
+  2942→                  <div className="mt-1 flex items-center justify-between">
+  2943→                    <span className="text-slate-400">Level:</span>
+  2944→                    <span className="font-semibold text-white">
+  2945→                      {result.newLevel}
+  2946→                      {leveledUp && (
+  2947→                        <span className="ml-1 rounded bg-emerald-500/20 px-1 text-emerald-300">
+  2948→                          ↑ Level Up!
+  2949→                        </span>
+  2950→                      )}
+  2951→                    </span>
+  2952→                  </div>
+  2953→                </div>
+  2954→              )}
+  2955→            </>
+  2956→          )}
+  2957→
+  2958→          {!result && (
+  2959→            <p className="mt-3 text-center text-xs text-slate-400">
+  2960→              Final tally pending from server…
+  2961→            </p>
+  2962→          )}
+  2963→
+  2964→          {/* Action buttons — AUDIT-A Sections B+C */}
+  2965→          <div className="mt-5 flex flex-col gap-2">
+  2966→            <button
+  2967→              type="button"
+  2968→              id={isExtract ? 'btn-success-play-again' : 'btn-defeat-play-again'}
+  2969→              onClick={onPlayAgain}
+  2970→              className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white shadow-lg transition-transform active:scale-[0.98] ${
+  2971→                isExtract
+  2972→                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
+  2973→                  : 'bg-gradient-to-r from-red-600 to-rose-600'
+  2974→              }`}
+  2975→            >
+  2976→              <Compass className="h-4 w-4" /> PLAY AGAIN
+  2977→            </button>
+  2978→            <button
+  2979→              type="button"
+  2980→              className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 py-2.5 text-xs font-bold text-amber-300 hover:bg-amber-500/20"
+  2981→            >
+  2982→              📺 Watch Video (Get +50 Chips)
+  2983→            </button>
+  2984→            <button
+  2985→              type="button"
+  2986→              id={isExtract ? 'btn-success-close' : 'btn-defeat-close'}
+  2987→              onClick={onExit}
+  2988→              className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-800 py-2.5 text-xs font-bold text-slate-200 hover:bg-slate-700"
+  2989→            >
+  2990→              {isExtract
+  2991→                ? (isOffline ? 'RETURN TO LOBBY' : 'SECURE CHIPS & RETURN TO LOBBY')
+  2992→                : 'RETURN TO LOBBY'}
+  2993→            </button>
+  2994→          </div>
+  2995→
+  2996→          <p className="mt-3 text-center text-[10px] text-slate-500">
+  2997→            Press ESC to exit
+  2998→          </p>
+  2999→        </div>
+  3000→      </div>
+  3001→    </div>
+  3002→  );
+  3003→}
+  3004→
