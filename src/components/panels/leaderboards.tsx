@@ -29,6 +29,8 @@ import {
   Search,
   Loader2,
   RefreshCw,
+  MapPin,
+  Inbox,
 } from 'lucide-react';
 
 interface LeaderboardsProps {
@@ -36,8 +38,7 @@ interface LeaderboardsProps {
   onInspectPlayer?: (p: InspectedPlayer) => void;
 }
 
-type LevelTab = 'level3' | 'level2' | 'level1';
-type Level3Sub = 'summit' | 'global';
+type TopTab = 'summit' | 'global' | 'national' | 'tiers';
 
 const RANK_MEDALS: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
@@ -118,7 +119,7 @@ function generateGlobalRanks(playerTag?: string): LeaderboardEntry[] {
   return out.slice(0, 100);
 }
 
-// Country #1 summit table — for each of 12 countries, show one champion
+// Country #1 summit table - for each country, show one champion
 function generateCountrySummit(): { country: string; name: string; userTag: string; chips: number; level: number }[] {
   return COUNTRIES.map((c, idx) => {
     const seed = COUNTRY_SEEDS[c.code]?.[0];
@@ -141,7 +142,7 @@ function generateCountrySummit(): { country: string; name: string; userTag: stri
   }).sort((a, b) => b.chips - a.chips);
 }
 
-// National board for a given country code — top 100
+// National board for a given country code - top 100
 function generateNationalBoard(countryCode: string): LeaderboardEntry[] {
   const country = COUNTRIES.find((c) => c.code === countryCode);
   const countryDisplayName = country?.name || countryCode;
@@ -179,7 +180,7 @@ function generateNationalBoard(countryCode: string): LeaderboardEntry[] {
   return out;
 }
 
-// Milestone-tier board — players at each milestone
+// Milestone-tier board - players at each milestone
 function generateMilestoneBoard(tierId: string): LeaderboardEntry[] {
   if (tierId === 'all') {
     return generateGlobalRanks();
@@ -197,13 +198,30 @@ function generateMilestoneBoard(tierId: string): LeaderboardEntry[] {
     return out;
   }
 
-  // Rank 1 is the first achiever of this tier
-  const firstAchieverMap: Record<string, { name: string; userTag: string; country: string; dateStr: string }> = {
-    bronze: { name: 'Rookie_Striker', userTag: '#IND-104', country: 'IN', dateStr: '02 Jan 2026, 09:15 AM UTC' },
-    silver: { name: 'Viper_Zero', userTag: '#USA-402', country: 'US', dateStr: '07 Jan 2026, 02:40 PM UTC' },
-    gold: { name: 'K-Snake_Master', userTag: '#KOR-114', country: 'KR', dateStr: '11 Jan 2026, 06:30 AM SGT' },
-    platinum: { name: 'Apex_Viper', userTag: '#USA-882', country: 'US', dateStr: '16 Jan 2026, 11:10 PM UTC' },
-    diamond: { name: 'Shadow_Ninja', userTag: '#JPN-309', country: 'JP', dateStr: '19 Jan 2026, 08:22 PM JST' },
+  // Rookie tier - all players below 100K chips
+  if (tierId === 'rookie') {
+    out.push({ name: 'Starter_Pawn', userTag: '#GEN-000', country: 'US', bankedChips: 45_000, level: 8, rank: 1 });
+    while (out.length < 100) {
+      const i = out.length;
+      out.push({
+        name: `${COUNTRIES[i % COUNTRIES.length].name.split(' ')[0]}_Rookie_${i + 1}`,
+        userTag: `#${COUNTRIES[i % COUNTRIES.length].code}-${200 + i}`,
+        country: COUNTRIES[i % COUNTRIES.length].code,
+        bankedChips: Math.max(1_000, 90_000 - i * 880),
+        level: Math.max(1, 10 - Math.floor(i / 12)),
+        rank: i + 1,
+      });
+    }
+    return out;
+  }
+
+  // First achiever for known tiers
+  const firstAchieverMap: Record<string, { name: string; userTag: string; country: string }> = {
+    bronze: { name: 'Rookie_Striker', userTag: '#IND-104', country: 'IN' },
+    silver: { name: 'Viper_Zero', userTag: '#USA-402', country: 'US' },
+    gold: { name: 'K-Snake_Master', userTag: '#KOR-114', country: 'KR' },
+    platinum: { name: 'Apex_Viper', userTag: '#USA-882', country: 'US' },
+    diamond: { name: 'Shadow_Ninja', userTag: '#JPN-309', country: 'JP' },
   };
   const achiever = firstAchieverMap[tierId];
   if (achiever) {
@@ -232,10 +250,61 @@ function generateMilestoneBoard(tierId: string): LeaderboardEntry[] {
   return out;
 }
 
+// Extended milestone tiers including Rookie
+const ALL_MILESTONE_TIERS = [
+  { id: 'all', name: 'All Tiers', minChips: 0, badge: '\u2b50 All', color: '#94a3b8' },
+  { id: 'rookie', name: 'Rookie (Below 100K)', minChips: 0, badge: '\ud83d\udee1\ufe0f Rookie', color: '#64748b' },
+  ...MILESTONE_TIERS.filter((t) => t.id !== 'all'),
+];
+
+// Empty state component
+function EmptyState({ message }: { message?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-slate-500">
+      <Inbox className="w-10 h-10 mb-3 text-slate-600" />
+      <p className="text-sm font-medium">{message || 'No entries yet'}</p>
+    </div>
+  );
+}
+
+// Tab button component
+function TabBtn({
+  active,
+  onClick,
+  icon: Icon,
+  label,
+  color,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: typeof Crown;
+  label: string;
+  color: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition border whitespace-nowrap ${
+        active
+          ? `border ${color}/40 ${color.replace('#', 'text-')}`
+          : 'text-slate-500 hover:text-slate-300 border-transparent'
+      }`}
+      style={
+        active
+          ? { borderColor: color, color: color, backgroundColor: color + '1a' }
+          : undefined
+      }
+    >
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+    </button>
+  );
+}
+
 export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
   const { player } = useAuth();
-  const [levelTab, setLevelTab] = useState<LevelTab>('level3');
-  const [level3Sub, setLevel3Sub] = useState<Level3Sub>('summit');
+  const [activeTab, setActiveTab] = useState<TopTab>('summit');
   const [selectedCountry, setSelectedCountry] = useState<string>('IN');
   const [selectedTierId, setSelectedTierId] = useState<string>('all');
   const [countrySearch, setCountrySearch] = useState('');
@@ -256,7 +325,6 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
       if (res.ok && data.entries && data.entries.length > 0) {
         setLiveEntries(data.entries);
       } else {
-        // Fallback to mock
         setLiveEntries(generateGlobalRanks(playerTag));
       }
       setLastUpdated(new Date());
@@ -270,7 +338,6 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
 
   useEffect(() => {
     void fetchLive();
-    // Auto-refresh every 30 minutes (per audit D.4)
     const id = setInterval(() => void fetchLive(), 30 * 60 * 1000);
     return () => clearInterval(id);
   }, [fetchLive]);
@@ -289,7 +356,6 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
   const globalRanks = useMemo<LeaderboardEntry[]>(() => {
     const generated = generateGlobalRanks(playerTag);
     if (liveEntries.length === 0) return generated;
-    // Live entries are higher priority; append generated for ranks beyond live count
     const liveSet = new Set(liveEntries.map((e) => e.userTag));
     const merged = [...liveEntries];
     let rankCounter = merged.length;
@@ -300,6 +366,23 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
     }
     return merged.slice(0, 100);
   }, [liveEntries, playerTag]);
+
+  // Compute player rank info for the Your Rank card
+  const playerRankInfo = useMemo(() => {
+    if (!player) return null;
+    const globalEntry = globalRanks.find((e) => e.userTag === player.userTag);
+    const national = generateNationalBoard(player.country || 'US');
+    const nationalEntry = national.find((e) => e.userTag === player.userTag);
+    const tier = milestoneTierForChips(player.bankedChips);
+    return {
+      globalRank: globalEntry?.rank ?? null,
+      nationalRank: nationalEntry?.rank ?? null,
+      tierBadge: tier.badge,
+      tierName: tier.name,
+      bankedChips: player.bankedChips,
+      level: player.level,
+    };
+  }, [player, globalRanks]);
 
   if (!player) return <NotSignedIn />;
 
@@ -329,6 +412,13 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
     return e.name.toLowerCase().includes(q) || e.userTag.toLowerCase().includes(q);
   });
 
+  const tabs: { id: TopTab; icon: typeof Crown; label: string; color: string }[] = [
+    { id: 'summit', icon: Crown, label: 'Summit', color: '#f59e0b' },
+    { id: 'global', icon: Globe, label: 'Global', color: '#06b6d4' },
+    { id: 'national', icon: MapPin, label: 'National', color: '#8b5cf6' },
+    { id: 'tiers', icon: Medal, label: 'Tiers', color: '#eab308' },
+  ];
+
   return (
     <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 overflow-hidden">
       <GlowBlob color="bg-amber-500/10" className="-top-12 -right-12 w-56 h-56" />
@@ -338,7 +428,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-widest">
-              CURRENT YEAR (2026) CONCURRENT TOURNAMENT HIERARCHY
+              CURRENT YEAR (2026) CONCURRENT TOURNAMENT
             </span>
             <span className="inline-flex items-center gap-1 text-[9px] font-mono text-amber-400 font-bold px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 rounded">
               <Zap className="w-3 h-3" /> Live Ranks Update Every 30 Minutes
@@ -349,8 +439,8 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
             Official World Tournament Leaderboards
           </h2>
           <p className="text-xs text-slate-400 mt-1 max-w-3xl">
-            Complete real-time standings for Level 1 (Milestone Tiers), Level 2 (National Boards),
-            and Level 3 (World Summit). Click any player row to inspect full profile &amp; rank status!
+            Complete real-time standings for World Summit, Global, National, and Milestone Tiers.
+            Click any player row to inspect full profile &amp; rank status!
           </p>
           {lastUpdated && (
             <MicroLabel className="mt-1.5 inline-block">
@@ -372,98 +462,168 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
         </button>
       </div>
 
-      {/* Level Tabs */}
+      {/* Your Rank Card */}
+      {playerRankInfo && (
+        <div
+          className="relative rounded-xl p-4 mb-5 border-0"
+          style={{
+            background: 'linear-gradient(135deg, rgba(245,158,11,0.08) 0%, rgba(16,185,129,0.08) 100%)',
+          }}
+        >
+          <div
+            className="absolute inset-0 rounded-xl pointer-events-none"
+            style={{
+              border: '2px solid transparent',
+              backgroundClip: 'padding-box',
+              WebkitMask: 'linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0)',
+              WebkitMaskComposite: 'xor',
+              maskComposite: 'exclude',
+              backgroundImage: 'linear-gradient(135deg, #f59e0b, #10b981)',
+            }}
+          />
+          <div className="relative">
+            <div className="flex items-center gap-2 mb-3">
+              <Crown className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-bold text-amber-300 uppercase tracking-widest font-mono">
+                Your Rank
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div>
+                <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">Global Rank</div>
+                <div className="text-lg font-black text-white tabular-nums">
+                  {loading ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                  ) : playerRankInfo.globalRank != null ? (
+                    <span className="text-amber-400">#{playerRankInfo.globalRank}</span>
+                  ) : (
+                    <span className="text-slate-600">N/A</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">National Rank</div>
+                <div className="text-lg font-black text-white tabular-nums">
+                  {playerRankInfo.nationalRank != null ? (
+                    <span className="text-emerald-400">#{playerRankInfo.nationalRank}</span>
+                  ) : (
+                    <span className="text-slate-600">N/A</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">Milestone Badge</div>
+                <div className="text-sm font-bold" style={{ color: milestoneTierForChips(player.bankedChips).color }}>
+                  {playerRankInfo.tierBadge}
+                </div>
+                <div className="text-[10px] text-slate-500 truncate max-w-[140px]">{playerRankInfo.tierName}</div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">Banked Chips</div>
+                <div className="text-sm font-mono font-bold text-emerald-400 tabular-nums">
+                  {playerRankInfo.bankedChips.toLocaleString()}c
+                </div>
+              </div>
+              <div className="col-span-2 sm:col-span-1">
+                <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">Level</div>
+                <div className="text-lg font-black text-white tabular-nums">{playerRankInfo.level}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Flat Tabs */}
       <div className="relative flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800/60 mb-5">
-        <LevelTabBtn active={levelTab === 'level3'} onClick={() => setLevelTab('level3')} icon={Crown} label="Level 3: World Summit & Global" color="amber" />
-        <LevelTabBtn active={levelTab === 'level2'} onClick={() => setLevelTab('level2')} icon={Globe} label="Level 2: National Boards" color="cyan" />
-        <LevelTabBtn active={levelTab === 'level1'} onClick={() => setLevelTab('level1')} icon={Medal} label="Level 1: Milestone Tier Ranks" color="yellow" />
+        {tabs.map((tab) => (
+          <TabBtn
+            key={tab.id}
+            active={activeTab === tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            icon={tab.icon}
+            label={tab.label}
+            color={tab.color}
+          />
+        ))}
       </div>
 
-      {/* Level 3: World Summit / Global */}
-      {levelTab === 'level3' && (
+      {/* ====== SUMMIT TAB ====== */}
+      {activeTab === 'summit' && (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setLevel3Sub('summit')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${level3Sub === 'summit' ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300' : 'text-slate-500 hover:text-slate-300 border border-transparent'}`}
-            >
-              <Crown className="w-3.5 h-3.5" /> #1 Country Champions (World Summit)
-            </button>
-            <button
-              type="button"
-              onClick={() => setLevel3Sub('global')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition ${level3Sub === 'global' ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300' : 'text-slate-500 hover:text-slate-300 border border-transparent'}`}
-            >
-              <Globe className="w-3.5 h-3.5" /> All Players Global Rankings (Rank #1 to N)
-            </button>
-            <span className="ml-auto text-[10px] font-mono text-slate-500">
+          <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-[11px] text-amber-200 leading-relaxed">
+            <strong>WORLD CUP SUMMIT MECHANIC:</strong> This master leaderboard aggregates ONLY the #1
+            Ranked Player from each country. Dec 31 midnight UTC #1 wins the World Championship!
+          </div>
+          <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
+            <div className="grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+              <div className="col-span-2">Global Rank</div>
+              <div className="col-span-5">Country #1 Champion</div>
+              <div className="col-span-3">Nation</div>
+              <div className="col-span-2 text-right">Banked Chips</div>
+            </div>
+            <ol className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll">
+              {countrySummit.length === 0 ? (
+                <EmptyState />
+              ) : (
+                countrySummit.map((c, i) => {
+                  const isMe = c.userTag === player.userTag;
+                  return (
+                    <li
+                      key={c.country}
+                      onClick={() => inspectPlayer({ name: c.name, userTag: c.userTag, country: c.country, chips: c.chips, level: c.level, rank: i + 1 })}
+                      className={`grid grid-cols-12 gap-2 items-center px-4 py-3 text-sm cursor-pointer transition-colors ${isMe ? 'bg-amber-500/10 border-l-2 border-amber-500' : 'hover:bg-slate-900/40'}`}
+                    >
+                      <div className="col-span-2 flex items-center gap-1.5 font-mono">
+                        {RANK_MEDALS[i + 1] ? (
+                          <span className="text-lg">{RANK_MEDALS[i + 1]}</span>
+                        ) : (
+                          <span className="text-slate-400 font-bold">#{i + 1}</span>
+                        )}
+                        {isMe && <span className="text-[9px] bg-amber-500 text-black px-1 rounded font-bold">YOU</span>}
+                      </div>
+                      <div className="col-span-5 min-w-0">
+                        <div className="font-bold text-white truncate">{c.name}</div>
+                        <div className="text-[10px] font-mono text-slate-500">{c.userTag} &middot; 26 Jul 2026</div>
+                      </div>
+                      <div className="col-span-3 text-xs text-slate-300 flex items-center gap-1.5">
+                        <span aria-hidden>{countryFlag(c.country)}</span> {countryName(c.country)}
+                      </div>
+                      <div className="col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">
+                        {c.chips.toLocaleString()}c
+                      </div>
+                    </li>
+                  );
+                })
+              )}
+            </ol>
+          </div>
+        </div>
+      )}
+
+      {/* ====== GLOBAL TAB ====== */}
+      {activeTab === 'global' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono text-slate-500">
               Total Global Competitors: {(liveEntries.length || globalRanks.length).toLocaleString()} Players
             </span>
           </div>
-
-          {level3Sub === 'summit' && (
-            <>
-              <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-[11px] text-amber-200 leading-relaxed">
-                <strong>WORLD CUP SUMMIT MECHANIC:</strong> This master leaderboard aggregates ONLY the #1
-                Ranked Player from each country. Dec 31 midnight UTC #1 wins the World Championship!
-              </div>
-              <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-                <div className="grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-                  <div className="col-span-2">Global Rank</div>
-                  <div className="col-span-5">Country #1 Champion</div>
-                  <div className="col-span-3">Nation</div>
-                  <div className="col-span-2 text-right">Banked Chips</div>
-                </div>
-                <ol className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll">
-                  {countrySummit.map((c, i) => {
-                    const isMe = c.userTag === player.userTag;
-                    return (
-                      <li
-                        key={c.country}
-                        onClick={() => inspectPlayer({ name: c.name, userTag: c.userTag, country: c.country, chips: c.chips, level: c.level, rank: i + 1 })}
-                        className={`grid grid-cols-12 gap-2 items-center px-4 py-3 text-sm cursor-pointer transition-colors ${isMe ? 'bg-amber-500/10 border-l-2 border-amber-500' : 'hover:bg-slate-900/40'}`}
-                      >
-                        <div className="col-span-2 flex items-center gap-1.5 font-mono">
-                          {RANK_MEDALS[i + 1] ? (
-                            <span className="text-lg">{RANK_MEDALS[i + 1]}</span>
-                          ) : (
-                            <span className="text-slate-400 font-bold">#{i + 1}</span>
-                          )}
-                          {isMe && <span className="text-[9px] bg-amber-500 text-black px-1 rounded font-bold">YOU</span>}
-                        </div>
-                        <div className="col-span-5 min-w-0">
-                          <div className="font-bold text-white truncate">{c.name}</div>
-                          <div className="text-[10px] font-mono text-slate-500">{c.userTag} · 🕒 26 Jul 2026</div>
-                        </div>
-                        <div className="col-span-3 text-xs text-slate-300 flex items-center gap-1.5">
-                          <span aria-hidden>{countryFlag(c.country)}</span> {countryName(c.country)}
-                        </div>
-                        <div className="col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">
-                          {c.chips.toLocaleString()}c
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ol>
-              </div>
-            </>
-          )}
-
-          {level3Sub === 'global' && (
-            <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-              <div className="grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-                <div className="col-span-2">Global Rank</div>
-                <div className="col-span-5">Player &amp; User Tag</div>
-                <div className="col-span-3">Milestone Badge</div>
-                <div className="col-span-2 text-right">Banked Chips</div>
-              </div>
-              <ol className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll">
-                {loading ? (
-                  <li className="p-4 text-center text-slate-500 text-xs flex items-center justify-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin text-amber-400" /> Loading global ranks…
-                  </li>
-                ) : globalRanks.map((e) => {
+          <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
+            <div className="grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+              <div className="col-span-2">Global Rank</div>
+              <div className="col-span-5">Player &amp; User Tag</div>
+              <div className="col-span-3">Milestone Badge</div>
+              <div className="col-span-2 text-right">Banked Chips</div>
+            </div>
+            <ol className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll">
+              {loading ? (
+                <li className="p-4 text-center text-slate-500 text-xs flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-amber-400" /> Loading global ranks&hellip;
+                </li>
+              ) : globalRanks.length === 0 ? (
+                <EmptyState />
+              ) : (
+                globalRanks.map((e) => {
                   const isMe = e.userTag === player.userTag;
                   const tier = milestoneTierForChips(e.bankedChips);
                   return (
@@ -484,10 +644,13 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                         <div className="font-bold text-white truncate flex items-center gap-1.5">
                           <span aria-hidden>{countryFlag(e.country)}</span> {e.name}
                         </div>
-                        <div className="text-[10px] font-mono text-slate-500">{e.userTag} · 🕒 26 Jul 2026</div>
+                        <div className="text-[10px] font-mono text-slate-500">{e.userTag} &middot; 26 Jul 2026</div>
                       </div>
                       <div className="col-span-3 text-xs">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-[10px] font-mono" style={{ color: tier.color }}>
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-[10px] font-mono"
+                          style={{ color: tier.color }}
+                        >
                           {tier.badge}
                         </span>
                       </div>
@@ -496,26 +659,26 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                       </div>
                     </li>
                   );
-                })}
-              </ol>
-            </div>
-          )}
+                })
+              )}
+            </ol>
+          </div>
         </div>
       )}
 
-      {/* Level 2: National */}
-      {levelTab === 'level2' && (
+      {/* ====== NATIONAL TAB ====== */}
+      {activeTab === 'national' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Globe className="w-4 h-4 text-cyan-400" />
-              <span className="text-xs font-bold text-white">Select Country Leaderboard (197 Supported):</span>
+              <MapPin className="w-4 h-4 text-violet-400" />
+              <span className="text-xs font-bold text-white">Select Country ({COUNTRIES.length} Countries):</span>
             </div>
             <div className="flex items-center gap-2">
               <select
                 value={selectedCountry}
                 onChange={(e) => setSelectedCountry(e.target.value)}
-                className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-cyan-500/50"
+                className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-violet-500/50"
               >
                 {COUNTRIES.map((c) => (
                   <option key={c.code} value={c.code}>
@@ -530,7 +693,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                   value={countrySearch}
                   onChange={(e) => setCountrySearch(e.target.value)}
                   placeholder="Search player in country..."
-                  className="bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50"
+                  className="bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-violet-500/50"
                 />
               </div>
             </div>
@@ -544,56 +707,68 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
               <div className="col-span-2 text-right">Banked Chips</div>
             </div>
             <ol className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll">
-              {filteredNational.map((e) => {
-                const isMe = e.userTag === player.userTag;
-                return (
-                  <li
-                    key={e.userTag + e.rank}
-                    onClick={() => inspectPlayer(e)}
-                    className={`grid grid-cols-12 gap-2 items-center px-4 py-3 text-sm cursor-pointer transition-colors ${isMe ? 'bg-cyan-500/10 border-l-2 border-cyan-500' : 'hover:bg-slate-900/40'}`}
-                  >
-                    <div className="col-span-2 flex items-center gap-1.5 font-mono">
-                      {RANK_MEDALS[e.rank] ? (
-                        <span className="text-lg">{RANK_MEDALS[e.rank]}</span>
-                      ) : (
-                        <span className="text-slate-400 font-bold">#{e.rank}</span>
-                      )}
-                      {isMe && <span className="text-[9px] bg-cyan-500 text-black px-1 rounded font-bold">YOU</span>}
-                    </div>
-                    <div className="col-span-5 min-w-0">
-                      <div className="font-bold text-white truncate flex items-center gap-1.5">
-                        <span aria-hidden>{countryFlag(e.country)}</span> {e.name}
+              {filteredNational.length === 0 ? (
+                <EmptyState message={`No players found for ${countryName(selectedCountry)}`} />
+              ) : (
+                filteredNational.map((e) => {
+                  const isMe = e.userTag === player.userTag;
+                  return (
+                    <li
+                      key={e.userTag + e.rank}
+                      onClick={() => inspectPlayer(e)}
+                      className={`grid grid-cols-12 gap-2 items-center px-4 py-3 text-sm cursor-pointer transition-colors ${isMe ? 'bg-violet-500/10 border-l-2 border-violet-500' : 'hover:bg-slate-900/40'}`}
+                    >
+                      <div className="col-span-2 flex items-center gap-1.5 font-mono">
+                        {RANK_MEDALS[e.rank] ? (
+                          <span className="text-lg">{RANK_MEDALS[e.rank]}</span>
+                        ) : (
+                          <span className="text-slate-400 font-bold">#{e.rank}</span>
+                        )}
+                        {isMe && <span className="text-[9px] bg-violet-500 text-black px-1 rounded font-bold">YOU</span>}
                       </div>
-                      <div className="text-[10px] font-mono text-slate-500">{e.userTag}</div>
-                    </div>
-                    <div className="col-span-3 text-xs text-amber-400 font-mono">Lvl {e.level}</div>
-                    <div className="col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">
-                      {e.bankedChips.toLocaleString()}c
-                    </div>
-                  </li>
-                );
-              })}
+                      <div className="col-span-5 min-w-0">
+                        <div className="font-bold text-white truncate flex items-center gap-1.5">
+                          <span aria-hidden>{countryFlag(e.country)}</span> {e.name}
+                        </div>
+                        <div className="text-[10px] font-mono text-slate-500">{e.userTag}</div>
+                      </div>
+                      <div className="col-span-3 text-xs text-amber-400 font-mono">Lvl {e.level}</div>
+                      <div className="col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">
+                        {e.bankedChips.toLocaleString()}c
+                      </div>
+                    </li>
+                  );
+                })
+              )}
             </ol>
           </div>
         </div>
       )}
 
-      {/* Level 1: Milestone Tiers */}
-      {levelTab === 'level1' && (
+      {/* ====== TIERS TAB ====== */}
+      {activeTab === 'tiers' && (
         <div className="space-y-4">
           <div className="rounded-xl border border-yellow-500/30 bg-yellow-950/10 p-3 text-[11px] text-yellow-200 leading-relaxed">
-            <strong>LEVEL 1 MILESTONE TIER RANKING BOARD:</strong> All players who have reached each chip
+            <strong>MILESTONE TIER RANKING BOARD:</strong> All players who have reached each chip
             milestone are ranked from #1 to all joined competitors! Click any player to inspect profile &amp; dossier.
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
-            {MILESTONE_TIERS.map((t) => (
+            {ALL_MILESTONE_TIERS.map((t) => (
               <button
                 key={t.id}
                 type="button"
                 onClick={() => setSelectedTierId(t.id)}
-                className={`px-2.5 py-1 rounded-full text-xs font-bold transition ${selectedTierId === t.id ? 'border' : 'border border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200'}`}
-                style={selectedTierId === t.id ? { borderColor: t.color, color: t.color, background: `${t.color}1a` } : {}}
+                className={`px-2.5 py-1 rounded-full text-xs font-bold transition ${
+                  selectedTierId === t.id
+                    ? 'border'
+                    : 'border border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200'
+                }`}
+                style={
+                  selectedTierId === t.id
+                    ? { borderColor: t.color, color: t.color, backgroundColor: t.color + '1a' }
+                    : undefined
+                }
                 title={t.name}
               >
                 {t.badge}
@@ -609,67 +784,46 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
               <div className="col-span-2 text-right">Banked Chips</div>
             </div>
             <ol className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll">
-              {milestoneBoard.map((e) => {
-                const isMe = e.userTag === player.userTag;
-                return (
-                  <li
-                    key={e.userTag + e.rank}
-                    onClick={() => inspectPlayer(e)}
-                    className={`grid grid-cols-12 gap-2 items-center px-4 py-3 text-sm cursor-pointer transition-colors ${isMe ? 'bg-yellow-500/10 border-l-2 border-yellow-500' : 'hover:bg-slate-900/40'}`}
-                  >
-                    <div className="col-span-2 flex items-center gap-1.5 font-mono">
-                      {RANK_MEDALS[e.rank] ? (
-                        <span className="text-lg">{RANK_MEDALS[e.rank]}</span>
-                      ) : (
-                        <span className="text-slate-400 font-bold">#{e.rank}</span>
-                      )}
-                      {isMe && <span className="text-[9px] bg-yellow-500 text-black px-1 rounded font-bold">YOU</span>}
-                    </div>
-                    <div className="col-span-5 min-w-0">
-                      <div className="font-bold text-white truncate flex items-center gap-1.5">
-                        {e.name}
+              {milestoneBoard.length === 0 ? (
+                <EmptyState />
+              ) : (
+                milestoneBoard.map((e) => {
+                  const isMe = e.userTag === player.userTag;
+                  return (
+                    <li
+                      key={e.userTag + e.rank}
+                      onClick={() => inspectPlayer(e)}
+                      className={`grid grid-cols-12 gap-2 items-center px-4 py-3 text-sm cursor-pointer transition-colors ${isMe ? 'bg-yellow-500/10 border-l-2 border-yellow-500' : 'hover:bg-slate-900/40'}`}
+                    >
+                      <div className="col-span-2 flex items-center gap-1.5 font-mono">
+                        {RANK_MEDALS[e.rank] ? (
+                          <span className="text-lg">{RANK_MEDALS[e.rank]}</span>
+                        ) : (
+                          <span className="text-slate-400 font-bold">#{e.rank}</span>
+                        )}
+                        {isMe && <span className="text-[9px] bg-yellow-500 text-black px-1 rounded font-bold">YOU</span>}
                       </div>
-                      <div className="text-[10px] font-mono text-slate-500">{e.userTag}</div>
-                    </div>
-                    <div className="col-span-3 text-xs text-slate-300 flex items-center gap-1.5">
-                      <span aria-hidden>{countryFlag(e.country)}</span> {countryName(e.country)}
-                    </div>
-                    <div className="col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">
-                      {e.bankedChips.toLocaleString()}c
-                    </div>
-                  </li>
-                );
-              })}
+                      <div className="col-span-5 min-w-0">
+                        <div className="font-bold text-white truncate flex items-center gap-1.5">
+                          {e.name}
+                        </div>
+                        <div className="text-[10px] font-mono text-slate-500">{e.userTag}</div>
+                      </div>
+                      <div className="col-span-3 text-xs text-slate-300 flex items-center gap-1.5">
+                        <span aria-hidden>{countryFlag(e.country)}</span> {countryName(e.country)}
+                      </div>
+                      <div className="col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">
+                        {e.bankedChips.toLocaleString()}c
+                      </div>
+                    </li>
+                  );
+                })
+              )}
             </ol>
           </div>
         </div>
       )}
     </div>
-  );
-}
-
-interface LevelTabBtnProps {
-  active: boolean;
-  onClick: () => void;
-  icon: typeof Crown;
-  label: string;
-  color: 'amber' | 'cyan' | 'yellow';
-}
-
-function LevelTabBtn({ active, onClick, icon: Icon, label, color }: LevelTabBtnProps) {
-  const colorMap = {
-    amber: 'bg-amber-500/20 border-amber-500/40 text-amber-300',
-    cyan: 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300',
-    yellow: 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300',
-  } as const;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition border ${active ? colorMap[color] : 'text-slate-500 hover:text-slate-300 border-transparent'}`}
-    >
-      <Icon className="w-3.5 h-3.5" /> {label}
-    </button>
   );
 }
 

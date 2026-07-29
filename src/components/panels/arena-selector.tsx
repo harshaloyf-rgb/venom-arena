@@ -281,8 +281,8 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
 
             <DetailRow
               icon={<Users className="w-3.5 h-3.5 text-slate-500" />}
-              label="Active Challengers"
-              value={`${selectedTier.botsCount} Snakes`}
+              label="Bot Population"
+              value={`${selectedTier.botsCount} Bots`}
               valueClass="text-cyan-400"
             />
 
