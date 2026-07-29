@@ -438,6 +438,71 @@ export function drawStarCollectible(
 }
 
 // ---------------------------------------------------------------------------
+// Extraction ring — white-to-green circle near an extracting snake's head
+// ---------------------------------------------------------------------------
+
+/**
+ * Draws the extraction progress ring around a snake's head.
+ * Visible to ALL players as a warning that someone is banking chips.
+ */
+export function drawExtractionRing(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  snakeSize: number,
+  progress: number, // 0..1
+  zoom: number,
+): void {
+  if (progress <= 0 || progress > 1) return;
+
+  const ringRadius = Math.max(8, snakeSize + 10 / zoom);
+  const lineWidth = Math.max(2, 3 / zoom);
+
+  ctx.save();
+
+  // Background ring (track)
+  ctx.beginPath();
+  ctx.arc(x, y, ringRadius, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+  ctx.lineWidth = lineWidth;
+  ctx.stroke();
+
+  // Progress arc (white → green gradient)
+  const startAngle = -Math.PI / 2;
+  const endAngle = startAngle + progress * Math.PI * 2;
+  ctx.beginPath();
+  ctx.arc(x, y, ringRadius, startAngle, endAngle);
+
+  // Color: white at start → emerald green at end
+  const r = Math.round(255 - progress * 227); // 255 → 28
+  const g = Math.round(255 - progress * 55);  // 255 → 200
+  const b = Math.round(255 - progress * 215); // 255 → 40
+  ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
+  ctx.lineWidth = lineWidth + 1 / zoom;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Glow
+  if (!lowQualityCheck(ctx)) {
+    ctx.shadowColor = `rgba(${r}, ${g}, ${b}, 0.5)`;
+    ctx.shadowBlur = 8 / zoom;
+    ctx.beginPath();
+    ctx.arc(x, y, ringRadius, startAngle, endAngle);
+    ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.4)`;
+    ctx.lineWidth = lineWidth;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.restore();
+}
+
+/** Cheap low-quality check — if canvas context has a hint. */
+function lowQualityCheck(_ctx: CanvasRenderingContext2D): boolean {
+  return false; // We don't pass lowQuality here; caller can gate
+}
+
+// ---------------------------------------------------------------------------
 // Food (main entry point — batches regular orbs, draws stars individually)
 // ---------------------------------------------------------------------------
 
@@ -485,12 +550,23 @@ export function drawFood(rc: FrameRenderCtx, foods: FoodSnapshot[]): void {
   drawOrbBatch(mediumOrbs);
   drawOrbBatch(largeOrbs);
 
-  // --- Star collectibles: 5-pointed gold stars with rotation + glow ---
+  // --- Star collectibles: 5-pointed gold stars with rotation + glow + value label ---
   if (starChips.length > 0) {
     ctx.save();
     for (let i = 0; i < starChips.length; i++) {
       const f = starChips[i];
       drawStarCollectible(ctx, f.x, f.y, Math.max(6, f.size + 4), rc.now, lowQuality);
+      // Draw chip value label inside the star
+      if (f.value > 0) {
+        const starRadius = Math.max(4, f.size + 4);
+        const labelSize = Math.max(7, Math.min(11, starRadius * 0.55));
+        ctx.font = `bold ${labelSize}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#7c2d12'; // dark brown, readable inside golden star
+        const label = f.value >= 1000 ? `${Math.round(f.value / 1000)}k` : `${Math.round(f.value)}`;
+        ctx.fillText(label, f.x, f.y + 0.5);
+      }
     }
     ctx.restore();
   }
