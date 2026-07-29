@@ -15,8 +15,8 @@ export interface SessionPayload {
   exp?: number;
 }
 
-export async function signSession(payload: Omit<SessionPayload, 'iat' | 'exp'>): Promise<string> {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: `${SESSION_DAYS}d` });
+export async function signSession(payload: Omit<SessionPayload, 'iat' | 'exp'>, expiresIn?: string): Promise<string> {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: expiresIn || `${SESSION_DAYS}d` });
 }
 
 export function verifySession(token: string): SessionPayload | null {
@@ -34,13 +34,13 @@ export async function getSession(): Promise<SessionPayload | null> {
   return verifySession(token);
 }
 
-export async function setSessionCookie(token: string) {
+export async function setSessionCookie(token: string, maxAgeSeconds?: number) {
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
-    maxAge: SESSION_DAYS * 24 * 60 * 60,
+    maxAge: maxAgeSeconds ?? SESSION_DAYS * 24 * 60 * 60,
     path: '/',
   });
 }

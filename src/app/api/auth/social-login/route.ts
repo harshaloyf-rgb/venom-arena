@@ -1,73 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
- * Social Login API — architecture for Google, Facebook, Apple OAuth.
+ * GET /api/auth/social-login?provider=google
  *
- * In production, this would:
- *   1. Validate the provider is enabled
- *   2. Redirect to the OAuth provider's authorization URL
- *   3. Handle the callback, exchange code for tokens
- *   4. Create/link a Player account
- *   5. Set session cookie
- *
- * Currently returns a "not configured" message since OAuth credentials
- * (Client ID, Client Secret) require a real domain and developer console setup.
+ * Redirects the user to the OAuth provider's authorization page.
+ * After authentication, the provider redirects back to /api/auth/social-callback.
  */
+import {
+  OAUTH_PROVIDERS,
+  getAuthorizationUrl,
+  getSetupGuide,
+  isProviderConfigured,
+  type OAuthProvider,
+} from '@/lib/oauth';
 
-const PROVIDERS = ['google', 'facebook', 'apple'] as const;
+export async function GET(req: NextRequest) {
+  const provider = req.nextUrl.searchParams.get('provider')?.toLowerCase();
 
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json().catch(() => ({}));
-    const provider = String(body.provider || '').toLowerCase();
+  if (!provider || !OAUTH_PROVIDERS.includes(provider as OAuthProvider)) {
+    return NextResponse.json(
+      { error: `Unsupported or missing provider. Supported: ${OAUTH_PROVIDERS.join(', ')}` },
+      { status: 400 },
+    );
+  }
 
-    if (!PROVIDERS.includes(provider as typeof PROVIDERS[number])) {
-      return NextResponse.json({ error: `Unsupported provider: ${provider}` }, { status: 400 });
-    }
+  const p = provider as OAuthProvider;
 
-    // Check if OAuth credentials are configured
-    const envKey = `${provider.toUpperCase()}_CLIENT_ID`;
-    const clientId = process.env[envKey];
-
-    if (!clientId) {
-      return NextResponse.json({
-        error: `${provider.charAt(0).toUpperCase() + provider.slice(1)} login is not configured yet. Please use email/password or play as guest.`,
+  // Check if credentials are configured
+  if (!isProviderConfigured(p)) {
+    return NextResponse.json(
+      {
+        error: `${p.charAt(0).toUpperCase() + p.slice(1)} login is not configured.`,
         notConfigured: true,
-        provider,
-        setupGuide: getSetupGuide(provider as typeof PROVIDERS[number]),
-      }, { status: 200 });
-    }
-
-    // When configured, redirect to OAuth authorization URL
-    // For now, return a placeholder
-    const authUrl = getAuthUrl(provider as typeof PROVIDERS[number], clientId);
-    return NextResponse.json({ url: authUrl, provider });
-  } catch (e) {
-    console.error('[auth/social-login] error', e);
-    return NextResponse.json({ error: 'Social login failed.' }, { status: 500 });
+        provider: p,
+        setupGuide: getSetupGuide(p),
+      },
+      { status: 200 },
+    );
   }
-}
 
-function getAuthUrl(provider: typeof PROVIDERS[number], clientId: string): string {
-  const redirectUri = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/auth/social-callback`;
+  // Generate a random state for CSRF protection
+  const state = crypto.randomUUID();
 
-  switch (provider) {
-    case 'google':
-      return `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=openid%20email%20profile&access_type=offline`;
-    case 'facebook':
-      return `https://www.facebook.com/v18.0/dialog/oauth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=email,public_profile`;
-    case 'apple':
-      return `https://appleid.apple.com/auth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=name%20email&response_mode=form_post`;
+  const authUrl = getAuthorizationUrl(p, state);
+  if (!authUrl) {
+    return NextResponse.json(
+      { error: 'Failed to generate authorization URL.' },
+      { status: 500 },
+    );
   }
-}
 
-function getSetupGuide(provider: typeof PROVIDERS[number]): string {
-  switch (provider) {
-    case 'google':
-      return 'Go to https://console.cloud.google.com → APIs & Services → Credentials → Create OAuth 2.0 Client ID. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env';
-    case 'facebook':
-      return 'Go to https://developers.facebook.com → My Apps → Create App → Add Facebook Login. Set FACEBOOK_CLIENT_ID and FACEBOOK_CLIENT_SECRET in .env';
-    case 'apple':
-      return 'Go to https://developer.apple.com → Certificates → Register an App ID with Sign in with Apple. Set APPLE_CLIENT_ID and APPLE_CLIENT_SECRET in .env';
-  }
+  // Set state in a short-lived cookie for CSRF verification
+  const cookieStore = await import('next/headers').then((m) => m.cookies());
+  cookieStore.set(`oauth_state_${p}`, state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 600, // 10 minutes
+    path: '/',
+    sameSite: 'lax',
+  });
+
+  // 302 redirect to the OAuth provider
+  return NextResponse.redirect(authUrl);
 }

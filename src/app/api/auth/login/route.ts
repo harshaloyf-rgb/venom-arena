@@ -7,11 +7,15 @@ import {
 } from '@/lib/auth';
 import { toProfile } from '@/lib/player-helpers';
 
+const SESSION_REMEMBER_DAYS = 30;
+const SESSION_DEFAULT_DAYS = 7;
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const email = String(body.email || '').toLowerCase().trim();
     const password = String(body.password || '');
+    const remember = Boolean(body.remember);
 
     if (!email || !password) {
       return NextResponse.json({ error: 'Email and password are required.' }, { status: 400 });
@@ -35,12 +39,13 @@ export async function POST(req: NextRequest) {
       data: { lastSeenAt: new Date() },
     });
 
+    const sessionDays = remember ? SESSION_REMEMBER_DAYS : SESSION_DEFAULT_DAYS;
     const token = await signSession({
       playerId: player.id,
       userTag: player.userTag,
       role: player.role as 'player' | 'admin',
-    });
-    await setSessionCookie(token);
+    }, `${sessionDays}d`);
+    await setSessionCookie(token, sessionDays * 24 * 60 * 60);
 
     return NextResponse.json({ player: toProfile(player) });
   } catch (e) {

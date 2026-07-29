@@ -20,6 +20,10 @@ model Player {
   country         String   @default("US")
   avatar          String?
 
+  // OAuth — for social login (Google, Facebook, Apple)
+  oauthProvider   String?  // "google" | "facebook" | "apple" | null
+  oauthProviderId String?  // unique ID from the OAuth provider
+
   // Economy
   bankedChips     Int      @default(150)
   totalEarned     Int      @default(150)
