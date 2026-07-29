@@ -25,17 +25,7 @@ import {
   type InspectedPlayer,
 } from '@/lib/game-config';
 import type { LeaderboardEntry } from '@/lib/types';
-import { toast } from 'sonner';
-
-type ToastType = 'success' | 'error' | 'info';
-type ToastFn = (msg: string, type?: ToastType) => void;
-
-function notify(msg: string, type: ToastType, onToast?: ToastFn) {
-  if (onToast) onToast(msg, type);
-  else if (type === 'error') toast.error(msg);
-  else if (type === 'info') toast.info(msg);
-  else toast.success(msg);
-}
+import { notify, type ToastFn } from './_panel-primitives';
 
 interface PlayerInspectorModalProps {
   player?: InspectedPlayer | null;

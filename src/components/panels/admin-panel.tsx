@@ -226,7 +226,7 @@ export function AdminPanel({ onToast }: AdminPanelProps) {
         addLog(ban ? 'BAN' : 'UNBAN', userTag, `FAILED: ${data?.error || 'unknown'}`, false);
         return;
       }
-      notify(`Banned player ${userTag} permanently.`, 'error', onToast);
+      notify(ban ? `Banned player ${userTag} permanently.` : `Unbanned player ${userTag}.`, ban ? 'error' : 'success', onToast);
       addLog(ban ? 'BAN' : 'UNBAN', userTag, ban ? 'Player banned' : 'Player unbanned', true);
       await fetchPlayers();
     } catch {

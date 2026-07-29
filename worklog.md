@@ -780,3 +780,45 @@ Stage Summary:
 - 1B+: B suffix (1Bc)
 - Detail card sticks in viewport when scrolling tier list
 - Lint clean, no dev errors
+
+---
+Task ID: 5
+Agent: main
+Task: Full codebase audit — fix bugs, duplicates, inconsistencies, and improvements
+
+Work Log:
+- Ran comprehensive audits across 4 parallel agents covering: game engine + config, page + panels, API routes + auth, modals + misc panels
+- Found and fixed 13 actionable issues:
+
+**Critical Bug Fixes:**
+1. BUG-1: Fixed `ReferenceError: now is not defined` crash in offline-engine `beginExtract()` — removed copy-pasted `isPostDeathRecording` block that referenced undefined `now` param
+2. BUG-2: Fixed missing `* BOT_PREDICT_SPEED` in bot prediction Y-axis (2 instances) — bot evasion now correctly predicts position in both X and Y
+3. Admin Panel: Fixed `handleBan()` always saying "Banned" even when unbanning — now shows correct message based on action
+
+**UI/Render Fixes:**
+4. Hall of Fame: Removed `Math.random()` from render path (caused flickering on re-render) — replaced with deterministic `out.length % 5`
+5. Hall of Fame: Fixed invalid timestamp format `0${i%9}:${i%60}` → proper zero-padded hours/minutes
+6. Clip Showcase: Removed no-op `.replace(/ /g, ' ')`
+
+**Code Quality / Duplicates:**
+7. Removed shadowed `BOT_FOOD_SCAN_RADIUS` local constant in offline-engine (was shadowing import)
+8. Removed duplicate `notify()` + types from player-inspector-modal — now imports from `_panel-primitives`
+9. Removed unused dual `<Toaster />` from layout.tsx — only `<Sonner />` needed
+10. Simplified boost threshold formula `BOOST_MIN_LENGTH + INITIAL_BODY_LENGTH - 20` → `BOOST_MIN_LENGTH`
+
+**Performance / Config:**
+11. Simplified `replenishFood()` double-scan (`.some()` + `.filter()`) to single `.filter()`
+12. Removed dead `'space'` key check in keyboard input handler
+13. Fixed `db.ts` query logging — now only logs in development, not production
+14. Fixed chip pack emoji `' titan'` → `'🏛️'` (National Titan Coffer)
+15. Fixed `rewarded-ad-modal` setTimeout cleanup on unmount via ref
+16. Updated metadata description "7 deadly tiers" → "30 deadly tiers"
+
+Stage Summary:
+- 13 confirmed bugs/issues fixed across 10 files
+- ESLint passes cleanly with zero errors
+- Game engine crash bug (beginExtract) resolved
+- Bot AI prediction now mathematically correct
+- No more render-time randomness causing UI flicker
+- Dead code and duplicates removed
+- Performance micro-optimizations applied

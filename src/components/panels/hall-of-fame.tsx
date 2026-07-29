@@ -87,7 +87,7 @@ function generateTierTop100(tierId: string) {
     userTag: tier.firstAchiever.userTag,
     country: tier.firstAchiever.country,
     chips: tier.chips,
-    level: 45 + Math.floor(Math.random() * 5),
+    level: 45 + (out.length % 5),
     dateStr: tier.firstAchiever.dateStr,
   });
 
@@ -108,7 +108,7 @@ function generateTierTop100(tierId: string) {
       country: c.code,
       chips: tier.chips,
       level: Math.max(5, 45 - Math.floor(i / 2.5)),
-      dateStr: `${10 + (i % 18)} Jan 2026, 0${i % 9}:${i % 60} ${i % 2 ? 'PM' : 'AM'} UTC`,
+      dateStr: `${10 + (i % 18)} Jan 2026, ${String(i % 24).padStart(2, '0')}:${String(i % 60).padStart(2, '0')} ${i % 2 ? 'PM' : 'AM'} UTC`,
     });
   }
   return out;

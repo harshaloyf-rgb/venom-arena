@@ -268,7 +268,6 @@ const JOYSTICK_BOOST_MAGNITUDE = 0.6;
 const MAX_SNAPSHOT_POINTS = 60;
 const BOT_THINK_INTERVAL_MS = 120;
 const BOT_THINK_JITTER_MS = 80;
-const BOT_FOOD_SCAN_RADIUS = 300;
 const BOT_THREAT_SCAN_RADIUS = 250;
 const BOT_MAX_TURN_PER_TICK = 0.22;
 const BOT_PREDICT_AHEAD_TICKS = 8;
@@ -1081,13 +1080,6 @@ export class OfflineGameEngine {
     const p = this.player;
     if (!p) return;
 
-    // During post-death recording, run simplified bot-only physics
-    if (this.isPostDeathRecording) {
-      this.tickPostDeathPhysics(now);
-      this.captureReplaySnapshot();
-      return;
-    }
-
     if (p.isDead) return;
     if (p.isExtracting) return;
     p.isExtracting = true;
@@ -1190,7 +1182,7 @@ export class OfflineGameEngine {
     const { angle, boost } = this.computePlayerInput();
     if (angle !== null) p.desiredAngle = angle;
     p.wantsBoost = boost;
-    p.isBoosting = boost && p.points.length > BOOST_MIN_LENGTH + INITIAL_BODY_LENGTH - 20;
+    p.isBoosting = boost && p.points.length > BOOST_MIN_LENGTH;
 
     // Extraction progress (3-second hold).
     if (p.isExtracting) {
@@ -1432,7 +1424,7 @@ export class OfflineGameEngine {
         if (playerDist < BOT_EVADE_RADIUS * 2) {
           // Predict where the player will be in N ticks.
           const predictedX = playerHead.x + Math.cos(p.angle) * BOT_PREDICT_SPEED * BOT_PREDICT_AHEAD_TICKS;
-          const predictedY = playerHead.y + Math.sin(p.angle) * BOT_PREDICT_AHEAD_TICKS;
+          const predictedY = playerHead.y + Math.sin(p.angle) * BOT_PREDICT_SPEED * BOT_PREDICT_AHEAD_TICKS;
           const distToPredicted = dist(head.x, head.y, predictedX, predictedY);
 
           // If the bot is on a collision course with the predicted position, evade.
@@ -1455,7 +1447,7 @@ export class OfflineGameEngine {
         const otherDist = dist(head.x, head.y, otherHead.x, otherHead.y);
         if (otherDist < 200) {
           const predictedX = otherHead.x + Math.cos(other.angle) * BOT_PREDICT_SPEED * BOT_PREDICT_AHEAD_TICKS;
-          const predictedY = otherHead.y + Math.sin(other.angle) * BOT_PREDICT_AHEAD_TICKS;
+          const predictedY = otherHead.y + Math.sin(other.angle) * BOT_PREDICT_SPEED * BOT_PREDICT_AHEAD_TICKS;
           const distToPredicted = dist(head.x, head.y, predictedX, predictedY);
           if (distToPredicted < (bot.size + other.size) * 3) {
             const evadeAngle = other.angle + (Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2);
@@ -1852,9 +1844,7 @@ export class OfflineGameEngine {
 
   private replenishFood(): void {
     // Remove eaten food (value <= 0).
-    if (this.foods.some((f) => f.value <= 0)) {
-      this.foods = this.foods.filter((f) => f.value > 0);
-    }
+    this.foods = this.foods.filter((f) => f.value > 0);
 
     // Replenish up to target, spawning around the player.
     const p = this.player;
@@ -1913,7 +1903,7 @@ export class OfflineGameEngine {
   // --------------------------------------------------------------------------
 
   private computePlayerInput(): { angle: number | null; boost: boolean } {
-    const spaceHeld = this.keys.has(' ') || this.keys.has('space') || this.boostHold;
+    const spaceHeld = this.keys.has(' ') || this.boostHold;
     // Touch joystick
     if (this.touchAngle !== null) {
       return { angle: this.touchAngle, boost: this.touchBoost || spaceHeld };
