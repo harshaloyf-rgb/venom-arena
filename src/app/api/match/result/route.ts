@@ -33,6 +33,7 @@ async function updateChallengeProgress(
     carriedChips: number;
     score: number;
     starsCollected: number;
+    durationSeconds: number;
   },
 ) {
   const today = utcToday();
@@ -60,14 +61,15 @@ async function updateChallengeProgress(
 
       case 'extract':
         if (params.outcome === 'extract') {
-          if (challenge.target <= 10) {
-            // Count-based extraction challenge (e.g. "extract 3 times")
-            newCurrent += 1;
-          } else {
-            // Amount-based extraction challenge (e.g. "extract with ≥50 chips")
-            // Track the best single-run amount
-            newCurrent = Math.max(newCurrent, params.carriedChips);
-          }
+          // Amount-based extraction challenge: track the best single-run amount
+          newCurrent = Math.max(newCurrent, params.carriedChips);
+        }
+        break;
+
+      case 'extract_streak':
+        if (params.outcome === 'extract') {
+          // Count-based extraction: increment for each successful extraction
+          newCurrent += 1;
         }
         break;
 
@@ -86,6 +88,11 @@ async function updateChallengeProgress(
       case 'star_collect':
         // Increment by stars collected this match
         newCurrent += params.starsCollected;
+        break;
+
+      case 'survive':
+        // Track survival time: record the best single-match survival
+        newCurrent = Math.max(newCurrent, params.durationSeconds);
         break;
     }
 
@@ -192,6 +199,7 @@ export async function POST(req: NextRequest) {
       carriedChips,
       score,
       starsCollected,
+      durationSeconds,
     });
 
     return updatedPlayer;

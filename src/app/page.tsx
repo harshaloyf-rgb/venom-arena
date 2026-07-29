@@ -134,6 +134,9 @@ export default function Home() {
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [missions, setMissions] = useState<Mission[]>([]);
   const [challengesLoading, setChallengesLoading] = useState(false);
+  const [challengeStreak, setChallengeStreak] = useState(0);
+  const [streakMultiplier, setStreakMultiplier] = useState(1);
+  const [challengeTier, setChallengeTier] = useState('');
   const [lastResult, setLastResult] = useState<MatchResult | undefined>(undefined);
   const [inspectedPlayer, setInspectedPlayer] = useState<InspectedPlayer | null>(null);
   const [toastFn] = useState<(msg: string, type?: 'success' | 'error' | 'info') => void>(() => (msg: string, type?: 'success' | 'error' | 'info') => {
@@ -164,6 +167,9 @@ export default function Home() {
       if (res.ok) {
         const data = await res.json();
         setMissions(data.challenges || []);
+        setChallengeStreak(data.streak || 0);
+        setStreakMultiplier(data.streakMultiplier || 1);
+        setChallengeTier(data.tier || '');
       }
     } catch {
       // Silently fail — challenges are non-critical
@@ -225,11 +231,17 @@ export default function Home() {
           body: JSON.stringify({ challengeId: mission.id }),
         });
         if (res.ok) {
+          const claimData = await res.json();
           setMissions((prev) =>
             prev.map((m) => (m.id === mission.id ? { ...m, claimed: true } : m)),
           );
-          toast.success(`Challenge reward claimed: +${mission.reward}c!`);
+          if (claimData.bonusReward > 0) {
+            toast.success(`Challenge claimed: +${claimData.reward}c (includes ${claimData.bonusReward}c streak bonus ×${claimData.streakMultiplier})!`);
+          } else {
+            toast.success(`Challenge reward claimed: +${claimData.reward}c!`);
+          }
           void refresh();
+          void fetchChallenges();
         } else {
           const data = await res.json().catch(() => ({}));
           toast.error(data.error || 'Failed to claim reward.');
@@ -595,8 +607,25 @@ export default function Home() {
                     <span className="text-xs font-bold text-white font-sans uppercase tracking-wider">
                       Tactical Challenges
                     </span>
+                    {challengeTier && (
+                      <span className={`text-[8px] px-1.5 py-0.5 font-bold rounded font-sans uppercase ${
+                        challengeTier === 'elite' ? 'bg-red-500/15 border border-red-500/20 text-red-400' :
+                        challengeTier === 'veteran' ? 'bg-amber-500/15 border border-amber-500/20 text-amber-400' :
+                        challengeTier === 'operative' ? 'bg-cyan-500/15 border border-cyan-500/20 text-cyan-400' :
+                        'bg-emerald-500/15 border border-emerald-500/20 text-emerald-400'
+                      }`}>
+                        {challengeTier}
+                      </span>
+                    )}
                   </div>
-                  <Sparkles className="w-4 h-4 text-indigo-400" />
+                  {streakMultiplier > 1 && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[9px] font-mono text-amber-400 font-bold">
+                        🔥 {challengeStreak}d streak ×{streakMultiplier}
+                      </span>
+                    </div>
+                  )}
+                  {streakMultiplier <= 1 && <Sparkles className="w-4 h-4 text-indigo-400" />}
                 </div>
 
                 {challengesLoading && missions.length === 0 ? (
