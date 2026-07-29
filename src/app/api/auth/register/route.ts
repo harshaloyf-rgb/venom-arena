@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
     const email = String(body.email || '').toLowerCase().trim();
     const password = String(body.password || '');
     const name = String(body.name || '').trim().slice(0, 20);
+    const pin = String(body.pin || '').trim();
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: 'Valid email is required.' }, { status: 400 });
@@ -24,6 +25,9 @@ export async function POST(req: NextRequest) {
     }
     if (!name) {
       return NextResponse.json({ error: 'Display name is required.' }, { status: 400 });
+    }
+    if (pin && !/^\d{4}$/.test(pin)) {
+      return NextResponse.json({ error: 'Security PIN must be exactly 4 digits.' }, { status: 400 });
     }
 
     const existing = await db.player.findUnique({ where: { email } });
@@ -38,6 +42,7 @@ export async function POST(req: NextRequest) {
       data: {
         email,
         passwordHash,
+        securityPin: pin || null,
         userTag,
         name,
         country: 'US',

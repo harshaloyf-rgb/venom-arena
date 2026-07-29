@@ -157,9 +157,10 @@ function RegisterForm({
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [pin, setPin] = useState('');
   return (
     <form
-      onSubmit={async (e) => { e.preventDefault(); await onSubmit('/api/auth/register', { name, email, password }); }}
+      onSubmit={async (e) => { e.preventDefault(); await onSubmit('/api/auth/register', { name, email, password, pin }); }}
       className="space-y-3"
     >
       <div className="space-y-1.5">
@@ -173,6 +174,20 @@ function RegisterForm({
       <div className="space-y-1.5">
         <Label htmlFor="r-pass">Password (min 6 chars)</Label>
         <Input id="r-pass" type="password" required minLength={6} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="r-pin">Security PIN (4 digits, optional)</Label>
+        <Input
+          id="r-pin"
+          type="text"
+          inputMode="numeric"
+          maxLength={4}
+          pattern="[0-9]{0,4}"
+          autoComplete="off"
+          value={pin}
+          onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+          placeholder="e.g. 1234"
+        />
       </div>
       {error && <p className="text-xs text-destructive">{error}</p>}
       <Button type="submit" className="w-full" disabled={busy}>

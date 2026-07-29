@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   X,
   UserPlus,
@@ -15,15 +15,16 @@ import {
   ExternalLink,
   Globe,
   Users,
+  Loader2,
 } from 'lucide-react';
 import {
-  INSPECTOR_ALLIES_REGIONAL,
-  INSPECTOR_ALLIES_GLOBAL,
-  INSPECTOR_BADGES,
-  INSPECTOR_LOADOUT,
   countryFlag,
+  milestoneTierForChips,
+  getCosmeticById,
+  MILESTONE_TIERS,
   type InspectedPlayer,
 } from '@/lib/game-config';
+import type { LeaderboardEntry } from '@/lib/types';
 import { toast } from 'sonner';
 
 type ToastType = 'success' | 'error' | 'info';
@@ -44,18 +45,6 @@ interface PlayerInspectorModalProps {
 
 type Tab = 'overview' | 'stats' | 'logs' | 'loadout';
 
-// Hardcoded career stats (per audit P.12)
-const HARDCODED_HIGHEST_EXTRACTION = '1,00,00,000 c';
-const HARDCODED_SUCCESS_RATE = '88.4%';
-const HARDCODED_KILLS = '412 Kills';
-
-// Hardcoded clan card (per audit P.15)
-const HARDCODED_CLAN_NAME = 'Viper Apex Syndicate';
-const HARDCODED_CLAN_TAG = 'APEX';
-const HARDCODED_CLAN_BANK = '1,45,00,000 c Bank';
-const HARDCODED_CLAN_ROLE = 'Officer • Clan Rank #1';
-
-// Hardcoded match history (per audit P.13)
 interface MatchLog {
   arena: string;
   outcome: 'Extracted' | 'Eliminated';
@@ -79,6 +68,10 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   const [friendRequested, setFriendRequested] = useState(false);
   const [blocked, setBlocked] = useState(false);
 
+  // Leaderboard data for allies
+  const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
+  const [alliesLoading, setAlliesLoading] = useState(false);
+
   // Reset state when the inspected player changes (key-based remount pattern)
   // Using a `key` on the parent would be cleaner, but since we control open/close,
   // we use a ref-guarded effect to avoid cascading renders.
@@ -89,6 +82,28 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
     if (blocked) setBlocked(false);
     if (tab !== 'overview') setTab('overview');
   }
+
+  // Fetch leaderboard data for allies when player changes
+  const fetchLeaderboard = useCallback(async (country: string) => {
+    setAlliesLoading(true);
+    try {
+      const res = await fetch('/api/leaderboard?type=chips&limit=10');
+      if (res.ok) {
+        const data = await res.json();
+        setLeaderboardData(data.entries ?? []);
+      }
+    } catch {
+      // Silently fail — allies section will show error state
+    } finally {
+      setAlliesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (player) {
+      fetchLeaderboard(player.country);
+    }
+  }, [player, fetchLeaderboard]);
 
   // Close on Escape
   useEffect(() => {
@@ -103,8 +118,8 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
 
   const p = player;
   const flag = p.flag || countryFlag(p.country);
-  const clanTag = p.clanTag || HARDCODED_CLAN_TAG;
-  const clanName = p.clanName || HARDCODED_CLAN_NAME;
+  const clanTag = p.clanTag;
+  const clanName = p.clanName;
 
   // Fallback ranks (per audit I.3)
   const globalRank = p.globalRank ?? Math.max(1, 15 - Math.floor(p.level / 3));
@@ -113,6 +128,44 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   const achievedAt = p.achievedAt || '26 Jul 2026, 05:42 PM UTC';
 
   const history = buildMatchHistory(p);
+
+  // --- Allies derived from real leaderboard data ---
+  const regionalAllies = leaderboardData.filter(
+    (e) => e.country === p.country && e.userTag !== p.userTag,
+  );
+  const globalAllies = leaderboardData.filter(
+    (e) => e.country !== p.country && e.userTag !== p.userTag,
+  );
+
+  // --- Badges derived from real chip milestones ---
+  const milestone = milestoneTierForChips(p.bankedChips);
+  const earnedBadges = MILESTONE_TIERS.filter(
+    (t) => t.id !== 'all' && p.bankedChips >= t.minChips,
+  );
+
+  // --- Loadout from player cosmetics ---
+  const skinItem = p.currentSkin ? getCosmeticById(p.currentSkin) : undefined;
+  const trailItem = p.currentTrail ? getCosmeticById(p.currentTrail) : undefined;
+  const deathItem = p.currentDeath ? getCosmeticById(p.currentDeath) : undefined;
+  const flagItem = p.currentFlag ? getCosmeticById(p.currentFlag) : undefined;
+  const bannerItem = p.currentBanner ? getCosmeticById(p.currentBanner) : undefined;
+
+  const loadoutEntries = [
+    { label: 'Snake DNA Skin:', value: skinItem ? `${skinItem.emoji || '🐍'} ${skinItem.name}` : 'Not visible' },
+    { label: 'Tail Trail FX:', value: trailItem ? `${trailItem.emoji || '✨'} ${trailItem.name}` : 'Not visible' },
+    { label: 'Kill Sound Effect:', value: deathItem ? `${deathItem.emoji || '💥'} ${deathItem.name}` : 'Not visible' },
+    { label: 'Victory Emote:', value: flagItem ? `${flagItem.emoji || '🏴'} ${flagItem.name}` : bannerItem ? `${bannerItem.emoji || '🏆'} ${bannerItem.name}` : 'Not visible' },
+  ];
+
+  // --- Career stats from real player data ---
+  const highestExtraction = p.biggestExtract
+    ? `${p.biggestExtract.toLocaleString('en-IN')} c`
+    : '—';
+  const successRate =
+    p.lifetimeExtracts != null && p.lifetimeDeaths != null
+      ? `${((p.lifetimeExtracts / (p.lifetimeExtracts + p.lifetimeDeaths)) * 100).toFixed(1)}%`
+      : '—';
+  const totalKills = p.lifetimeKills != null ? `${p.lifetimeKills.toLocaleString()} Kills` : '—';
 
   function handleAddFriend() {
     if (friendRequested) return;
@@ -175,9 +228,11 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
               <span className="truncate">{p.name}</span>
               <span className="text-xl" aria-hidden>{flag}</span>
             </h2>
-            <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded inline-block mt-1">
-              [{clanTag}]
-            </span>
+            {clanTag && (
+              <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded inline-block mt-1">
+                [{clanTag}]
+              </span>
+            )}
             <p className="text-xs text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
               <span>Ledger Tag: <strong className="font-mono text-amber-400">{p.userTag}</strong></span>
               <span>•</span>
@@ -226,53 +281,66 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
           {/* OVERVIEW */}
           {tab === 'overview' && (
             <div className="space-y-3">
-              {/* Clan membership */}
-              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-                <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <Shield className="w-3.5 h-3.5 text-indigo-400" /> Syndicate Clan Membership
-                  </span>
-                  <span className="text-[9px] text-emerald-400 font-mono">Active Member</span>
-                </div>
-                <div className="flex items-center justify-between p-2.5 bg-slate-900 rounded-lg border border-slate-800">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="text-2xl shrink-0" aria-hidden>🐍</span>
-                    <div className="min-w-0">
-                      <div className="font-bold text-white text-xs truncate">
-                        {clanName}
-                        <span className="ml-1.5 bg-indigo-500/20 text-indigo-300 text-[9px] font-mono font-bold px-1 py-0.2 rounded border border-indigo-500/30">
-                          [{clanTag}]
-                        </span>
+              {/* Clan membership — only shown if the player has a clan */}
+              {clanTag && clanName && (
+                <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                  <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Shield className="w-3.5 h-3.5 text-indigo-400" /> Syndicate Clan Membership
+                    </span>
+                    <span className="text-[9px] text-emerald-400 font-mono">Active Member</span>
+                  </div>
+                  <div className="flex items-center justify-between p-2.5 bg-slate-900 rounded-lg border border-slate-800">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="text-2xl shrink-0" aria-hidden>🐍</span>
+                      <div className="min-w-0">
+                        <div className="font-bold text-white text-xs truncate">
+                          {clanName}
+                          <span className="ml-1.5 bg-indigo-500/20 text-indigo-300 text-[9px] font-mono font-bold px-1 py-0.2 rounded border border-indigo-500/30">
+                            [{clanTag}]
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">Member</div>
                       </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">Role: {HARDCODED_CLAN_ROLE}</div>
-                      <div className="text-[10px] text-emerald-400 font-mono mt-0.5">{HARDCODED_CLAN_BANK}</div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Regional allies */}
               <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
                 <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
                   <span className="flex items-center gap-1">
-                    <Users className="w-3.5 h-3.5 text-violet-400" /> 🇮🇳 REGIONAL ALLIES ({p.country || 'IN'} NETWORK)
+                    <Users className="w-3.5 h-3.5 text-violet-400" /> {flag} REGIONAL ALLIES ({p.country} NETWORK)
                   </span>
-                  <span className="text-[9px] text-slate-500 font-mono">{INSPECTOR_ALLIES_REGIONAL.length} Members</span>
+                  {alliesLoading ? (
+                    <Loader2 className="w-3 h-3 text-slate-500 animate-spin" />
+                  ) : (
+                    <span className="text-[9px] text-slate-500 font-mono">{regionalAllies.length} Members</span>
+                  )}
                 </div>
-                <ul className="space-y-1.5">
-                  {INSPECTOR_ALLIES_REGIONAL.map((a) => (
-                    <li key={a.userTag} className="flex items-center justify-between text-xs p-2 bg-slate-900 rounded-lg border border-slate-800">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span aria-hidden>{countryFlag(a.country)}</span>
-                        <div className="min-w-0">
-                          <div className="font-bold text-white truncate">{a.name}</div>
-                          <div className="text-[10px] font-mono text-slate-500">{a.userTag}</div>
+                {alliesLoading ? (
+                  <div className="flex items-center justify-center py-4 text-[11px] text-slate-500 gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading regional allies…
+                  </div>
+                ) : regionalAllies.length === 0 ? (
+                  <div className="text-center py-4 text-[11px] text-slate-500">No regional allies found on the leaderboard.</div>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {regionalAllies.map((a) => (
+                      <li key={a.userTag} className="flex items-center justify-between text-xs p-2 bg-slate-900 rounded-lg border border-slate-800">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span aria-hidden>{countryFlag(a.country)}</span>
+                          <div className="min-w-0">
+                            <div className="font-bold text-white truncate">{a.name}</div>
+                            <div className="text-[10px] font-mono text-slate-500">{a.userTag}</div>
+                          </div>
                         </div>
-                      </div>
-                      <span className="text-[10px] font-mono text-violet-300 bg-violet-500/10 border border-violet-500/30 px-1.5 py-0.5 rounded">{a.role}</span>
-                    </li>
-                  ))}
-                </ul>
+                        <span className="text-[10px] font-mono text-violet-300 bg-violet-500/10 border border-violet-500/30 px-1.5 py-0.5 rounded">Rank #{a.rank}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
               {/* Global allies */}
@@ -281,22 +349,34 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                   <span className="flex items-center gap-1">
                     <Globe className="w-3.5 h-3.5 text-cyan-400" /> 🌐 GLOBAL ALLIES &amp; INTERNATIONAL ALLIANCES
                   </span>
-                  <span className="text-[9px] text-slate-500 font-mono">{INSPECTOR_ALLIES_GLOBAL.length} Members</span>
+                  {alliesLoading ? (
+                    <Loader2 className="w-3 h-3 text-slate-500 animate-spin" />
+                  ) : (
+                    <span className="text-[9px] text-slate-500 font-mono">{globalAllies.length} Members</span>
+                  )}
                 </div>
-                <ul className="space-y-1.5">
-                  {INSPECTOR_ALLIES_GLOBAL.map((a) => (
-                    <li key={a.userTag} className="flex items-center justify-between text-xs p-2 bg-slate-900 rounded-lg border border-slate-800">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span aria-hidden>{countryFlag(a.country)}</span>
-                        <div className="min-w-0">
-                          <div className="font-bold text-white truncate">{a.name}</div>
-                          <div className="text-[10px] font-mono text-slate-500">{a.userTag}</div>
+                {alliesLoading ? (
+                  <div className="flex items-center justify-center py-4 text-[11px] text-slate-500 gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading global allies…
+                  </div>
+                ) : globalAllies.length === 0 ? (
+                  <div className="text-center py-4 text-[11px] text-slate-500">No global allies found on the leaderboard.</div>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {globalAllies.map((a) => (
+                      <li key={a.userTag} className="flex items-center justify-between text-xs p-2 bg-slate-900 rounded-lg border border-slate-800">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span aria-hidden>{countryFlag(a.country)}</span>
+                          <div className="min-w-0">
+                            <div className="font-bold text-white truncate">{a.name}</div>
+                            <div className="text-[10px] font-mono text-slate-500">{a.userTag}</div>
+                          </div>
                         </div>
-                      </div>
-                      <span className="text-[10px] font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-1.5 py-0.5 rounded">{a.role}</span>
-                    </li>
-                  ))}
-                </ul>
+                        <span className="text-[10px] font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-1.5 py-0.5 rounded">Rank #{a.rank}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
               {/* Social channels */}
@@ -325,21 +405,28 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                 </div>
               </div>
 
-              {/* Badges */}
+              {/* Badges — calculated from real chip milestones */}
               <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-                <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center gap-1">
-                  <Award className="w-3.5 h-3.5 text-amber-400" /> Earned Badges &amp; Honors
+                <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Award className="w-3.5 h-3.5 text-amber-400" /> Earned Badges &amp; Honors
+                  </span>
+                  <span className="text-[9px] text-amber-400 font-mono">{milestone.badge}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  {INSPECTOR_BADGES.map((b) => (
-                    <div key={b.title} className="p-2 bg-slate-900 rounded-lg border border-slate-800 flex items-center gap-2">
-                      <span className="text-lg" aria-hidden>{b.icon}</span>
-                      <div>
-                        <div className="font-bold text-amber-300 text-[11px]">{b.title}</div>
-                        <div className="text-[9px] text-slate-400">{b.desc}</div>
+                  {earnedBadges.length === 0 ? (
+                    <div className="col-span-2 text-center py-3 text-[11px] text-slate-500">No milestone badges earned yet.</div>
+                  ) : (
+                    earnedBadges.map((t) => (
+                      <div key={t.id} className="p-2 bg-slate-900 rounded-lg border border-slate-800 flex items-center gap-2">
+                        <span className="text-lg" aria-hidden>{t.badge.split(' ')[0]}</span>
+                        <div>
+                          <div className="font-bold text-amber-300 text-[11px]">{t.name.split('(')[0].trim()}</div>
+                          <div className="text-[9px] text-slate-400">{(t.minChips / 100_000).toFixed(0)}L+ Chips</div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -372,10 +459,31 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <StatCard label="Total Banked Chips" value={`${p.bankedChips.toLocaleString('en-IN')} c`} accent="text-emerald-400" icon={<Trophy className="w-3.5 h-3.5" />} />
-                <StatCard label="Highest Extraction" value={HARDCODED_HIGHEST_EXTRACTION} accent="text-amber-400" icon={<Award className="w-3.5 h-3.5" />} />
-                <StatCard label="Extraction Success Rate" value={HARDCODED_SUCCESS_RATE} accent="text-indigo-400" icon={<Zap className="w-3.5 h-3.5" />} />
-                <StatCard label="Snake Eliminations" value={HARDCODED_KILLS} accent="text-rose-400" icon={<Swords className="w-3.5 h-3.5" />} />
+                <StatCard label="Highest Extraction" value={highestExtraction} accent="text-amber-400" icon={<Award className="w-3.5 h-3.5" />} />
+                <StatCard label="Extraction Success Rate" value={successRate} accent="text-indigo-400" icon={<Zap className="w-3.5 h-3.5" />} />
+                <StatCard label="Snake Eliminations" value={totalKills} accent="text-rose-400" icon={<Swords className="w-3.5 h-3.5" />} />
               </div>
+              {/* Additional real stats when available */}
+              {(p.lifetimeExtracts != null || p.bestStreak != null) && (
+                <div className="grid grid-cols-2 gap-3">
+                  {p.lifetimeExtracts != null && (
+                    <StatCard
+                      label="Total Extractions"
+                      value={p.lifetimeExtracts.toLocaleString()}
+                      accent="text-cyan-400"
+                      icon={<Sparkles className="w-3.5 h-3.5" />}
+                    />
+                  )}
+                  {p.bestStreak != null && (
+                    <StatCard
+                      label="Best Streak"
+                      value={`${p.bestStreak} Wins`}
+                      accent="text-yellow-400"
+                      icon={<Trophy className="w-3.5 h-3.5" />}
+                    />
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -406,10 +514,10 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
           {/* LOADOUT */}
           {tab === 'loadout' && (
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 text-xs">
-              {INSPECTOR_LOADOUT.map((l) => (
+              {loadoutEntries.map((l) => (
                 <div key={l.label} className="flex justify-between py-1.5 border-b border-slate-900 last:border-0">
                   <span className="text-slate-400">{l.label}</span>
-                  <span className="font-bold text-white">{l.value}</span>
+                  <span className={`font-bold ${l.value === 'Not visible' ? 'text-slate-500 italic' : 'text-white'}`}>{l.value}</span>
                 </div>
               ))}
             </div>

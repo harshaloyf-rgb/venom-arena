@@ -1,0 +1,864 @@
+     1→'use client';
+     2→
+     3→/**
+     4→ * Venom Arena — main app shell (BUILD-6).
+     5→ *
+     6→ * Replicates the dark slate + indigo AAA dashboard from the original
+     7→ * `upload/extracted/src/App.tsx` while wiring into the new server-
+     8→ * authoritative BUILD-2/3/4 stack:
+     9→ *   - `useAuth()` for player data + logout
+    10→ *   - `<GameCanvas />` (BUILD-3) when an arena is active
+    11→ *   - The 8 BUILD-4 panels + 4 new BUILD-6 placeholders (Championships,
+    12→ *     SeasonPass, ClipShowcase, AdminPanel) + GameRulesModal
+    13→ *
+    14→ * Layout: sticky header → main (dashboard OR sub-page nav + content) →
+    15→ * sticky footer (`min-h-screen flex flex-col` + `mt-auto`).
+    16→ */
+    17→
+    18→import { useCallback, useMemo, useState } from 'react';
+    19→import { toast } from 'sonner';
+    20→import {
+    21→  Landmark,
+    22→  Compass,
+    23→  Shield,
+    24→  User,
+    25→  Trophy,
+    26→  Gift,
+    27→  ShoppingBag,
+    28→  Coins,
+    29→  Sparkles,
+    30→  Users,
+    31→  ChevronLeft,
+    32→  Play,
+    33→  ListTodo,
+    34→  Award,
+    35→  LogOut,
+    36→  Film,
+    37→  BookOpen,
+    38→  Crown,
+    39→  Loader2,
+    40→} from 'lucide-react';
+    41→
+    42→import { useAuth } from '@/components/providers/auth-provider';
+    43→import AuthGate from '@/components/auth/auth-gate';
+    44→import { GameCanvas } from '@/components/game/game-canvas';
+    45→import { ArenaSelector } from '@/components/panels/arena-selector';
+    46→import { CosmeticsShop } from '@/components/panels/cosmetics-shop';
+    47→import { PlayerProfilePanel } from '@/components/panels/player-profile';
+    48→import { Leaderboards } from '@/components/panels/leaderboards';
+    49→import { DailyRewards } from '@/components/panels/daily-rewards';
+    50→import { ChipStore } from '@/components/panels/chip-store';
+    51→import { SocialPanel } from '@/components/panels/social-panel';
+    52→import { ClanSystem } from '@/components/panels/clan-system';
+    53→import { HallOfFame } from '@/components/panels/hall-of-fame';
+    54→import { Championships } from '@/components/panels/championships';
+    55→import { SeasonPass } from '@/components/panels/season-pass';
+    56→import { ClipShowcase } from '@/components/panels/clip-showcase';
+    57→import { AdminPanel } from '@/components/panels/admin-panel';
+    58→import { PlayerInspectorModal } from '@/components/panels/player-inspector-modal';
+    59→import { GameRulesModal } from '@/components/modals/game-rules-modal';
+    60→
+    61→import { xpForLevel, type InspectedPlayer } from '@/lib/game-config';
+    62→import type { MatchResult } from '@/lib/types';
+    63→
+    64→// ---------------------------------------------------------------------------
+    65→// Types
+    66→// ---------------------------------------------------------------------------
+    67→
+    68→type TabId =
+    69→  | 'dashboard'
+    70→  | 'arena'
+    71→  | 'shop'
+    72→  | 'profile'
+    73→  | 'leaderboard'
+    74→  | 'championships'
+    75→  | 'halloffame'
+    76→  | 'clans'
+    77→  | 'seasonpass'
+    78→  | 'clips'
+    79→  | 'rewards'
+    80→  | 'store'
+    81→  | 'social'
+    82→  | 'admin';
+    83→
+    84→interface Mission {
+    85→  id: string;
+    86→  title: string;
+    87→  description: string;
+    88→  reward: number;
+    89→  target: number;
+    90→  current: number;
+    91→  completed: boolean;
+    92→  claimed: boolean;
+    93→}
+    94→
+    95→interface TabDef {
+    96→  id: TabId;
+    97→  label: string;
+    98→  icon: typeof Compass;
+    99→  activeColor: string; // tailwind classes applied when active
+   100→  adminOnly?: boolean;
+   101→}
+   102→
+   103→const TABS: TabDef[] = [
+   104→  { id: 'arena', label: 'Play', icon: Compass, activeColor: 'text-indigo-400 bg-indigo-600/10 border-indigo-500/30' },
+   105→  { id: 'shop', label: 'Shop & Lab', icon: ShoppingBag, activeColor: 'text-purple-400 bg-purple-600/10 border-purple-500/30' },
+   106→  { id: 'profile', label: 'Dossier', icon: User, activeColor: 'text-blue-400 bg-blue-600/10 border-blue-500/30' },
+   107→  { id: 'leaderboard', label: 'Leaderboard', icon: Trophy, activeColor: 'text-amber-400 bg-amber-500/10 border-amber-500/30' },
+   108→  { id: 'championships', label: 'Championships', icon: Crown, activeColor: 'text-amber-400 bg-amber-500/10 border-amber-500/30' },
+   109→  { id: 'halloffame', label: 'Hall of Fame', icon: Award, activeColor: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30' },
+   110→  { id: 'clans', label: 'Syndicates', icon: Shield, activeColor: 'text-indigo-400 bg-indigo-600/10 border-indigo-500/30' },
+   111→  { id: 'seasonpass', label: 'Pass', icon: Sparkles, activeColor: 'text-purple-400 bg-purple-600/10 border-purple-500/30' },
+   112→  { id: 'clips', label: 'Highlights', icon: Film, activeColor: 'text-red-400 bg-red-600/10 border-red-500/30' },
+   113→  { id: 'rewards', label: 'Claims', icon: Gift, activeColor: 'text-emerald-400 bg-emerald-600/10 border-emerald-500/30' },
+   114→  { id: 'store', label: 'Vault', icon: Coins, activeColor: 'text-emerald-400 bg-emerald-600/10 border-emerald-500/30' },
+   115→  { id: 'social', label: 'Friends & Search', icon: Users, activeColor: 'text-violet-400 bg-violet-600/10 border-violet-500/30' },
+   116→  { id: 'admin', label: 'Admin', icon: Shield, activeColor: 'text-red-400 bg-red-600/10 border-red-500/30', adminOnly: true },
+   117→];
+   118→
+   119→const INITIAL_MISSIONS: Mission[] = [
+   120→  {
+   121→    id: 'mission-1',
+   122→    title: 'Survive and Thrive',
+   123→    description: 'Successfully extract with at least 50 chips in a single match.',
+   124→    reward: 25,
+   125→    target: 1,
+   126→    current: 0,
+   127→    completed: false,
+   128→    claimed: false,
+   129→  },
+   130→  {
+   131→    id: 'mission-2',
+   132→    title: 'Apex Hunter',
+   133→    description: 'Eliminate 5 rival snakes (head-to-body collisions) in any arena.',
+   134→    reward: 50,
+   135→    target: 5,
+   136→    current: 0,
+   137→    completed: false,
+   138→    claimed: false,
+   139→  },
+   140→  {
+   141→    id: 'mission-3',
+   142→    title: 'Star Grabber',
+   143→    description: 'Collect 15 star-chips dropped by fallen opponents.',
+   144→    reward: 40,
+   145→    target: 15,
+   146→    current: 0,
+   147→    completed: false,
+   148→    claimed: false,
+   149→  },
+   150→  {
+   151→    id: 'mission-4',
+   152→    title: 'High Stakes Entry',
+   153→    description: 'Enter Neon Grid (100 chips buy-in) or higher arena.',
+   154→    reward: 30,
+   155→    target: 1,
+   156→    current: 0,
+   157→    completed: false,
+   158→    claimed: false,
+   159→  },
+   160→];
+   161→
+   162→// ---------------------------------------------------------------------------
+   163→// Component
+   164→// ---------------------------------------------------------------------------
+   165→
+   166→export default function Home() {
+   167→  const { player, loading, logout, refresh } = useAuth();
+   168→
+   169→  const [activeTab, setActiveTab] = useState<TabId>('dashboard');
+   170→  const [activeArenaId, setActiveArenaId] = useState<string | null>(null);
+   171→  const [isRulesOpen, setIsRulesOpen] = useState(false);
+   172→  const [missions, setMissions] = useState<Mission[]>(INITIAL_MISSIONS);
+   173→  const [lastResult, setLastResult] = useState<MatchResult | undefined>(undefined);
+   174→  const [inspectedPlayer, setInspectedPlayer] = useState<InspectedPlayer | null>(null);
+   175→  const [toastFn] = useState<(msg: string, type?: 'success' | 'error' | 'info') => void>(() => (msg: string, type?: 'success' | 'error' | 'info') => {
+   176→    if (type === 'error') toast.error(msg);
+   177→    else if (type === 'info') toast.info(msg);
+   178→    else toast.success(msg);
+   179→  });
+   180→
+   181→  const handleInspectPlayer = useCallback((p: InspectedPlayer) => {
+   182→    setInspectedPlayer(p);
+   183→  }, []);
+   184→
+   185→  // Filter tabs by admin role (must run before any early return).
+   186→  const visibleTabs = useMemo(
+   187→    () => TABS.filter((t) => !t.adminOnly || player?.role === 'admin'),
+   188→    [player?.role],
+   189→  );
+   190→
+   191→  // -------------------------------------------------------------------------
+   192→  // Handlers
+   193→  // -------------------------------------------------------------------------
+   194→
+   195→  const handleExitGame = useCallback(
+   196→    (result?: MatchResult) => {
+   197→      setActiveArenaId(null);
+   198→      if (result) {
+   199→        setLastResult(result);
+   200→        if (result.outcome === 'extract') {
+   201→          toast.success(
+   202→            `🏆 Extracted ${result.chipsExtracted.toLocaleString()}c from ${result.arenaName}! +${result.xpGained} XP`,
+   203→          );
+   204→          // Mark the "Survive and Thrive" mission progress if applicable
+   205→          if (result.chipsExtracted >= 50) {
+   206→            setMissions((prev) =>
+   207→              prev.map((m) =>
+   208→                m.id === 'mission-1' && !m.completed
+   209→                  ? { ...m, current: m.target, completed: true }
+   210→                  : m,
+   211→              ),
+   212→            );
+   213→          }
+   214→        } else {
+   215→          toast.error(`💀 Eliminated in ${result.arenaName}. ${result.kills} kill(s) this match.`);
+   216→        }
+   217→      }
+   218→      // Refresh player profile so header chips reflect the new bank balance.
+   219→      void refresh();
+   220→    },
+   221→    [refresh],
+   222→  );
+   223→
+   224→  const handlePlayArena = useCallback(
+   225→    (arenaId: string) => {
+   226→      if (!player) return;
+   227→      setActiveArenaId(arenaId);
+   228→      // Mark the "High Stakes Entry" mission progress (buy-in ≥ 100c) — flavor.
+   229→      // The real buy-in accounting happens server-side in /api/match/join.
+   230→      if (arenaId === 'tier-2' || arenaId === 'tier-3' || arenaId === 'tier-4' || arenaId === 'tier-5') {
+   231→        setMissions((prev) =>
+   232→          prev.map((m) =>
+   233→            m.id === 'mission-4' && !m.completed
+   234→              ? { ...m, current: m.target, completed: true }
+   235→              : m,
+   236→          ),
+   237→        );
+   238→      }
+   239→    },
+   240→    [player],
+   241→  );
+   242→
+   243→  const handleLogout = useCallback(async () => {
+   244→    await logout();
+   245→    setActiveTab('dashboard');
+   246→    setActiveArenaId(null);
+   247→    toast.info('Secure session disconnected. 🔒');
+   248→  }, [logout]);
+   249→
+   250→  const claimMission = useCallback(
+   251→    (mission: Mission) => {
+   252→      if (!mission.completed || mission.claimed) return;
+   253→      setMissions((prev) =>
+   254→        prev.map((m) => (m.id === mission.id ? { ...m, claimed: true } : m)),
+   255→      );
+   256→      toast.success(`Challenge reward claimed: +${mission.reward}c!`);
+   257→      // In a future iteration this should POST to /api/player/mission-claim
+   258→      // to credit the banked chips server-side. For now we just refresh so
+   259→      // any other concurrent changes show up.
+   260→      void refresh();
+   261→    },
+   262→    [refresh],
+   263→  );
+   264→
+   265→  // -------------------------------------------------------------------------
+   266→  // Loading / Auth / Game-canvas gates
+   267→  // -------------------------------------------------------------------------
+   268→
+   269→  if (loading) {
+   270→    return (
+   271→      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+   272→        <div className="flex flex-col items-center gap-3">
+   273→          <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
+   274→          <p className="text-sm text-slate-400">Loading arena…</p>
+   275→        </div>
+   276→      </div>
+   277→    );
+   278→  }
+   279→
+   280→  if (!player) {
+   281→    return <AuthGate />;
+   282→  }
+   283→
+   284→  if (activeArenaId) {
+   285→    return (
+   286→      <div className="w-screen h-screen overflow-hidden bg-slate-950">
+   287→        <GameCanvas arenaId={activeArenaId} player={player} onExit={handleExitGame} />
+   288→      </div>
+   289→    );
+   290→  }
+   291→
+   292→  // -------------------------------------------------------------------------
+   293→  // XP progress (proper curve via xpForLevel)
+   294→  // -------------------------------------------------------------------------
+   295→
+   296→  const xpThisLevel = xpForLevel(player.level);
+   297→  const xpNextLevel = xpForLevel(player.level + 1);
+   298→  const xpIntoLevel = Math.max(0, player.xp - xpThisLevel);
+   299→  const xpSpan = Math.max(1, xpNextLevel - xpThisLevel);
+   300→  const xpPercent = Math.min(100, Math.floor((xpIntoLevel / xpSpan) * 100));
+   301→
+   302→  // -------------------------------------------------------------------------
+   303→  // Render
+   304→  // -------------------------------------------------------------------------
+   305→
+   306→  return (
+   307→    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
+   308→      {/* ============= HEADER ============= */}
+   309→      <header className="border-b border-slate-900 bg-slate-950/80 sticky top-0 z-40 backdrop-blur-md">
+   310→        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+   311→          {/* Logo + title */}
+   312→          <button
+   313→            onClick={() => {
+   314→              setActiveTab('dashboard');
+   315→            }}
+   316→            className="flex items-center gap-3 cursor-pointer group select-none"
+   317→            aria-label="Return to lobby dashboard"
+   318→          >
+   319→            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-950/40 border border-indigo-400/20 group-hover:scale-105 transition duration-200">
+   320→              <Compass className="w-5 h-5 text-white va-spin-slow" />
+   321→            </div>
+   322→            <div className="text-left">
+   323→              <h1 className="text-lg font-extrabold tracking-tight text-white font-sans flex items-center gap-1.5 uppercase group-hover:text-indigo-400 transition duration-200">
+   324→                Project Venom
+   325→                <span className="text-xs px-2 py-0.5 bg-indigo-500 text-white font-bold rounded-full leading-none tracking-widest font-mono">
+   326→                  Arena
+   327→                </span>
+   328→              </h1>
+   329→              <span className="text-[10px] text-slate-500 block font-mono">
+   330→                STORES-SAFE COMPLIANT VERSION
+   331→              </span>
+   332→            </div>
+   333→          </button>
+   334→
+   335→          {/* Account controls */}
+   336→          <div className="flex items-center gap-3 w-full sm:w-auto justify-end flex-wrap">
+   337→            {/* Player badge */}
+   338→            <div className="bg-slate-900/60 border border-slate-800/80 px-4 py-2 rounded-xl flex items-center gap-2.5">
+   339→              <div className="w-8 h-8 rounded-lg bg-slate-950 flex items-center justify-center border border-slate-800/80 text-xs overflow-hidden shrink-0 shadow-inner">
+   340→                {player.avatar ? (
+   341→                  player.avatar.startsWith('data:') || player.avatar.startsWith('http') ? (
+   342→                    <img
+   343→                      src={player.avatar}
+   344→                      alt={player.name}
+   345→                      className="w-full h-full object-cover"
+   346→                      referrerPolicy="no-referrer"
+   347→                    />
+   348→                  ) : (
+   349→                    <span className="select-none text-base">{player.avatar}</span>
+   350→                  )
+   351→                ) : (
+   352→                  <span className="select-none text-[10px] font-mono font-bold text-slate-400">
+   353→                    {player.level}
+   354→                  </span>
+   355→                )}
+   356→              </div>
+   357→              <div className="text-left leading-none">
+   358→                <span className="text-[9px] text-slate-500 block uppercase font-semibold">
+   359→                  Challenger (Lvl {player.level})
+   360→                </span>
+   361→                <span className="text-xs font-bold font-sans text-white truncate max-w-28 block">
+   362→                  {player.name}
+   363→                </span>
+   364→              </div>
+   365→            </div>
+   366→
+   367→            {/* Chips wallet */}
+   368→            <div className="bg-emerald-500/10 border border-emerald-500/20 px-4 py-2 rounded-xl flex items-center gap-2.5">
+   369→              <Coins className="w-4 h-4 text-emerald-400 animate-pulse" />
+   370→              <div className="text-left leading-none">
+   371→                <span className="text-[9px] text-emerald-500/60 block uppercase font-semibold">
+   372→                  Secure Chips
+   373→                </span>
+   374→                <span className="text-sm font-bold font-mono text-emerald-400 tabular-nums">
+   375→                  {player.bankedChips.toLocaleString()}
+   376→                </span>
+   377→              </div>
+   378→            </div>
+   379→
+   380→            {/* Rules & Guide */}
+   381→            <button
+   382→              onClick={() => setIsRulesOpen(true)}
+   383→              className="bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 p-2 py-2.5 rounded-xl transition duration-200 cursor-pointer flex items-center gap-1.5 shadow"
+   384→              title="Official Guide, Rules & FAQ"
+   385→            >
+   386→              <BookOpen className="w-4 h-4 text-indigo-400 group-hover:text-white" />
+   387→              <span className="text-xs font-bold font-sans hidden sm:inline">Rules &amp; Guide</span>
+   388→            </button>
+   389→
+   390→            {/* Sign out */}
+   391→            <button
+   392→              onClick={handleLogout}
+   393→              className="bg-slate-900/60 hover:bg-red-950/40 hover:text-red-400 hover:border-red-500/20 border border-slate-800/80 p-2 py-2.5 rounded-xl transition duration-200 cursor-pointer flex items-center gap-1.5"
+   394→              title="Secure Logout"
+   395→            >
+   396→              <LogOut className="w-4 h-4" />
+   397→              <span className="text-xs font-bold font-sans hidden md:inline">Sign Out</span>
+   398→            </button>
+   399→          </div>
+   400→        </div>
+   401→      </header>
+   402→
+   403→      {/* ============= MAIN ============= */}
+   404→      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full flex flex-col justify-start">
+   405→        {/* ========== DASHBOARD TAB ========== */}
+   406→        {activeTab === 'dashboard' && (
+   407→          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start w-full va-fade-in">
+   408→            {/* LEFT COLUMN: Hero + Bento gates (8 cols) */}
+   409→            <div className="lg:col-span-8 flex flex-col gap-6">
+   410→              {/* Hero banner */}
+   411→              <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 to-indigo-950/80 border border-indigo-500/10 shadow-2xl relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-6">
+   412→                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+   413→
+   414→                <div className="flex items-center gap-4 relative">
+   415→                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-950/40 border border-indigo-400/20 shrink-0">
+   416→                    <Award className="w-7 h-7 text-white animate-pulse" />
+   417→                  </div>
+   418→                  <div>
+   419→                    <span className="text-[10px] text-indigo-400 font-mono font-bold tracking-widest block uppercase">
+   420→                      Lobby Headquarters
+   421→                    </span>
+   422→                    <h2 className="text-xl font-black text-white font-sans tracking-tight mt-0.5">
+   423→                      WELCOME BACK, {player.name.toUpperCase()}
+   424→                    </h2>
+   425→                    {/* XP progress bar */}
+   426→                    <div className="flex items-center gap-3 mt-2">
+   427→                      <span className="text-[10px] font-mono text-slate-400">LVL {player.level}</span>
+   428→                      <div className="w-36 h-1.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+   429→                        <div
+   430→                          className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+   431→                          style={{ width: `${xpPercent}%` }}
+   432→                        />
+   433→                      </div>
+   434→                      <span className="text-[9px] font-mono text-slate-500">
+   435→                        {xpIntoLevel.toLocaleString()} / {xpSpan.toLocaleString()} XP
+   436→                      </span>
+   437→                    </div>
+   438→                  </div>
+   439→                </div>
+   440→
+   441→                <button
+   442→                  onClick={() => {
+   443→                    setActiveTab('arena');
+   444→                  }}
+   445→                  className="px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-sans font-bold text-xs flex items-center gap-2 transition duration-200 cursor-pointer shadow-lg shadow-indigo-950/40 border border-indigo-500 shrink-0 self-stretch sm:self-auto justify-center"
+   446→                >
+   447→                  <Play className="w-3.5 h-3.5 fill-current" /> LAUNCH MATCHMAKER
+   448→                </button>
+   449→              </div>
+   450→
+   451→              {/* Bento grid of lobby stations */}
+   452→              <div className="flex flex-col gap-3">
+   453→                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">
+   454→                  Lobby Stations
+   455→                </span>
+   456→
+   457→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   458→                  {/* Gate 1: Play Endless Arenas */}
+   459→                  <BentoGate
+   460→                    onClick={() => setActiveTab('arena')}
+   461→                    icon={Compass}
+   462→                    accent="indigo"
+   463→                    badge="Battle Gate"
+   464→                    title="Play Endless Arenas"
+   465→                    desc="Risk chips to compete in simulated multiplayer shards. Harvest dropping stars and escape safely."
+   466→                    footLeft="STAKES FROM: 10 chips"
+   467→                    footRight="Enter"
+   468→                  />
+   469→
+   470→                  {/* Gate 2: Identity Workshop & Shop */}
+   471→                  <BentoGate
+   472→                    onClick={() => setActiveTab('shop')}
+   473→                    icon={ShoppingBag}
+   474→                    accent="purple"
+   475→                    badge="Customize Lab"
+   476→                    title="Identity Workshop & Shop"
+   477→                    desc="Unlock glowing skins, trials, death burst novas, or design a custom repeating body segment sequence."
+   478→                    footLeft={`EQUIPPED: ${player.currentSkin ? 'Custom DNA' : 'Gallery Skin'}`}
+   479→                    footRight="Modify"
+   480→                  />
+   481→
+   482→                  {/* Gate 3: Challenger Dossier */}
+   483→                  <BentoGate
+   484→                    onClick={() => setActiveTab('profile')}
+   485→                    icon={User}
+   486→                    accent="blue"
+   487→                    badge="My Record"
+   488→                    title="Challenger Dossier"
+   489→                    desc="Examine your records, high scores, total banked wealth, and change your operative callsign."
+   490→                    footLeft={`HIGH SCORE: ${(player.biggestExtract || 0).toLocaleString()}`}
+   491→                    footRight="Inspect"
+   492→                  />
+   493→
+   494→                  {/* Gate 4: Global Standings */}
+   495→                  <BentoGate
+   496→                    onClick={() => setActiveTab('leaderboard')}
+   497→                    icon={Trophy}
+   498→                    accent="amber"
+   499→                    badge="Elite Standings"
+   500→                    title="Global Standings"
+   501→                    desc="Track rank placements and compare your banked chip balance against other elite venom snake operators."
+   502→                    footLeft="LEADERBOARD RANK: Tier 1"
+   503→                    footRight="View"
+   504→                  />
+   505→
+   506→                  {/* Gate 5: Daily Free Claims */}
+   507→                  <BentoGate
+   508→                    onClick={() => setActiveTab('rewards')}
+   509→                    icon={Gift}
+   510→                    accent="emerald"
+   511→                    badge="Complimentary"
+   512→                    title="Daily Free Claims"
+   513→                    desc="Secure your complimentary login chips. Claim hourly or daily packages to rebuild your wallet!"
+   514→                    footLeft={`STREAK: ${player.dailyStreak || 1} Days`}
+   515→                    footRight="Claim"
+   516→                  />
+   517→
+   518→                  {/* Gate 6: Virtual Chip Store */}
+   519→                  <BentoGate
+   520→                    onClick={() => setActiveTab('store')}
+   521→                    icon={Coins}
+   522→                    accent="emerald"
+   523→                    badge="Secure Vault"
+   524→                    title="Virtual Chip Store"
+   525→                    desc="Acquire secure safe-guarded chip packs immediately to compete in high-stakes premium arena tables."
+   526→                    footLeft={`WALLET: ${player.bankedChips.toLocaleString()} c`}
+   527→                    footRight="Shop"
+   528→                  />
+   529→
+   530→                  {/* Gate 7: Friends, Global Search & Syndicate Hub (wide) */}
+   531→                  <BentoGate
+   532→                    onClick={() => setActiveTab('social')}
+   533→                    icon={Users}
+   534→                    accent="violet"
+   535→                    badge="Friends & Global Search"
+   536→                    title="Friends, Global Search & Syndicate Hub"
+   537→                    desc="Search and connect with players globally by tag or country flag (🇮🇳, 🇺🇸, 🇯🇵, etc.), send daily chip gifts (+25c), spectate matches, and create co-op team codes!"
+   538→                    footLeft="GLOBAL PLAYER NETWORK READY"
+   539→                    footRight="Search & Connect"
+   540→                    wide
+   541→                  />
+   542→                </div>
+   543→              </div>
+   544→            </div>
+   545→
+   546→            {/* RIGHT COLUMN: Tactical Challenges (4 cols) */}
+   547→            <div className="lg:col-span-4 flex flex-col gap-4">
+   548→              <section
+   549→                id="challenges-dashboard-panel"
+   550→                className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 shadow-xl flex flex-col gap-4"
+   551→                aria-label="Daily tactical challenges"
+   552→              >
+   553→                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+   554→                  <div className="flex items-center gap-2">
+   555→                    <ListTodo className="w-4 h-4 text-indigo-400 animate-pulse" />
+   556→                    <span className="text-xs font-bold text-white font-sans uppercase tracking-wider">
+   557→                      Tactical Challenges
+   558→                    </span>
+   559→                  </div>
+   560→                  <Sparkles className="w-4 h-4 text-indigo-400" />
+   561→                </div>
+   562→
+   563→                <div className="flex flex-col gap-3.5">
+   564→                  {missions.map((m) => {
+   565→                    const percent = Math.min(100, Math.floor((m.current / m.target) * 100));
+   566→                    return (
+   567→                      <div
+   568→                        key={m.id}
+   569→                        className="p-3.5 bg-slate-950/90 rounded-xl border border-slate-800 flex flex-col gap-2.5"
+   570→                      >
+   571→                        <div className="flex items-start justify-between gap-2">
+   572→                          <div>
+   573→                            <h4 className="text-xs font-bold text-white font-sans leading-snug">
+   574→                              {m.title}
+   575→                            </h4>
+   576→                            <p className="text-[10.5px] text-slate-400 font-sans mt-1 leading-normal">
+   577→                              {m.description}
+   578→                            </p>
+   579→                          </div>
+   580→                        </div>
+   581→
+   582→                        <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 mt-0.5">
+   583→                          <span>PROGRESS:</span>
+   584→                          <span>
+   585→                            {m.current} / {m.target} ({percent}%)
+   586→                          </span>
+   587→                        </div>
+   588→
+   589→                        <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800/60">
+   590→                          <div
+   591→                            className={`h-full rounded-full transition-all duration-300 ${
+   592→                              m.claimed
+   593→                                ? 'bg-emerald-600'
+   594→                                : 'bg-gradient-to-r from-indigo-500 to-indigo-600'
+   595→                            }`}
+   596→                            style={{ width: `${percent}%` }}
+   597→                          />
+   598→                        </div>
+   599→
+   600→                        <div className="flex justify-between items-center mt-1 pt-2 border-t border-slate-900/40">
+   601→                          <span className="text-[10px] font-mono font-bold text-emerald-400">
+   602→                            +{m.reward} CHIPS
+   603→                          </span>
+   604→                          <button
+   605→                            onClick={() => claimMission(m)}
+   606→                            disabled={!m.completed || m.claimed}
+   607→                            className={`px-3 py-1 rounded-lg text-[10px] font-sans font-bold transition-all cursor-pointer ${
+   608→                              m.claimed
+   609→                                ? 'bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed'
+   610→                                : m.completed
+   611→                                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 text-black shadow shadow-emerald-950/20'
+   612→                                  : 'bg-slate-900 text-slate-500 border border-slate-800 cursor-not-allowed'
+   613→                            }`}
+   614→                          >
+   615→                            {m.claimed ? 'Claimed ✓' : 'Claim'}
+   616→                          </button>
+   617→                        </div>
+   618→                      </div>
+   619→                    );
+   620→                  })}
+   621→                </div>
+   622→
+   623→                {/* Last-match summary */}
+   624→                {lastResult && (
+   625→                  <div className="mt-2 p-3 rounded-xl border border-slate-800 bg-slate-950/80">
+   626→                    <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">
+   627→                      Last Match
+   628→                    </span>
+   629→                    <div className="mt-1 flex items-center gap-2">
+   630→                      <span className="text-base">
+   631→                        {lastResult.outcome === 'extract' ? '🏆' : '💀'}
+   632→                      </span>
+   633→                      <div className="text-[11px] text-slate-300 leading-tight">
+   634→                        <p className="font-bold text-white">
+   635→                          {lastResult.outcome === 'extract' ? 'Extracted' : 'Eliminated'} ·{' '}
+   636→                          {lastResult.arenaName}
+   637→                        </p>
+   638→                        <p className="text-slate-500">
+   639→                          {lastResult.chipsExtracted.toLocaleString()}c · {lastResult.kills} kills ·
+   640→                          +{lastResult.xpGained} XP · {Math.floor(lastResult.durationSeconds)}s
+   641→                        </p>
+   642→                      </div>
+   643→                    </div>
+   644→                  </div>
+   645→                )}
+   646→              </section>
+   647→            </div>
+   648→          </div>
+   649→        )}
+   650→
+   651→        {/* ========== SUB-PAGE NAV + CONTENT ========== */}
+   652→        {activeTab !== 'dashboard' && (
+   653→          <div className="w-full va-fade-in">
+   654→            {/* Top nav: back button + breadcrumb + tab strip */}
+   655→            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-900/40 border border-slate-800 rounded-2xl p-4 mb-6 shadow-md">
+   656→              <div className="flex items-center gap-3">
+   657→                <button
+   658→                  onClick={() => {
+   659→                    setActiveTab('dashboard');
+   660→                  }}
+   661→                  className="px-3.5 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-900 transition-all cursor-pointer flex items-center gap-1.5 shadow"
+   662→                >
+   663→                  <ChevronLeft className="w-4 h-4 text-indigo-400" /> Lobby HQ
+   664→                </button>
+   665→                <div className="h-4 w-[1px] bg-slate-800 hidden sm:block" />
+   666→                <div className="text-[10px] text-slate-500 font-mono hidden sm:block">
+   667→                  STATION / {activeTab.toUpperCase()}
+   668→                </div>
+   669→              </div>
+   670→
+   671→              {/* Horizontal scrollable tab strip */}
+   672→              <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800/60 overflow-x-auto max-w-full no-scrollbar">
+   673→                {visibleTabs.map((tab) => {
+   674→                  const active = activeTab === tab.id;
+   675→                  const TabIcon = tab.icon;
+   676→                  return (
+   677→                    <button
+   678→                      key={tab.id}
+   679→                      onClick={() => {
+   680→                        setActiveTab(tab.id);
+   681→                      }}
+   682→                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border border-transparent shrink-0 ${
+   683→                        active
+   684→                          ? `${tab.activeColor} border`
+   685→                          : 'text-slate-500 hover:text-slate-300'
+   686→                      }`}
+   687→                    >
+   688→                      <TabIcon className="w-3.5 h-3.5" />
+   689→                      <span>{tab.label}</span>
+   690→                    </button>
+   691→                  );
+   692→                })}
+   693→              </div>
+   694→            </div>
+   695→
+   696→            {/* Tab content */}
+   697→            <div className="w-full">
+   698→              {activeTab === 'arena' && <ArenaSelector onPlay={handlePlayArena} />}
+   699→
+   700→              {activeTab === 'shop' && <CosmeticsShop />}
+   701→              {activeTab === 'profile' && <PlayerProfilePanel />}
+   702→              {activeTab === 'leaderboard' && <Leaderboards onInspectPlayer={handleInspectPlayer} onToast={toastFn} />}
+   703→              {activeTab === 'championships' && <Championships onToast={toastFn} />}
+   704→              {activeTab === 'halloffame' && <HallOfFame onInspectPlayer={handleInspectPlayer} onToast={toastFn} />}
+   705→              {activeTab === 'clans' && <ClanSystem onInspectPlayer={handleInspectPlayer} onToast={toastFn} />}
+   706→              {activeTab === 'seasonpass' && <SeasonPass onToast={toastFn} />}
+   707→              {activeTab === 'clips' && <ClipShowcase onInspectPlayer={handleInspectPlayer} onToast={toastFn} />}
+   708→              {activeTab === 'rewards' && <DailyRewards onToast={toastFn} />}
+   709→              {activeTab === 'store' && <ChipStore onToast={toastFn} />}
+   710→              {activeTab === 'social' && <SocialPanel onToast={toastFn} />}
+   711→              {activeTab === 'admin' && player.role === 'admin' && <AdminPanel onToast={toastFn} />}
+   712→            </div>
+   713→          </div>
+   714→        )}
+   715→      </main>
+   716→
+   717→      {/* ============= FOOTER ============= */}
+   718→      <footer className="border-t border-slate-900/60 bg-slate-950/40 py-6 mt-auto text-center text-xs text-slate-500">
+   719→        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+   720→          <p className="font-sans">
+   721→            &copy; 2026 Project Venom Arena. All Rights Reserved. Fully store-safe, non-gambling gameplay edition.
+   722→          </p>
+   723→          <div className="flex gap-4 font-mono text-[10px] text-slate-400">
+   724→            <span>APP_VERSION: 1.0.0-MVP</span>
+   725→            <span>ENGINE: TSX_CANVAS</span>
+   726→          </div>
+   727→        </div>
+   728→      </footer>
+   729→
+   730→      {/* ============= MODALS ============= */}
+   731→      <GameRulesModal isOpen={isRulesOpen} onClose={() => setIsRulesOpen(false)} />
+   732→      <PlayerInspectorModal player={inspectedPlayer} onClose={() => setInspectedPlayer(null)} onToast={toastFn} />
+   733→    </div>
+   734→  );
+   735→}
+   736→
+   737→// ---------------------------------------------------------------------------
+   738→// Bento gate card (dashboard quick-link)
+   739→// ---------------------------------------------------------------------------
+   740→
+   741→interface BentoGateProps {
+   742→  icon: typeof Compass;
+   743→  accent: 'indigo' | 'purple' | 'blue' | 'amber' | 'yellow' | 'emerald' | 'violet' | 'red';
+   744→  badge: string;
+   745→  title: string;
+   746→  desc: string;
+   747→  footLeft: string;
+   748→  footRight: string;
+   749→  onClick: () => void;
+   750→  wide?: boolean;
+   751→}
+   752→
+   753→const ACCENT_CLASSES: Record<
+   754→  BentoGateProps['accent'],
+   755→  { iconBg: string; badgeBg: string; borderHover: string; textHover: string; arrow: string }
+   756→> = {
+   757→  indigo: {
+   758→    iconBg: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400',
+   759→    badgeBg: 'bg-indigo-500/15 border-indigo-500/20 text-indigo-400',
+   760→    borderHover: 'hover:border-indigo-500/40',
+   761→    textHover: 'group-hover:text-indigo-400',
+   762→    arrow: 'text-indigo-400',
+   763→  },
+   764→  purple: {
+   765→    iconBg: 'bg-purple-500/10 border-purple-500/20 text-purple-400',
+   766→    badgeBg: 'bg-purple-500/15 border-purple-500/20 text-purple-400',
+   767→    borderHover: 'hover:border-purple-500/40',
+   768→    textHover: 'group-hover:text-purple-400',
+   769→    arrow: 'text-purple-400',
+   770→  },
+   771→  blue: {
+   772→    iconBg: 'bg-blue-500/10 border-blue-500/20 text-blue-400',
+   773→    badgeBg: 'bg-blue-500/15 border-blue-500/20 text-blue-400',
+   774→    borderHover: 'hover:border-blue-500/40',
+   775→    textHover: 'group-hover:text-blue-400',
+   776→    arrow: 'text-blue-400',
+   777→  },
+   778→  amber: {
+   779→    iconBg: 'bg-amber-500/10 border-amber-500/20 text-amber-400',
+   780→    badgeBg: 'bg-amber-500/15 border-amber-500/20 text-amber-400',
+   781→    borderHover: 'hover:border-amber-500/40',
+   782→    textHover: 'group-hover:text-amber-400',
+   783→    arrow: 'text-amber-400',
+   784→  },
+   785→  yellow: {
+   786→    iconBg: 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400',
+   787→    badgeBg: 'bg-yellow-500/15 border-yellow-500/20 text-yellow-400',
+   788→    borderHover: 'hover:border-yellow-500/40',
+   789→    textHover: 'group-hover:text-yellow-400',
+   790→    arrow: 'text-yellow-400',
+   791→  },
+   792→  emerald: {
+   793→    iconBg: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',
+   794→    badgeBg: 'bg-emerald-500/15 border-emerald-500/20 text-emerald-400',
+   795→    borderHover: 'hover:border-emerald-500/40',
+   796→    textHover: 'group-hover:text-emerald-400',
+   797→    arrow: 'text-emerald-400',
+   798→  },
+   799→  violet: {
+   800→    iconBg: 'bg-violet-500/10 border-violet-500/20 text-violet-400',
+   801→    badgeBg: 'bg-cyan-500/15 border-cyan-500/20 text-cyan-300',
+   802→    borderHover: 'hover:border-violet-500/40',
+   803→    textHover: 'group-hover:text-violet-400',
+   804→    arrow: 'text-violet-400',
+   805→  },
+   806→  red: {
+   807→    iconBg: 'bg-red-500/10 border-red-500/20 text-red-400',
+   808→    badgeBg: 'bg-red-500/15 border-red-500/20 text-red-400',
+   809→    borderHover: 'hover:border-red-500/40',
+   810→    textHover: 'group-hover:text-red-400',
+   811→    arrow: 'text-red-400',
+   812→  },
+   813→};
+   814→
+   815→function BentoGate({
+   816→  icon: Icon,
+   817→  accent,
+   818→  badge,
+   819→  title,
+   820→  desc,
+   821→  footLeft,
+   822→  footRight,
+   823→  onClick,
+   824→  wide,
+   825→}: BentoGateProps) {
+   826→  const c = ACCENT_CLASSES[accent];
+   827→  return (
+   828→    <button
+   829→      onClick={onClick}
+   830→      className={`p-5 bg-slate-900/60 hover:bg-slate-900 border border-slate-800/80 ${c.borderHover} rounded-2xl cursor-pointer transition-all duration-300 group shadow-md flex flex-col justify-between h-44 text-left ${
+   831→        wide ? 'sm:col-span-2' : ''
+   832→      }`}
+   833→    >
+   834→      <div className="flex items-start justify-between">
+   835→        <div
+   836→          className={`w-10 h-10 rounded-xl ${c.iconBg} border flex items-center justify-center group-hover:scale-110 transition-transform`}
+   837→        >
+   838→          <Icon className="w-5 h-5" />
+   839→        </div>
+   840→        <span
+   841→          className={`text-[9px] px-2 py-0.5 ${c.badgeBg} border font-bold font-sans rounded-full uppercase`}
+   842→        >
+   843→          {badge}
+   844→        </span>
+   845→      </div>
+   846→      <div>
+   847→        <h3 className={`text-sm font-bold text-white ${c.textHover} transition-colors`}>
+   848→          {title}
+   849→        </h3>
+   850→        <p className="text-xs text-slate-400 font-sans mt-1 line-clamp-2 leading-relaxed">
+   851→          {desc}
+   852→        </p>
+   853→      </div>
+   854→      <div className="text-[10px] font-mono text-slate-500 border-t border-slate-800/40 pt-2 flex justify-between">
+   855→        <span className="truncate pr-2">{footLeft}</span>
+   856→        <span className={`${c.arrow} group-hover:translate-x-1 transition-transform shrink-0`}>
+   857→          {footRight} →
+   858→        </span>
+   859→      </div>
+   860→    </button>
+   861→  );
+   862→}
+   863→
+   864→

@@ -1,22 +1,16 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
 import {
-  INITIAL_FRIENDS,
-  INITIAL_RIVALS,
-  GLOBAL_COMMUNITY_PLAYERS,
   SOCIAL_COUNTRY_FILTER,
   PUBLIC_CLANS,
   PRESET_EMBLEMS,
   BOT_REPLIES,
   countryFlag,
-  countryName,
   ARENA_TIERS,
-  type MockFriend,
-  type MockRival,
-  type GlobalPlayer,
 } from '@/lib/game-config';
+import type { LeaderboardEntry } from '@/lib/types';
 import {
   GlowBlob,
   MicroLabel,
@@ -41,6 +35,7 @@ import {
   Plus,
   LogOut,
   Award,
+  Loader2,
 } from 'lucide-react';
 
 interface SocialPanelProps {
@@ -52,51 +47,172 @@ interface SocialPanelProps {
 type TopTab = 'friends' | 'syndicate';
 type FriendsSubTab = 'friends' | 'rivals' | 'search';
 
-const FRIEND_CHIPS: Record<string, number> = {
-  ApexViper: 1200,
-  ShadowSlinker: 150,
-  CoinGobbler: 40,
-  VenomKing: 250000,
-};
+/* ---------- local types (replacing mock types from game-config) ---------- */
 
-function friendChips(name: string, level: number): number {
-  if (FRIEND_CHIPS[name] !== undefined) return FRIEND_CHIPS[name];
-  return level * 45;
+interface FriendItem {
+  id: string;
+  userTag: string;
+  name: string;
+  country: string;
+  level: number;
+  bankedChips: number;
+  online: boolean;
+  /** derived client-side for the avatar ring */
+  skinColor: string;
+  /** UI-only toggles (gifts are not persisted server-side) */
+  giftSent: boolean;
+  giftReceived: boolean;
 }
 
-const STATUS_LABELS: Record<MockFriend['status'] | MockRival['status'], string> = {
+interface PendingRequestItem {
+  id: string;
+  userTag: string;
+  name: string;
+  country: string;
+  level: number;
+  bankedChips: number;
+  online: boolean;
+  skinColor: string;
+}
+
+interface RivalItem {
+  id: string;
+  name: string;
+  userTag: string;
+  status: 'online' | 'idle' | 'in-match' | 'offline';
+  currentArenaName: string;
+  level: number;
+  timesKilledByYou: number;
+  timesKilledYou: number;
+  lastEncounterDate: string;
+}
+
+/* ---------- shared display helpers ---------- */
+
+const STATUS_LABELS: Record<string, string> = {
   online: 'Lobby',
   idle: 'Idle',
   'in-match': 'In-Arena',
   offline: 'Offline',
 };
 
-const STATUS_BADGES: Record<MockRival['status'], string> = {
+const STATUS_BADGES: Record<string, string> = {
   'in-match': '⚔️ Playing Arena',
   online: '🟢 Online',
   idle: '🟢 Online',
   offline: '⚪ Offline',
 };
 
+function deriveSkinColor(tag: string): string {
+  const palette = ['#10b981', '#a855f7', '#eab308', '#ef4444', '#06b6d4', '#f97316', '#ec4899', '#8b5cf6'];
+  let hash = 0;
+  for (let i = 0; i < tag.length; i++) hash = tag.charCodeAt(i) + ((hash << 5) - hash);
+  return palette[Math.abs(hash) % palette.length];
+}
+
+/* ========================================================================== */
+
 export function SocialPanel({ onToast, onSpectateFriend, onJoinArena }: SocialPanelProps) {
   const { player, refresh } = useAuth();
   const [topTab, setTopTab] = useState<TopTab>('friends');
   const [friendsSub, setFriendsSub] = useState<FriendsSubTab>('friends');
-  const [friends, setFriends] = useState<MockFriend[]>(INITIAL_FRIENDS);
-  const [rivals, setRivals] = useState<MockRival[]>(INITIAL_RIVALS);
+
+  // --- Friends (fetched from /api/friends/list) ---
+  const [friends, setFriends] = useState<FriendItem[]>([]);
+  const [pendingReceived, setPendingReceived] = useState<PendingRequestItem[]>([]);
+  const [pendingSent, setPendingSent] = useState<PendingRequestItem[]>([]);
+  const [friendsLoading, setFriendsLoading] = useState(false);
+
+  // --- Rivals (local-only, populated from death-screen interactions) ---
+  const [rivals, setRivals] = useState<RivalItem[]>([]);
+
+  // --- Global community (fetched from /api/leaderboard) ---
+  const [globalPlayers, setGlobalPlayers] = useState<LeaderboardEntry[]>([]);
+  const [globalLoading, setGlobalLoading] = useState(false);
+
+  // --- UI state ---
   const [search, setSearch] = useState('');
   const [countryFilter, setCountryFilter] = useState('ALL');
   const [addFriendInput, setAddFriendInput] = useState('');
+  const [addFriendLoading, setAddFriendLoading] = useState(false);
   const [joinedClanId, setJoinedClanId] = useState<string | null>(null);
   const [showCreateClan, setShowCreateClan] = useState(false);
   const [clanForm, setClanForm] = useState({ name: '', tag: '', emblem: PRESET_EMBLEMS[0], description: '' });
   const [clanChat, setClanChat] = useState<{ author: string; text: string; ts: string }[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [depositAmount, setDepositAmount] = useState('');
-  const [coOpFriend, setCoOpFriend] = useState<MockFriend | null>(null);
+  const [coOpFriend, setCoOpFriend] = useState<FriendItem | null>(null);
+
+  /* ---------------- data fetching ---------------- */
+
+  const fetchFriends = useCallback(async () => {
+    setFriendsLoading(true);
+    try {
+      const res = await fetch('/api/friends/list');
+      if (!res.ok) return;
+      const data = await res.json();
+      setFriends((data.friends ?? []).map((f: any) => ({
+        id: f.id,
+        userTag: f.userTag,
+        name: f.name,
+        country: f.country,
+        level: f.level,
+        bankedChips: f.bankedChips ?? 0,
+        online: f.online,
+        skinColor: deriveSkinColor(f.userTag),
+        giftSent: false,
+        giftReceived: false,
+      })));
+      setPendingReceived((data.pendingReceived ?? []).map((f: any) => ({
+        id: f.id,
+        userTag: f.userTag,
+        name: f.name,
+        country: f.country,
+        level: f.level,
+        bankedChips: f.bankedChips ?? 0,
+        online: f.online,
+        skinColor: deriveSkinColor(f.userTag),
+      })));
+      setPendingSent((data.pendingSent ?? []).map((f: any) => ({
+        id: f.id,
+        userTag: f.userTag,
+        name: f.name,
+        country: f.country,
+        level: f.level,
+        bankedChips: f.bankedChips ?? 0,
+        online: f.online,
+        skinColor: deriveSkinColor(f.userTag),
+      })));
+    } catch {
+      /* silent */
+    } finally {
+      setFriendsLoading(false);
+    }
+  }, []);
+
+  const fetchGlobalPlayers = useCallback(async () => {
+    setGlobalLoading(true);
+    try {
+      const res = await fetch('/api/leaderboard?type=chips&limit=50');
+      if (!res.ok) return;
+      const data = await res.json();
+      setGlobalPlayers(data.entries ?? []);
+    } catch {
+      /* silent */
+    } finally {
+      setGlobalLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchFriends();
+    fetchGlobalPlayers();
+  }, [fetchFriends, fetchGlobalPlayers]);
+
+  /* ---------------- computed ---------------- */
 
   const filteredGlobalPlayers = useMemo(() => {
-    return GLOBAL_COMMUNITY_PLAYERS.filter((p) => {
+    return globalPlayers.filter((p) => {
       if (countryFilter !== 'ALL' && p.country !== countryFilter) return false;
       if (search.trim()) {
         const q = search.toLowerCase();
@@ -104,76 +220,154 @@ export function SocialPanel({ onToast, onSpectateFriend, onJoinArena }: SocialPa
       }
       return true;
     });
-  }, [search, countryFilter]);
+  }, [search, countryFilter, globalPlayers]);
 
   if (!player) return <NotSignedIn />;
 
   const joinedClan = joinedClanId ? PUBLIC_CLANS.find((c) => c.id === joinedClanId) : null;
 
-  function handleAddFriend() {
-    const name = addFriendInput.trim();
-    if (!name) {
+  /* ---------------- async handlers (friends) ---------------- */
+
+  async function handleAddFriend() {
+    const tag = addFriendInput.trim().toUpperCase();
+    if (!tag) {
       notify('Please enter a player tag or name.', 'error', onToast);
       return;
     }
-    const tagNum = Math.floor(1000 + Math.random() * 9000);
-    const finalTag = name.substring(0, 4).toUpperCase() + '-' + tagNum;
-    const newFriend: MockFriend = {
-      id: `f-${Date.now()}`,
-      name,
-      userTag: finalTag,
-      status: 'offline',
-      level: 5 + Math.floor(Math.random() * 30),
-      skinColor: '#22d3ee',
-      giftSent: false,
-      giftReceived: false,
-    };
-    setFriends((prev) => [...prev, newFriend]);
-    setAddFriendInput('');
-    notify(`Friend request sent to ${name} (${finalTag})! 🤝`, 'success', onToast);
+    setAddFriendLoading(true);
+    try {
+      const res = await fetch('/api/friends/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userTag: tag }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        notify(data.error || 'Failed to send request.', 'error', onToast);
+        return;
+      }
+      setAddFriendInput('');
+      notify(`Friend request sent to ${tag}! 🤝`, 'success', onToast);
+      await fetchFriends();
+    } catch {
+      notify('Network error. Please try again.', 'error', onToast);
+    } finally {
+      setAddFriendLoading(false);
+    }
   }
 
-  function handleSendGift(f: MockFriend) {
+  async function handleRemoveFriend(f: FriendItem) {
+    try {
+      const res = await fetch('/api/friends/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userTag: f.userTag }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        notify(data.error || 'Failed to remove friend.', 'error', onToast);
+        return;
+      }
+      setFriends((prev) => prev.filter((x) => x.id !== f.id));
+      notify(`Removed ${f.name} from friends list.`, 'info', onToast);
+    } catch {
+      notify('Network error. Please try again.', 'error', onToast);
+    }
+  }
+
+  async function handleAcceptFriend(req: PendingRequestItem) {
+    try {
+      const res = await fetch('/api/friends/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userTag: req.userTag }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        notify(data.error || 'Failed to accept request.', 'error', onToast);
+        return;
+      }
+      notify(`Accepted friend request from ${req.name}! 🤝`, 'success', onToast);
+      await fetchFriends();
+    } catch {
+      notify('Network error. Please try again.', 'error', onToast);
+    }
+  }
+
+  async function handleDeclineFriend(req: PendingRequestItem) {
+    try {
+      await fetch('/api/friends/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userTag: req.userTag }),
+      });
+      setPendingReceived((prev) => prev.filter((x) => x.id !== req.id));
+      notify(`Declined friend request from ${req.name}.`, 'info', onToast);
+    } catch {
+      /* silent */
+    }
+  }
+
+  async function handleConnectGlobal(p: LeaderboardEntry) {
+    try {
+      const res = await fetch('/api/friends/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userTag: p.userTag }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        notify(data.error || 'Failed to send request.', 'error', onToast);
+        return;
+      }
+      notify(`Connected with ${p.name}! 🤝`, 'success', onToast);
+      await fetchFriends();
+    } catch {
+      notify('Network error. Please try again.', 'error', onToast);
+    }
+  }
+
+  /* ---------------- sync UI handlers (gifts, spectate, invite) ---------------- */
+
+  function handleSendGift(f: FriendItem) {
     setFriends((prev) => prev.map((x) => (x.id === f.id ? { ...x, giftSent: true } : x)));
     notify(`Sent 25 Daily Chips Gift to ${f.name}! 🎁`, 'success', onToast);
   }
 
-  function handleClaimGift(f: MockFriend) {
+  function handleClaimGift(f: FriendItem) {
     setFriends((prev) => prev.map((x) => (x.id === f.id ? { ...x, giftReceived: false } : x)));
     notify(`Claimed 25 chips gift from ${f.name}! 🪙`, 'success', onToast);
     void refresh();
   }
 
-  function handleSpectate(f: MockFriend) {
-    if (f.status !== 'in-match') return;
+  function handleSpectate(f: FriendItem) {
+    if (!f.online) return;
     if (onSpectateFriend) onSpectateFriend(f.name, f.skinColor);
     else notify(`Joining spectating server for ${f.name}... 👁️`, 'info', onToast);
   }
 
-  function handleInviteFriend(f: MockFriend) {
-    if (f.status === 'offline') return;
+  function handleInviteFriend(f: FriendItem) {
+    if (!f.online) return;
     setCoOpFriend(f);
   }
 
-  function handleRemoveFriend(f: MockFriend) {
-    setFriends((prev) => prev.filter((x) => x.id !== f.id));
-    notify(`Removed ${f.name} from friends list.`, 'info', onToast);
-  }
+  /* ---------------- rival handlers ---------------- */
 
-  function handleHuntRival(r: MockRival) {
+  function handleHuntRival(r: RivalItem) {
     notify(`⚔️ HUNT INITIATED: Entering ${r.currentArenaName} to take down ${r.name}!`, 'info', onToast);
     if (onJoinArena) onJoinArena('tier-2');
   }
 
-  function handleConvertRival(r: MockRival) {
+  function handleConvertRival(r: RivalItem) {
     setFriends((prev) => [...prev, {
       id: `f-${Date.now()}`,
-      name: r.name,
       userTag: r.userTag,
-      status: r.status,
-      currentArenaName: r.currentArenaName,
+      name: r.name,
+      country: '',
       level: r.level,
-      skinColor: '#22d3ee',
+      bankedChips: 0,
+      online: r.status !== 'offline',
+      skinColor: deriveSkinColor(r.userTag),
       giftSent: false,
       giftReceived: false,
     }]);
@@ -181,10 +375,12 @@ export function SocialPanel({ onToast, onSpectateFriend, onJoinArena }: SocialPa
     notify(`${r.name} converted from rival to friend!`, 'success', onToast);
   }
 
-  function handleRemoveRival(r: MockRival) {
+  function handleRemoveRival(r: RivalItem) {
     setRivals((prev) => prev.filter((x) => x.id !== r.id));
     notify(`Removed ${r.name} from rivals list.`, 'info', onToast);
   }
+
+  /* ---------------- syndicate handlers (unchanged — still mock) ---------------- */
 
   function handleJoinClan(clanId: string) {
     const clan = PUBLIC_CLANS.find((c) => c.id === clanId);
@@ -253,6 +449,10 @@ export function SocialPanel({ onToast, onSpectateFriend, onJoinArena }: SocialPa
     }, 1500);
   }
 
+  /* ========================================================================== */
+  /*                                   JSX                                      */
+  /* ========================================================================== */
+
   return (
     <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 overflow-hidden">
       <GlowBlob color="bg-violet-500/10" className="-top-12 -right-12 w-56 h-56" />
@@ -275,7 +475,7 @@ export function SocialPanel({ onToast, onSpectateFriend, onJoinArena }: SocialPa
         </button>
       </div>
 
-      {/* FRIENDS TAB */}
+      {/* ==================== FRIENDS TAB ==================== */}
       {topTab === 'friends' && (
         <div className="space-y-4">
           {/* Sub-tabs */}
@@ -291,47 +491,115 @@ export function SocialPanel({ onToast, onSpectateFriend, onJoinArena }: SocialPa
               type="text"
               value={addFriendInput}
               onChange={(e) => setAddFriendInput(e.target.value)}
-              placeholder="Enter Player Tag or Name (e.g. Cobra-4231)..."
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAddFriend(); }}
+              placeholder="Enter Player Tag (e.g. COBRA-4231)..."
               className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-violet-500/50"
             />
             <button
               type="button"
               onClick={handleAddFriend}
-              className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs uppercase tracking-wider transition flex items-center gap-1.5"
+              disabled={addFriendLoading}
+              className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs uppercase tracking-wider transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <UserPlus className="w-3.5 h-3.5" /> Add Friend
+              {addFriendLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />} Add Friend
             </button>
           </div>
 
-          {/* My Friends */}
+          {/* ---- My Friends ---- */}
           {friendsSub === 'friends' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {friends.length === 0 ? (
-                <div className="md:col-span-2 p-6 rounded-xl border border-slate-800 bg-slate-950/60 text-center">
+            <div className="space-y-3">
+              {/* Pending friend requests (incoming) */}
+              {pendingReceived.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <UserPlus className="w-3.5 h-3.5" /> Incoming Requests ({pendingReceived.length})
+                  </h3>
+                  <ul className="space-y-2">
+                    {pendingReceived.map((req) => (
+                      <li key={req.id} className="flex items-center justify-between gap-3 p-3 rounded-xl border border-amber-500/20 bg-amber-500/5">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0" style={{ background: `${req.skinColor}20`, border: `1px solid ${req.skinColor}40` }} aria-hidden>
+                            🐍
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-white text-sm truncate">{req.name}</div>
+                            <div className="text-[10px] font-mono text-slate-500">#{req.userTag} · Lvl {req.level}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleAcceptFriend(req)}
+                            className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1"
+                          >
+                            <Check className="w-3 h-3" /> Accept
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeclineFriend(req)}
+                            className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-slate-800 hover:bg-rose-900/40 text-slate-300 hover:text-rose-400 border border-slate-700 hover:border-rose-500/30 transition flex items-center gap-1"
+                          >
+                            <X className="w-3 h-3" /> Decline
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Pending sent requests */}
+              {pendingSent.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Outgoing Requests ({pendingSent.length})</h3>
+                  <ul className="space-y-1.5">
+                    {pendingSent.map((req) => (
+                      <li key={req.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-slate-800 bg-slate-950/40">
+                        <div className="w-6 h-6 rounded flex items-center justify-center text-xs shrink-0" style={{ background: `${req.skinColor}20`, border: `1px solid ${req.skinColor}40` }} aria-hidden>
+                          🐍
+                        </div>
+                        <span className="text-xs font-bold text-white truncate">{req.name}</span>
+                        <span className="text-[10px] font-mono text-slate-500">#{req.userTag}</span>
+                        <span className="ml-auto text-[10px] font-mono text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full">Pending</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Accepted friends grid */}
+              {friendsLoading ? (
+                <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-400">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading friends…
+                </div>
+              ) : friends.length === 0 && pendingReceived.length === 0 && pendingSent.length === 0 ? (
+                <div className="p-6 rounded-xl border border-slate-800 bg-slate-950/60 text-center">
                   <Users className="w-8 h-8 text-slate-600 mx-auto mb-2" />
                   <h4 className="text-sm font-bold text-white">Your Friends List is Empty</h4>
                   <p className="text-xs text-slate-400 mt-1">
-                    Use &quot;Search Global Players&quot; above or enter rival tags to connect,
+                    Use &quot;Search Global Players&quot; above or enter a player tag to send a friend request,
                     gift daily free chips, and play!
                   </p>
                 </div>
               ) : (
-                friends.map((f) => (
-                  <FriendCard
-                    key={f.id}
-                    f={f}
-                    onSendGift={() => handleSendGift(f)}
-                    onClaimGift={() => handleClaimGift(f)}
-                    onSpectate={() => handleSpectate(f)}
-                    onInvite={() => handleInviteFriend(f)}
-                    onRemove={() => handleRemoveFriend(f)}
-                  />
-                ))
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {friends.map((f) => (
+                    <FriendCard
+                      key={f.id}
+                      f={f}
+                      onSendGift={() => handleSendGift(f)}
+                      onClaimGift={() => handleClaimGift(f)}
+                      onSpectate={() => handleSpectate(f)}
+                      onInvite={() => handleInviteFriend(f)}
+                      onRemove={() => handleRemoveFriend(f)}
+                    />
+                  ))}
+                </div>
               )}
             </div>
           )}
 
-          {/* My Rivals */}
+          {/* ---- My Rivals ---- */}
           {friendsSub === 'rivals' && (
             <div className="space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
@@ -371,7 +639,7 @@ export function SocialPanel({ onToast, onSpectateFriend, onJoinArena }: SocialPa
             </div>
           )}
 
-          {/* Global Search */}
+          {/* ---- Global Search (leaderboard) ---- */}
           {friendsSub === 'search' && (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -399,91 +667,66 @@ export function SocialPanel({ onToast, onSpectateFriend, onJoinArena }: SocialPa
               </div>
 
               <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-                <ol className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll">
-                  {filteredGlobalPlayers.length === 0 ? (
-                    <li className="p-6 text-center text-xs text-slate-500">No players match your search.</li>
-                  ) : (
-                    filteredGlobalPlayers.map((p) => {
-                      const connected = friends.some((f) => f.userTag === p.userTag);
-                      return (
-                        <li key={p.userTag} className="px-4 py-3 text-sm flex items-center justify-between gap-3 hover:bg-slate-900/40 transition-colors">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: `${p.skinColor}20`, border: `1px solid ${p.skinColor}40` }} aria-hidden>
-                              {countryFlag(p.country)}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="font-bold text-white truncate flex items-center gap-1.5">
-                                {p.name}
-                                <span className="text-[10px] font-mono text-slate-500">#{p.userTag}</span>
+                {globalLoading ? (
+                  <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-400">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Loading global players…
+                  </div>
+                ) : (
+                  <ol className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll">
+                    {filteredGlobalPlayers.length === 0 ? (
+                      <li className="p-6 text-center text-xs text-slate-500">No players match your search.</li>
+                    ) : (
+                      filteredGlobalPlayers.map((p) => {
+                        const connected = friends.some((f) => f.userTag === p.userTag)
+                          || pendingSent.some((f) => f.userTag === p.userTag);
+                        const isSelf = p.userTag === player.userTag;
+                        return (
+                          <li key={p.userTag} className="px-4 py-3 text-sm flex items-center justify-between gap-3 hover:bg-slate-900/40 transition-colors">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0 bg-slate-800/60 border border-slate-700/60" aria-hidden>
+                                {countryFlag(p.country)}
                               </div>
-                              <div className="text-[10px] font-mono text-slate-400">
-                                🪙 {(p.chips / 1000).toFixed(0)}k · Lvl {p.level} · {STATUS_LABELS[p.status]}
+                              <div className="min-w-0">
+                                <div className="font-bold text-white truncate flex items-center gap-1.5">
+                                  {p.name}
+                                  {p.isPlayer && <span className="text-[9px] font-bold text-violet-300 bg-violet-500/10 border border-violet-500/30 px-1.5 py-0 rounded-full">You</span>}
+                                  <span className="text-[10px] font-mono text-slate-500">#{p.userTag}</span>
+                                </div>
+                                <div className="text-[10px] font-mono text-slate-400">
+                                  🪙 {(p.bankedChips / 1000).toFixed(0)}k · Lvl {p.level} · #{p.rank}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          {connected ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded-full">
-                              <Check className="w-3 h-3" /> Connected
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setFriends((prev) => [...prev, {
-                                  id: `f-${Date.now()}`,
-                                  name: p.name,
-                                  userTag: p.userTag,
-                                  status: p.status,
-                                  level: p.level,
-                                  skinColor: p.skinColor,
-                                  giftSent: false,
-                                  giftReceived: false,
-                                }]);
-                                notify(`Connected with ${p.name}! 🤝`, 'success', onToast);
-                              }}
-                              className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-violet-600/20 border border-violet-500/40 text-violet-300 hover:bg-violet-600 hover:text-white transition flex items-center gap-1"
-                            >
-                              <UserPlus className="w-3 h-3" /> Connect
-                            </button>
-                          )}
-                        </li>
-                      );
-                    })
-                  )}
-                  {/* Custom tag not in presets */}
-                  {search.trim() && filteredGlobalPlayers.length === 0 && (
-                    <li className="p-4 text-center text-xs text-slate-400">
-                      <p className="font-bold text-white">Custom Player Tag: &quot;{search}&quot;</p>
-                      <p className="mt-1">Found on Global Server. Connect &amp; send invite request.</p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFriends((prev) => [...prev, {
-                            id: `f-${Date.now()}`,
-                            name: search.trim(),
-                            userTag: search.trim().toUpperCase(),
-                            status: 'offline',
-                            level: 1,
-                            skinColor: '#22d3ee',
-                            giftSent: false,
-                            giftReceived: false,
-                          }]);
-                          notify(`Connected with ${search}! 🤝`, 'success', onToast);
-                        }}
-                        className="mt-3 px-3 py-1.5 rounded-lg text-[10px] font-bold bg-violet-600 hover:bg-violet-500 text-white transition inline-flex items-center gap-1"
-                      >
-                        <UserPlus className="w-3 h-3" /> Connect
-                      </button>
-                    </li>
-                  )}
-                </ol>
+                            {isSelf ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-800 px-2 py-1 rounded-full">
+                                You
+                              </span>
+                            ) : connected ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded-full">
+                                <Check className="w-3 h-3" /> Connected
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleConnectGlobal(p)}
+                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-violet-600/20 border border-violet-500/40 text-violet-300 hover:bg-violet-600 hover:text-white transition flex items-center gap-1"
+                              >
+                                <UserPlus className="w-3 h-3" /> Connect
+                              </button>
+                            )}
+                          </li>
+                        );
+                      })
+                    )}
+                  </ol>
+                )}
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* SYNDICATE TAB */}
+      {/* ==================== SYNDICATE TAB ==================== */}
       {topTab === 'syndicate' && (
         <div className="space-y-4">
           {!joinedClan ? (
@@ -783,6 +1026,10 @@ export function SocialPanel({ onToast, onSpectateFriend, onJoinArena }: SocialPa
   );
 }
 
+/* ========================================================================== */
+/*                           Sub-components                                    */
+/* ========================================================================== */
+
 interface SubTabBtnProps {
   active: boolean;
   onClick: () => void;
@@ -802,8 +1049,10 @@ function SubTabBtn({ active, onClick, icon: Icon, label }: SubTabBtnProps) {
   );
 }
 
+/* ---------- Friend Card ---------- */
+
 interface FriendCardProps {
-  f: MockFriend;
+  f: FriendItem;
   onSendGift: () => void;
   onClaimGift: () => void;
   onSpectate: () => void;
@@ -812,6 +1061,8 @@ interface FriendCardProps {
 }
 
 function FriendCard({ f, onSendGift, onClaimGift, onSpectate, onInvite, onRemove }: FriendCardProps) {
+  const statusKey = f.online ? 'online' : 'offline';
+
   return (
     <div className="p-4 rounded-2xl border border-slate-800 bg-slate-950/70 shadow-md flex flex-col gap-2">
       <div className="flex items-start justify-between">
@@ -835,18 +1086,12 @@ function FriendCard({ f, onSendGift, onClaimGift, onSpectate, onInvite, onRemove
       </div>
 
       <div className="flex items-center justify-between text-[10px] font-mono">
-        <span className={`inline-flex items-center gap-1 ${f.status === 'online' ? 'text-emerald-400' : f.status === 'in-match' ? 'text-rose-400' : f.status === 'idle' ? 'text-amber-400' : 'text-slate-500'}`}>
-          <span className={`w-1.5 h-1.5 rounded-full ${f.status === 'online' ? 'bg-emerald-400' : f.status === 'in-match' ? 'bg-rose-400' : f.status === 'idle' ? 'bg-amber-400' : 'bg-slate-600'}`} />
-          {STATUS_LABELS[f.status]}
+        <span className={`inline-flex items-center gap-1 ${f.online ? 'text-emerald-400' : 'text-slate-500'}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${f.online ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+          {STATUS_LABELS[statusKey]}
         </span>
         <span className="text-amber-400">Lvl {f.level}</span>
       </div>
-
-      {f.currentArenaName && (
-        <div className="text-[10px] text-slate-400 truncate">
-          📍 {f.currentArenaName}
-        </div>
-      )}
 
       <div className="flex flex-wrap gap-1.5 pt-1">
         {f.giftReceived ? (
@@ -860,7 +1105,7 @@ function FriendCard({ f, onSendGift, onClaimGift, onSpectate, onInvite, onRemove
         ) : (
           <span className="px-2 py-1 rounded-lg text-[10px] text-slate-500 bg-slate-900 border border-slate-800">No pending gift</span>
         )}
-        {f.status === 'in-match' && (
+        {f.online && (
           <button
             type="button"
             onClick={onSpectate}
@@ -872,7 +1117,7 @@ function FriendCard({ f, onSendGift, onClaimGift, onSpectate, onInvite, onRemove
         <button
           type="button"
           onClick={onInvite}
-          disabled={f.status === 'offline'}
+          disabled={!f.online}
           className="px-2 py-1 rounded-lg text-[10px] font-bold bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600 hover:text-white transition flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Swords className="w-3 h-3" /> Invite
@@ -890,8 +1135,10 @@ function FriendCard({ f, onSendGift, onClaimGift, onSpectate, onInvite, onRemove
   );
 }
 
+/* ---------- Rival Card ---------- */
+
 interface RivalCardProps {
-  r: MockRival;
+  r: RivalItem;
   onHunt: () => void;
   onConvert: () => void;
   onRemove: () => void;
@@ -956,14 +1203,16 @@ function RivalCard({ r, onHunt, onConvert, onRemove }: RivalCardProps) {
         onClick={onHunt}
         className="w-full py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5"
       >
-        <Swords className="w-3.5 h-3.5" /> HUNT / JOIN ARENA
+        <Swords className="w-3 h-3" /> HUNT / JOIN ARENA
       </button>
     </div>
   );
 }
 
+/* ---------- Co-Op Invite Modal ---------- */
+
 interface CoOpInviteModalProps {
-  friend: MockFriend;
+  friend: FriendItem;
   playerChips: number;
   onClose: () => void;
   onSend: (tierId: string) => void;
@@ -971,7 +1220,7 @@ interface CoOpInviteModalProps {
 
 function CoOpInviteModal({ friend, playerChips, onClose, onSend }: CoOpInviteModalProps) {
   const [selectedTier, setSelectedTier] = useState(ARENA_TIERS[0].id);
-  const friendChipsAmt = friendChips(friend.name, friend.level);
+  const friendChipsAmt = friend.bankedChips;
   const tier = ARENA_TIERS.find((t) => t.id === selectedTier) || ARENA_TIERS[0];
   const youCanAfford = playerChips >= tier.buyIn;
   const friendCanAfford = friendChipsAmt >= tier.buyIn;
