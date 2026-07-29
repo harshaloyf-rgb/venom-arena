@@ -59,6 +59,7 @@ import {
   Shield,
   Signal,
   Skull,
+  Star,
   Swords,
   Trophy,
   User,
@@ -99,6 +100,7 @@ import type {
 
 import {
   drawChipLabel,
+  drawExtractionRing,
   drawFood,
   drawFoodOrb,
   drawFullMap,
@@ -282,6 +284,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
   const [hudBots, setHudBots] = useState(0);
   const [extracting, setExtracting] = useState(false);
   const [extractProgress, setExtractProgress] = useState(0);
+  const [showDeathVignette, setShowDeathVignette] = useState(false);
   const [fps, setFps] = useState(60);
   const [ping, setPing] = useState<number>(-1);
   const [lowQuality, setLowQuality] = useState(false);
@@ -887,7 +890,8 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         isPostDeathRef.current = true;
         postDeathRecordRef.current = 300;
 
-        setPhase('ended');
+        // Show death vignette for 3 seconds BEFORE showing the end screen
+        setShowDeathVignette(true);
         if (!isOffline) {
           toast({
             title: 'Eliminated',
@@ -901,11 +905,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
           });
         }
 
-        // Delay capturing replay frames to include post-death frames.
-        // The replay capture happens after the 5s window in the snapshot handler.
-        // But we also set the endScreen now with current replay (pre-death).
-        // We'll update it again when post-death recording completes.
-        // Set initial end screen (replay will be updated after 15s post-death)
+        // Prepare end screen data (but don't show it yet)
         const { frames: initFrames, deathFrameIdx: initDeathIdx } = getReplayFrames();
         setEndScreen({
           outcome: 'death',
@@ -917,6 +917,13 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
           replayMyId: mySnakeIdRef.current ?? undefined,
           replayDeathFrameIdx: initDeathIdx,
         });
+
+        // After 3-second death vignette, show the end overlay
+        const DEATH_VIGNETTE_DELAY_MS = 3000;
+        safeTimeout(() => {
+          setShowDeathVignette(false);
+          setPhase('ended');
+        }, DEATH_VIGNETTE_DELAY_MS);
 
         // After 15s post-death recording completes, update endScreen with final frames.
         // Use safeTimeout so the callback is skipped if the component unmounts.
@@ -1346,6 +1353,14 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
           if (s.isPlayer && s.carriedChips > 0 && s.points && s.points.length > 0) {
             const head = s.points[0];
             drawChipLabel(ctx, head.x, head.y, s.carriedChips, s.size, cam.zoom);
+          }
+        }
+
+        // Draw extraction progress rings around extracting snakes
+        for (const s of snap.snakes) {
+          if (s.isExtracting && s.extractionProgress > 0 && s.points && s.points.length > 0) {
+            const head = s.points[0];
+            drawExtractionRing(ctx, head.x, head.y, s.size, s.extractionProgress, cam.zoom);
           }
         }
       }
@@ -1846,7 +1861,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
 
       {/* HUD: top-left (Carried Chips + Rank/Score/Kills/Boost + Real Players/Bots) — AUDIT-A Section A */}
       {phase !== 'connecting' && (
-        <div className="pointer-events-none absolute left-3 top-3 flex max-w-sm flex-col gap-2 font-mono">
+        <div className="pointer-events-none absolute left-3 top-3 z-40 flex max-w-sm flex-col gap-2 font-mono">
           {/* Carried Chips card — BUILD-13: hidden when isOfflineMode (no chips in offline). */}
           {!isOfflineMode && (
             <div className="rounded-lg border border-emerald-500/30 bg-slate-950/80 px-3 py-2 backdrop-blur-sm">
@@ -1856,6 +1871,19 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
               </div>
               <div className="text-2xl font-bold text-emerald-400 tabular-nums">
                 {hudCarried.toLocaleString()}<span className="ml-0.5 text-base">c</span>
+              </div>
+            </div>
+          )}
+
+          {/* Stars Earned card (online only) — shows extra chips collected from star chips */}
+          {!isOfflineMode && hudCarried > (arena?.buyIn ?? 0) && (
+            <div className="rounded-lg border border-amber-500/30 bg-slate-950/80 px-3 py-1.5 backdrop-blur-sm">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-500">
+                <Star className="h-3 w-3 text-amber-400" />
+                <span>Stars Earned</span>
+              </div>
+              <div className="text-sm font-bold text-amber-400 tabular-nums">
+                +{Math.max(0, hudCarried - (arena?.buyIn ?? 0)).toLocaleString()}<span className="ml-0.5 text-xs">c</span>
               </div>
             </div>
           )}
@@ -1910,7 +1938,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
 
       {/* HUD: top-right (Banked / FPS / Ping) — AUDIT-A Section A */}
       {phase !== 'connecting' && (
-        <div className="pointer-events-none absolute right-3 top-3 flex flex-col items-end gap-1.5 font-mono">
+        <div className="pointer-events-none absolute right-3 top-3 z-40 flex flex-col items-end gap-1.5 font-mono">
           <div className="rounded-md border border-amber-500/30 bg-slate-950/80 px-2.5 py-1 text-right backdrop-blur-sm">
             <div className="text-[10px] uppercase tracking-wider text-slate-500">BANKED</div>
             <div className="text-sm font-bold text-amber-300 tabular-nums">
@@ -2054,6 +2082,17 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         >
           <X className="h-4 w-4" />
         </button>
+      )}
+
+      {/* Death vignette: 3-second red radial fade after death, before end screen. z-30 (above canvas, below HUD z-40, below EndOverlay z-50). */}
+      {showDeathVignette && (
+        <div
+          className="absolute inset-0 z-30 pointer-events-none animate-[fadeIn_300ms_ease-out]"
+          style={{
+            background: 'radial-gradient(ellipse at center, transparent 30%, rgba(220, 38, 38, 0.6) 100%)',
+          }}
+          aria-hidden="true"
+        />
       )}
 
       {/* Quick Chat Emotes Bar (bottom-left) — AUDIT-A Section H */}
