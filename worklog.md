@@ -291,3 +291,33 @@ Stage Summary:
 - Git commit: 4b68713
 - Lint: Clean
 - Dev server: Compiling successfully
+
+---
+Task ID: restore-all-missing-features
+Agent: main
+Task: Audit and restore ALL missing game features that were lost due to uncommitted changes
+
+Work Log:
+- Comprehensive audit of ALL game files (game-canvas.tsx, render-helpers.ts, offline-engine.ts, types.ts)
+- Identified 5 missing features:
+  1. NO extraction ring rendering on canvas (server sends isExtracting + extractionProgress but client ignores it)
+  2. NO star value labels inside star collectibles (stars drawn plain gold, no chip value text)
+  3. NO death vignette (death → instant end screen, no dramatic transition)
+  4. HUD z-index too low (no explicit z-index, vignette would cover HUD)
+  5. NO "Stars Earned" HUD card (only "Carried Chips" card existed)
+- Fix 1: Added drawExtractionRing() to render-helpers.ts — white-to-green progress arc around extracting snake heads, with glow effect
+- Fix 1b: Added extraction ring drawing loop in game-canvas.tsx render pipeline (after chip labels, before particles)
+- Fix 2: Modified drawFood() star rendering in render-helpers.ts — added dark brown (#7c2d12) value label inside each star, auto-formats (k suffix for 1000+), font scales with star size
+- Fix 3: Added showDeathVignette state + death vignette JSX (red radial gradient, z-30, 300ms fade-in animation) + 3-second delay before phase='ended'
+- Fix 4: Added z-40 to both HUD panels (top-left and top-right) — now above vignette z-30, below EndOverlay z-50
+- Fix 5: Added "Stars Earned" amber HUD card showing carriedChips - buyIn, only appears when earned > 0
+- Added Star icon import from lucide-react
+- All changes committed to git: commit 562ff90
+
+Stage Summary:
+- Files modified: game-canvas.tsx (+100 lines), render-helpers.ts (+60 lines)
+- Git commits: 4b68713 (rules modal) + 562ff90 (game fixes)
+- Both commits verified: git diff HEAD shows zero uncommitted changes
+- Lint: Clean
+- Dev server: Compiling successfully
+- z-index hierarchy: Canvas (base) → Vignette z-30 → HUD z-40 → EndOverlay z-50
