@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     }
     if (!player.securityPin) {
       return NextResponse.json(
-        { error: 'This account has no Security PIN set. Please contact support.' },
+        { error: 'This account has no Security PIN set. PIN is required for password recovery. Please create a new account or contact an admin.' },
         { status: 400 }
       );
     }

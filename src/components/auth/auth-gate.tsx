@@ -15,6 +15,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/components/providers/auth-provider';
+import { GameRulesModal } from '@/components/modals/game-rules-modal';
 import {
   Skull,
   Zap,
@@ -73,6 +74,7 @@ function AuthScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [forgotOpen, setForgotOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
 
   // Per-tab error handling — clear error when switching tabs
   function handleTabChange(value: string) {
@@ -244,11 +246,7 @@ function AuthScreen() {
               <div className="text-center">
                 <button
                   type="button"
-                  onClick={() => {
-                    window.location.hash = 'rules';
-                    // Open rules modal after potential login — we set a flag in sessionStorage
-                    sessionStorage.setItem('va_show_rules', '1');
-                  }}
+                  onClick={() => setRulesOpen(true)}
                   className="inline-flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 underline-offset-2 hover:underline cursor-pointer"
                 >
                   <BookOpen className="w-3 h-3" />
@@ -258,6 +256,9 @@ function AuthScreen() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Game Rules Modal */}
+        <GameRulesModal isOpen={rulesOpen} onClose={() => setRulesOpen(false)} />
 
         {/* Forgot Password Modal */}
         <Dialog open={forgotOpen} onOpenChange={(open) => { setForgotOpen(open); setError(null); }}>
