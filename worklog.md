@@ -442,3 +442,41 @@ Stage Summary:
 - Food weights and Stars in Arena HUD confirmed already correct
 - Rules & Guide modal: NOT edited (per user instruction)
 - No git commits made (per user instruction)
+
+---
+Task ID: section-0-accounts
+Agent: Main Agent
+Task: Implement Rules & Guide Section 0 — ACCOUNTS & GETTING STARTED (complete)
+
+Work Log:
+- Verified Register flow already complete: display name (max 20 chars), email, password (min 6), Security PIN, VENOM-XXXX tag, 150 starter chips, permanent DB save
+- Verified Guest Play already complete: one-click, 150 starter chips, random VENOM-XXXX tag
+- MISSING: Guest → Registered upgrade flow
+
+Created:
+1. `/api/auth/upgrade/route.ts` — POST endpoint to upgrade guest to registered
+   - Validates: email format, password >= 6 chars, display name required, optional 4-digit PIN
+   - Only works for guest accounts (email === null)
+   - Checks email uniqueness
+   - UPDATEs only email, passwordHash, name, securityPin — preserves ALL other data
+   - Issues fresh session token after upgrade
+
+2. `player-profile.tsx` — Added GuestUpgradeBanner component
+   - Shows amber banner at top of Profile stats tab for guest accounts
+   - "You're playing as a Guest" with "Upgrade Now" button
+   - Expandable form: Display Name, Email, Password, Security PIN
+   - Progress preservation message: "Your progress is safe"
+   - Calls /api/auth/upgrade API on submit
+   - Toast notification on success, auto-refreshes auth state
+   - Banner auto-hides after successful upgrade (player.email is now set)
+
+Verification:
+- ESLint: Clean (zero errors)
+- Browser verified: Guest login → Profile panel → "You're playing as a Guest" banner → "Upgrade Now" → form → filled & submitted → "Account upgraded successfully!" toast → banner disappeared → name changed to "ViperStrike" → all data preserved
+- Dev log: POST /api/auth/upgrade 200, UPDATE query confirmed only email/passwordHash/name/securityPin changed
+- Rules & Guide NOT edited
+
+Stage Summary:
+- Section 0 fully implemented: Register, Guest Play, AND Guest Upgrade
+- Guest upgrade preserves all progress (chips, stats, cosmetics, friends, challenges)
+- No git commits (per user instruction)
