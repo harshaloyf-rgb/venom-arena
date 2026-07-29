@@ -80,7 +80,7 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
       url: uploadForm.url,
       extractedChips: parseInt(uploadForm.chips, 10) || 0,
       upvotes: 0,
-      dateStr: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, ' '),
+      dateStr: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
       tags: ['Community'],
     };
     setClips((prev) => [newClip, ...prev]);

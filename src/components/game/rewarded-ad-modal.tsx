@@ -39,6 +39,15 @@ export function RewardedAdModal({ open, onClose, onRewardClaimed, onToast }: Rew
   const [phase, setPhase] = useState<Phase>('watching');
   const [errorMsg, setErrorMsg] = useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
 
   // Countdown timer
   useEffect(() => {
@@ -79,8 +88,8 @@ export function RewardedAdModal({ open, onClose, onRewardClaimed, onToast }: Rew
       if (onToast) onToast(`+${data.reward} chips credited from video reward!`, 'success');
       onRewardClaimed?.(data.reward);
 
-      // Auto-close after success
-      setTimeout(() => {
+      // Auto-close after success (cleanup-safe via ref)
+      closeTimerRef.current = setTimeout(() => {
         onClose();
       }, 1500);
     } catch {
