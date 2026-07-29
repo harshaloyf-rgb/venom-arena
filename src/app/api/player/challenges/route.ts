@@ -71,7 +71,7 @@ function pickDiverse<T extends { category: string }>(arr: T[], n: number): T[] {
   // Second pass: fill remaining slots (still avoiding duplicates in the pick)
   if (picked.length < n) {
     const remaining = arr.filter(
-      (item) => !picked.includes(item) && !usedCategories.has(item.category),
+      (item) => !picked.includes(item),
     );
     const extra = pickRandom(remaining, n - picked.length);
     picked.push(...extra);

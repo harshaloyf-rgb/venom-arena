@@ -8,8 +8,7 @@
  * authoritative BUILD-2/3/4 stack:
  *   - `useAuth()` for player data + logout
  *   - `<GameCanvas />` (BUILD-3) when an arena is active
- *   - The 8 BUILD-4 panels + 4 new BUILD-6 placeholders (Championships,
- *     SeasonPass, ClipShowcase, AdminPanel) + GameRulesModal
+ *   - 12 lobby panels (Bento Gates) + sub-page tab system + GameRulesModal
  *
  * Layout: sticky header → main (dashboard OR sub-page nav + content) →
  * sticky footer (`min-h-screen flex flex-col` + `mt-auto`).
@@ -18,7 +17,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  Landmark,
   Compass,
   Shield,
   User,
@@ -510,7 +508,7 @@ export default function Home() {
                   <BentoGate
                     onClick={() => setActiveTab('store')}
                     icon={Coins}
-                    accent="emerald"
+                    accent="cyan"
                     badge="Secure Vault"
                     title="Virtual Chip Store"
                     desc="Acquire secure safe-guarded chip packs immediately to compete in high-stakes premium arena tables."
@@ -522,7 +520,7 @@ export default function Home() {
                   <BentoGate
                     onClick={() => setActiveTab('championships')}
                     icon={Crown}
-                    accent="amber"
+                    accent="rose"
                     badge="Tournament"
                     title="Championships"
                     desc="Enter elite championship events. Compete against top-ranked operators for massive chip prizes and exclusive titles."
@@ -558,7 +556,7 @@ export default function Home() {
                   <BentoGate
                     onClick={() => setActiveTab('seasonpass')}
                     icon={Sparkles}
-                    accent="purple"
+                    accent="pink"
                     badge="Season XP"
                     title="Season Pass"
                     desc="Track your seasonal progression. Unlock exclusive rewards, cosmetics, and bonus chip multipliers as you level up."
@@ -911,7 +909,7 @@ export default function Home() {
 
 interface BentoGateProps {
   icon: typeof Compass;
-  accent: 'indigo' | 'purple' | 'blue' | 'amber' | 'yellow' | 'emerald' | 'violet' | 'red';
+  accent: 'indigo' | 'purple' | 'blue' | 'amber' | 'yellow' | 'emerald' | 'violet' | 'red' | 'cyan' | 'rose' | 'pink';
   badge: string;
   title: string;
   desc: string;
@@ -969,7 +967,7 @@ const ACCENT_CLASSES: Record<
   },
   violet: {
     iconBg: 'bg-violet-500/10 border-violet-500/20 text-violet-400',
-    badgeBg: 'bg-cyan-500/15 border-cyan-500/20 text-cyan-300',
+    badgeBg: 'bg-violet-500/15 border-violet-500/20 text-violet-400',
     borderHover: 'hover:border-violet-500/40',
     textHover: 'group-hover:text-violet-400',
     arrow: 'text-violet-400',
@@ -980,6 +978,27 @@ const ACCENT_CLASSES: Record<
     borderHover: 'hover:border-red-500/40',
     textHover: 'group-hover:text-red-400',
     arrow: 'text-red-400',
+  },
+  cyan: {
+    iconBg: 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400',
+    badgeBg: 'bg-cyan-500/15 border-cyan-500/20 text-cyan-400',
+    borderHover: 'hover:border-cyan-500/40',
+    textHover: 'group-hover:text-cyan-400',
+    arrow: 'text-cyan-400',
+  },
+  rose: {
+    iconBg: 'bg-rose-500/10 border-rose-500/20 text-rose-400',
+    badgeBg: 'bg-rose-500/15 border-rose-500/20 text-rose-400',
+    borderHover: 'hover:border-rose-500/40',
+    textHover: 'group-hover:text-rose-400',
+    arrow: 'text-rose-400',
+  },
+  pink: {
+    iconBg: 'bg-pink-500/10 border-pink-500/20 text-pink-400',
+    badgeBg: 'bg-pink-500/15 border-pink-500/20 text-pink-400',
+    borderHover: 'hover:border-pink-500/40',
+    textHover: 'group-hover:text-pink-400',
+    arrow: 'text-pink-400',
   },
 };
 
