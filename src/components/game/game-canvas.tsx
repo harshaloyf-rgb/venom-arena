@@ -459,8 +459,8 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
     fullMapOpenRef.current = fullMapOpen;
   }, [fullMapOpen]);
   useEffect(() => {
-    isOfflineModeRef.current = isOffline || hudRealPlayerCount === 0;
-  }, [isOffline, hudRealPlayerCount]);
+    isOfflineModeRef.current = isOffline;
+  }, [isOffline]);
   // Auto-hide minimap in offline mode (mapless practice arena).
   useEffect(() => {
     if (isOffline) setMinimapVisible(false);
@@ -1773,7 +1773,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
   // players). Drives chips-display hiding + rank/leaderboard formatting.
   // (Offline practice arenas return early before this point, so this only
   //  matters for the online-mode edge case where realPlayerCount === 0.)
-  const isOfflineMode = isOffline || hudRealPlayerCount === 0;
+  const isOfflineMode = isOffline;
   // Rank display:
   //  - Online (realPlayerCount > 1): "#X of Y" using server yourRank.
   //  - Online with <= 1 real player: "#1 of 1".
