@@ -3,6 +3,105 @@ import { db } from '@/lib/db';
 import { toProfile } from '@/lib/player-helpers';
 import { getArenaById, levelFromXp } from '@/lib/game-config';
 
+// ---------------------------------------------------------------------------
+// Date helpers (duplicated from challenges/route.ts — needed for period lookup)
+// ---------------------------------------------------------------------------
+
+function utcToday(): string {
+  const now = new Date();
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+}
+
+function utcMonday(): string {
+  const now = new Date();
+  const day = now.getUTCDay(); // 0=Sun … 6=Sat
+  const diff = day === 0 ? 6 : day - 1; // shift so Monday=0
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff));
+  return `${monday.getUTCFullYear()}-${String(monday.getUTCMonth() + 1).padStart(2, '0')}-${String(monday.getUTCDate()).padStart(2, '0')}`;
+}
+
+// ---------------------------------------------------------------------------
+// Challenge progress updater (runs inside the caller's Prisma transaction)
+// ---------------------------------------------------------------------------
+
+async function updateChallengeProgress(
+  tx: Parameters<Parameters<typeof db.$transaction>[0]>[0],
+  playerId: string,
+  params: {
+    kills: number;
+    outcome: 'extract' | 'death';
+    carriedChips: number;
+    score: number;
+    starsCollected: number;
+  },
+) {
+  const today = utcToday();
+  const monday = utcMonday();
+
+  const activeChallenges = await tx.challenge.findMany({
+    where: {
+      playerId,
+      completed: false,
+      OR: [
+        { type: 'daily', periodStart: today },
+        { type: 'weekly', periodStart: monday },
+      ],
+    },
+  });
+
+  for (const challenge of activeChallenges) {
+    let newCurrent = challenge.current;
+
+    switch (challenge.category) {
+      case 'kill':
+        // Increment by the number of kills this match
+        newCurrent += params.kills;
+        break;
+
+      case 'extract':
+        if (params.outcome === 'extract') {
+          if (challenge.target <= 10) {
+            // Count-based extraction challenge (e.g. "extract 3 times")
+            newCurrent += 1;
+          } else {
+            // Amount-based extraction challenge (e.g. "extract with ≥50 chips")
+            // Track the best single-run amount
+            newCurrent = Math.max(newCurrent, params.carriedChips);
+          }
+        }
+        break;
+
+      case 'score':
+        // Score milestones: if reached in this match, mark as completable
+        if (params.score >= challenge.target) {
+          newCurrent = challenge.target;
+        }
+        break;
+
+      case 'arena_entry':
+        // Player entered an arena
+        newCurrent += 1;
+        break;
+
+      case 'star_collect':
+        // Increment by stars collected this match
+        newCurrent += params.starsCollected;
+        break;
+    }
+
+    // Auto-complete when target is met
+    const shouldComplete = newCurrent >= challenge.target;
+
+    await tx.challenge.update({
+      where: { id: challenge.id },
+      data: {
+        current: newCurrent,
+        ...(shouldComplete ? { completed: true } : {}),
+      },
+    });
+  }
+}
+
 // POST /api/match/result
 // Called by the Socket.IO game server (mini-service) when a player extracts or dies.
 // Authenticates via a shared internal secret (NOT the user JWT).
@@ -14,6 +113,9 @@ import { getArenaById, levelFromXp } from '@/lib/game-config';
 //   carriedChips: number,
 //   kills: number,
 //   durationSeconds: number,
+//   score?: number,
+//   bankedAmount?: number,
+//   starsCollected?: number,
 //   killerTag?: string  (when outcome === 'death')
 // }
 export async function POST(req: NextRequest) {
@@ -31,6 +133,7 @@ export async function POST(req: NextRequest) {
   const kills = Math.max(0, Math.floor(Number(body.kills) || 0));
   const durationSeconds = Math.max(0, Math.floor(Number(body.durationSeconds) || 0));
   const killerTag = body.killerTag ? String(body.killerTag) : undefined;
+  const starsCollected = Math.max(0, Math.floor(Number(body.starsCollected) || 0));
 
   const arena = getArenaById(arenaId);
   if (!arena) return NextResponse.json({ error: 'Unknown arena.' }, { status: 400 });
@@ -51,7 +154,7 @@ export async function POST(req: NextRequest) {
   // XP formula: floor((score*5 + kills*50) * rewardMultiplier)
   const xpGained = Math.floor((score * 5 + kills * 50) * arena.rewardMultiplier);
 
-  // Use a transaction so stats are atomic and never double-applied
+  // Use a transaction so stats and challenge progress are atomic
   const updated = await db.$transaction(async (tx) => {
     const p = await tx.player.findUnique({ where: { id: player.id } });
     if (!p) throw new Error('player missing');
@@ -78,7 +181,18 @@ export async function POST(req: NextRequest) {
 
     if (kills > p.bestStreak) data.bestStreak = kills;
 
-    return tx.player.update({ where: { id: player.id }, data: data as any });
+    const updatedPlayer = await tx.player.update({ where: { id: player.id }, data: data as any });
+
+    // --- Challenge progress tracking ---
+    await updateChallengeProgress(tx, player.id, {
+      kills,
+      outcome,
+      carriedChips,
+      score,
+      starsCollected,
+    });
+
+    return updatedPlayer;
   });
 
   return NextResponse.json({
