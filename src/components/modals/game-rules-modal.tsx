@@ -41,6 +41,15 @@ import {
 } from 'lucide-react';
 import { ARENA_TIERS, PRACTICE_TIERS, MILESTONE_TIERS } from '@/lib/game-config';
 
+// ── Short-form chip formatter for tier tables ──
+function fmtShort(n: number): string {
+  if (n === 0) return 'FREE';
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}Bc`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}Mc`;
+  if (n >= 1_000) return `${(n / 1_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}Kc`;
+  return `${n}c`;
+}
+
 interface GameRulesModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -255,7 +264,7 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                     <tr key={tier.id} className={i < arr.length - 1 ? 'border-b border-slate-900' : ''}>
                       <td className="py-1 pr-2 font-bold" style={{ color: tier.accentColor }}>#{i + 1}</td>
                       <td className="py-1 pr-2 font-bold" style={{ color: tier.accentColor }}>{tier.name}</td>
-                      <td className="py-1 pr-2">{tier.buyIn === 0 ? 'FREE' : `${tier.buyIn.toLocaleString()}c`}</td>
+                      <td className="py-1 pr-2">{fmtShort(tier.buyIn)}</td>
                       <td className="py-1 pr-2">{tier.botsCount}</td>
                       <td className="py-1 pr-2 text-indigo-300">x{tier.rewardMultiplier}</td>
                       <td className="py-1">{tier.difficulty}</td>

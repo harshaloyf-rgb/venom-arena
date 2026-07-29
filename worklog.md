@@ -760,3 +760,23 @@ Stage Summary:
 - Arena selector has difficulty filter tabs for easy browsing
 - Rules & Guide fully updated for all changes
 - Lint passes cleanly, browser verification successful
+
+---
+Task ID: arena-short-forms-and-sticky
+Agent: main
+Task: Add short-form chip formatting (K/M/B) and sticky detail card
+
+Work Log:
+- Added `formatChips()` function to arena-selector.tsx: converts large numbers to short forms (e.g., 1,000 → 1Kc, 1,000,000 → 1Mc, 1,000,000,000 → 1Bc)
+- Applied short form to: tier list buy-in labels, detail card Stake Buy-In, BUY IN ARENA button, Jump to highest affordable link
+- Added `fmtShort()` to game-rules-modal.tsx for tier reference table buy-in column
+- Made right-side detail card sticky (`lg:sticky lg:top-4 lg:self-start`) so BUY IN button stays visible when scrolling all 30 tiers
+
+Stage Summary:
+- All buy-in amounts now display in compact short form (Kc/Mc/Bc)
+- Below 1,000: plain format (10c, 75c, 300c, 500c)
+- 1K–999K: K suffix (1Kc, 7.5Kc, 750Kc)
+- 1M–999M: M suffix (1.5Mc, 300Mc, 750Mc)
+- 1B+: B suffix (1Bc)
+- Detail card sticks in viewport when scrolling tier list
+- Lint clean, no dev errors
