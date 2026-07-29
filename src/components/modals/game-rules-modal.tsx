@@ -185,7 +185,7 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                   <li><strong>Star Chips:</strong> Golden stars dropped when real players die. Each star = player&apos;s carried chips ÷ 10. Collect to increase your carried chips.</li>
                   <li><strong>XP:</strong> Earned on successful extraction only.</li>
                   <li><strong>Map:</strong> Circular boundary that breathes. Stay inside!</li>
-                  <li><strong>Bots:</strong> Per arena tier (25-50). Self-destruct at score≥100. Bots never drop or collect stars.</li>
+                  <li><strong>Bots:</strong> Per arena tier (30 bots). Self-destruct at score≥100. Bots never drop or collect stars.</li>
                 </ul>
               </div>
 
@@ -195,7 +195,7 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                 </span>
                 <ul className="list-disc pl-4 space-y-1 text-slate-400 text-[11px]">
                   <li><strong>100% FREE:</strong> Zero chip cost. No buy-in.</li>
-                  <li><strong>1000 AI Bots:</strong> Always exactly 1000 bots of varied sizes.</li>
+                  <li><strong>AI Bots:</strong> 30 AI bots of varied sizes.</li>
                   <li><strong>No Chips / Stars / XP:</strong> Score-based leaderboard (body length), no chip economy</li>
                   <li><strong>Infinite Map:</strong> No boundaries, no wall death.</li>
                   <li><strong>No Bot Self-Destruct:</strong> Bots just harvest and dodge.</li>

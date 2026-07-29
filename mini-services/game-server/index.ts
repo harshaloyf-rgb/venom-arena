@@ -31,7 +31,7 @@
 import { createServer } from 'http';
 import { Server, type Socket } from 'socket.io';
 import {
-  ALL_ARENAS,
+  ARENA_TIERS,
   BOT_SELF_DESTRUCT_THRESHOLD,
   EXTRACT_DURATION_MS,
   INITIAL_BODY_LENGTH,
@@ -210,6 +210,21 @@ const io = new Server(httpServer, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
   pingTimeout: 60000,
   pingInterval: 25000,
+});
+
+// Raw HTTP handler for /stats endpoint
+httpServer.on('request', (req, res) => {
+  if (req.url === '/stats' && req.method === 'GET') {
+    const stats: Record<string, { players: number; maxPlayers: number }> = {};
+    for (const [roomKey, room] of rooms) {
+      stats[roomKey] = { players: room.players.size, maxPlayers: MAX_PLAYERS_PER_SHARD };
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(stats));
+  } else {
+    res.writeHead(404);
+    res.end('Not Found');
+  }
 });
 
 /** Per-arena rooms, lazily created. Keyed by arena id from ARENA_TIERS. */
@@ -1012,8 +1027,8 @@ function countPlayers(): number {
 log('warn', 'CORS is open (origin: *) — OK for dev (Caddy restricts in prod)');
 log('info', `NEXT_APP_URL=${NEXT_APP_URL}  PORT=${PORT}`);
 
-// Pre-create all arenas (7 online + 3 practice) so bots are ready when the first player joins.
-for (const tier of ALL_ARENAS) {
+// Pre-create all online arenas so bots are ready when the first player joins.
+for (const tier of ARENA_TIERS) {
   getOrCreateRoom(tier.id);
 }
 log('info', `Pre-created ${rooms.size} arena rooms`);
