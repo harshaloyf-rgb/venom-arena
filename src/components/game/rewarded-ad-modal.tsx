@@ -7,7 +7,7 @@
  *  1. Modal opens with a 5-second countdown (simulating ad playback).
  *  2. During countdown, the user cannot skip (disabled state).
  *  3. After countdown, a "Claim +50 Chips" button appears.
- *  4. Clicking it calls POST /api/chips/ad-reward and credits chips.
+ *  4. Clicking it calls POST /api/player/video-reward and credits chips.
  *  5. On success, shows a confirmation toast and auto-closes.
  *  6. On cooldown (429), shows "Ad on cooldown" message.
  *
@@ -65,7 +65,7 @@ export function RewardedAdModal({ open, onClose, onRewardClaimed, onToast }: Rew
     setErrorMsg('');
 
     try {
-      const res = await fetch('/api/chips/ad-reward', { method: 'POST' });
+      const res = await fetch('/api/player/video-reward', { method: 'POST' });
       const data = await res.json();
 
       if (!res.ok) {
@@ -76,8 +76,8 @@ export function RewardedAdModal({ open, onClose, onRewardClaimed, onToast }: Rew
       }
 
       setPhase('success');
-      if (onToast) onToast(`+${data.granted} chips credited from ad reward!`, 'success');
-      onRewardClaimed?.(data.granted);
+      if (onToast) onToast(`+${data.reward} chips credited from video reward!`, 'success');
+      onRewardClaimed?.(data.reward);
 
       // Auto-close after success
       setTimeout(() => {

@@ -1,0 +1,2002 @@
+     1→'use client';
+     2→
+     3→/**
+     4→ * BUILD-11 — `CosmeticsShop` panel.
+     5→ *
+     6→ * Faithful replica of `/upload/extracted/src/components/CosmeticsShop.tsx`
+     7→ * (1810 lines). Adapted to the BUILD-2 server-authoritative stack:
+     8→ *
+     9→ *  - Premium ALL_COSMETICS items use `POST /api/player/cosmetic` with
+    10→ *    `{ action: 'buy' | 'equip', skinId }` and `useAuth().refresh()` after.
+    11→ *  - 20 free SLITHER_PRESETS and the Genetic Pattern Lab custom skin are
+    12→ *    persisted to `localStorage['venom_custom_skin_state']` (the server
+    13→ *    has no concept of custom-skin segments; the GameCanvas reads this
+    14→ *    key client-side to render the live wiggle preview).
+    15→ *
+    16→ * All textual strings — the H2 title, the subtitle, the two view-mode tabs,
+    17→ * the 7 category filters, the 20 preset descriptions, every "Active/Locked/
+    18→ * Equipped/Equip X/Unlock (N Chips)" button label, the 4-step Pattern Lab,
+    19→ * the TryOnPreview overlay caption "LAB HOLO-PREVIEW (STEER TO TEST)" and
+    20→ * every toast message — are preserved verbatim from the original audit
+    21→ * (AUDIT-C section A).
+    22→ *
+    23→ * The LIVE moving skin preview (`<SkinsCanvasPreview>` — 180×80 canvas, 10
+    24→ * segments, 60fps `requestAnimationFrame` loop using the exact
+    25→ * `Math.sin(time - i * 0.42) * 9` wiggle formula) and the interactive
+    26→ * `<TryOnPreview>` (450×180 canvas, 26 segments, mouse-steerable with
+    27→ * auto-patrol fallback) are both reproduced character-for-character from
+    28→ * the original so the "real-time wiggling skin" feeling is identical.
+    29→ */
+    30→
+    31→import { useEffect, useRef, useState } from 'react';
+    32→import {
+    33→  ArrowLeftRight,
+    34→  Check,
+    35→  CheckCircle2,
+    36→  Flame,
+    37→  Lock,
+    38→  Paintbrush,
+    39→  Palette,
+    40→  Plus,
+    41→  ShoppingBag,
+    42→  Sliders,
+    43→  Sparkles,
+    44→  Trash2,
+    45→  Wand2,
+    46→} from 'lucide-react';
+    47→import { useAuth } from '@/components/providers/auth-provider';
+    48→import { ALL_COSMETICS, type Skin } from '@/lib/game-config';
+    49→import {
+    50→  PanelSkeleton,
+    51→  NotSignedIn,
+    52→  notify,
+    53→  type ToastFn,
+    54→} from './_panel-primitives';
+    55→
+    56→interface CosmeticsShopProps {
+    57→  onToast?: ToastFn;
+    58→}
+    59→
+    60→// ---------------------------------------------------------------------------
+    61→// Palette (18 swatches) — exact from AUDIT-C A.1
+    62→// ---------------------------------------------------------------------------
+    63→const PALETTE_COLORS = [
+    64→  { name: 'Red Alert', hex: '#ef4444' },
+    65→  { name: 'Solar Orange', hex: '#f97316' },
+    66→  { name: 'Midas Gold', hex: '#f59e0b' },
+    67→  { name: 'Lime Venom', hex: '#84cc16' },
+    68→  { name: 'Acid Green', hex: '#22c55e' },
+    69→  { name: 'Emerald', hex: '#10b981' },
+    70→  { name: 'Teal Void', hex: '#0d9488' },
+    71→  { name: 'Cyber Cyan', hex: '#06b6d4' },
+    72→  { name: 'Sky Blue', hex: '#0ea5e9' },
+    73→  { name: 'Sapphire', hex: '#3b82f6' },
+    74→  { name: 'Royal Indigo', hex: '#6366f1' },
+    75→  { name: 'Shadow Purple', hex: '#a855f7' },
+    76→  { name: 'Orchid Pink', hex: '#ec4899' },
+    77→  { name: 'Crimson', hex: '#dc2626' },
+    78→  { name: 'Pure White', hex: '#ffffff' },
+    79→  { name: 'Slate Gray', hex: '#64748b' },
+    80→  { name: 'Deep Carbon', hex: '#1e293b' },
+    81→  { name: 'Pitch Black', hex: '#090d16' },
+    82→];
+    83→
+    84→// ---------------------------------------------------------------------------
+    85→// Custom skin segment shape — matches original `CustomSegment` interface.
+    86→// ---------------------------------------------------------------------------
+    87→type SegShape = 'circle' | 'square' | 'diamond' | 'spike';
+    88→interface CustomSegment {
+    89→  color: string;
+    90→  sizeScale: number;
+    91→  shape: SegShape;
+    92→  glow: boolean;
+    93→}
+    94→
+    95→type BodyStyle =
+    96→  | 'smooth'
+    97→  | 'dragon'
+    98→  | 'armored'
+    99→  | 'crystal'
+   100→  | 'obsidian'
+   101→  | 'basilisk';
+   102→type TaperStyle = 'natural' | 'uniform' | 'wave' | 'heavy';
+   103→
+   104→interface SlitherPreset {
+   105→  id: string;
+   106→  name: string;
+   107→  colors: string[];
+   108→  shape: BodyStyle;
+   109→  taper: TaperStyle;
+   110→  glow: boolean;
+   111→  emoji: string;
+   112→  category: 'Classic' | 'Cyber' | 'Flags';
+   113→  description: string;
+   114→}
+   115→
+   116→// ---------------------------------------------------------------------------
+   117→// SLITHER_PRESETS (20 free presets) — exact from AUDIT-C C.3
+   118→// ---------------------------------------------------------------------------
+   119→const SLITHER_PRESETS: SlitherPreset[] = [
+   120→  {
+   121→    id: 'preset-fish',
+   122→    name: 'The Fish Snake',
+   123→    colors: ['#06b6d4', '#3b82f6', '#0ea5e9', '#0284c7'],
+   124→    shape: 'crystal',
+   125→    taper: 'wave',
+   126→    glow: true,
+   127→    emoji: '🐟',
+   128→    category: 'Cyber',
+   129→    description: 'Aquatic scales with hydrodynamic dorsal fins and bubble bioluminescence.',
+   130→  },
+   131→  {
+   132→    id: 'preset-lion',
+   133→    name: 'The Lion Snake',
+   134→    colors: ['#f59e0b', '#b45309', '#f97316', '#78350f'],
+   135→    shape: 'dragon',
+   136→    taper: 'heavy',
+   137→    glow: true,
+   138→    emoji: '🦁',
+   139→    category: 'Classic',
+   140→    description: 'Golden apex mane headpiece with furious amber predator scales.',
+   141→  },
+   142→  {
+   143→    id: 'preset-motorbike',
+   144→    name: 'The Motorbike Snake',
+   145→    colors: ['#3b82f6', '#090d16', '#64748b', '#090d16'],
+   146→    shape: 'armored',
+   147→    taper: 'heavy',
+   148→    glow: true,
+   149→    emoji: '🏍️',
+   150→    category: 'Cyber',
+   151→    description: 'Chrome exhaust head, asphalt dark body segments, and burnout smoke trail.',
+   152→  },
+   153→  {
+   154→    id: 'preset-coin',
+   155→    name: 'The Coin Snake',
+   156→    colors: ['#fbbf24', '#d97706', '#f59e0b', '#b45309'],
+   157→    shape: 'obsidian',
+   158→    taper: 'natural',
+   159→    glow: true,
+   160→    emoji: '🪙',
+   161→    category: 'Classic',
+   162→    description: 'Gold dollar medallion crown with stacked casino chip coin segments.',
+   163→  },
+   164→  {
+   165→    id: 'preset-bumblebee',
+   166→    name: 'Bumblebee stripe',
+   167→    colors: ['#f59e0b', '#090d16', '#f59e0b', '#090d16'],
+   168→    shape: 'smooth',
+   169→    taper: 'natural',
+   170→    glow: false,
+   171→    emoji: '🐝',
+   172→    category: 'Classic',
+   173→    description: 'Classic yellow and black stripes reminiscent of a honey bee.',
+   174→  },
+   175→  {
+   176→    id: 'preset-patriot',
+   177→    name: 'Patriot Streamer',
+   178→    colors: ['#ef4444', '#ffffff', '#3b82f6', '#ffffff'],
+   179→    shape: 'smooth',
+   180→    taper: 'natural',
+   181→    glow: true,
+   182→    emoji: '🇺🇸',
+   183→    category: 'Flags',
+   184→    description: 'Brave red, white, and blue colors streaming in perfect unison.',
+   185→  },
+   186→  {
+   187→    id: 'preset-watermelon',
+   188→    name: 'Watermelon Slicer',
+   189→    colors: ['#22c55e', '#22c55e', '#ec4899', '#ec4899'],
+   190→    shape: 'smooth',
+   191→    taper: 'wave',
+   192→    glow: false,
+   193→    emoji: '🍉',
+   194→    category: 'Classic',
+   195→    description: 'Sweet pink flesh bordered by alternating deep forest green scales.',
+   196→  },
+   197→  {
+   198→    id: 'preset-tiger',
+   199→    name: 'Tiger Shifter',
+   200→    colors: ['#f97316', '#090d16', '#f97316', '#090d16'],
+   201→    shape: 'dragon',
+   202→    taper: 'natural',
+   203→    glow: false,
+   204→    emoji: '🐯',
+   205→    category: 'Classic',
+   206→    description: 'Dangerous orange and obsidian bands armed with body-tapering spikes.',
+   207→  },
+   208→  {
+   209→    id: 'preset-mint',
+   210→    name: 'Mint Candy',
+   211→    colors: ['#10b981', '#ffffff', '#10b981', '#ffffff'],
+   212→    shape: 'smooth',
+   213→    taper: 'uniform',
+   214→    glow: true,
+   215→    emoji: '🍬',
+   216→    category: 'Classic',
+   217→    description: 'Sweet spearmint and white swirl nodes radiating clean aura.',
+   218→  },
+   219→  {
+   220→    id: 'preset-rainbow-unicorn',
+   221→    name: 'Rainbow Unicorn',
+   222→    colors: ['#ef4444', '#f97316', '#f59e0b', '#22c55e', '#06b6d4', '#6366f1', '#a855f7'],
+   223→    shape: 'crystal',
+   224→    taper: 'wave',
+   225→    glow: true,
+   226→    emoji: '🦄',
+   227→    category: 'Classic',
+   228→    description: 'Full visible spectrum of pulsing diamond-crystal nodes.',
+   229→  },
+   230→  {
+   231→    id: 'preset-germany',
+   232→    name: 'Germany Banner',
+   233→    colors: ['#090d16', '#ef4444', '#f59e0b'],
+   234→    shape: 'smooth',
+   235→    taper: 'natural',
+   236→    glow: false,
+   237→    emoji: '🇩🇪',
+   238→    category: 'Flags',
+   239→    description: 'Bold black, red, and golden stripes representing national pride.',
+   240→  },
+   241→  {
+   242→    id: 'preset-brazil',
+   243→    name: 'Brazil Samba',
+   244→    colors: ['#22c55e', '#f59e0b', '#3b82f6', '#22c55e'],
+   245→    shape: 'crystal',
+   246→    taper: 'natural',
+   247→    glow: true,
+   248→    emoji: '🇧🇷',
+   249→    category: 'Flags',
+   250→    description: 'Vibrant green and gold diamond nodes reflecting carnival energy.',
+   251→  },
+   252→  {
+   253→    id: 'preset-france',
+   254→    name: 'France Tricolore',
+   255→    colors: ['#3b82f6', '#ffffff', '#ef4444'],
+   256→    shape: 'smooth',
+   257→    taper: 'natural',
+   258→    glow: false,
+   259→    emoji: '🇫🇷',
+   260→    category: 'Flags',
+   261→    description: 'Symmetric blue, white, and red bands of the French Republic.',
+   262→  },
+   263→  {
+   264→    id: 'preset-pride',
+   265→    name: 'Pride Rainbow',
+   266→    colors: ['#ef4444', '#f97316', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7'],
+   267→    shape: 'smooth',
+   268→    taper: 'uniform',
+   269→    glow: true,
+   270→    emoji: '🏳️‍🌈',
+   271→    category: 'Flags',
+   272→    description: 'Classic rainbow flags celebrating diversity and inclusion.',
+   273→  },
+   274→  {
+   275→    id: 'preset-solar',
+   276→    name: 'Solar Flare',
+   277→    colors: ['#f59e0b', '#f97316', '#ef4444', '#f97316'],
+   278→    shape: 'dragon',
+   279→    taper: 'heavy',
+   280→    glow: true,
+   281→    emoji: '🔥',
+   282→    category: 'Cyber',
+   283→    description: 'Armor scales colored in blazing gold, solar orange, and furnace red.',
+   284→  },
+   285→  {
+   286→    id: 'preset-cosmic',
+   287→    name: 'Cosmic Nebula',
+   288→    colors: ['#6366f1', '#a855f7', '#ec4899', '#3b82f6'],
+   289→    shape: 'smooth',
+   290→    taper: 'wave',
+   291→    glow: true,
+   292→    emoji: '🌌',
+   293→    category: 'Cyber',
+   294→    description: 'Deep cosmic space colors with pulsing neon aurora bioluminescence.',
+   295→  },
+   296→  {
+   297→    id: 'preset-lava',
+   298→    name: 'Lava Dreadnought',
+   299→    colors: ['#ef4444', '#1e293b', '#ef4444', '#090d16'],
+   300→    shape: 'obsidian',
+   301→    taper: 'heavy',
+   302→    glow: true,
+   303→    emoji: '🌋',
+   304→    category: 'Cyber',
+   305→    description: 'Armored obsidian spikes interspaced with blistering crimson core nodes.',
+   306→  },
+   307→  {
+   308→    id: 'preset-tron',
+   309→    name: 'Tron Grid',
+   310→    colors: ['#06b6d4', '#090d16', '#06b6d4', '#090d16'],
+   311→    shape: 'armored',
+   312→    taper: 'uniform',
+   313→    glow: true,
+   314→    emoji: '💻',
+   315→    category: 'Cyber',
+   316→    description: 'Futuristic cyan lines on dark background representing grid patterns.',
+   317→  },
+   318→  {
+   319→    id: 'preset-mech',
+   320→    name: 'Gundam Mech',
+   321→    colors: ['#64748b', '#3b82f6', '#ffffff', '#f59e0b'],
+   322→    shape: 'dragon',
+   323→    taper: 'heavy',
+   324→    glow: true,
+   325→    emoji: '🤖',
+   326→    category: 'Cyber',
+   327→    description: 'Tactical ironclad grey plates accented with heavy yellow and blue rocket spikes.',
+   328→  },
+   329→  {
+   330→    id: 'preset-gold-dragon',
+   331→    name: 'Golden Dragon',
+   332→    colors: ['#f59e0b', '#dc2626', '#f59e0b', '#dc2626'],
+   333→    shape: 'dragon',
+   334→    taper: 'heavy',
+   335→    glow: true,
+   336→    emoji: '🐉',
+   337→    category: 'Classic',
+   338→    description: 'Shining royal gold armored spike scales fit for mythical emperors.',
+   339→  },
+   340→];
+   341→
+   342→// ---------------------------------------------------------------------------
+   343→// generateCustomSegments — exact replica of original helper.
+   344→// ---------------------------------------------------------------------------
+   345→function generateCustomSegments(
+   346→  colors: string[],
+   347→  shapeStyle: BodyStyle,
+   348→  taperStyle: TaperStyle,
+   349→  glowEnabled: boolean,
+   350→): CustomSegment[] {
+   351→  if (colors.length === 0) return [];
+   352→  const result: CustomSegment[] = [];
+   353→  const totalNodes = 16;
+   354→
+   355→  for (let i = 0; i < totalNodes; i++) {
+   356→    const color = colors[i % colors.length];
+   357→
+   358→    let shape: SegShape = 'circle';
+   359→    if (shapeStyle === 'smooth') {
+   360→      shape = 'circle';
+   361→    } else if (shapeStyle === 'dragon') {
+   362→      shape = i === 0 ? 'circle' : i % 2 === 1 ? 'spike' : 'circle';
+   363→    } else if (shapeStyle === 'armored') {
+   364→      shape = i === 0 ? 'circle' : i % 2 === 1 ? 'square' : 'circle';
+   365→    } else if (shapeStyle === 'crystal') {
+   366→      shape = i === 0 ? 'circle' : i % 2 === 1 ? 'diamond' : 'circle';
+   367→    } else if (shapeStyle === 'obsidian') {
+   368→      shape = 'spike';
+   369→    } else if (shapeStyle === 'basilisk') {
+   370→      shape = 'diamond';
+   371→    }
+   372→
+   373→    let sizeScale = 1.0;
+   374→    if (taperStyle === 'uniform') {
+   375→      sizeScale = i === 0 ? 1.3 : 1.0;
+   376→    } else if (taperStyle === 'natural') {
+   377→      sizeScale = i === 0 ? 1.35 : Math.max(0.65, 1.25 - (i / totalNodes) * 0.55);
+   378→    } else if (taperStyle === 'wave') {
+   379→      sizeScale = i === 0 ? 1.3 : 1.0 + Math.sin(i * 0.95) * 0.22;
+   380→    } else if (taperStyle === 'heavy') {
+   381→      sizeScale = i === 0 ? 1.6 : Math.max(0.55, 1.35 - (i / totalNodes) * 0.8);
+   382→    }
+   383→
+   384→    result.push({
+   385→      color,
+   386→      shape,
+   387→      glow: glowEnabled,
+   388→      sizeScale: Number(sizeScale.toFixed(2)),
+   389→    });
+   390→  }
+   391→
+   392→  return result;
+   393→}
+   394→
+   395→// ---------------------------------------------------------------------------
+   396→// localStorage custom-skin persistence — read by GameCanvas client-side.
+   397→// ---------------------------------------------------------------------------
+   398→interface CustomSkinState {
+   399→  useCustomSkin: boolean;
+   400→  currentSkin: string; // preset id or 'custom-lab-skin'
+   401→  customSkinSegments: CustomSegment[];
+   402→}
+   403→
+   404→const CUSTOM_SKIN_KEY = 'venom_custom_skin_state';
+   405→
+   406→function readCustomSkinState(): CustomSkinState | null {
+   407→  try {
+   408→    const raw = localStorage.getItem(CUSTOM_SKIN_KEY);
+   409→    if (!raw) return null;
+   410→    return JSON.parse(raw) as CustomSkinState;
+   411→  } catch {
+   412→    return null;
+   413→  }
+   414→}
+   415→
+   416→/**
+   417→ * SSR-safe variant — returns `null` during server rendering so lazy useState
+   418→ * initializers don't crash on `localStorage is not defined`.
+   419→ */
+   420→function readCustomSkinStateSafe(): CustomSkinState | null {
+   421→  if (typeof window === 'undefined') return null;
+   422→  return readCustomSkinState();
+   423→}
+   424→
+   425→function writeCustomSkinState(state: CustomSkinState) {
+   426→  try {
+   427→    localStorage.setItem(CUSTOM_SKIN_KEY, JSON.stringify(state));
+   428→  } catch {
+   429→    /* ignore quota errors */
+   430→  }
+   431→}
+   432→
+   433→// ---------------------------------------------------------------------------
+   434→// 1. REUSABLE REAL-TIME 60FPS SLITHERING SKIN PREVIEW
+   435→// ---------------------------------------------------------------------------
+   436→interface SkinsCanvasPreviewProps {
+   437→  colors: string[];
+   438→  pattern?: string;
+   439→  shapeStyle?: BodyStyle;
+   440→  glow?: boolean;
+   441→}
+   442→
+   443→function SkinsCanvasPreview({
+   444→  colors,
+   445→  pattern,
+   446→  shapeStyle = 'smooth',
+   447→  glow = false,
+   448→}: SkinsCanvasPreviewProps) {
+   449→  const canvasRef = useRef<HTMLCanvasElement>(null);
+   450→
+   451→  useEffect(() => {
+   452→    const canvas = canvasRef.current;
+   453→    if (!canvas) return;
+   454→    const ctx = canvas.getContext('2d');
+   455→    if (!ctx) return;
+   456→
+   457→    let animId = 0;
+   458→    let time = Math.random() * 100;
+   459→
+   460→    const numSegments = 10;
+   461→    const points: Array<{ x: number; y: number }> = [];
+   462→    for (let i = 0; i < numSegments; i++) points.push({ x: 0, y: 0 });
+   463→
+   464→    const render = () => {
+   465→      ctx.clearRect(0, 0, canvas.width, canvas.height);
+   466→      time += 0.07;
+   467→
+   468→      // Grid background
+   469→      ctx.strokeStyle = 'rgba(99, 102, 241, 0.05)';
+   470→      ctx.lineWidth = 1;
+   471→      for (let x = 15; x < canvas.width; x += 30) {
+   472→        ctx.beginPath();
+   473→        ctx.moveTo(x, 0);
+   474→        ctx.lineTo(x, canvas.height);
+   475→        ctx.stroke();
+   476→      }
+   477→
+   478→      for (let i = 0; i < numSegments; i++) {
+   479→        const x = canvas.width - 24 - (i * (canvas.width - 48)) / (numSegments - 1);
+   480→        const wiggleVal = Math.sin(time - i * 0.42) * 9;
+   481→        const y = canvas.height / 2 + wiggleVal;
+   482→        points[i] = { x, y };
+   483→      }
+   484→
+   485→      // Draw trailing segment shadows & nodes from tail to head
+   486→      for (let i = points.length - 1; i >= 1; i--) {
+   487→        const pt = points[i];
+   488→        const nextPt = points[i - 1] || pt;
+   489→        const segAngle = Math.atan2(nextPt.y - pt.y, nextPt.x - pt.x);
+   490→
+   491→        let fillColor = colors[i % colors.length] || '#ffffff';
+   492→        let segmentGlow = glow;
+   493→
+   494→        if (pattern === 'rainbow') {
+   495→          const hue = (Date.now() * 0.06 + i * 36) % 360;
+   496→          fillColor = `hsl(${hue}, 85%, 55%)`;
+   497→          segmentGlow = true;
+   498→        } else if (pattern === 'neon') {
+   499→          fillColor = i % 2 === 0 ? '#06b6d4' : '#a855f7';
+   500→          segmentGlow = true;
+   501→        } else if (pattern === 'metallic') {
+   502→          fillColor = i % 2 === 0 ? '#cbd5e1' : '#475569';
+   503→        } else if (pattern === 'camo') {
+   504→          fillColor = i % 2 === 0 ? '#15803d' : '#854d0e';
+   505→        }
+   506→
+   507→        const sizeRatio = 1 - (i / points.length) * 0.42;
+   508→        const r = 6 * sizeRatio;
+   509→
+   510→        ctx.save();
+   511→        if (segmentGlow) {
+   512→          ctx.shadowBlur = 8;
+   513→          ctx.shadowColor = fillColor;
+   514→        }
+   515→        ctx.fillStyle = fillColor;
+   516→
+   517→        let segmentShape: SegShape = 'circle';
+   518→        if (shapeStyle === 'dragon') {
+   519→          segmentShape = i % 2 === 1 ? 'spike' : 'circle';
+   520→        } else if (shapeStyle === 'armored') {
+   521→          segmentShape = i % 2 === 1 ? 'square' : 'circle';
+   522→        } else if (shapeStyle === 'crystal') {
+   523→          segmentShape = i % 2 === 1 ? 'diamond' : 'circle';
+   524→        } else if (shapeStyle === 'obsidian') {
+   525→          segmentShape = 'spike';
+   526→        } else if (shapeStyle === 'basilisk') {
+   527→          segmentShape = 'diamond';
+   528→        }
+   529→
+   530→        ctx.beginPath();
+   531→        if (segmentShape === 'circle') {
+   532→          ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+   533→          ctx.fill();
+   534→        } else if (segmentShape === 'square') {
+   535→          ctx.fillRect(pt.x - r, pt.y - r, r * 2, r * 2);
+   536→        } else if (segmentShape === 'diamond') {
+   537→          ctx.moveTo(pt.x, pt.y - r);
+   538→          ctx.lineTo(pt.x + r, pt.y);
+   539→          ctx.lineTo(pt.x, pt.y + r);
+   540→          ctx.lineTo(pt.x - r, pt.y);
+   541→          ctx.closePath();
+   542→          ctx.fill();
+   543→        } else if (segmentShape === 'spike') {
+   544→          const perpAngle = segAngle + Math.PI / 2;
+   545→          ctx.moveTo(
+   546→            pt.x + Math.cos(segAngle) * r * 1.3,
+   547→            pt.y + Math.sin(segAngle) * r * 1.3,
+   548→          );
+   549→          ctx.lineTo(
+   550→            pt.x + Math.cos(perpAngle) * r * 0.8,
+   551→            pt.y + Math.sin(perpAngle) * r * 0.8,
+   552→          );
+   553→          ctx.lineTo(
+   554→            pt.x - Math.cos(segAngle) * r * 0.3,
+   555→            pt.y - Math.sin(segAngle) * r * 0.3,
+   556→          );
+   557→          ctx.lineTo(
+   558→            pt.x - Math.cos(perpAngle) * r * 0.8,
+   559→            pt.y - Math.sin(perpAngle) * r * 0.8,
+   560→          );
+   561→          ctx.closePath();
+   562→          ctx.fill();
+   563→        }
+   564→        ctx.restore();
+   565→      }
+   566→
+   567→      // Head
+   568→      const head = points[0];
+   569→      const prevPt = points[1] || head;
+   570→      const headAngle = Math.atan2(head.y - prevPt.y, head.x - prevPt.x);
+   571→
+   572→      let headColor = colors[0] || '#ffffff';
+   573→      if (pattern === 'rainbow') {
+   574→        const hue = (Date.now() * 0.06) % 360;
+   575→        headColor = `hsl(${hue}, 85%, 55%)`;
+   576→      } else if (pattern === 'neon') {
+   577→        headColor = '#06b6d4';
+   578→      }
+   579→
+   580→      ctx.save();
+   581→      ctx.fillStyle = headColor;
+   582→      if (glow) {
+   583→        ctx.shadowBlur = 10;
+   584→        ctx.shadowColor = headColor;
+   585→      }
+   586→      ctx.beginPath();
+   587→      ctx.arc(head.x, head.y, 8.5, 0, Math.PI * 2);
+   588→      ctx.fill();
+   589→      ctx.restore();
+   590→
+   591→      // Eyes
+   592→      const eyeL_Angle = headAngle + 0.52;
+   593→      const eyeR_Angle = headAngle - 0.52;
+   594→      const eyeL_Pos = {
+   595→        x: head.x + Math.cos(eyeL_Angle) * 3.8,
+   596→        y: head.y + Math.sin(eyeL_Angle) * 3.8,
+   597→      };
+   598→      const eyeR_Pos = {
+   599→        x: head.x + Math.cos(eyeR_Angle) * 3.8,
+   600→        y: head.y + Math.sin(eyeR_Angle) * 3.8,
+   601→      };
+   602→
+   603→      ctx.fillStyle = '#ffffff';
+   604→      ctx.beginPath();
+   605→      ctx.arc(eyeL_Pos.x, eyeL_Pos.y, 2, 0, Math.PI * 2);
+   606→      ctx.arc(eyeR_Pos.x, eyeR_Pos.y, 2, 0, Math.PI * 2);
+   607→      ctx.fill();
+   608→
+   609→      ctx.fillStyle = '#090d16';
+   610→      ctx.beginPath();
+   611→      ctx.arc(
+   612→        eyeL_Pos.x + Math.cos(headAngle) * 0.6,
+   613→        eyeL_Pos.y + Math.sin(headAngle) * 0.6,
+   614→        1,
+   615→        0,
+   616→        Math.PI * 2,
+   617→      );
+   618→      ctx.arc(
+   619→        eyeR_Pos.x + Math.cos(headAngle) * 0.6,
+   620→        eyeR_Pos.y + Math.sin(headAngle) * 0.6,
+   621→        1,
+   622→        0,
+   623→        Math.PI * 2,
+   624→      );
+   625→      ctx.fill();
+   626→
+   627→      animId = requestAnimationFrame(render);
+   628→    };
+   629→
+   630→    render();
+   631→    return () => cancelAnimationFrame(animId);
+   632→  }, [colors, pattern, shapeStyle, glow]);
+   633→
+   634→  return (
+   635→    <div className="relative overflow-hidden rounded-xl border border-slate-800/80 bg-slate-900/60 p-1 group">
+   636→      <canvas
+   637→        ref={canvasRef}
+   638→        width={180}
+   639→        height={80}
+   640→        className="block max-w-full h-[80px] w-full"
+   641→      />
+   642→    </div>
+   643→  );
+   644→}
+   645→
+   646→// ---------------------------------------------------------------------------
+   647→// 2. INTERACTIVE TRY-ON PLAYGROUND (steer with mouse)
+   648→// ---------------------------------------------------------------------------
+   649→interface TryOnPreviewProps {
+   650→  colors: string[];
+   651→  shapeStyle: BodyStyle;
+   652→  taperStyle: TaperStyle;
+   653→  glow: boolean;
+   654→}
+   655→
+   656→function TryOnPreview({
+   657→  colors,
+   658→  shapeStyle,
+   659→  taperStyle,
+   660→  glow,
+   661→}: TryOnPreviewProps) {
+   662→  const canvasRef = useRef<HTMLCanvasElement>(null);
+   663→  const mousePos = useRef({ x: 220, y: 100 });
+   664→  const isHovered = useRef(false);
+   665→
+   666→  useEffect(() => {
+   667→    const canvas = canvasRef.current;
+   668→    if (!canvas) return;
+   669→    const ctx = canvas.getContext('2d');
+   670→    if (!ctx) return;
+   671→
+   672→    let animId = 0;
+   673→    let time = 0;
+   674→
+   675→    const numPoints = 26;
+   676→    const points: Array<{ x: number; y: number }> = [];
+   677→    for (let i = 0; i < numPoints; i++) points.push({ x: 220, y: 100 });
+   678→
+   679→    const handleMouseMove = (e: MouseEvent) => {
+   680→      const rect = canvas.getBoundingClientRect();
+   681→      mousePos.current = {
+   682→        x: e.clientX - rect.left,
+   683→        y: e.clientY - rect.top,
+   684→      };
+   685→    };
+   686→    const handleMouseEnter = () => {
+   687→      isHovered.current = true;
+   688→    };
+   689→    const handleMouseLeave = () => {
+   690→      isHovered.current = false;
+   691→    };
+   692→
+   693→    canvas.addEventListener('mousemove', handleMouseMove);
+   694→    canvas.addEventListener('mouseenter', handleMouseEnter);
+   695→    canvas.addEventListener('mouseleave', handleMouseLeave);
+   696→
+   697→    let headX = 220;
+   698→    let headY = 100;
+   699→
+   700→    const render = () => {
+   701→      ctx.clearRect(0, 0, canvas.width, canvas.height);
+   702→      time += 0.045;
+   703→
+   704→      let targetX = canvas.width / 2 + Math.cos(time * 0.9) * 120;
+   705→      let targetY = canvas.height / 2 + Math.sin(time * 1.6) * 45;
+   706→
+   707→      if (isHovered.current) {
+   708→        targetX = mousePos.current.x;
+   709→        targetY = mousePos.current.y;
+   710→      }
+   711→
+   712→      const dx = targetX - headX;
+   713→      const dy = targetY - headY;
+   714→      const dist = Math.hypot(dx, dy);
+   715→
+   716→      if (dist > 3) {
+   717→        const speed = isHovered.current ? 4.8 : 3.4;
+   718→        const angle = Math.atan2(dy, dx);
+   719→        headX += Math.cos(angle) * speed;
+   720→        headY += Math.sin(angle) * speed;
+   721→      }
+   722→
+   723→      points.unshift({ x: headX, y: headY });
+   724→      if (points.length > numPoints) points.pop();
+   725→
+   726→      // Grid scanlines
+   727→      ctx.strokeStyle = 'rgba(99, 102, 241, 0.04)';
+   728→      ctx.lineWidth = 1;
+   729→      for (let x = 0; x < canvas.width; x += 20) {
+   730→        ctx.beginPath();
+   731→        ctx.moveTo(x, 0);
+   732→        ctx.lineTo(x, canvas.height);
+   733→        ctx.stroke();
+   734→      }
+   735→      for (let y = 0; y < canvas.height; y += 20) {
+   736→        ctx.beginPath();
+   737→        ctx.moveTo(0, y);
+   738→        ctx.lineTo(canvas.width, y);
+   739→        ctx.stroke();
+   740→      }
+   741→
+   742→      // Mouse radar ring
+   743→      if (isHovered.current) {
+   744→        ctx.strokeStyle = 'rgba(99, 102, 241, 0.2)';
+   745→        ctx.beginPath();
+   746→        ctx.arc(mousePos.current.x, mousePos.current.y, 12, 0, Math.PI * 2);
+   747→        ctx.stroke();
+   748→      }
+   749→
+   750→      // Body segments
+   751→      for (let i = points.length - 1; i >= 1; i--) {
+   752→        const pt = points[i];
+   753→        const prevPt = points[i - 1] || pt;
+   754→        const segAngle = Math.atan2(pt.y - prevPt.y, pt.x - prevPt.x);
+   755→        const perpAngle = segAngle + Math.PI / 2;
+   756→
+   757→        const sizeRatio = 1 - (i / points.length) * 0.45;
+   758→        const color = colors[i % colors.length] || '#ffffff';
+   759→
+   760→        let shape: SegShape = 'circle';
+   761→        if (shapeStyle === 'smooth') {
+   762→          shape = 'circle';
+   763→        } else if (shapeStyle === 'dragon') {
+   764→          shape = i % 2 === 1 ? 'spike' : 'circle';
+   765→        } else if (shapeStyle === 'armored') {
+   766→          shape = i % 2 === 1 ? 'square' : 'circle';
+   767→        } else if (shapeStyle === 'crystal') {
+   768→          shape = i % 2 === 1 ? 'diamond' : 'circle';
+   769→        } else if (shapeStyle === 'obsidian') {
+   770→          shape = 'spike';
+   771→        } else if (shapeStyle === 'basilisk') {
+   772→          shape = 'diamond';
+   773→        }
+   774→
+   775→        let sizeScale = 1.0;
+   776→        if (taperStyle === 'uniform') {
+   777→          sizeScale = 1.0;
+   778→        } else if (taperStyle === 'natural') {
+   779→          sizeScale = Math.max(0.65, 1.25 - (i / points.length) * 0.55);
+   780→        } else if (taperStyle === 'wave') {
+   781→          sizeScale = 1.0 + Math.sin(i * 0.95) * 0.22;
+   782→        } else if (taperStyle === 'heavy') {
+   783→          sizeScale = Math.max(0.55, 1.35 - (i / points.length) * 0.8);
+   784→        }
+   785→
+   786→        const r = 10 * sizeRatio * sizeScale;
+   787→
+   788→        ctx.save();
+   789→        if (glow) {
+   790→          ctx.shadowBlur = 12;
+   791→          ctx.shadowColor = color;
+   792→        }
+   793→        ctx.fillStyle = color;
+   794→
+   795→        ctx.beginPath();
+   796→        if (shape === 'circle') {
+   797→          ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+   798→          ctx.fill();
+   799→        } else if (shape === 'square') {
+   800→          ctx.fillRect(pt.x - r, pt.y - r, r * 2, r * 2);
+   801→        } else if (shape === 'diamond') {
+   802→          ctx.moveTo(pt.x, pt.y - r);
+   803→          ctx.lineTo(pt.x + r, pt.y);
+   804→          ctx.lineTo(pt.x, pt.y + r);
+   805→          ctx.lineTo(pt.x - r, pt.y);
+   806→          ctx.closePath();
+   807→          ctx.fill();
+   808→        } else if (shape === 'spike') {
+   809→          const spikeAngle = segAngle + Math.PI;
+   810→          ctx.moveTo(
+   811→            pt.x + Math.cos(segAngle) * r * 1.35,
+   812→            pt.y + Math.sin(segAngle) * r * 1.35,
+   813→          );
+   814→          ctx.lineTo(
+   815→            pt.x + Math.cos(perpAngle) * r * 0.95,
+   816→            pt.y + Math.sin(perpAngle) * r * 0.95,
+   817→          );
+   818→          ctx.lineTo(
+   819→            pt.x + Math.cos(spikeAngle) * r * 0.4,
+   820→            pt.y + Math.sin(spikeAngle) * r * 0.4,
+   821→          );
+   822→          ctx.lineTo(
+   823→            pt.x + Math.cos(perpAngle - Math.PI) * r * 0.95,
+   824→            pt.y + Math.sin(perpAngle - Math.PI) * r * 0.95,
+   825→          );
+   826→          ctx.closePath();
+   827→          ctx.fill();
+   828→        }
+   829→        ctx.restore();
+   830→      }
+   831→
+   832→      // Head
+   833→      const head = points[0];
+   834→      const headColor = colors[0] || '#ffffff';
+   835→      ctx.save();
+   836→      if (glow) {
+   837→        ctx.shadowBlur = 15;
+   838→        ctx.shadowColor = headColor;
+   839→      }
+   840→      ctx.fillStyle = headColor;
+   841→      ctx.beginPath();
+   842→      ctx.arc(head.x, head.y, 12, 0, Math.PI * 2);
+   843→      ctx.fill();
+   844→      ctx.restore();
+   845→
+   846→      // Forked tongue
+   847→      if (Math.sin(Date.now() * 0.012) > 0.45) {
+   848→        ctx.save();
+   849→        ctx.strokeStyle = '#ef4444';
+   850→        ctx.lineWidth = 2.5;
+   851→        ctx.lineCap = 'round';
+   852→        const nextPt = points[1] || head;
+   853→        const headAngle = Math.atan2(head.y - nextPt.y, head.x - nextPt.x);
+   854→        const startX = head.x + Math.cos(headAngle) * 12;
+   855→        const startY = head.y + Math.sin(headAngle) * 12;
+   856→        const endX = startX + Math.cos(headAngle) * 8;
+   857→        const endY = startY + Math.sin(headAngle) * 8;
+   858→
+   859→        ctx.beginPath();
+   860→        ctx.moveTo(startX, startY);
+   861→        ctx.lineTo(endX, endY);
+   862→        ctx.lineTo(
+   863→          endX + Math.cos(headAngle + 0.45) * 5,
+   864→          endY + Math.sin(headAngle + 0.45) * 5,
+   865→        );
+   866→        ctx.moveTo(endX, endY);
+   867→        ctx.lineTo(
+   868→          endX + Math.cos(headAngle - 0.45) * 5,
+   869→          endY + Math.sin(headAngle - 0.45) * 5,
+   870→        );
+   871→        ctx.stroke();
+   872→        ctx.restore();
+   873→      }
+   874→
+   875→      // Eyes
+   876→      const nextPt = points[1] || head;
+   877→      const headAngle = Math.atan2(head.y - nextPt.y, head.x - nextPt.x);
+   878→      const eyeL = {
+   879→        x: head.x + Math.cos(headAngle + 0.45) * 6,
+   880→        y: head.y + Math.sin(headAngle + 0.45) * 6,
+   881→      };
+   882→      const eyeR = {
+   883→        x: head.x + Math.cos(headAngle - 0.45) * 6,
+   884→        y: head.y + Math.sin(headAngle - 0.45) * 6,
+   885→      };
+   886→
+   887→      ctx.fillStyle = '#ffffff';
+   888→      ctx.beginPath();
+   889→      ctx.arc(eyeL.x, eyeL.y, 2.8, 0, Math.PI * 2);
+   890→      ctx.arc(eyeR.x, eyeR.y, 2.8, 0, Math.PI * 2);
+   891→      ctx.fill();
+   892→
+   893→      ctx.fillStyle = '#090d16';
+   894→      ctx.beginPath();
+   895→      ctx.arc(
+   896→        eyeL.x + Math.cos(headAngle) * 0.8,
+   897→        eyeL.y + Math.sin(headAngle) * 0.8,
+   898→        1.4,
+   899→        0,
+   900→        Math.PI * 2,
+   901→      );
+   902→      ctx.arc(
+   903→        eyeR.x + Math.cos(headAngle) * 0.8,
+   904→        eyeR.y + Math.sin(headAngle) * 0.8,
+   905→        1.4,
+   906→        0,
+   907→        Math.PI * 2,
+   908→      );
+   909→      ctx.fill();
+   910→
+   911→      animId = requestAnimationFrame(render);
+   912→    };
+   913→
+   914→    render();
+   915→    return () => {
+   916→      cancelAnimationFrame(animId);
+   917→      canvas.removeEventListener('mousemove', handleMouseMove);
+   918→      canvas.removeEventListener('mouseenter', handleMouseEnter);
+   919→      canvas.removeEventListener('mouseleave', handleMouseLeave);
+   920→    };
+   921→  }, [colors, shapeStyle, taperStyle, glow]);
+   922→
+   923→  return (
+   924→    <div className="relative overflow-hidden rounded-2xl border border-indigo-500/20 bg-slate-950 p-1 shadow-2xl">
+   925→      <div className="absolute top-2 left-3 flex items-center gap-1.5 z-10 bg-slate-900/90 px-2 py-0.5 rounded border border-indigo-500/20 pointer-events-none select-none">
+   926→        <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+   927→        <span className="text-[9px] text-indigo-300 font-mono font-bold uppercase tracking-wider">
+   928→          LAB HOLO-PREVIEW (STEER TO TEST)
+   929→        </span>
+   930→      </div>
+   931→      <canvas
+   932→        ref={canvasRef}
+   933→        width={450}
+   934→        height={180}
+   935→        className="block max-w-full h-[180px] w-full bg-slate-950/90 rounded-xl cursor-crosshair border border-slate-900 shadow-inner"
+   936→      />
+   937→    </div>
+   938→  );
+   939→}
+   940→
+   941→// ---------------------------------------------------------------------------
+   942→// Main component
+   943→// ---------------------------------------------------------------------------
+   944→type ShopView = 'presets' | 'editor';
+   945→type CategoryFilter =
+   946→  | 'all'
+   947→  | 'presets'
+   948→  | 'premium'
+   949→  | 'trails'
+   950→  | 'deaths'
+   951→  | 'flags'
+   952→  | 'banners';
+   953→
+   954→const CATEGORY_TABS: { id: CategoryFilter; label: string }[] = [
+   955→  { id: 'all', label: '🌈 All Items' },
+   956→  { id: 'presets', label: '🐍 Ready Presets (Free!)' },
+   957→  { id: 'premium', label: '✨ Premium Shop' },
+   958→  { id: 'trails', label: '💫 Laser Trails' },
+   959→  { id: 'deaths', label: '💥 Death Novas' },
+   960→  { id: 'flags', label: '🇺🇸 Flags' },
+   961→  { id: 'banners', label: '🏆 Profile Banners' },
+   962→];
+   963→
+   964→const BODY_STYLE_OPTIONS: { id: BodyStyle; label: string; desc: string }[] = [
+   965→  { id: 'smooth', label: 'Smooth Circles', desc: 'Standard sleek nodes' },
+   966→  { id: 'dragon', label: 'Dragon Scales', desc: 'Alternating jagged spikes' },
+   967→  { id: 'armored', label: 'Armored Plates', desc: 'Futuristic squad blocks' },
+   968→  { id: 'crystal', label: 'Crystal Shards', desc: 'Alternating shiny gems' },
+   969→  { id: 'obsidian', label: 'Spiky Obsidian', desc: 'Full high-threat spikes' },
+   970→  { id: 'basilisk', label: 'Basilisk Diamonds', desc: 'Pointy royal nodes' },
+   971→];
+   972→
+   973→const TAPER_OPTIONS: { id: TaperStyle; label: string }[] = [
+   974→  { id: 'natural', label: 'Natural Taper' },
+   975→  { id: 'uniform', label: 'Uniform Width' },
+   976→  { id: 'wave', label: 'Sinuous Wave' },
+   977→  { id: 'heavy', label: 'Heavy Head' },
+   978→];
+   979→
+   980→export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
+   981→  const { player, loading, refresh } = useAuth();
+   982→  const [shopView, setShopView] = useState<ShopView>('presets');
+   983→  const [activeCategory, setActiveCategory] = useState<CategoryFilter>('all');
+   984→
+   985→  // DNA Lab custom states — initialized lazily from localStorage on the
+   986→  // client so that the Lab tab reflects whatever the player last deployed.
+   987→  // (The lab tab is hidden by default, so any hydration delta between
+   988→  // SSR-default and client-stored values is invisible until interaction.)
+   989→  const [customState, setCustomState] = useState<CustomSkinState | null>(
+   990→    () => readCustomSkinStateSafe(),
+   991→  );
+   992→  const [colorSequence, setColorSequence] = useState<string[]>(() => {
+   993→    const stored = readCustomSkinStateSafe();
+   994→    if (stored?.customSkinSegments?.length) {
+   995→      return stored.customSkinSegments.map((s) => s.color);
+   996→    }
+   997→    return ['#06b6d4', '#a855f7', '#06b6d4', '#a855f7'];
+   998→  });
+   999→  const [bodyStyle, setBodyStyle] = useState<BodyStyle>(() => {
+  1000→    const stored = readCustomSkinStateSafe();
+  1001→    const segs = stored?.customSkinSegments;
+  1002→    if (segs && segs.length > 0) {
+  1003→      if (segs.every((s) => s.shape === 'circle')) return 'smooth';
+  1004→      if (segs.every((s) => s.shape === 'spike')) return 'obsidian';
+  1005→      if (segs.every((s) => s.shape === 'diamond')) return 'basilisk';
+  1006→      if (segs.some((s) => s.shape === 'spike')) return 'dragon';
+  1007→      if (segs.some((s) => s.shape === 'square')) return 'armored';
+  1008→      if (segs.some((s) => s.shape === 'diamond')) return 'crystal';
+  1009→    }
+  1010→    return 'smooth';
+  1011→  });
+  1012→  const [taperStyle, setTaperStyle] = useState<TaperStyle>('natural');
+  1013→  const [glowEnabled, setGlowEnabled] = useState<boolean>(() => {
+  1014→    const stored = readCustomSkinStateSafe();
+  1015→    if (stored?.customSkinSegments?.length) {
+  1016→      return stored.customSkinSegments.some((s) => s.glow);
+  1017→    }
+  1018→    return true;
+  1019→  });
+  1020→
+  1021→  if (loading) return <PanelSkeleton count={6} height="h-44" />;
+  1022→  if (!player) return <NotSignedIn />;
+  1023→
+  1024→  // Bind to a const so TypeScript keeps the non-null narrowing inside the
+  1025→  // closures below.
+  1026→  const p = player;
+  1027→
+  1028→  // -- helpers --------------------------------------------------------------
+  1029→  // A manufactured skin is "active" only if no custom-skin (preset or DNA-lab)
+  1030→  // is currently overriding the server's `currentSkin` field.
+  1031→  const isSkinActive = (item: Skin) =>
+  1032→    !customState?.useCustomSkin && p.currentSkin === item.id;
+  1033→
+  1034→  const isPresetActive = (preset: SlitherPreset) =>
+  1035→    customState?.useCustomSkin === true &&
+  1036→    customState.currentSkin === preset.id;
+  1037→
+  1038→  const isTrailActive = (item: Skin) => p.currentTrail === item.id;
+  1039→  const isDeathActive = (item: Skin) => p.currentDeath === item.id;
+  1040→  const isFlagActive = (item: Skin) => p.currentFlag === item.id;
+  1041→  const isBannerActive = (item: Skin) => p.currentBanner === item.id;
+  1042→
+  1043→  async function postCosmetic(action: 'buy' | 'equip', skinId: string) {
+  1044→    try {
+  1045→      const res = await fetch('/api/player/cosmetic', {
+  1046→        method: 'POST',
+  1047→        headers: { 'Content-Type': 'application/json' },
+  1048→        body: JSON.stringify({ action, skinId }),
+  1049→      });
+  1050→      const data = (await res.json().catch(() => ({}))) as { error?: string };
+  1051→      if (!res.ok) {
+  1052→        notify(data?.error || 'Action failed.', 'error', onToast);
+  1053→        return false;
+  1054→      }
+  1055→      await refresh();
+  1056→      return true;
+  1057→    } catch {
+  1058→      notify('Network error. Please try again.', 'error', onToast);
+  1059→      return false;
+  1060→    }
+  1061→  }
+  1062→
+  1063→  // -- action handlers ------------------------------------------------------
+  1064→  async function handleEquipManufacturedSkin(item: Skin) {
+  1065→    const owned = p.unlockedSkins.includes(item.id);
+  1066→    if (owned) {
+  1067→      if (await postCosmetic('equip', item.id)) {
+  1068→        // Clear custom-skin flag when equipping a manufactured skin
+  1069→        if (customState?.useCustomSkin) {
+  1070→          const next: CustomSkinState = {
+  1071→            ...customState,
+  1072→            useCustomSkin: false,
+  1073→          };
+  1074→          writeCustomSkinState(next);
+  1075→          setCustomState(next);
+  1076→        }
+  1077→        notify(`Equipped Body Skin: ${item.name}`, 'success', onToast);
+  1078→      }
+  1079→    } else {
+  1080→      if (p.bankedChips < item.cost) {
+  1081→        notify(
+  1082→          `You need ${item.cost} chips to unlock ${item.name}! Play matches to earn chips.`,
+  1083→          'error',
+  1084→          onToast,
+  1085→        );
+  1086→        return;
+  1087→      }
+  1088→      if (await postCosmetic('buy', item.id)) {
+  1089→        if (customState?.useCustomSkin) {
+  1090→          const next: CustomSkinState = {
+  1091→            ...customState,
+  1092→            useCustomSkin: false,
+  1093→          };
+  1094→          writeCustomSkinState(next);
+  1095→          setCustomState(next);
+  1096→        }
+  1097→        notify(
+  1098→          `Unlocked & Equipped ${item.name}! -${item.cost} CHIPS`,
+  1099→          'success',
+  1100→          onToast,
+  1101→        );
+  1102→      }
+  1103→    }
+  1104→  }
+  1105→
+  1106→  function handleEquipSlitherPreset(preset: SlitherPreset) {
+  1107→    const segments = generateCustomSegments(
+  1108→      preset.colors,
+  1109→      preset.shape,
+  1110→      preset.taper,
+  1111→      preset.glow,
+  1112→    );
+  1113→    const next: CustomSkinState = {
+  1114→      useCustomSkin: true,
+  1115→      currentSkin: preset.id,
+  1116→      customSkinSegments: segments,
+  1117→    };
+  1118→    writeCustomSkinState(next);
+  1119→    setCustomState(next);
+  1120→    notify(
+  1121→      `Injected DNA: ${preset.name}! Equipped in Battle Arena.`,
+  1122→      'success',
+  1123→      onToast,
+  1124→    );
+  1125→  }
+  1126→
+  1127→  async function handleEquipTrail(item: Skin) {
+  1128→    const owned = p.unlockedSkins.includes(item.id);
+  1129→    if (owned) {
+  1130→      if (await postCosmetic('equip', item.id)) {
+  1131→        notify(`Equipped Trail Effect: ${item.name}`, 'success', onToast);
+  1132→      }
+  1133→    } else {
+  1134→      if (p.bankedChips < item.cost) {
+  1135→        notify(
+  1136→          `You need ${item.cost} chips to unlock this trail!`,
+  1137→          'error',
+  1138→          onToast,
+  1139→        );
+  1140→        return;
+  1141→      }
+  1142→      if (await postCosmetic('buy', item.id)) {
+  1143→        notify(
+  1144→          `Unlocked & Equipped Trail: ${item.name}! -${item.cost} CHIPS`,
+  1145→          'success',
+  1146→          onToast,
+  1147→        );
+  1148→      }
+  1149→    }
+  1150→  }
+  1151→
+  1152→  async function handleEquipDeathEffect(item: Skin) {
+  1153→    const owned = p.unlockedSkins.includes(item.id);
+  1154→    if (owned) {
+  1155→      if (await postCosmetic('equip', item.id)) {
+  1156→        notify(`Equipped Death Effect: ${item.name}`, 'success', onToast);
+  1157→      }
+  1158→    } else {
+  1159→      if (p.bankedChips < item.cost) {
+  1160→        notify(
+  1161→          `You need ${item.cost} chips to unlock this death effect!`,
+  1162→          'error',
+  1163→          onToast,
+  1164→        );
+  1165→        return;
+  1166→      }
+  1167→      if (await postCosmetic('buy', item.id)) {
+  1168→        notify(
+  1169→          `Unlocked & Equipped Death Nova: ${item.name}! -${item.cost} CHIPS`,
+  1170→          'success',
+  1171→          onToast,
+  1172→        );
+  1173→      }
+  1174→    }
+  1175→  }
+  1176→
+  1177→  async function handleEquipFlag(item: Skin) {
+  1178→    const owned = p.unlockedSkins.includes(item.id);
+  1179→    if (owned) {
+  1180→      if (await postCosmetic('equip', item.id)) {
+  1181→        notify(`Equipped Flag: ${item.name}`, 'success', onToast);
+  1182→      }
+  1183→    } else {
+  1184→      if (p.bankedChips < item.cost) {
+  1185→        notify(
+  1186→          `You need ${item.cost} chips to unlock this flag!`,
+  1187→          'error',
+  1188→          onToast,
+  1189→        );
+  1190→        return;
+  1191→      }
+  1192→      if (await postCosmetic('buy', item.id)) {
+  1193→        notify(
+  1194→          `Unlocked & Equipped Flag: ${item.emoji} ${item.name}! -${item.cost} CHIPS`,
+  1195→          'success',
+  1196→          onToast,
+  1197→        );
+  1198→      }
+  1199→    }
+  1200→  }
+  1201→
+  1202→  async function handleEquipBanner(item: Skin) {
+  1203→    const owned = p.unlockedSkins.includes(item.id);
+  1204→    if (owned) {
+  1205→      if (await postCosmetic('equip', item.id)) {
+  1206→        notify(`Equipped Profile Banner: ${item.name}`, 'success', onToast);
+  1207→      }
+  1208→    } else {
+  1209→      if (p.bankedChips < item.cost) {
+  1210→        notify(
+  1211→          `You need ${item.cost} chips to unlock this profile banner!`,
+  1212→          'error',
+  1213→          onToast,
+  1214→        );
+  1215→        return;
+  1216→      }
+  1217→      if (await postCosmetic('buy', item.id)) {
+  1218→        notify(
+  1219→          `Unlocked & Equipped Profile Banner: ${item.name}! -${item.cost} CHIPS`,
+  1220→          'success',
+  1221→          onToast,
+  1222→        );
+  1223→      }
+  1224→    }
+  1225→  }
+  1226→
+  1227→  // -- genetic lab handlers -------------------------------------------------
+  1228→  function handleAppendColor(hex: string) {
+  1229→    if (colorSequence.length >= 24) {
+  1230→      notify('Maximum 24 segments in stripe pattern!', 'error', onToast);
+  1231→      return;
+  1232→    }
+  1233→    setColorSequence([...colorSequence, hex]);
+  1234→  }
+  1235→
+  1236→  function handleRemoveColorAt(index: number) {
+  1237→    if (colorSequence.length <= 1) {
+  1238→      notify('Stripe sequence must have at least 1 color node!', 'error', onToast);
+  1239→      return;
+  1240→    }
+  1241→    setColorSequence(colorSequence.filter((_, idx) => idx !== index));
+  1242→  }
+  1243→
+  1244→  function handleClearSequence() {
+  1245→    setColorSequence(['#ffffff']);
+  1246→    notify('Sequence reset.', 'info', onToast);
+  1247→  }
+  1248→
+  1249→  function handleDoublePattern() {
+  1250→    if (colorSequence.length >= 12) {
+  1251→      notify('Sequence too long to double!', 'error', onToast);
+  1252→      return;
+  1253→    }
+  1254→    setColorSequence([...colorSequence, ...colorSequence]);
+  1255→  }
+  1256→
+  1257→  function handleMirrorPattern() {
+  1258→    if (colorSequence.length >= 12) {
+  1259→      notify('Sequence too long to mirror!', 'error', onToast);
+  1260→      return;
+  1261→    }
+  1262→    setColorSequence([...colorSequence, ...[...colorSequence].reverse()]);
+  1263→  }
+  1264→
+  1265→  function handleRandomizePattern() {
+  1266→    const categories: BodyStyle[] = [
+  1267→      'smooth',
+  1268→      'dragon',
+  1269→      'armored',
+  1270→      'crystal',
+  1271→      'obsidian',
+  1272→      'basilisk',
+  1273→    ];
+  1274→    const tapers: TaperStyle[] = ['natural', 'uniform', 'wave', 'heavy'];
+  1275→    const colorsList = PALETTE_COLORS.map((c) => c.hex);
+  1276→
+  1277→    const count = Math.floor(Math.random() * 3) + 2;
+  1278→    const sequence: string[] = [];
+  1279→    for (let i = 0; i < count; i++) {
+  1280→      sequence.push(colorsList[Math.floor(Math.random() * colorsList.length)]);
+  1281→    }
+  1282→
+  1283→    setColorSequence(sequence);
+  1284→    setBodyStyle(categories[Math.floor(Math.random() * categories.length)]);
+  1285→    setTaperStyle(tapers[Math.floor(Math.random() * tapers.length)]);
+  1286→    setGlowEnabled(Math.random() > 0.4);
+  1287→    notify('Mutated new genetic chain!', 'success', onToast);
+  1288→  }
+  1289→
+  1290→  function handleDeployCustomSkin() {
+  1291→    if (colorSequence.length === 0) {
+  1292→      notify('Choose at least 1 color node before deploying!', 'error', onToast);
+  1293→      return;
+  1294→    }
+  1295→
+  1296→    const segments = generateCustomSegments(
+  1297→      colorSequence,
+  1298→      bodyStyle,
+  1299→      taperStyle,
+  1300→      glowEnabled,
+  1301→    );
+  1302→    const next: CustomSkinState = {
+  1303→      useCustomSkin: true,
+  1304→      currentSkin: 'custom-lab-skin',
+  1305→      customSkinSegments: segments,
+  1306→    };
+  1307→    writeCustomSkinState(next);
+  1308→    setCustomState(next);
+  1309→    notify(
+  1310→      '🧪 Genetic Custom Segment deployed! Equipped in Battle Arena.',
+  1311→      'success',
+  1312→      onToast,
+  1313→    );
+  1314→  }
+  1315→
+  1316→  // -- derived lists --------------------------------------------------------
+  1317→  const manufacturedSkins = ALL_COSMETICS.filter((c) => c.type === 'skin');
+  1318→  const trailCosmetics = ALL_COSMETICS.filter((c) => c.type === 'trail');
+  1319→  const deathCosmetics = ALL_COSMETICS.filter((c) => c.type === 'death');
+  1320→  const flagCosmetics = ALL_COSMETICS.filter((c) => c.type === 'flag');
+  1321→  const bannerCosmetics = ALL_COSMETICS.filter((c) => c.type === 'banner');
+  1322→
+  1323→  const showPresetsTab =
+  1324→    activeCategory === 'all' || activeCategory === 'presets';
+  1325→  const showPremiumTab =
+  1326→    activeCategory === 'all' || activeCategory === 'premium';
+  1327→  const showTrailsTab =
+  1328→    activeCategory === 'all' || activeCategory === 'trails';
+  1329→  const showDeathsTab =
+  1330→    activeCategory === 'all' || activeCategory === 'deaths';
+  1331→  const showFlagsTab = activeCategory === 'all' || activeCategory === 'flags';
+  1332→  const showBannersTab =
+  1333→    activeCategory === 'all' || activeCategory === 'banners';
+  1334→
+  1335→  const isCustomLabDeployed =
+  1336→    customState?.useCustomSkin === true &&
+  1337→    customState.currentSkin === 'custom-lab-skin';
+  1338→
+  1339→  return (
+  1340→    <div
+  1341→      id="cosmetics-shop"
+  1342→      className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl relative overflow-hidden"
+  1343→    >
+  1344→      {/* Decor */}
+  1345→      <div className="absolute top-0 right-0 w-80 h-80 bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
+  1346→      <div className="absolute -bottom-10 -left-10 w-60 h-60 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+  1347→
+  1348→      {/* HEADER */}
+  1349→      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-800">
+  1350→        <div>
+  1351→          <h2 className="text-xl font-bold font-sans tracking-tight text-white flex items-center gap-2">
+  1352→            <ShoppingBag className="w-5 h-5 text-indigo-400" /> Identity Workshop
+  1353→            &amp; Skin Gallery
+  1354→          </h2>
+  1355→          <p className="text-xs text-slate-400 font-sans mt-1">
+  1356→            Browse and equip real-time wiggling skins, luminous laser trails, or
+  1357→            customize your own custom repeating venom snake DNA blueprint!
+  1358→          </p>
+  1359→        </div>
+  1360→
+  1361→        {/* View-mode tabs */}
+  1362→        <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800/80 w-fit shrink-0">
+  1363→          <button
+  1364→            type="button"
+  1365→            onClick={() => setShopView('presets')}
+  1366→            className={`px-4 py-2 rounded-lg text-xs font-sans font-bold transition-all cursor-pointer ${
+  1367→              shopView === 'presets'
+  1368→                ? 'bg-indigo-600 text-white shadow'
+  1369→                : 'text-slate-400 hover:text-slate-200'
+  1370→            }`}
+  1371→          >
+  1372→            🎨 Skin &amp; Effect Gallery
+  1373→          </button>
+  1374→          <button
+  1375→            type="button"
+  1376→            onClick={() => setShopView('editor')}
+  1377→            className={`px-4 py-2 rounded-lg text-xs font-sans font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+  1378→              shopView === 'editor'
+  1379→                ? 'bg-purple-600 text-white shadow'
+  1380→                : 'text-slate-400 hover:text-slate-200'
+  1381→            }`}
+  1382→          >
+  1383→            🧬 Genetic Pattern Lab
+  1384→          </button>
+  1385→        </div>
+  1386→      </div>
+  1387→
+  1388→      {/* BODY */}
+  1389→      {shopView === 'presets' ? (
+  1390→        <div className="animate-fade-in">
+  1391→          {/* Category filters */}
+  1392→          <div className="flex flex-wrap gap-2 mb-6">
+  1393→            {CATEGORY_TABS.map((tab) => (
+  1394→              <button
+  1395→                key={tab.id}
+  1396→                type="button"
+  1397→                onClick={() => setActiveCategory(tab.id)}
+  1398→                className={`px-3.5 py-1.5 rounded-lg text-xs font-sans font-semibold transition-all cursor-pointer ${
+  1399→                  activeCategory === tab.id
+  1400→                    ? 'bg-slate-800 text-white border border-slate-700 shadow-md font-bold'
+  1401→                    : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-transparent'
+  1402→                }`}
+  1403→              >
+  1404→                {tab.label}
+  1405→              </button>
+  1406→            ))}
+  1407→          </div>
+  1408→
+  1409→          {/* Gallery grid */}
+  1410→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+  1411→            {/* A. FREE SLITHER PRESETS */}
+  1412→            {showPresetsTab &&
+  1413→              SLITHER_PRESETS.map((preset) => {
+  1414→                const active = isPresetActive(preset);
+  1415→                return (
+  1416→                  <PresetCard
+  1417→                    key={preset.id}
+  1418→                    preset={preset}
+  1419→                    active={active}
+  1420→                    onClick={() => handleEquipSlitherPreset(preset)}
+  1421→                  />
+  1422→                );
+  1423→              })}
+  1424→
+  1425→            {/* B. PREMIUM MANUFACTURED SKINS */}
+  1426→            {showPremiumTab &&
+  1427→              manufacturedSkins.map((item) => {
+  1428→                const unlocked = p.unlockedSkins.includes(item.id);
+  1429→                const active = isSkinActive(item);
+  1430→                const canAfford = p.bankedChips >= item.cost;
+  1431→                return (
+  1432→                  <SkinCard
+  1433→                    key={item.id}
+  1434→                    item={item}
+  1435→                    unlocked={unlocked}
+  1436→                    active={active}
+  1437→                    canAfford={canAfford}
+  1438→                    accent="emerald"
+  1439→                    onClick={() => void handleEquipManufacturedSkin(item)}
+  1440→                    equipLabel="Equip Skin"
+  1441→                  />
+  1442→                );
+  1443→              })}
+  1444→
+  1445→            {/* C. LASER TRAILS */}
+  1446→            {showTrailsTab &&
+  1447→              trailCosmetics.map((item) => (
+  1448→                <TrailCard
+  1449→                  key={item.id}
+  1450→                  item={item}
+  1451→                  unlocked={p.unlockedSkins.includes(item.id)}
+  1452→                  active={isTrailActive(item)}
+  1453→                  canAfford={p.bankedChips >= item.cost}
+  1454→                  onClick={() => void handleEquipTrail(item)}
+  1455→                />
+  1456→              ))}
+  1457→
+  1458→            {/* D. DEATH BURSTS */}
+  1459→            {showDeathsTab &&
+  1460→              deathCosmetics.map((item) => (
+  1461→                <DeathCard
+  1462→                  key={item.id}
+  1463→                  item={item}
+  1464→                  unlocked={p.unlockedSkins.includes(item.id)}
+  1465→                  active={isDeathActive(item)}
+  1466→                  canAfford={p.bankedChips >= item.cost}
+  1467→                  onClick={() => void handleEquipDeathEffect(item)}
+  1468→                />
+  1469→              ))}
+  1470→
+  1471→            {/* E. FLAGS */}
+  1472→            {showFlagsTab &&
+  1473→              flagCosmetics.map((item) => (
+  1474→                <FlagCard
+  1475→                  key={item.id}
+  1476→                  item={item}
+  1477→                  unlocked={p.unlockedSkins.includes(item.id)}
+  1478→                  active={isFlagActive(item)}
+  1479→                  canAfford={p.bankedChips >= item.cost}
+  1480→                  onClick={() => void handleEquipFlag(item)}
+  1481→                />
+  1482→              ))}
+  1483→
+  1484→            {/* F. BANNERS */}
+  1485→            {showBannersTab &&
+  1486→              bannerCosmetics.map((item) => (
+  1487→                <BannerCard
+  1488→                  key={item.id}
+  1489→                  item={item}
+  1490→                  unlocked={p.unlockedSkins.includes(item.id)}
+  1491→                  active={isBannerActive(item)}
+  1492→                  canAfford={p.bankedChips >= item.cost}
+  1493→                  onClick={() => void handleEquipBanner(item)}
+  1494→                />
+  1495→              ))}
+  1496→          </div>
+  1497→        </div>
+  1498→      ) : (
+  1499→        /* GENETIC PATTERN LAB */
+  1500→        <div className="animate-fade-in grid grid-cols-1 lg:grid-cols-12 gap-6">
+  1501→          {/* LEFT COLUMN — TryOn preview + Projector card */}
+  1502→          <div className="lg:col-span-5 flex flex-col gap-4">
+  1503→            <TryOnPreview
+  1504→              colors={colorSequence.length > 0 ? colorSequence : ['#ffffff']}
+  1505→              shapeStyle={bodyStyle}
+  1506→              taperStyle={taperStyle}
+  1507→              glow={glowEnabled}
+  1508→            />
+  1509→
+  1510→            {/* Projector Details Card */}
+  1511→            <div className="bg-slate-950 border border-slate-800 p-4 rounded-2xl shadow-inner">
+  1512→              <span className="text-[9px] text-indigo-400 font-mono tracking-widest block uppercase font-extrabold mb-1">
+  1513→                GENETIC PROFILE STATS
+  1514→              </span>
+  1515→              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+  1516→                <Palette className="w-4 h-4 text-purple-400" /> Pattern DNA Engine
+  1517→              </h3>
+  1518→              <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+  1519→                Your stripe nodes loop continuously as your snake grows in the
+  1520→                arena. You can tweak color order, skin geometries, tapering
+  1521→                physics, and aurora bioluminescence before deploying!
+  1522→              </p>
+  1523→
+  1524→              <div className="grid grid-cols-2 gap-2.5 mt-3 text-[10.5px] font-mono">
+  1525→                <div className="bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-800">
+  1526→                  <span className="text-slate-500">NODES:</span>{' '}
+  1527→                  <span className="text-purple-400 font-black">
+  1528→                    {colorSequence.length} nodes
+  1529→                  </span>
+  1530→                </div>
+  1531→                <div className="bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-800">
+  1532→                  <span className="text-slate-500">GLOW:</span>{' '}
+  1533→                  <span
+  1534→                    className={
+  1535→                      glowEnabled
+  1536→                        ? 'text-emerald-400 font-black'
+  1537→                        : 'text-slate-500'
+  1538→                    }
+  1539→                  >
+  1540→                    {glowEnabled ? 'ENABLED' : 'DISABLED'}
+  1541→                  </span>
+  1542→                </div>
+  1543→              </div>
+  1544→
+  1545→              <button
+  1546→                type="button"
+  1547→                onClick={handleDeployCustomSkin}
+  1548→                className={`w-full mt-4 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md ${
+  1549→                  isCustomLabDeployed
+  1550→                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-emerald-950'
+  1551→                    : 'bg-purple-600 hover:bg-purple-500 text-white border border-purple-500 hover:shadow-purple-500/20'
+  1552→                }`}
+  1553→              >
+  1554→                {isCustomLabDeployed ? (
+  1555→                  <>
+  1556→                    <CheckCircle2 className="w-4 h-4 text-emerald-100 animate-bounce" />{' '}
+  1557→                    DNA DEPLOYED &amp; EQUIPPED (ACTIVE)
+  1558→                  </>
+  1559→                ) : (
+  1560→                  <>
+  1561→                    <Wand2 className="w-4 h-4 text-purple-100" /> DEPLOY TO
+  1562→                    BATTLE-ARENA
+  1563→                  </>
+  1564→                )}
+  1565→              </button>
+  1566→            </div>
+  1567→          </div>
+  1568→
+  1569→          {/* RIGHT COLUMN — 4-step editor */}
+  1570→          <div className="lg:col-span-7 flex flex-col gap-6">
+  1571→            {/* STEP 1 — Stripe sequence */}
+  1572→            <div className="bg-slate-950 border border-slate-800 p-5 rounded-2xl flex flex-col gap-4">
+  1573→              <div>
+  1574→                <span className="text-[10px] text-slate-500 font-mono tracking-wider block uppercase font-bold">
+  1575→                  STEP 1
+  1576→                </span>
+  1577→                <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+  1578→                  <Paintbrush className="w-4 h-4 text-indigo-400" /> Construct
+  1579→                  Stripe Sequence
+  1580→                </h3>
+  1581→                <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+  1582→                  Click any palette color below to append it to the tail
+  1583→                  sequence.{' '}
+  1584→                  <span className="text-indigo-400 font-semibold">
+  1585→                    Click any crown node inside the wiggling strip to erase it.
+  1586→                  </span>
+  1587→                </p>
+  1588→              </div>
+  1589→
+  1590→              {/* Palette */}
+  1591→              <div className="grid grid-cols-6 sm:grid-cols-9 gap-2">
+  1592→                {PALETTE_COLORS.map((col) => (
+  1593→                  <button
+  1594→                    key={col.hex}
+  1595→                    type="button"
+  1596→                    onClick={() => handleAppendColor(col.hex)}
+  1597→                    title={`Add ${col.name}`}
+  1598→                    className="aspect-square rounded-full border border-slate-800 hover:border-white hover:scale-110 active:scale-95 transition-all shadow cursor-pointer flex items-center justify-center group relative"
+  1599→                    style={{ backgroundColor: col.hex }}
+  1600→                  >
+  1601→                    <Plus
+  1602→                      className={`w-4 h-4 opacity-0 group-hover:opacity-100 transition ${
+  1603→                        col.hex === '#ffffff' || col.hex === '#f59e0b'
+  1604→                          ? 'text-slate-950'
+  1605→                          : 'text-white'
+  1606→                      }`}
+  1607→                    />
+  1608→                  </button>
+  1609→                ))}
+  1610→              </div>
+  1611→
+  1612→              {/* Active strip */}
+  1613→              <div className="bg-slate-900 border border-slate-800/80 p-3 rounded-xl flex items-center gap-1.5 overflow-x-auto min-h-[64px] max-w-full relative shadow-inner va-scroll">
+  1614→                {colorSequence.map((col, idx) => (
+  1615→                  <button
+  1616→                    key={`${idx}-${col}`}
+  1617→                    type="button"
+  1618→                    onClick={() => handleRemoveColorAt(idx)}
+  1619→                    title="Click to erase node"
+  1620→                    className="w-8 h-8 rounded-full border border-slate-950/45 shrink-0 flex items-center justify-center relative cursor-pointer hover:border-red-500 hover:scale-105 active:scale-95 group transition"
+  1621→                    style={{
+  1622→                      backgroundColor: col,
+  1623→                      boxShadow: `0 0 6px ${col}44`,
+  1624→                    }}
+  1625→                  >
+  1626→                    <span
+  1627→                      className={`${
+  1628→                        col === '#ffffff' || col === '#f59e0b'
+  1629→                          ? 'text-slate-950 font-black'
+  1630→                          : 'text-white font-bold'
+  1631→                      } text-[10px]`}
+  1632→                    >
+  1633→                      {idx === 0 ? '👑' : idx}
+  1634→                    </span>
+  1635→                    <span className="absolute inset-0 bg-red-600/90 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition">
+  1636→                      <Trash2 className="w-3.5 h-3.5 text-white" />
+  1637→                    </span>
+  1638→                  </button>
+  1639→                ))}
+  1640→              </div>
+  1641→
+  1642→              {/* Helpers */}
+  1643→              <div className="flex flex-wrap gap-2.5">
+  1644→                <button
+  1645→                  type="button"
+  1646→                  onClick={handleDoublePattern}
+  1647→                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold text-[10px] rounded-lg transition flex items-center gap-1 cursor-pointer"
+  1648→                >
+  1649→                  <Plus className="w-3.5 h-3.5 text-indigo-400" /> Double
+  1650→                  Sequence Length
+  1651→                </button>
+  1652→                <button
+  1653→                  type="button"
+  1654→                  onClick={handleMirrorPattern}
+  1655→                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold text-[10px] rounded-lg transition flex items-center gap-1 cursor-pointer"
+  1656→                >
+  1657→                  <ArrowLeftRight className="w-3.5 h-3.5 text-indigo-400" />{' '}
+  1658→                  Mirror Symmetrically
+  1659→                </button>
+  1660→                <button
+  1661→                  type="button"
+  1662→                  onClick={handleRandomizePattern}
+  1663→                  className="px-3 py-1.5 bg-purple-950/20 hover:bg-purple-950/30 border border-purple-800/20 hover:border-purple-500/30 text-purple-300 font-bold text-[10px] rounded-lg transition flex items-center gap-1 cursor-pointer ml-auto"
+  1664→                >
+  1665→                  🎲 Mutate DNA
+  1666→                </button>
+  1667→                <button
+  1668→                  type="button"
+  1669→                  onClick={handleClearSequence}
+  1670→                  className="px-3 py-1.5 bg-rose-950/10 hover:bg-rose-950/25 border border-rose-800/20 hover:border-rose-500/30 text-rose-400 font-bold text-[10px] rounded-lg transition flex items-center gap-1 cursor-pointer"
+  1671→                >
+  1672→                  <Trash2 className="w-3.5 h-3.5" /> Reset
+  1673→                </button>
+  1674→              </div>
+  1675→            </div>
+  1676→
+  1677→            {/* STEP 2 — Geometry */}
+  1678→            <div className="bg-slate-950 border border-slate-800 p-5 rounded-2xl flex flex-col gap-3">
+  1679→              <div>
+  1680→                <span className="text-[10px] text-slate-500 font-mono tracking-wider block uppercase font-bold">
+  1681→                  STEP 2
+  1682→                </span>
+  1683→                <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+  1684→                  <Sliders className="w-4 h-4 text-indigo-400" /> Choose Segment
+  1685→                  Geometry
+  1686→                </h3>
+  1687→              </div>
+  1688→
+  1689→              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+  1690→                {BODY_STYLE_OPTIONS.map((style) => (
+  1691→                  <button
+  1692→                    key={style.id}
+  1693→                    type="button"
+  1694→                    onClick={() => setBodyStyle(style.id)}
+  1695→                    className={`p-3 rounded-xl border text-left transition duration-200 cursor-pointer flex flex-col justify-between ${
+  1696→                      bodyStyle === style.id
+  1697→                        ? 'bg-indigo-600/10 border-indigo-500 shadow shadow-indigo-950'
+  1698→                        : 'bg-slate-900 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/80'
+  1699→                    }`}
+  1700→                  >
+  1701→                    <span className="text-xs font-bold text-white block capitalize">
+  1702→                      {style.label}
+  1703→                    </span>
+  1704→                    <span className="text-[10px] text-slate-400 block mt-1 leading-snug">
+  1705→                      {style.desc}
+  1706→                    </span>
+  1707→                  </button>
+  1708→                ))}
+  1709→              </div>
+  1710→            </div>
+  1711→
+  1712→            {/* STEPS 3 & 4 — Taper + Glow */}
+  1713→            <div className="bg-slate-950 border border-slate-800 p-5 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-6">
+  1714→              {/* Taper */}
+  1715→              <div className="flex flex-col justify-between gap-3">
+  1716→                <div>
+  1717→                  <span className="text-[10px] text-slate-500 font-mono tracking-wider block uppercase font-bold">
+  1718→                    STEP 3
+  1719→                  </span>
+  1720→                  <h3 className="text-sm font-bold text-white">
+  1721→                    Body Taper Physics
+  1722→                  </h3>
+  1723→                  <p className="text-[10px] text-slate-400 leading-relaxed mt-0.5">
+  1724→                    Configure snake tail scaling density styles.
+  1725→                  </p>
+  1726→                </div>
+  1727→
+  1728→                <div className="grid grid-cols-2 gap-2">
+  1729→                  {TAPER_OPTIONS.map((tap) => (
+  1730→                    <button
+  1731→                      key={tap.id}
+  1732→                      type="button"
+  1733→                      onClick={() => setTaperStyle(tap.id)}
+  1734→                      className={`py-2 px-2.5 rounded-lg border text-xs font-semibold font-sans text-center transition cursor-pointer ${
+  1735→                        taperStyle === tap.id
+  1736→                          ? 'bg-indigo-600/15 border-indigo-500 text-indigo-300'
+  1737→                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+  1738→                      }`}
+  1739→                    >
+  1740→                      {tap.label}
+  1741→                    </button>
+  1742→                  ))}
+  1743→                </div>
+  1744→              </div>
+  1745→
+  1746→              {/* Glow */}
+  1747→              <div className="flex flex-col justify-between gap-3 border-t md:border-t-0 md:border-l border-slate-900 pt-4 md:pt-0 md:pl-6">
+  1748→                <div>
+  1749→                  <span className="text-[10px] text-slate-500 font-mono tracking-wider block uppercase font-bold">
+  1750→                    STEP 4
+  1751→                  </span>
+  1752→                  <h3 className="text-sm font-bold text-white">
+  1753→                    Bioluminescent Aura
+  1754→                  </h3>
+  1755→                  <p className="text-[10px] text-slate-400 leading-relaxed mt-0.5">
+  1756→                    Toggle active radioactive body node shading glow in battle
+  1757→                    arenas.
+  1758→                  </p>
+  1759→                </div>
+  1760→
+  1761→                <div className="flex items-center justify-between p-3 bg-slate-900 rounded-xl border border-slate-800">
+  1762→                  <div className="text-left">
+  1763→                    <span className="text-xs font-bold text-white block">
+  1764→                      Neon Glow
+  1765→                    </span>
+  1766→                    <span className="text-[10px] text-slate-400 block leading-tight">
+  1767→                      Emit high-vis plasma light
+  1768→                    </span>
+  1769→                  </div>
+  1770→
+  1771→                  <button
+  1772→                    type="button"
+  1773→                    onClick={() => setGlowEnabled(!glowEnabled)}
+  1774→                    aria-pressed={glowEnabled}
+  1775→                    aria-label="Toggle neon glow"
+  1776→                    className={`w-11 h-6 rounded-full transition-all relative flex items-center p-1 cursor-pointer ${
+  1777→                      glowEnabled ? 'bg-indigo-500' : 'bg-slate-800'
+  1778→                    }`}
+  1779→                  >
+  1780→                    <span
+  1781→                      className={`w-4 h-4 bg-white rounded-full shadow transition-all ${
+  1782→                        glowEnabled ? 'translate-x-5' : 'translate-x-0'
+  1783→                      }`}
+  1784→                    />
+  1785→                  </button>
+  1786→                </div>
+  1787→              </div>
+  1788→            </div>
+  1789→          </div>
+  1790→        </div>
+  1791→      )}
+  1792→    </div>
+  1793→  );
+  1794→}
+  1795→
+  1796→// ---------------------------------------------------------------------------
+  1797→// Card sub-components
+  1798→// ---------------------------------------------------------------------------
+  1799→function ActiveBadge({ accent }: { accent: 'indigo' | 'emerald' }) {
+  1800→  const accentClass =
+  1801→    accent === 'emerald'
+  1802→      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+  1803→      : 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30';
+  1804→  return (
+  1805→    <span
+  1806→      className={`absolute top-2.5 right-2.5 ${accentClass} border text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase flex items-center gap-1 leading-none`}
+  1807→    >
+  1808→      <Check className="w-2.5 h-2.5" /> Active
+  1809→    </span>
+  1810→  );
+  1811→}
+  1812→
+  1813→function LockedBadge() {
+  1814→  return (
+  1815→    <span className="absolute top-2.5 right-2.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 leading-none">
+  1816→      <Lock className="w-2.5 h-2.5 text-amber-400" /> Locked
+  1817→    </span>
+  1818→  );
+  1819→}
+  1820→
+  1821→function PresetCard({
+  1822→  preset,
+  1823→  active,
+  1824→  onClick,
+  1825→}: {
+  1826→  preset: SlitherPreset;
+  1827→  active: boolean;
+  1828→  onClick: () => void;
+  1829→}) {
+  1830→  return (
+  1831→    <div
+  1832→      onClick={onClick}
+  1833→      role="button"
+  1834→      tabIndex={0}
+  1835→      onKeyDown={(e) => {
+  1836→        if (e.key === 'Enter' || e.key === ' ') {
+  1837→          e.preventDefault();
+  1838→          onClick();
+  1839→        }
+  1840→      }}
+  1841→      className={`p-4 bg-slate-950 rounded-2xl border transition-all duration-300 cursor-pointer group hover:bg-slate-900 flex flex-col justify-between relative select-none ${
+  1842→        active
+  1843→          ? 'border-indigo-500 shadow-lg shadow-indigo-950/60 ring-1 ring-indigo-500/25 translate-y-[-2px]'
+  1844→          : 'border-slate-800 hover:border-slate-700 hover:translate-y-[-2px]'
+  1845→      }`}
+  1846→    >
+  1847→      {active && <ActiveBadge accent="indigo" />}
+  1848→
+  1849→      <div>
+  1850→        <div className="mb-4">
+  1851→          <SkinsCanvasPreview
+  1852→            colors={preset.colors}
+  1853→            shapeStyle={preset.shape}
+  1854→            glow={preset.glow}
+  1855→          />
+  1856→        </div>
+  1857→
+  1858→        <div className="flex items-center gap-1.5 mb-1.5 justify-center">
+  1859→          <span className="text-base">{preset.emoji}</span>
+  1860→          <h3 className="text-sm font-bold text-white tracking-tight group-hover:text-indigo-400 transition-colors">
+  1861→            {preset.name}
+  1862→          </h3>
+  1863→        </div>
+  1864→
+  1865→        <p className="text-[10.5px] text-slate-500 text-center leading-relaxed mb-4 px-1.5 line-clamp-2">
+  1866→          {preset.description}
+  1867→        </p>
+  1868→      </div>
+  1869→
+  1870→      <button
+  1871→        type="button"
+  1872→        tabIndex={-1}
+  1873→        className={`w-full py-2 rounded-xl text-center text-xs font-bold transition-all uppercase pointer-events-none ${
+  1874→          active
+  1875→            ? 'bg-indigo-950/40 text-indigo-400 border border-indigo-500/20'
+  1876→            : 'bg-slate-900 text-slate-300 group-hover:bg-indigo-600 group-hover:text-white'
+  1877→        }`}
+  1878→      >
+  1879→        {active ? 'Equipped' : 'Equip Preset'}
+  1880→      </button>
+  1881→    </div>
+  1882→  );
+  1883→}
+  1884→
+  1885→function SkinCard({
+  1886→  item,
+  1887→  unlocked,
+  1888→  active,
+  1889→  canAfford,
+  1890→  onClick,
+  1891→  equipLabel,
+  1892→  accent,
+  1893→}: {
+  1894→  item: Skin;
+  1895→  unlocked: boolean;
+  1896→  active: boolean;
+  1897→  canAfford: boolean;
+  1898→  onClick: () => void;
+  1899→  equipLabel: string;
+  1900→  accent: 'indigo' | 'emerald';
+  1901→}) {
+  1902→  return (
+  1903→    <div
+  1904→      onClick={onClick}
+  1905→      role="button"
+  1906→      tabIndex={0}
+  1907→      onKeyDown={(e) => {
+  1908→        if (e.key === 'Enter' || e.key === ' ') {
+  1909→          e.preventDefault();
+  1910→          onClick();
+  1911→        }
+  1912→      }}
+  1913→      className={`p-4 bg-slate-950 rounded-2xl border transition-all duration-300 cursor-pointer group hover:bg-slate-900 flex flex-col justify-between relative select-none ${
+  1914→        active
+  1915→          ? accent === 'emerald'
+  1916→            ? 'border-emerald-500 shadow-lg shadow-emerald-950/60 ring-1 ring-emerald-500/25 translate-y-[-2px]'
+  1917→            : 'border-indigo-500 shadow-lg shadow-indigo-950/60 ring-1 ring-indigo-500/25 translate-y-[-2px]'
+  1918→          : 'border-slate-800 hover:border-slate-700 hover:translate-y-[-2px]'
+  1919→      }`}
+  1920→    >
+  1921→      {active ? (
+  1922→        <ActiveBadge accent={accent} />
+  1923→      ) : (
+  1924→        !unlocked && <LockedBadge />
+  1925→      )}
+  1926→
+  1927→      <div>
+  1928→        <div className="mb-4">
+  1929→          <SkinsCanvasPreview
+  1930→            colors={[item.color, item.secondaryColor || item.color]}
+  1931→            pattern={item.pattern}
+  1932→            shapeStyle="smooth"
+  1933→            glow={
+  1934→              item.pattern === 'glow' ||
+  1935→              item.pattern === 'neon' ||
+  1936→              item.pattern === 'rainbow'
+  1937→            }
+  1938→          />
+  1939→        </div>
+  1940→
+  1941→        <div className="flex items-center gap-1.5 mb-1.5 justify-center">
+  1942→          <span className="text-base">{item.emoji}</span>
+  1943→          <h3
+  1944→            className={`text-sm font-bold text-white tracking-tight group-hover:text-${accent}-400 transition-colors`}
+  1945→          >
+  1946→            {item.name}
+  1947→          </h3>
+  1948→        </div>
+  1949→
+  1950→        <p className="text-[10.5px] text-slate-500 text-center leading-relaxed mb-4 px-1.5 line-clamp-2">
+  1951→          {item.description}
+  1952→        </p>
+  1953→      </div>
+  1954→
+  1955→      {active ? (
+  1956→        <button
+  1957→          type="button"
+  1958→          tabIndex={-1}
+  1959→          className={`w-full py-2 rounded-xl text-center text-xs font-bold pointer-events-none uppercase ${
+  1960→            accent === 'emerald'
+  1961→              ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-500/20'
+  1962→              : 'bg-indigo-950/40 text-indigo-400 border border-indigo-500/20'
+  1963→          }`}
+  1964→        >
+  1965→          Equipped
+  1966→        </button>
+  1967→      ) : unlocked ? (
+  1968→        <button
+  1969→          type="button"
+  1970→          tabIndex={-1}
+  1971→          className={`w-full py-2 rounded-xl text-center text-xs font-bold pointer-events-none uppercase bg-slate-900 text-slate-300 group-hover:bg-${accent}-600 group-hover:text-white`}
+  1972→        >
+  1973→          {equipLabel}
+  1974→        </button>
+  1975→      ) : (
+  1976→        <button
+  1977→          type="button"
+  1978→          tabIndex={-1}
+  1979→          className={`w-full py-2 rounded-xl text-center text-xs font-bold flex items-center justify-center gap-1 pointer-events-none ${
+  1980→            canAfford
+  1981→              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20 group-hover:bg-amber-500 group-hover:text-slate-950 font-black'
+  1982→              : 'bg-slate-900/40 text-slate-500 cursor-not-allowed'
+  1983→          }`}
+  1984→        >
+  1985→          <Sparkles className="w-3 h-3 animate-pulse" /> Unlock ({item.cost}{' '}
+  1986→          Chips)
+  1987→        </button>
+  1988→      )}
+  1989→    </div>
+  1990→  );
+  1991→}
+  1992→
+  1993→function TrailCard({
+  1994→  item,
+  1995→  unlocked,
+  1996→  active,
+  1997→  canAfford,
+  1998→  onClick,
+  1999→}: {
+  2000→  item: Skin;
+
+[showing lines 1-2000 of 2307; use offset=2001 with limit to continue reading]

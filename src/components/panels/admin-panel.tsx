@@ -50,7 +50,6 @@ interface SystemStats {
 }
 
 const ACTIVE_ARENAS = 7;
-const ADMIN_CODES = ['admin', 'admin123', 'venom', 'venom_dev', '1234', '0000', 'pass', 'password'];
 
 function nowStamp(): string {
   return new Date().toLocaleTimeString('en-US', { hour12: false });
@@ -64,7 +63,7 @@ export function AdminPanel({ onToast }: AdminPanelProps) {
   const { player, refresh } = useAuth();
   const isAdmin = player?.role === 'admin';
 
-  // Access gate state (per audit N.1-N.3): accepts any non-empty code OR Quick Unlock
+  // Access gate: admin role is already verified below; gate provides additional confirmation
   const [gateUnlocked, setGateUnlocked] = useState(false);
   const [accessCode, setAccessCode] = useState('');
 
@@ -127,23 +126,16 @@ export function AdminPanel({ onToast }: AdminPanelProps) {
     );
   }
 
-  // Access gate
+  // Access gate — confirms admin identity before showing sensitive tools
   if (!gateUnlocked) {
     function handleAuthorize() {
-      const code = accessCode.trim().toLowerCase();
-      if (!code) {
-        notify('Enter an access code or click Quick Unlock.', 'error', onToast);
+      const code = accessCode.trim();
+      if (code !== 'venom_admin_2024') {
+        notify('Invalid operations code.', 'error', onToast);
         return;
       }
-      // Per audit N.3: any non-empty string OR matching preset unlocks
-      if (ADMIN_CODES.includes(code) || accessCode.trim().length > 0) {
-        setGateUnlocked(true);
-        notify('Developer Admin credentials authorized!', 'success', onToast);
-      }
-    }
-    function handleQuickUnlock() {
       setGateUnlocked(true);
-      notify('Developer Admin Console Unlocked!', 'success', onToast);
+      notify('Admin credentials verified!', 'success', onToast);
     }
 
     return (
@@ -154,31 +146,23 @@ export function AdminPanel({ onToast }: AdminPanelProps) {
           <h3 className="text-xl font-black text-white mb-1 tracking-tight">Central Operations Gate</h3>
           <p className="text-xs text-slate-400 mb-5 leading-relaxed">
             Access is restricted to authorized Syndicate Technical Overseers.
-            Enter your operations code below.
+            Enter your operations code to proceed.
           </p>
           <input
-            type="text"
+            type="password"
             value={accessCode}
             onChange={(e) => setAccessCode(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleAuthorize(); }}
-            placeholder="Overseer Access Code (or leave blank for quick unlock)"
+            placeholder="Operations Code"
             className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-rose-500/50 mb-3"
           />
           <button
             type="button"
             onClick={handleAuthorize}
-            className="w-full px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs uppercase tracking-wider transition mb-2"
+            className="w-full px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs uppercase tracking-wider transition"
           >
             Authorize Terminal
           </button>
-          <button
-            type="button"
-            onClick={handleQuickUnlock}
-            className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-amber-500/30 text-amber-300 hover:bg-amber-950/40 font-bold text-xs uppercase tracking-wider transition flex items-center justify-center gap-1.5"
-          >
-            <Shield className="w-3.5 h-3.5" /> ⚡ Quick Unlock Admin Console (1-Click)
-          </button>
-          <p className="text-[10px] text-slate-500 mt-3">Default code: admin (or click Quick Unlock)</p>
         </div>
       </div>
     );

@@ -1,0 +1,2002 @@
+     1→'use client';
+     2→
+     3→/**
+     4→ * BUILD-11 — `PlayerProfilePanel` panel.
+     5→ *
+     6→ * Faithful replica of `/upload/extracted/src/components/PlayerProfile.tsx`
+     7→ * (1429 lines). Adapted to the BUILD-2 server-authoritative stack:
+     8→ *
+     9→ *  - Reads `player` and `refresh`/`logout` from `useAuth()`.
+    10→ *  - Identity changes persist via `PUT /api/player` with
+    11→ *    `{ name, country, avatar, instagram, youtube, twitch }` (server
+    12→ *    whitelists name/country/avatar; socials persist via localStorage).
+    13→ *  - Friends, match history, and identity logs persist to the same
+    14→ *    `localStorage` keys the original used (`venom_friends`,
+    15→ *    `venom_match_history`, `venom_identity_history_log`).
+    16→ *  - Co-Op Lobby Invite modal matches the original 1-to-1: arena-stakes
+    17→ *    list, eligibility pills (`"You can't afford" / "They can't afford"
+    18→ *    / "Eligible 🤝"`), counter-proposal speech bubble, and the
+    19→ *    `localStorage['venom_active_match_invite']` handshake consumed by
+    20→ *    `ArenaSelector`.
+    21→ *
+    22→ * Every text string (4 tabs, 8 stat cards, 3 tournament caps, FAQ, social
+    23→ * badges, ALL button labels and toast messages) is preserved verbatim from
+    24→ * AUDIT-C section D.
+    25→ */
+    26→
+    27→import { useEffect, useState } from 'react';
+    28→import {
+    29→  Award,
+    30→  Check,
+    31→  Clock,
+    32→  Compass,
+    33→  Edit2,
+    34→  Eye,
+    35→  Globe,
+    36→  History,
+    37→  Landmark,
+    38→  Lock,
+    39→  LogOut,
+    40→  RefreshCw,
+    41→  Shield,
+    42→  Skull,
+    43→  Sparkles,
+    44→  Swords,
+    45→  Target,
+    46→  Trash2,
+    47→  Trophy,
+    48→  Upload,
+    49→  UserPlus,
+    50→  Users,
+    51→  X,
+    52→} from 'lucide-react';
+    53→import { useAuth } from '@/components/providers/auth-provider';
+    54→import { ARENA_TIERS, COUNTRIES, getCosmeticById } from '@/lib/game-config';
+    55→import type { PlayerProfile } from '@/lib/types';
+    56→import {
+    57→  PanelSkeleton,
+    58→  NotSignedIn,
+    59→  notify,
+    60→  type ToastFn,
+    61→} from './_panel-primitives';
+    62→
+    63→interface PlayerProfilePanelProps {
+    64→  onToast?: ToastFn;
+    65→}
+    66→
+    67→// ---------------------------------------------------------------------------
+    68→// FACTION_COUNTRIES — exact from original (AUDIT-C G)
+    69→// ---------------------------------------------------------------------------
+    70→const FACTION_COUNTRIES = COUNTRIES;
+    71→
+    72→// ---------------------------------------------------------------------------
+    73→// PRESET_AVATARS — exact from original (AUDIT-C D.14)
+    74→// ---------------------------------------------------------------------------
+    75→const PRESET_AVATARS = [
+    76→  { id: 'av-viper', label: 'Venomous Viper', emoji: '🐍' },
+    77→  { id: 'av-skull', label: 'Syndicate Skull', emoji: '🏴‍☠️' },
+    78→  { id: 'av-invader', label: 'Pixel Invader', emoji: '👾' },
+    79→  { id: 'av-sentinel', label: 'Cyber Sentinel', emoji: '🤖' },
+    80→  { id: 'av-king', label: 'Midas King', emoji: '👑' },
+    81→  { id: 'av-storm', label: 'Storm Surge', emoji: '⚡' },
+    82→  { id: 'av-fury', label: 'Crimson Fury', emoji: '🔥' },
+    83→  { id: 'av-nebula', label: 'Cosmic Nebula', emoji: '🌌' },
+    84→];
+    85→
+    86→// ---------------------------------------------------------------------------
+    87→// Friend + history + identity-log types
+    88→// ---------------------------------------------------------------------------
+    89→type FriendStatus = 'online' | 'idle' | 'in-match' | 'offline';
+    90→
+    91→interface Friend {
+    92→  id: string;
+    93→  name: string;
+    94→  userTag: string;
+    95→  status: FriendStatus;
+    96→  level: number;
+    97→  skinColor: string;
+    98→  giftSentToday: boolean;
+    99→  giftReceivedToday: boolean;
+   100→}
+   101→
+   102→interface MatchHistoryEntry {
+   103→  id: string;
+   104→  arenaName: string;
+   105→  isOnline: boolean;
+   106→  status: 'EXTRACTED' | 'COLLIDED';
+   107→  chipsEarned: number;
+   108→  chipsLost: number;
+   109→  kills: number;
+   110→  snakeLength: number;
+   111→  timestamp: string;
+   112→  durationSec: number;
+   113→}
+   114→
+   115→interface IdentityLogEntry {
+   116→  id: string;
+   117→  previousName: string;
+   118→  newName: string;
+   119→  previousCountry: string;
+   120→  newCountry: string;
+   121→  timestamp: string;
+   122→  status: 'VERIFIED' | 'APPROVED' | 'FIRST_HANDSHAKE';
+   123→}
+   124→
+   125→// ---------------------------------------------------------------------------
+   126→// Default seed data — exact from original (AUDIT-C D.12, D.13)
+   127→// ---------------------------------------------------------------------------
+   128→const INITIAL_FRIENDS: Friend[] = [
+   129→  {
+   130→    id: 'f-1',
+   131→    name: 'ApexViper',
+   132→    userTag: 'APEX-1029',
+   133→    status: 'online',
+   134→    level: 42,
+   135→    skinColor: '#10b981',
+   136→    giftSentToday: false,
+   137→    giftReceivedToday: true,
+   138→  },
+   139→  {
+   140→    id: 'f-2',
+   141→    name: 'ShadowSlinker',
+   142→    userTag: 'SLNK-9281',
+   143→    status: 'in-match',
+   144→    level: 18,
+   145→    skinColor: '#a855f7',
+   146→    giftSentToday: false,
+   147→    giftReceivedToday: false,
+   148→  },
+   149→  {
+   150→    id: 'f-3',
+   151→    name: 'CoinGobbler',
+   152→    userTag: 'COIN-5432',
+   153→    status: 'offline',
+   154→    level: 29,
+   155→    skinColor: '#eab308',
+   156→    giftSentToday: true,
+   157→    giftReceivedToday: false,
+   158→  },
+   159→  {
+   160→    id: 'f-4',
+   161→    name: 'VenomKing',
+   162→    userTag: 'VNOM-0001',
+   163→    status: 'idle',
+   164→    level: 55,
+   165→    skinColor: '#ef4444',
+   166→    giftSentToday: false,
+   167→    giftReceivedToday: false,
+   168→  },
+   169→];
+   170→
+   171→const SAMPLE_MATCHES: MatchHistoryEntry[] = [
+   172→  {
+   173→    id: 'match-mock1',
+   174→    arenaName: 'Slum Alley',
+   175→    isOnline: false,
+   176→    status: 'EXTRACTED',
+   177→    chipsEarned: 180,
+   178→    chipsLost: 0,
+   179→    kills: 3,
+   180→    snakeLength: 22,
+   181→    timestamp: new Date(Date.now() - 4 * 3_600_000).toISOString(),
+   182→    durationSec: 85,
+   183→  },
+   184→  {
+   185→    id: 'match-mock2',
+   186→    arenaName: 'Neon Grid',
+   187→    isOnline: true,
+   188→    status: 'COLLIDED',
+   189→    chipsEarned: 0,
+   190→    chipsLost: 50,
+   191→    kills: 1,
+   192→    snakeLength: 14,
+   193→    timestamp: new Date(Date.now() - 24 * 3_600_000).toISOString(),
+   194→    durationSec: 42,
+   195→  },
+   196→  {
+   197→    id: 'match-mock3',
+   198→    arenaName: 'Viper Syndicate',
+   199→    isOnline: true,
+   200→    status: 'EXTRACTED',
+   201→    chipsEarned: 640,
+   202→    chipsLost: 0,
+   203→    kills: 6,
+   204→    snakeLength: 35,
+   205→    timestamp: new Date(Date.now() - 48 * 3_600_000).toISOString(),
+   206→    durationSec: 164,
+   207→  },
+   208→];
+   209→
+   210→// ---------------------------------------------------------------------------
+   211→// Local-storage helpers — never crash on parse error
+   212→// ---------------------------------------------------------------------------
+   213→function readJSON<T>(key: string, fallback: T): T {
+   214→  try {
+   215→    const raw = localStorage.getItem(key);
+   216→    if (!raw) return fallback;
+   217→    return JSON.parse(raw) as T;
+   218→  } catch {
+   219→    return fallback;
+   220→  }
+   221→}
+   222→
+   223→function writeJSON(key: string, value: unknown) {
+   224→  try {
+   225→    localStorage.setItem(key, JSON.stringify(value));
+   226→  } catch {
+   227→    /* quota errors silently ignored */
+   228→  }
+   229→}
+   230→
+   231→// Mocked friend balance — original SocialPanel had `getFriendSimulatedChips`.
+   232→// We hardcode a friendly number for the co-op modal's eligibility math.
+   233→function getFriendSimulatedChips(friend: Friend): number {
+   234→  // Stable pseudo-random based on the friend id so each friend has a
+   235→  // believable bankroll that doesn't change on re-render.
+   236→  let h = 0;
+   237→  for (let i = 0; i < friend.id.length; i++) {
+   238→    h = (h * 31 + friend.id.charCodeAt(i)) & 0xffffffff;
+   239→  }
+   240→  return 750 + (Math.abs(h) % 9000);
+   241→}
+   242→
+   243→// ---------------------------------------------------------------------------
+   244→// Main component
+   245→// ---------------------------------------------------------------------------
+   246→type ProfileTab = 'stats' | 'history' | 'friends' | 'identityLog';
+   247→
+   248→type InviteStatusMessageType =
+   249→  | 'success'
+   250→  | 'warning'
+   251→  | 'error'
+   252→  | 'counter';
+   253→interface InviteStatusMessage {
+   254→  type: InviteStatusMessageType;
+   255→  text: string;
+   256→  counterArenaId?: string;
+   257→}
+   258→
+   259→export function PlayerProfilePanel({ onToast }: PlayerProfilePanelProps) {
+   260→  const { player, loading, refresh, logout } = useAuth();
+   261→
+   262→  if (loading) {
+   263→    return (
+   264→      <div className="space-y-4">
+   265→        <PanelSkeleton count={1} height="h-48" />
+   266→        <PanelSkeleton count={2} height="h-40" />
+   267→      </div>
+   268→    );
+   269→  }
+   270→  if (!player) return <NotSignedIn />;
+   271→
+   272→  return (
+   273→    <ProfileContent
+   274→      player={player}
+   275→      onToast={onToast}
+   276→      onRefresh={refresh}
+   277→      onLogout={logout}
+   278→    />
+   279→  );
+   280→}
+   281→
+   282→interface ProfileContentProps {
+   283→  player: PlayerProfile;
+   284→  onToast?: ToastFn;
+   285→  onRefresh: () => Promise<void>;
+   286→  onLogout: () => Promise<void>;
+   287→}
+   288→
+   289→function ProfileContent({
+   290→  player,
+   291→  onToast,
+   292→  onRefresh,
+   293→  onLogout,
+   294→}: ProfileContentProps) {
+   295→  const [activeTab, setActiveTab] = useState<ProfileTab>('stats');
+   296→
+   297→  // Co-Op Lobby Invite modal state
+   298→  const [activeInviteFriend, setActiveInviteFriend] = useState<Friend | null>(
+   299→    null,
+   300→  );
+   301→  const [inviteSelectedArenaId, setInviteSelectedArenaId] =
+   302→    useState<string>('tier-1');
+   303→  const [inviteStatusMessage, setInviteStatusMessage] =
+   304→    useState<InviteStatusMessage | null>(null);
+   305→
+   306→  // Identity editing
+   307→  const [isEditing, setIsEditing] = useState(false);
+   308→  const [newName, setNewName] = useState(player.name);
+   309→  const [selectedCountry, setSelectedCountry] = useState(
+   310→    player.country || 'US',
+   311→  );
+   312→  const [selectedAvatar, setSelectedAvatar] = useState(player.avatar || '');
+   313→  const [instagram, setInstagram] = useState('');
+   314→  const [youtube, setYoutube] = useState('');
+   315→  const [twitch, setTwitch] = useState('');
+   316→  const [isDragging, setIsDragging] = useState(false);
+   317→  const [saving, setSaving] = useState(false);
+   318→  const [loggingOut, setLoggingOut] = useState(false);
+   319→
+   320→  // Friends, matches, logs
+   321→  const [friends, setFriends] = useState<Friend[]>([]);
+   322→  const [matches, setMatches] = useState<MatchHistoryEntry[]>([]);
+   323→  const [identityLogs, setIdentityLogs] = useState<IdentityLogEntry[]>([]);
+   324→  const [newFriendName, setNewFriendName] = useState('');
+   325→
+   326→  // Load from localStorage + socials from player profile
+   327→  useEffect(() => {
+   328→    const storedFriends = readJSON<Friend[] | null>('venom_friends', null);
+   329→    if (storedFriends && Array.isArray(storedFriends)) {
+   330→      setFriends(storedFriends);
+   331→    } else {
+   332→      setFriends(INITIAL_FRIENDS);
+   333→      writeJSON('venom_friends', INITIAL_FRIENDS);
+   334→    }
+   335→
+   336→    const storedMatches = readJSON<MatchHistoryEntry[] | null>(
+   337→      'venom_match_history',
+   338→      null,
+   339→    );
+   340→    if (storedMatches && Array.isArray(storedMatches) && storedMatches.length) {
+   341→      setMatches(storedMatches);
+   342→    } else {
+   343→      setMatches(SAMPLE_MATCHES);
+   344→      writeJSON('venom_match_history', SAMPLE_MATCHES);
+   345→    }
+   346→
+   347→    const storedLogs = readJSON<IdentityLogEntry[] | null>(
+   348→      'venom_identity_history_log',
+   349→      null,
+   350→    );
+   351→    if (storedLogs && Array.isArray(storedLogs)) {
+   352→      setIdentityLogs(storedLogs);
+   353→    } else {
+   354→      const seed: IdentityLogEntry[] = [
+   355→        {
+   356→          id: 'log-1',
+   357→          previousName: 'Unregistered Agent',
+   358→          newName: player.name,
+   359→          previousCountry: 'None',
+   360→          newCountry: player.country || 'US',
+   361→          timestamp: new Date(Date.now() - 5 * 86_400_000).toISOString(),
+   362→          status: 'FIRST_HANDSHAKE',
+   363→        },
+   364→      ];
+   365→      setIdentityLogs(seed);
+   366→      writeJSON('venom_identity_history_log', seed);
+   367→    }
+   368→
+   369→    // Socials persisted in localStorage
+   370→    const socials = readJSON<{
+   371→      instagram?: string;
+   372→      youtube?: string;
+   373→      twitch?: string;
+   374→    }>('venom_social_channels', {});
+   375→    setInstagram(socials.instagram || '');
+   376→    setYoutube(socials.youtube || '');
+   377→    setTwitch(socials.twitch || '');
+   378→  }, [player.name, player.country]);
+   379→
+   380→  // -- derived values -------------------------------------------------------
+   381→  const xpNeeded = player.level * 200;
+   382→  const xpPercent = Math.min(100, Math.floor((player.xp / xpNeeded) * 100));
+   383→  const deathsCount = player.lifetimeDeaths || 1;
+   384→  const kdRatio = ((player.lifetimeKills || 0) / deathsCount).toFixed(2);
+   385→  const totalRuns =
+   386→    (player.lifetimeExtracts || 0) + (player.lifetimeDeaths || 0);
+   387→  const extractRate =
+   388→    totalRuns > 0
+   389→      ? `${Math.floor(((player.lifetimeExtracts || 0) / totalRuns) * 100)}%`
+   390→      : '0%';
+   391→
+   392→  const activeSkin = getCosmeticById(player.currentSkin);
+   393→  const activeFlag = FACTION_COUNTRIES.find(
+   394→    (c) => c.code === (player.country || 'US'),
+   395→  );
+   396→
+   397→  // -- avatar drag & drop handlers -----------------------------------------
+   398→  function processAvatarFile(file: File) {
+   399→    if (!file.type.startsWith('image/')) {
+   400→      notify('Please select a valid image file.', 'error', onToast);
+   401→      return;
+   402→    }
+   403→    if (file.size > 1.5 * 1024 * 1024) {
+   404→      notify(
+   405→        'Image size exceeds 1.5MB. Please choose a smaller file.',
+   406→        'error',
+   407→        onToast,
+   408→      );
+   409→      return;
+   410→    }
+   411→    const reader = new FileReader();
+   412→    reader.onload = (event) => {
+   413→      if (event.target?.result) {
+   414→        setSelectedAvatar(event.target.result as string);
+   415→        notify(
+   416→          'Custom avatar selected! Save your handshake to lock it in.',
+   417→          'success',
+   418→          onToast,
+   419→        );
+   420→      }
+   421→    };
+   422→    reader.readAsDataURL(file);
+   423→  }
+   424→
+   425→  function handleDrop(e: React.DragEvent) {
+   426→    e.preventDefault();
+   427→    setIsDragging(false);
+   428→    const files = e.dataTransfer.files;
+   429→    if (files && files.length > 0) processAvatarFile(files[0]);
+   430→  }
+   431→
+   432→  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+   433→    const files = e.target.files;
+   434→    if (files && files.length > 0) processAvatarFile(files[0]);
+   435→  }
+   436→
+   437→  // -- identity save --------------------------------------------------------
+   438→  function handleStartEditing() {
+   439→    setNewName(player.name);
+   440→    setSelectedCountry(player.country || 'US');
+   441→    setSelectedAvatar(player.avatar || '');
+   442→    setIsEditing(true);
+   443→  }
+   444→
+   445→  async function handleSaveProfile() {
+   446→    const trimmed = newName.trim();
+   447→    if (!trimmed) {
+   448→      notify('Nickname cannot be empty!', 'error', onToast);
+   449→      return;
+   450→    }
+   451→    if (trimmed.length > 15) {
+   452→      notify('Nickname must be 15 characters or less.', 'error', onToast);
+   453→      return;
+   454→    }
+   455→
+   456→    setSaving(true);
+   457→    try {
+   458→      const res = await fetch('/api/player', {
+   459→        method: 'PUT',
+   460→        headers: { 'Content-Type': 'application/json' },
+   461→        body: JSON.stringify({
+   462→          name: trimmed,
+   463→          country: selectedCountry,
+   464→          avatar:
+   465→            selectedAvatar && selectedAvatar.length <= 8
+   466→              ? selectedAvatar
+   467→              : undefined,
+   468→          instagram: instagram.trim(),
+   469→          youtube: youtube.trim(),
+   470→          twitch: twitch.trim(),
+   471→        }),
+   472→      });
+   473→      const data = (await res.json().catch(() => ({}))) as { error?: string };
+   474→      if (!res.ok) {
+   475→        notify(data?.error || 'Failed to save profile.', 'error', onToast);
+   476→        return;
+   477→      }
+   478→
+   479→      // Persist socials client-side (server whitelist doesn't include them)
+   480→      writeJSON('venom_social_channels', {
+   481→        instagram: instagram.trim(),
+   482→        youtube: youtube.trim(),
+   483→        twitch: twitch.trim(),
+   484→      });
+   485→
+   486→      // Identity change log
+   487→      const nameChanged = trimmed !== player.name;
+   488→      const countryChanged = selectedCountry !== (player.country || 'US');
+   489→      if (nameChanged || countryChanged) {
+   490→        const newLog: IdentityLogEntry = {
+   491→          id: 'log-' + Math.random().toString(36).slice(2, 11),
+   492→          previousName: player.name,
+   493→          newName: trimmed,
+   494→          previousCountry: player.country || 'US',
+   495→          newCountry: selectedCountry,
+   496→          timestamp: new Date().toISOString(),
+   497→          status: 'VERIFIED',
+   498→        };
+   499→        const updatedLogs = [newLog, ...identityLogs];
+   500→        setIdentityLogs(updatedLogs);
+   501→        writeJSON('venom_identity_history_log', updatedLogs);
+   502→      }
+   503→
+   504→      await onRefresh();
+   505→      setIsEditing(false);
+   506→      notify(
+   507→        'Handshake secure! Profile & Social links saved successfully! 🔒',
+   508→        'success',
+   509→        onToast,
+   510→      );
+   511→    } catch {
+   512→      notify('Network error. Please try again.', 'error', onToast);
+   513→    } finally {
+   514→      setSaving(false);
+   515→    }
+   516→  }
+   517→
+   518→  // -- friend handlers ------------------------------------------------------
+   519→  function handleAddFriend(e: React.FormEvent) {
+   520→    e.preventDefault();
+   521→    const trimmed = newFriendName.trim();
+   522→    if (!trimmed) return;
+   523→
+   524→    if (
+   525→      friends.some(
+   526→        (f) => f.name.toLowerCase() === trimmed.toLowerCase(),
+   527→      )
+   528→    ) {
+   529→      notify(`${trimmed} is already in your allied squad list!`, 'error', onToast);
+   530→      return;
+   531→    }
+   532→
+   533→    const newFriend: Friend = {
+   534→      id: 'f-' + Math.random().toString(36).slice(2, 11),
+   535→      name: trimmed,
+   536→      userTag: 'VIPR-' + Math.floor(1000 + Math.random() * 9000),
+   537→      status: Math.random() > 0.5 ? 'online' : 'offline',
+   538→      level: Math.floor(5 + Math.random() * 45),
+   539→      skinColor: '#38bdf8',
+   540→      giftSentToday: false,
+   541→      giftReceivedToday: false,
+   542→    };
+   543→
+   544→    const updated = [...friends, newFriend];
+   545→    setFriends(updated);
+   546→    writeJSON('venom_friends', updated);
+   547→    setNewFriendName('');
+   548→    notify(`${trimmed} has been synced into your ally list! 🔗`, 'success', onToast);
+   549→  }
+   550→
+   551→  function handleRemoveFriend(id: string, name: string) {
+   552→    const updated = friends.filter((f) => f.id !== id);
+   553→    setFriends(updated);
+   554→    writeJSON('venom_friends', updated);
+   555→    notify(`Alliance with ${name} dismantled.`, 'info', onToast);
+   556→  }
+   557→
+   558→  function handleSendGift(id: string, name: string) {
+   559→    const updated = friends.map((f) =>
+   560→      f.id === id ? { ...f, giftSentToday: true } : f,
+   561→    );
+   562→    setFriends(updated);
+   563→    writeJSON('venom_friends', updated);
+   564→    notify(`Deposited 25 tactical bonus Chips to ${name}! 🎁`, 'success', onToast);
+   565→  }
+   566→
+   567→  // -- co-op invite handlers ------------------------------------------------
+   568→  function openInviteModal(friend: Friend) {
+   569→    setActiveInviteFriend(friend);
+   570→    setInviteSelectedArenaId('tier-1');
+   571→    setInviteStatusMessage(null);
+   572→  }
+   573→
+   574→  function handleSendCoOpInvite() {
+   575→    if (!activeInviteFriend) return;
+   576→    const selectedTier =
+   577→      ARENA_TIERS.find((t) => t.id === inviteSelectedArenaId) || ARENA_TIERS[0];
+   578→    const friendChips = getFriendSimulatedChips(activeInviteFriend);
+   579→    const playerChips = player.bankedChips;
+   580→
+   581→    if (playerChips < selectedTier.buyIn) {
+   582→      notify(
+   583→        `You do not have enough chips for ${selectedTier.name}!`,
+   584→        'error',
+   585→        onToast,
+   586→      );
+   587→      return;
+   588→    }
+   589→
+   590→    if (friendChips < selectedTier.buyIn) {
+   591→      const affordableTiers = ARENA_TIERS.filter(
+   592→        (t) => friendChips >= t.buyIn && playerChips >= t.buyIn,
+   593→      );
+   594→      if (affordableTiers.length > 0) {
+   595→        const counterTier = affordableTiers[affordableTiers.length - 1];
+   596→        setInviteStatusMessage({
+   597→          type: 'counter',
+   598→          text: `Sorry! I don't have enough chips for ${selectedTier.name} (need ${selectedTier.buyIn.toLocaleString()} c, only have ${friendChips.toLocaleString()} c). Let's join the "${counterTier.name}" (Buy-In: ${counterTier.buyIn.toLocaleString()} c) instead! Re-invite me?`,
+   599→          counterArenaId: counterTier.id,
+   600→        });
+   601→        notify(
+   602→          'Co-op invitation rejected: Insufficient chips. Counter-proposal received!',
+   603→          'info',
+   604→          onToast,
+   605→        );
+   606→      } else {
+   607→        setInviteStatusMessage({
+   608→          type: 'error',
+   609→          text: `Ah, I'm super low on chips right now (${friendChips.toLocaleString()} c) and can't afford any of the available buy-ins. Send me a chip gift or invite me when I earn some more! 🐍`,
+   610→        });
+   611→        notify('Co-op invitation rejected: Insufficient chips.', 'error', onToast);
+   612→      }
+   613→      return;
+   614→    }
+   615→
+   616→    writeJSON('venom_active_match_invite', {
+   617→      name: activeInviteFriend.name,
+   618→      skinColor: activeInviteFriend.skinColor,
+   619→      arenaId: selectedTier.id,
+   620→    });
+   621→    notify(
+   622→      `Co-op invite accepted by ${activeInviteFriend.name}! Staking buy-in... 🤝⚔️`,
+   623→      'success',
+   624→      onToast,
+   625→    );
+   626→    setActiveInviteFriend(null);
+   627→  }
+   628→
+   629→  // -- logout ---------------------------------------------------------------
+   630→  async function handleLogout() {
+   631→    setLoggingOut(true);
+   632→    try {
+   633→      await onLogout();
+   634→      notify('Signed out.', 'info', onToast);
+   635→    } finally {
+   636→      setLoggingOut(false);
+   637→    }
+   638→  }
+   639→
+   640→  // =========================================================================
+   641→  // RENDER
+   642→  // =========================================================================
+   643→  return (
+   644→    <div className="w-full max-w-6xl mx-auto p-4 sm:p-6 bg-slate-950/60 border border-slate-900 rounded-2xl shadow-xl relative overflow-hidden backdrop-blur-md">
+   645→      {/* Glow */}
+   646→      <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+   647→      <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+   648→
+   649→      {/* HEADER */}
+   650→      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-900 pb-6 mb-6">
+   651→        <div className="flex items-center gap-4">
+   652→          {/* Avatar */}
+   653→          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border border-indigo-400/30 relative shadow-md overflow-hidden shrink-0">
+   654→            {player.avatar ? (
+   655→              player.avatar.startsWith('data:') ||
+   656→              player.avatar.startsWith('http') ? (
+   657→                <img
+   658→                  src={player.avatar}
+   659→                  alt={player.name}
+   660→                  className="w-full h-full object-cover"
+   661→                  referrerPolicy="no-referrer"
+   662→                />
+   663→              ) : (
+   664→                <span className="text-3xl select-none">{player.avatar}</span>
+   665→              )
+   666→            ) : (
+   667→              <span
+   668→                className="text-3xl select-none"
+   669→                title="EQuipped DNA Skin"
+   670→              >
+   671→                {activeSkin?.emoji || '🐍'}
+   672→              </span>
+   673→            )}
+   674→            <div className="absolute -bottom-1 -right-1 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold text-indigo-400 shadow">
+   675→              Lvl {player.level}
+   676→            </div>
+   677→          </div>
+   678→
+   679→          {/* Name + tag + socials */}
+   680→          <div>
+   681→            <div className="flex items-center gap-2">
+   682→              <h2 className="text-xl font-bold text-white font-sans tracking-tight flex items-center gap-2">
+   683→                <span className="text-xl" title="Region flag">
+   684→                  {activeFlag?.flag || '🇺🇸'}
+   685→                </span>
+   686→                <span>{player.name}</span>
+   687→                <span className="text-[10px] font-mono font-bold bg-slate-950 border border-slate-800 text-indigo-400 px-1.5 py-0.5 rounded uppercase">
+   688→                  {player.country || 'US'}
+   689→                </span>
+   690→              </h2>
+   691→              <button
+   692→                type="button"
+   693→                onClick={handleStartEditing}
+   694→                className="text-slate-400 hover:text-white p-1 transition cursor-pointer"
+   695→                title="Edit Identity"
+   696→                aria-label="Edit identity"
+   697→              >
+   698→                <Edit2 className="w-4 h-4" />
+   699→              </button>
+   700→            </div>
+   701→            <p className="text-xs text-slate-400 font-sans mt-1">
+   702→              Ledger Tag:{' '}
+   703→              <span className="font-mono text-slate-300 font-bold">
+   704→                #{player.userTag || 'STRK-8291'}
+   705→              </span>{' '}
+   706→              • Global Standing:{' '}
+   707→              <span className="text-amber-400 font-bold font-mono">
+   708→                #999
+   709→              </span>
+   710→            </p>
+   711→
+   712→            {/* Socials */}
+   713→            <div className="flex flex-wrap items-center gap-2 mt-2">
+   714→              {instagram && (
+   715→                <a
+   716→                  href={`https://instagram.com/${instagram.replace('@', '')}`}
+   717→                  target="_blank"
+   718→                  rel="noreferrer"
+   719→                  className="px-2.5 py-1 bg-pink-500/10 hover:bg-pink-500/20 text-pink-400 border border-pink-500/30 rounded-lg text-[11px] font-sans font-bold flex items-center gap-1.5 transition-all"
+   720→                >
+   721→                  📸 {instagram}
+   722→                </a>
+   723→              )}
+   724→              {youtube && (
+   725→                <a
+   726→                  href={
+   727→                    youtube.startsWith('http')
+   728→                      ? youtube
+   729→                      : `https://youtube.com/${youtube}`
+   730→                  }
+   731→                  target="_blank"
+   732→                  rel="noreferrer"
+   733→                  className="px-2.5 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-[11px] font-sans font-bold flex items-center gap-1.5 transition-all"
+   734→                >
+   735→                  🎥 YouTube
+   736→                </a>
+   737→              )}
+   738→              {twitch && (
+   739→                <a
+   740→                  href={`https://twitch.tv/${twitch}`}
+   741→                  target="_blank"
+   742→                  rel="noreferrer"
+   743→                  className="px-2.5 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-lg text-[11px] font-sans font-bold flex items-center gap-1.5 transition-all"
+   744→                >
+   745→                  📱 Twitch
+   746→                </a>
+   747→              )}
+   748→            </div>
+   749→          </div>
+   750→        </div>
+   751→
+   752→        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+   753→          {/* Level progress */}
+   754→          <div className="w-full md:w-72 bg-slate-900/60 p-3 rounded-xl border border-slate-800 backdrop-blur-sm flex-1">
+   755→            <div className="flex justify-between items-center text-xs text-slate-400 font-sans mb-1.5">
+   756→              <span className="flex items-center gap-1">
+   757→                <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />{' '}
+   758→                Level Progress
+   759→              </span>
+   760→              <span className="font-mono text-white font-bold">
+   761→                {player.xp} / {xpNeeded} XP
+   762→              </span>
+   763→            </div>
+   764→            <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800 p-0.5">
+   765→              <div
+   766→                className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
+   767→                style={{ width: `${xpPercent}%` }}
+   768→              />
+   769→            </div>
+   770→          </div>
+   771→
+   772→          {/* Logout */}
+   773→          <button
+   774→            type="button"
+   775→            onClick={handleLogout}
+   776→            disabled={loggingOut}
+   777→            className="px-4 py-3 bg-red-950/20 hover:bg-red-950/40 border border-red-500/20 text-red-400 hover:text-red-300 rounded-xl text-xs font-bold transition duration-200 cursor-pointer flex items-center justify-center gap-1.5 shadow h-[52px] disabled:opacity-50"
+   778→            title="Logout Session"
+   779→          >
+   780→            <LogOut className="w-4 h-4" />
+   781→            <span className="whitespace-nowrap">Sign Out</span>
+   782→          </button>
+   783→        </div>
+   784→      </div>
+   785→
+   786→      {/* TAB NAV */}
+   787→      <div className="flex flex-wrap gap-2 mb-6 border-b border-slate-900 pb-3">
+   788→        {(
+   789→          [
+   790→            { id: 'stats', label: 'Records & Statistics', icon: Target },
+   791→            { id: 'history', label: 'Match History Ledger', icon: History },
+   792→            {
+   793→              id: 'friends',
+   794→              label: `Friends & Spectate (${friends.length})`,
+   795→              icon: Users,
+   796→            },
+   797→            {
+   798→              id: 'identityLog',
+   799→              label: 'Identity Anti-Tamper Logs',
+   800→              icon: Lock,
+   801→            },
+   802→          ] as const
+   803→        ).map((tab) => {
+   804→          const Icon = tab.icon;
+   805→          return (
+   806→            <button
+   807→              key={tab.id}
+   808→              type="button"
+   809→              onClick={() => {
+   810→                setActiveTab(tab.id);
+   811→                setIsEditing(false);
+   812→              }}
+   813→              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+   814→                activeTab === tab.id
+   815→                  ? 'bg-indigo-600/10 border border-indigo-500/30 text-indigo-400 shadow-lg'
+   816→                  : 'bg-transparent border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+   817→              }`}
+   818→            >
+   819→              <Icon className="w-3.5 h-3.5" />
+   820→              {tab.label}
+   821→            </button>
+   822→          );
+   823→        })}
+   824→      </div>
+   825→
+   826→      {/* TAB CONTENT */}
+   827→      {activeTab === 'stats' && (
+   828→        <div className="space-y-6">
+   829→          {/* Guest Upgrade Banner */}
+   830→          {!player.email && <GuestUpgradeBanner onRefresh={onRefresh} onToast={onToast} />}
+   831→
+   832→          {/* Identity editor */}
+   833→          {isEditing && (
+   834→            <IdentityEditor
+   835→              newName={newName}
+   836→              setNewName={setNewName}
+   837→              selectedCountry={selectedCountry}
+   838→              setSelectedCountry={setSelectedCountry}
+   839→              selectedAvatar={selectedAvatar}
+   840→              setSelectedAvatar={setSelectedAvatar}
+   841→              instagram={instagram}
+   842→              setInstagram={setInstagram}
+   843→              youtube={youtube}
+   844→              setYoutube={setYoutube}
+   845→              twitch={twitch}
+   846→              setTwitch={setTwitch}
+   847→              isDragging={isDragging}
+   848→              setIsDragging={setIsDragging}
+   849→              onDrop={handleDrop}
+   850→              onFileChange={handleFileChange}
+   851→              onCancel={() => setIsEditing(false)}
+   852→              onSave={handleSaveProfile}
+   853→              saving={saving}
+   854→            />
+   855→          )}
+   856→
+   857→          {/* Statistics grid */}
+   858→          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+   859→            <StatCard
+   860→              label="Banked Wallet"
+   861→              subLabel="Deposited Chips"
+   862→              value={player.bankedChips.toLocaleString()}
+   863→              icon={<Landmark className="w-4 h-4 text-emerald-400" />}
+   864→              valueClass="text-emerald-400"
+   865→            />
+   866→            <StatCard
+   867→              label="Tournament Kills"
+   868→              subLabel="Total Terminations"
+   869→              value={String(player.lifetimeKills)}
+   870→              icon={<Skull className="w-4 h-4 text-rose-400" />}
+   871→              valueClass="text-white"
+   872→            />
+   873→            <StatCard
+   874→              label="K/D Ratio"
+   875→              subLabel="Kill / Death Index"
+   876→              value={kdRatio}
+   877→              icon={<Target className="w-4 h-4 text-amber-400" />}
+   878→              valueClass="text-amber-400"
+   879→            />
+   880→            <StatCard
+   881→              label="Extraction Rate"
+   882→              subLabel="Successful Handshakes"
+   883→              value={extractRate}
+   884→              icon={<Compass className="w-4 h-4 text-cyan-400" />}
+   885→              valueClass="text-cyan-400"
+   886→            />
+   887→            <StatCard
+   888→              label="Survival Streak"
+   889→              subLabel="Consecutive Extractions"
+   890→              value={String(player.bestStreak)}
+   891→              icon={<Trophy className="w-4 h-4 text-yellow-500" />}
+   892→              valueClass="text-yellow-500"
+   893→            />
+   894→            <StatCard
+   895→              label="Record Extraction"
+   896→              subLabel="Max Retained in One Run"
+   897→              value={player.biggestExtract.toLocaleString()}
+   898→              icon={<Award className="w-4 h-4 text-indigo-400" />}
+   899→              valueClass="text-indigo-400"
+   900→            />
+   901→            <StatCard
+   902→              label="Lifetime Retained"
+   903→              subLabel="Cumulative Chip Profit"
+   904→              value={player.totalEarned.toLocaleString()}
+   905→              icon={<Landmark className="w-4 h-4 text-teal-400" />}
+   906→              valueClass="text-teal-400"
+   907→            />
+   908→            <StatCard
+   909→              label="Total Forfeited"
+   910→              subLabel="Forfeited in Crash Events"
+   911→              value={player.totalLost.toLocaleString()}
+   912→              icon={<RefreshCw className="w-4 h-4 text-red-400" />}
+   913→              valueClass="text-red-400"
+   914→            />
+   915→          </div>
+   916→
+   917→          {/* Annual Tournament Guardrails */}
+   918→          <div className="bg-slate-950 border border-amber-500/30 rounded-2xl p-5 shadow-xl space-y-4">
+   919→            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-900 pb-3">
+   920→              <div className="flex items-center gap-2">
+   921→                <Shield className="w-5 h-5 text-amber-400" />
+   922→                <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">
+   923→                  Annual Tournament Guardrails &amp; Limit Allowances
+   924→                </h3>
+   925→              </div>
+   926→              <span className="text-[11px] font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+   927→                1-YEAR UTC TOURNAMENT CYCLE ACTIVE
+   928→              </span>
+   929→            </div>
+   930→
+   931→            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+   932→              {/* 1. Matches cap */}
+   933→              <CapCard
+   934→                icon={<Swords className="w-3.5 h-3.5 text-indigo-400" />}
+   935→                label="Matches Allowed"
+   936→                value={`${(18).toLocaleString()} / 10,000`}
+   937→                barClass="from-indigo-500 to-purple-500"
+   938→                pct={Math.min(100, (18 / 10000) * 100)}
+   939→                leftLabel={`Completed: ${(18).toLocaleString()}`}
+   940→                rightLabel={`Remaining: ${(10000 - 18).toLocaleString()} matches`}
+   941→                rightClass="text-emerald-400 font-bold"
+   942→              />
+   943→              {/* 2. Annual buy cap */}
+   944→              <CapCard
+   945→                icon={<Landmark className="w-3.5 h-3.5 text-emerald-400" />}
+   946→                label="Annual Buy Cap (25L)"
+   947→                value={`${(0).toLocaleString()} / 25,00,000 c`}
+   948→                barClass="from-emerald-500 to-teal-400"
+   949→                pct={0}
+   950→                leftLabel="Bought: 0 c"
+   951→                rightLabel="Cap Remaining: 25,00,000 c"
+   952→                rightClass="text-emerald-400 font-bold"
+   953→              />
+   954→              {/* 3. Daily ad cap */}
+   955→              <CapCard
+   956→                icon={<Trophy className="w-3.5 h-3.5 text-amber-400" />}
+   957→                label="Rewarded Ads Today"
+   958→                value={`${0} / 12 Ads`}
+   959→                barClass="from-amber-500 to-yellow-400"
+   960→                pct={0}
+   961→                leftLabel="Watched: 0"
+   962→                rightLabel="Resets at 00:00 UTC"
+   963→                rightClass="text-amber-400 font-bold"
+   964→              />
+   965→            </div>
+   966→          </div>
+   967→
+   968→          {/* Challenger Standing Rating banner */}
+   969→          <div className="p-4 rounded-xl border border-slate-900 bg-slate-900/10 flex items-center gap-4">
+   970→            <Shield className="w-8 h-8 text-indigo-500 shrink-0" />
+   971→            <div className="text-xs leading-relaxed text-slate-400">
+   972→              <span className="font-bold text-slate-200 uppercase block mb-0.5">
+   973→                CHALLENGER STANDING RATING
+   974→              </span>
+   975→              All tournament statistics are linked directly to your global
+   976→              challenger index handle. Altering your registry flag updates
+   977→              leaderboard feeds dynamically. Data verification handshakes run
+   978→              periodically to check metrics validity.
+   979→            </div>
+   980→          </div>
+   981→        </div>
+   982→      )}
+   983→
+   984→      {/* TAB: HISTORY */}
+   985→      {activeTab === 'history' && (
+   986→        <div className="space-y-4">
+   987→          <div className="flex items-center justify-between border-b border-slate-900 pb-3">
+   988→            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+   989→              <History className="w-4 h-4 text-indigo-400" /> Match Run Records
+   990→              Ledger
+   991→            </h3>
+   992→            <span className="text-xs text-slate-500 font-mono">
+   993→              Showing last 25 operations
+   994→            </span>
+   995→          </div>
+   996→
+   997→          {matches.length === 0 ? (
+   998→            <div className="text-center py-12 border border-dashed border-slate-900 rounded-2xl">
+   999→              <History className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+  1000→              <p className="text-sm text-slate-400">
+  1001→                No matches found in the active ledger standing.
+  1002→              </p>
+  1003→              <p className="text-xs text-slate-600 mt-1">
+  1004→                Jump into any arena to log your first run data!
+  1005→              </p>
+  1006→            </div>
+  1007→          ) : (
+  1008→            <div className="overflow-x-auto">
+  1009→              <table className="w-full text-left border-collapse">
+  1010→                <thead>
+  1011→                  <tr className="border-b border-slate-900 text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+  1012→                    <th className="py-3 px-4">Arena Sector</th>
+  1013→                    <th className="py-3 px-4">Status</th>
+  1014→                    <th className="py-3 px-4 text-right">Chips Outcome</th>
+  1015→                    <th className="py-3 px-4 text-center">Kills</th>
+  1016→                    <th className="py-3 px-4 text-center">Tail Score</th>
+  1017→                    <th className="py-3 px-4">Time Elapsed</th>
+  1018→                    <th className="py-3 px-4">Timestamp</th>
+  1019→                  </tr>
+  1020→                </thead>
+  1021→                <tbody className="divide-y divide-slate-900/60 text-xs">
+  1022→                  {matches.map((match) => (
+  1023→                    <tr key={match.id} className="hover:bg-slate-900/20 transition">
+  1024→                      <td className="py-3.5 px-4 font-bold text-slate-300">
+  1025→                        <div className="flex items-center gap-1.5">
+  1026→                          <Compass className="w-3.5 h-3.5 text-indigo-400" />
+  1027→                          <span>{match.arenaName}</span>
+  1028→                          <span
+  1029→                            className={`text-[8px] font-mono px-1 rounded ${
+  1030→                              match.isOnline
+  1031→                                ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-300'
+  1032→                                : 'bg-slate-800 text-slate-400'
+  1033→                            }`}
+  1034→                          >
+  1035→                            {match.isOnline ? 'ONLINE' : 'PRACTICE'}
+  1036→                          </span>
+  1037→                        </div>
+  1038→                      </td>
+  1039→                      <td className="py-3.5 px-4">
+  1040→                        <span
+  1041→                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+  1042→                            match.status === 'EXTRACTED'
+  1043→                              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+  1044→                              : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+  1045→                          }`}
+  1046→                        >
+  1047→                          {match.status}
+  1048→                        </span>
+  1049→                      </td>
+  1050→                      <td
+  1051→                        className={`py-3.5 px-4 text-right font-mono font-bold ${
+  1052→                          match.status === 'EXTRACTED'
+  1053→                            ? 'text-emerald-400'
+  1054→                            : 'text-rose-400'
+  1055→                        }`}
+  1056→                      >
+  1057→                        {match.status === 'EXTRACTED'
+  1058→                          ? `+${match.chipsEarned.toLocaleString()} c`
+  1059→                          : `-${match.chipsLost.toLocaleString()} c`}
+  1060→                      </td>
+  1061→                      <td className="py-3.5 px-4 text-center font-mono font-semibold text-slate-300">
+  1062→                        {match.kills}
+  1063→                      </td>
+  1064→                      <td className="py-3.5 px-4 text-center font-mono font-medium text-indigo-300">
+  1065→                        {match.snakeLength || 10}
+  1066→                      </td>
+  1067→                      <td className="py-3.5 px-4 font-mono text-slate-400">
+  1068→                        <div className="flex items-center gap-1">
+  1069→                          <Clock className="w-3 h-3 text-slate-500" />
+  1070→                          <span>{match.durationSec}s</span>
+  1071→                        </div>
+  1072→                      </td>
+  1073→                      <td className="py-3.5 px-4 font-mono text-slate-500 text-[11px]">
+  1074→                        {new Date(match.timestamp).toLocaleDateString()}{' '}
+  1075→                        {new Date(match.timestamp).toLocaleTimeString([], {
+  1076→                          hour: '2-digit',
+  1077→                          minute: '2-digit',
+  1078→                        })}
+  1079→                      </td>
+  1080→                    </tr>
+  1081→                  ))}
+  1082→                </tbody>
+  1083→              </table>
+  1084→            </div>
+  1085→          )}
+  1086→        </div>
+  1087→      )}
+  1088→
+  1089→      {/* TAB: FRIENDS */}
+  1090→      {activeTab === 'friends' && (
+  1091→        <div className="space-y-6">
+  1092→          <div>
+  1093→            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+  1094→              <Users className="w-5 h-5 text-indigo-400" /> Friends &amp; Live
+  1095→              Spectate Portal
+  1096→            </h3>
+  1097→            <p className="text-xs text-slate-400 mt-1">
+  1098→              Add allies to build your roster. Send daily gifts, invite them to
+  1099→              high-stakes co-op matches, or spectate their live runs in
+  1100→              real-time when they are in-match!
+  1101→            </p>
+  1102→          </div>
+  1103→
+  1104→          <form
+  1105→            onSubmit={handleAddFriend}
+  1106→            className="flex gap-2.5 max-w-md"
+  1107→          >
+  1108→            <div className="relative flex-1">
+  1109→              <UserPlus className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-500" />
+  1110→              <input
+  1111→                type="text"
+  1112→                placeholder="Enter challenger alias..."
+  1113→                value={newFriendName}
+  1114→                onChange={(e) => setNewFriendName(e.target.value)}
+  1115→                maxLength={15}
+  1116→                className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all font-sans"
+  1117→              />
+  1118→            </div>
+  1119→            <button
+  1120→              type="submit"
+  1121→              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+  1122→            >
+  1123→              <UserPlus className="w-4 h-4" /> Sync Ally
+  1124→            </button>
+  1125→          </form>
+  1126→
+  1127→          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  1128→            {friends.map((friend) => {
+  1129→              const statusText =
+  1130→                friend.status === 'online'
+  1131→                  ? 'Online'
+  1132→                  : friend.status === 'idle'
+  1133→                    ? 'Idle'
+  1134→                    : friend.status === 'in-match'
+  1135→                      ? 'In Match'
+  1136→                      : 'Offline';
+  1137→              return (
+  1138→                <div
+  1139→                  key={friend.id}
+  1140→                  className="bg-slate-950/40 border border-slate-900 rounded-2xl p-4 flex items-center justify-between hover:border-slate-800 transition shadow"
+  1141→                >
+  1142→                  <div className="flex items-center gap-3 min-w-0">
+  1143→                    <div className="relative shrink-0">
+  1144→                      <div className="w-11 h-11 rounded-xl bg-slate-900 flex items-center justify-center border border-slate-800">
+  1145→                        <span className="text-xl">🐍</span>
+  1146→                      </div>
+  1147→                      <span
+  1148→                        className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-slate-950 ${
+  1149→                          friend.status === 'online'
+  1150→                            ? 'bg-emerald-500'
+  1151→                            : friend.status === 'idle'
+  1152→                              ? 'bg-amber-500 animate-pulse'
+  1153→                              : friend.status === 'in-match'
+  1154→                                ? 'bg-fuchsia-500 animate-pulse'
+  1155→                                : 'bg-slate-600'
+  1156→                        }`}
+  1157→                        title={statusText}
+  1158→                      />
+  1159→                    </div>
+  1160→
+  1161→                    <div className="min-w-0">
+  1162→                      <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+  1163→                        <span className="truncate">{friend.name}</span>
+  1164→                        <span className="text-[9px] font-mono text-slate-500 font-normal shrink-0">
+  1165→                          #{friend.userTag}
+  1166→                        </span>
+  1167→                      </h4>
+  1168→                      <p className="text-xs text-slate-400 mt-0.5">
+  1169→                        Level {friend.level} •{' '}
+  1170→                        <span
+  1171→                          className={`text-[10px] uppercase font-mono font-bold ${
+  1172→                            friend.status === 'online'
+  1173→                              ? 'text-emerald-400'
+  1174→                              : friend.status === 'idle'
+  1175→                                ? 'text-amber-400'
+  1176→                                : friend.status === 'in-match'
+  1177→                                  ? 'text-fuchsia-400'
+  1178→                                  : 'text-slate-500'
+  1179→                          }`}
+  1180→                        >
+  1181→                          {friend.status}
+  1182→                        </span>
+  1183→                      </p>
+  1184→                    </div>
+  1185→                  </div>
+  1186→
+  1187→                  <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+  1188→                    {friend.status === 'in-match' && (
+  1189→                      <button
+  1190→                        type="button"
+  1191→                        onClick={() =>
+  1192→                          notify(
+  1193→                            `Spectating ${friend.name}'s live match... (demo)`,
+  1194→                            'info',
+  1195→                            onToast,
+  1196→                          )
+  1197→                        }
+  1198→                        className="px-2.5 py-1.5 bg-fuchsia-600/20 text-fuchsia-300 hover:bg-fuchsia-600 hover:text-white border border-fuchsia-500/30 rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1.5 animate-pulse"
+  1199→                        title="Spectate Match"
+  1200→                      >
+  1201→                        <Eye className="w-3.5 h-3.5" />
+  1202→                        <span>Spectate</span>
+  1203→                      </button>
+  1204→                    )}
+  1205→
+  1206→                    {(friend.status === 'online' ||
+  1207→                      friend.status === 'idle') && (
+  1208→                      <button
+  1209→                        type="button"
+  1210→                        onClick={() => openInviteModal(friend)}
+  1211→                        className="px-2.5 py-1.5 bg-violet-600/20 text-violet-300 hover:bg-violet-600 hover:text-white border border-violet-500/30 rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1.5"
+  1212→                        title="Invite to Match"
+  1213→                      >
+  1214→                        <Swords className="w-3.5 h-3.5" />
+  1215→                        <span>Invite</span>
+  1216→                      </button>
+  1217→                    )}
+  1218→
+  1219→                    <button
+  1220→                      type="button"
+  1221→                      onClick={() => handleSendGift(friend.id, friend.name)}
+  1222→                      disabled={friend.giftSentToday || friend.status === 'offline'}
+  1223→                      className={`px-2.5 py-1.5 rounded-xl border transition cursor-pointer text-xs font-bold flex items-center gap-1 ${
+  1224→                        friend.giftSentToday
+  1225→                          ? 'bg-slate-900 border-slate-800 text-slate-500 cursor-not-allowed'
+  1226→                          : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20'
+  1227→                      }`}
+  1228→                      title="Send Gift"
+  1229→                    >
+  1230→                      <Landmark className="w-4 h-4" />
+  1231→                      <span>{friend.giftSentToday ? 'Gifted' : 'Gift'}</span>
+  1232→                    </button>
+  1233→
+  1234→                    <button
+  1235→                      type="button"
+  1236→                      onClick={() => handleRemoveFriend(friend.id, friend.name)}
+  1237→                      className="p-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-xl border border-transparent hover:border-rose-500/20 transition cursor-pointer"
+  1238→                      title="Dismantle Alliance"
+  1239→                      aria-label="Dismantle alliance"
+  1240→                    >
+  1241→                      <Trash2 className="w-4 h-4" />
+  1242→                    </button>
+  1243→                  </div>
+  1244→                </div>
+  1245→              );
+  1246→            })}
+  1247→          </div>
+  1248→        </div>
+  1249→      )}
+  1250→
+  1251→      {/* TAB: IDENTITY LOGS */}
+  1252→      {activeTab === 'identityLog' && (
+  1253→        <div className="space-y-4">
+  1254→          <div className="p-4 rounded-xl border border-indigo-500/20 bg-indigo-500/5 flex items-start gap-3.5 mb-2">
+  1255→            <Lock className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+  1256→            <div className="text-xs font-sans leading-relaxed text-slate-300">
+  1257→              <strong className="text-white uppercase block mb-1">
+  1258→                CHALLENGER REGISTRY LEDGER
+  1259→              </strong>
+  1260→              To maintain the integrity of global tournaments, all modifications
+  1261→              to nickname tags or regional affiliations are permanently logged
+  1262→              to this client audit ledger. Tampering or spoofing database
+  1263→              records will immediately reset active tournament streak counts.
+  1264→            </div>
+  1265→          </div>
+  1266→
+  1267→          <div className="border border-slate-900 rounded-2xl overflow-hidden bg-slate-950/20">
+  1268→            {identityLogs.length === 0 ? (
+  1269→              <p className="text-center py-8 text-slate-500 text-xs font-mono">
+  1270→                No handshakes registered yet.
+  1271→              </p>
+  1272→            ) : (
+  1273→              <div className="divide-y divide-slate-900">
+  1274→                {identityLogs.map((log) => (
+  1275→                  <div
+  1276→                    key={log.id}
+  1277→                    className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs font-mono"
+  1278→                  >
+  1279→                    <div className="space-y-1">
+  1280→                      <div className="flex items-center gap-2">
+  1281→                        <span className="text-slate-500">TAG REGISTERED:</span>
+  1282→                        <span className="text-slate-300 font-bold">
+  1283→                          {log.previousName}
+  1284→                        </span>
+  1285→                        <span className="text-slate-500">➜</span>
+  1286→                        <span className="text-indigo-400 font-bold">
+  1287→                          {log.newName}
+  1288→                        </span>
+  1289→                      </div>
+  1290→                      <div className="flex items-center gap-2 text-[11px] text-slate-400">
+  1291→                        <span>REGION ALIGNMENT:</span>
+  1292→                        <span className="text-slate-500 uppercase">
+  1293→                          {log.previousCountry}
+  1294→                        </span>
+  1295→                        <span className="text-slate-500">➜</span>
+  1296→                        <span className="text-emerald-400 uppercase font-bold">
+  1297→                          {log.newCountry}
+  1298→                        </span>
+  1299→                      </div>
+  1300→                    </div>
+  1301→
+  1302→                    <div className="flex items-center gap-3 justify-between sm:justify-end">
+  1303→                      <div className="text-right">
+  1304→                        <span className="text-[10px] text-slate-500 block">
+  1305→                          HANDSHAKE TIMESTAMP
+  1306→                        </span>
+  1307→                        <span className="text-slate-400 text-[11px]">
+  1308→                          {new Date(log.timestamp).toLocaleDateString()}{' '}
+  1309→                          {new Date(log.timestamp).toLocaleTimeString()}
+  1310→                        </span>
+  1311→                      </div>
+  1312→                      <span className="px-2 py-1 rounded text-[9px] font-bold tracking-widest bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 uppercase">
+  1313→                        {log.status}
+  1314→                      </span>
+  1315→                    </div>
+  1316→                  </div>
+  1317→                ))}
+  1318→              </div>
+  1319→            )}
+  1320→          </div>
+  1321→        </div>
+  1322→      )}
+  1323→
+  1324→      {/* CO-OP LOBBY INVITE MODAL */}
+  1325→      {activeInviteFriend && (
+  1326→        <CoOpInviteModal
+  1327→          friend={activeInviteFriend}
+  1328→          playerChips={player.bankedChips}
+  1329→          selectedArenaId={inviteSelectedArenaId}
+  1330→          setSelectedArenaId={setInviteSelectedArenaId}
+  1331→          statusMessage={inviteStatusMessage}
+  1332→          setStatusMessage={setInviteStatusMessage}
+  1333→          onClose={() => setActiveInviteFriend(null)}
+  1334→          onSend={handleSendCoOpInvite}
+  1335→          onToast={onToast}
+  1336→        />
+  1337→      )}
+  1338→    </div>
+  1339→  );
+  1340→}
+  1341→
+  1342→// ---------------------------------------------------------------------------
+  1343→// Sub-components
+  1344→// ---------------------------------------------------------------------------
+  1345→function StatCard({
+  1346→  label,
+  1347→  subLabel,
+  1348→  value,
+  1349→  icon,
+  1350→  valueClass,
+  1351→}: {
+  1352→  label: string;
+  1353→  subLabel: string;
+  1354→  value: string;
+  1355→  icon: React.ReactNode;
+  1356→  valueClass: string;
+  1357→}) {
+  1358→  return (
+  1359→    <div className="bg-slate-950/40 border border-slate-900 rounded-xl p-4 flex flex-col justify-between hover:border-slate-800 transition shadow">
+  1360→      <div className="flex items-center justify-between text-slate-400 mb-2">
+  1361→        <span className="text-xs font-sans">{label}</span>
+  1362→        {icon}
+  1363→      </div>
+  1364→      <div>
+  1365→        <span
+  1366→          className={`text-xl font-bold font-mono tracking-tight block ${valueClass}`}
+  1367→        >
+  1368→          {value}
+  1369→        </span>
+  1370→        <span className="text-[9px] font-mono uppercase text-slate-500 tracking-wider">
+  1371→          {subLabel}
+  1372→        </span>
+  1373→      </div>
+  1374→    </div>
+  1375→  );
+  1376→}
+  1377→
+  1378→function CapCard({
+  1379→  icon,
+  1380→  label,
+  1381→  value,
+  1382→  barClass,
+  1383→  pct,
+  1384→  leftLabel,
+  1385→  rightLabel,
+  1386→  rightClass,
+  1387→}: {
+  1388→  icon: React.ReactNode;
+  1389→  label: string;
+  1390→  value: string;
+  1391→  barClass: string;
+  1392→  pct: number;
+  1393→  leftLabel: string;
+  1394→  rightLabel: string;
+  1395→  rightClass: string;
+  1396→}) {
+  1397→  return (
+  1398→    <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800 space-y-2">
+  1399→      <div className="flex justify-between items-center text-xs">
+  1400→        <span className="text-slate-400 font-bold uppercase font-sans flex items-center gap-1">
+  1401→          {icon} {label}
+  1402→        </span>
+  1403→        <span className="font-mono font-bold text-slate-300">{value}</span>
+  1404→      </div>
+  1405→      <div className="w-full h-2.5 bg-slate-950 rounded-full border border-slate-800 overflow-hidden">
+  1406→        <div
+  1407→          className={`h-full bg-gradient-to-r ${barClass} rounded-full`}
+  1408→          style={{ width: `${Math.min(100, pct)}%` }}
+  1409→        />
+  1410→      </div>
+  1411→      <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+  1412→        <span>{leftLabel}</span>
+  1413→        <span className={rightClass}>{rightLabel}</span>
+  1414→      </div>
+  1415→    </div>
+  1416→  );
+  1417→}
+  1418→
+  1419→interface IdentityEditorProps {
+  1420→  newName: string;
+  1421→  setNewName: (v: string) => void;
+  1422→  selectedCountry: string;
+  1423→  setSelectedCountry: (v: string) => void;
+  1424→  selectedAvatar: string;
+  1425→  setSelectedAvatar: (v: string) => void;
+  1426→  instagram: string;
+  1427→  setInstagram: (v: string) => void;
+  1428→  youtube: string;
+  1429→  setYoutube: (v: string) => void;
+  1430→  twitch: string;
+  1431→  setTwitch: (v: string) => void;
+  1432→  isDragging: boolean;
+  1433→  setIsDragging: (v: boolean) => void;
+  1434→  onDrop: (e: React.DragEvent) => void;
+  1435→  onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  1436→  onCancel: () => void;
+  1437→  onSave: () => void;
+  1438→  saving: boolean;
+  1439→}
+  1440→
+  1441→function IdentityEditor(props: IdentityEditorProps) {
+  1442→  const {
+  1443→    newName,
+  1444→    setNewName,
+  1445→    selectedCountry,
+  1446→    setSelectedCountry,
+  1447→    selectedAvatar,
+  1448→    setSelectedAvatar,
+  1449→    instagram,
+  1450→    setInstagram,
+  1451→    youtube,
+  1452→    setYoutube,
+  1453→    twitch,
+  1454→    setTwitch,
+  1455→    isDragging,
+  1456→    setIsDragging,
+  1457→    onDrop,
+  1458→    onFileChange,
+  1459→    onCancel,
+  1460→    onSave,
+  1461→    saving,
+  1462→  } = props;
+  1463→
+  1464→  const isImageAvatar =
+  1465→    selectedAvatar.startsWith('data:') || selectedAvatar.startsWith('http');
+  1466→
+  1467→  return (
+  1468→    <div className="border border-indigo-500/30 bg-slate-950/80 rounded-2xl p-5 sm:p-6 mb-6">
+  1469→      <div className="flex items-center gap-3 border-b border-slate-800 pb-4 mb-4">
+  1470→        <div className="p-2.5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-indigo-400">
+  1471→          <Lock className="w-5 h-5 animate-pulse" />
+  1472→        </div>
+  1473→        <div>
+  1474→          <h3 className="text-base sm:text-lg font-bold text-white font-sans">
+  1475→            Handshake Registration Protocol
+  1476→          </h3>
+  1477→          <p className="text-xs text-slate-400">
+  1478→            Lock down your tournament handle and regional alignment. All
+  1479→            changes are logged.
+  1480→          </p>
+  1481→        </div>
+  1482→      </div>
+  1483→
+  1484→      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+  1485→        {/* Nickname */}
+  1486→        <div className="flex flex-col gap-1.5">
+  1487→          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-sans">
+  1488→            Challenger Handle
+  1489→          </label>
+  1490→          <input
+  1491→            type="text"
+  1492→            value={newName}
+  1493→            onChange={(e) => setNewName(e.target.value)}
+  1494→            maxLength={15}
+  1495→            className="bg-slate-900 border border-slate-800 text-white font-sans text-sm px-3.5 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all w-full"
+  1496→            placeholder="Enter nickname"
+  1497→          />
+  1498→          <span className="text-[10px] text-slate-500">
+  1499→            Max 15 characters. System validates non-duplicate handle signatures.
+  1500→          </span>
+  1501→        </div>
+  1502→
+  1503→        {/* Country */}
+  1504→        <div className="flex flex-col gap-1.5">
+  1505→          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-sans">
+  1506→            Faction Region (Flag)
+  1507→          </label>
+  1508→          <select
+  1509→            value={selectedCountry}
+  1510→            onChange={(e) => setSelectedCountry(e.target.value)}
+  1511→            className="bg-slate-900 border border-slate-800 text-white font-sans text-sm px-3.5 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all w-full cursor-pointer"
+  1512→          >
+  1513→            {FACTION_COUNTRIES.map((c) => (
+  1514→              <option key={c.code} value={c.code}>
+  1515→                {c.flag} {c.name} ({c.code})
+  1516→              </option>
+  1517→            ))}
+  1518→          </select>
+  1519→          <span className="text-[10px] text-slate-500">
+  1520→            Associates your extraction chips to regional champion rankings.
+  1521→          </span>
+  1522→        </div>
+  1523→
+  1524→        {/* Avatar customizer */}
+  1525→        <div className="md:col-span-2 flex flex-col gap-3 border-t border-slate-900/60 pt-5">
+  1526→          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-sans">
+  1527→            Profile Avatar / Identity Emblem
+  1528→          </label>
+  1529→
+  1530→          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
+  1531→            {/* Left: drag-drop */}
+  1532→            <div className="md:col-span-5 flex flex-col gap-3">
+  1533→              <div
+  1534→                onDragOver={(e) => {
+  1535→                  e.preventDefault();
+  1536→                  setIsDragging(true);
+  1537→                }}
+  1538→                onDragLeave={() => setIsDragging(false)}
+  1539→                onDrop={onDrop}
+  1540→                onClick={() =>
+  1541→                  document.getElementById('avatar-file-input')?.click()
+  1542→                }
+  1543→                className={`border-2 border-dashed rounded-2xl p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 relative group h-44 ${
+  1544→                  isDragging
+  1545→                    ? 'border-indigo-500 bg-indigo-500/5'
+  1546→                    : 'border-slate-800 bg-slate-900/40 hover:border-indigo-500/40 hover:bg-slate-900/60'
+  1547→                }`}
+  1548→              >
+  1549→                <input
+  1550→                  id="avatar-file-input"
+  1551→                  type="file"
+  1552→                  accept="image/*"
+  1553→                  className="hidden"
+  1554→                  onChange={onFileChange}
+  1555→                />
+  1556→
+  1557→                {selectedAvatar && isImageAvatar ? (
+  1558→                  <div className="absolute inset-0 p-1.5 flex flex-col items-center justify-center bg-slate-950/80 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity z-10">
+  1559→                    <Upload className="w-6 h-6 text-indigo-400 mb-1" />
+  1560→                    <span className="text-[10px] text-white font-sans font-bold">
+  1561→                      CHANGE IMAGE
+  1562→                    </span>
+  1563→                    <span className="text-[9px] text-slate-400 mt-0.5">
+  1564→                      Drag &amp; Drop or Click
+  1565→                    </span>
+  1566→                  </div>
+  1567→                ) : null}
+  1568→
+  1569→                {selectedAvatar ? (
+  1570→                  isImageAvatar ? (
+  1571→                    <div className="w-24 h-24 rounded-2xl border border-indigo-500/20 overflow-hidden relative shadow-lg">
+  1572→                      <img
+  1573→                        src={selectedAvatar}
+  1574→                        alt="Avatar Preview"
+  1575→                        className="w-full h-full object-cover"
+  1576→                        referrerPolicy="no-referrer"
+  1577→                      />
+  1578→                    </div>
+  1579→                  ) : (
+  1580→                    <div className="flex flex-col items-center justify-center">
+  1581→                      <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-4xl mb-2 shadow-inner">
+  1582→                        {selectedAvatar}
+  1583→                      </div>
+  1584→                      <span className="text-xs font-bold text-white font-sans">
+  1585→                        Preset Selected
+  1586→                      </span>
+  1587→                      <span className="text-[10px] text-slate-500 mt-1 font-sans">
+  1588→                        Click here to upload custom image instead
+  1589→                      </span>
+  1590→                    </div>
+  1591→                  )
+  1592→                ) : (
+  1593→                  <div className="flex flex-col items-center justify-center">
+  1594→                    <div className="w-12 h-12 rounded-xl bg-slate-950 flex items-center justify-center border border-slate-800 text-slate-400 group-hover:text-indigo-400 transition-colors mb-2.5">
+  1595→                      <Upload className="w-5 h-5" />
+  1596→                    </div>
+  1597→                    <span className="text-xs font-bold text-white font-sans">
+  1598→                      Upload Custom Photo
+  1599→                    </span>
+  1600→                    <span className="text-[10px] text-slate-500 mt-1">
+  1601→                      Drag &amp; Drop or click to browse
+  1602→                    </span>
+  1603→                    <span className="text-[9px] text-slate-500 mt-0.5">
+  1604→                      PNG, JPG, WebP up to 1.5MB
+  1605→                    </span>
+  1606→                  </div>
+  1607→                )}
+  1608→              </div>
+  1609→
+  1610→              {selectedAvatar && (
+  1611→                <button
+  1612→                  type="button"
+  1613→                  onClick={() => setSelectedAvatar('')}
+  1614→                  className="py-1.5 px-3 bg-slate-900 hover:bg-red-950/40 hover:text-red-400 hover:border-red-500/20 border border-slate-800 text-slate-400 rounded-xl text-[10px] font-sans font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
+  1615→                >
+  1616→                  <Trash2 className="w-3.5 h-3.5" /> Reset to Skin Default
+  1617→                </button>
+  1618→              )}
+  1619→            </div>
+  1620→
+  1621→            {/* Right: preset grid */}
+  1622→            <div className="md:col-span-7 flex flex-col gap-2.5">
+  1623→              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider font-sans">
+  1624→                Choose Preset Emblem
+  1625→              </span>
+  1626→              <div className="grid grid-cols-4 gap-2">
+  1627→                {PRESET_AVATARS.map((p) => {
+  1628→                  const isSelected = selectedAvatar === p.emoji;
+  1629→                  return (
+  1630→                    <button
+  1631→                      key={p.id}
+  1632→                      type="button"
+  1633→                      onClick={() => setSelectedAvatar(p.emoji)}
+  1634→                      className={`p-3 rounded-xl border transition-all duration-200 cursor-pointer flex flex-col items-center justify-center gap-1.5 group hover:scale-105 h-20 ${
+  1635→                        isSelected
+  1636→                          ? 'border-indigo-500 bg-indigo-500/10 shadow-lg'
+  1637→                          : 'border-slate-900 bg-slate-950/40 hover:border-slate-800'
+  1638→                      }`}
+  1639→                      title={p.label}
+  1640→                    >
+  1641→                      <span className="text-2xl select-none group-hover:scale-110 transition-transform">
+  1642→                        {p.emoji}
+  1643→                      </span>
+  1644→                      <span className="text-[8.5px] font-sans font-semibold text-slate-400 group-hover:text-slate-200 truncate w-full text-center">
+  1645→                        {p.label}
+  1646→                      </span>
+  1647→                    </button>
+  1648→                  );
+  1649→                })}
+  1650→              </div>
+  1651→            </div>
+  1652→          </div>
+  1653→        </div>
+  1654→
+  1655→        {/* Social channels */}
+  1656→        <div className="md:col-span-2 flex flex-col gap-3 border-t border-slate-900/60 pt-5">
+  1657→          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-sans flex items-center gap-2">
+  1658→            <Globe className="w-4 h-4 text-purple-400" /> Creator Social
+  1659→            Channels (Showcased on your Public Profile)
+  1660→          </label>
+  1661→          <p className="text-[11px] text-slate-400 font-sans">
+  1662→            Link your Instagram handle, YouTube channel, and Twitch profile so
+  1663→            other vipers and allies can follow you and watch your game clips!
+  1664→          </p>
+  1665→
+  1666→          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+  1667→            <div className="flex flex-col gap-1.5">
+  1668→              <label className="text-[10px] font-bold text-pink-400 font-sans uppercase">
+  1669→                📸 Instagram Handle
+  1670→              </label>
+  1671→              <input
+  1672→                type="text"
+  1673→                value={instagram}
+  1674→                onChange={(e) => setInstagram(e.target.value)}
+  1675→                placeholder="@username (e.g. @hari_snake_god)"
+  1676→                className="bg-slate-900 border border-slate-800 text-white font-sans text-xs px-3 py-2 rounded-xl focus:outline-none focus:border-pink-500"
+  1677→              />
+  1678→            </div>
+  1679→            <div className="flex flex-col gap-1.5">
+  1680→              <label className="text-[10px] font-bold text-red-400 font-sans uppercase">
+  1681→                🎥 YouTube Channel / Handle
+  1682→              </label>
+  1683→              <input
+  1684→                type="text"
+  1685→                value={youtube}
+  1686→                onChange={(e) => setYoutube(e.target.value)}
+  1687→                placeholder="@channel or URL"
+  1688→                className="bg-slate-900 border border-slate-800 text-white font-sans text-xs px-3 py-2 rounded-xl focus:outline-none focus:border-red-500"
+  1689→              />
+  1690→            </div>
+  1691→            <div className="flex flex-col gap-1.5">
+  1692→              <label className="text-[10px] font-bold text-purple-400 font-sans uppercase">
+  1693→                📱 Twitch Stream Handle
+  1694→              </label>
+  1695→              <input
+  1696→                type="text"
+  1697→                value={twitch}
+  1698→                onChange={(e) => setTwitch(e.target.value)}
+  1699→                placeholder="twitch_username"
+  1700→                className="bg-slate-900 border border-slate-800 text-white font-sans text-xs px-3 py-2 rounded-xl focus:outline-none focus:border-purple-500"
+  1701→              />
+  1702→            </div>
+  1703→          </div>
+  1704→        </div>
+  1705→      </div>
+  1706→
+  1707→      <div className="mt-5 p-3.5 bg-indigo-950/20 border border-indigo-500/10 rounded-xl flex items-start gap-3">
+  1708→        <Shield className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+  1709→        <div className="text-xs font-sans leading-relaxed text-slate-300">
+  1710→          <strong className="text-indigo-300 block mb-0.5">
+  1711→            CYBER HANDSHAKE WARNING:
+  1712→          </strong>
+  1713→          Changing your registered alias or territory updates global tournament
+  1714→          indices. Immutable record logs are appended to the ledger below.
+  1715→        </div>
+  1716→      </div>
+  1717→
+  1718→      <div className="mt-5 flex justify-end gap-2.5 border-t border-slate-900 pt-4">
+  1719→        <button
+  1720→          type="button"
+  1721→          onClick={onCancel}
+  1722→          disabled={saving}
+  1723→          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer"
+  1724→        >
+  1725→          Cancel
+  1726→        </button>
+  1727→        <button
+  1728→          type="button"
+  1729→          onClick={onSave}
+  1730→          disabled={saving}
+  1731→          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-600/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+  1732→        >
+  1733→          <Check className="w-4 h-4" /> Save Handshake
+  1734→        </button>
+  1735→      </div>
+  1736→    </div>
+  1737→  );
+  1738→}
+  1739→
+  1740→// ---------------------------------------------------------------------------
+  1741→// Co-Op Invite Modal
+  1742→// ---------------------------------------------------------------------------
+  1743→interface CoOpInviteModalProps {
+  1744→  friend: Friend;
+  1745→  playerChips: number;
+  1746→  selectedArenaId: string;
+  1747→  setSelectedArenaId: (id: string) => void;
+  1748→  statusMessage: InviteStatusMessage | null;
+  1749→  setStatusMessage: (m: InviteStatusMessage | null) => void;
+  1750→  onClose: () => void;
+  1751→  onSend: () => void;
+  1752→  onToast?: ToastFn;
+  1753→}
+  1754→
+  1755→function CoOpInviteModal({
+  1756→  friend,
+  1757→  playerChips,
+  1758→  selectedArenaId,
+  1759→  setSelectedArenaId,
+  1760→  statusMessage,
+  1761→  setStatusMessage,
+  1762→  onClose,
+  1763→  onSend,
+  1764→  onToast,
+  1765→}: CoOpInviteModalProps) {
+  1766→  const friendChips = getFriendSimulatedChips(friend);
+  1767→
+  1768→  return (
+  1769→    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+  1770→      <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl overflow-hidden">
+  1771→        <div
+  1772→          aria-hidden="true"
+  1773→          className="absolute -top-10 -right-10 w-32 h-32 rounded-full blur-3xl opacity-20 pointer-events-none"
+  1774→          style={{ backgroundColor: friend.skinColor }}
+  1775→        />
+  1776→
+  1777→        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+  1778→          <div className="flex items-center gap-2.5">
+  1779→            <Swords className="w-5 h-5 text-violet-400 animate-pulse" />
+  1780→            <div>
+  1781→              <h3 className="font-bold text-white text-sm font-sans">
+  1782→                Co-Op Lobby Invite
+  1783→              </h3>
+  1784→              <p className="text-[10px] text-slate-400 font-sans mt-0.5">
+  1785→                Assemble a squad with your allies
+  1786→              </p>
+  1787→            </div>
+  1788→          </div>
+  1789→          <button
+  1790→            type="button"
+  1791→            onClick={onClose}
+  1792→            className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition cursor-pointer"
+  1793→            aria-label="Close modal"
+  1794→          >
+  1795→            <X className="w-4 h-4" />
+  1796→          </button>
+  1797→        </div>
+  1798→
+  1799→        {/* Balance cards */}
+  1800→        <div className="grid grid-cols-2 gap-3 my-4">
+  1801→          <div className="bg-slate-950/60 border border-slate-800/60 p-3 rounded-xl flex flex-col gap-1 text-center">
+  1802→            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider font-sans">
+  1803→              Your Balance
+  1804→            </span>
+  1805→            <span className="text-sm font-bold font-mono text-indigo-400">
+  1806→              {playerChips.toLocaleString()}{' '}
+  1807→              <span className="text-xs font-sans text-slate-500">c</span>
+  1808→            </span>
+  1809→          </div>
+  1810→          <div className="bg-slate-950/60 border border-slate-800/60 p-3 rounded-xl flex flex-col gap-1 text-center">
+  1811→            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider font-sans">
+  1812→              {friend.name}
+  1813→            </span>
+  1814→            <span className="text-sm font-bold font-mono text-emerald-400">
+  1815→              {friendChips.toLocaleString()}{' '}
+  1816→              <span className="text-xs font-sans text-slate-500">c</span>
+  1817→            </span>
+  1818→          </div>
+  1819→        </div>
+  1820→
+  1821→        {/* Arena selector */}
+  1822→        <div className="flex flex-col gap-2 my-4">
+  1823→          <label className="text-[10px] text-slate-400 font-bold uppercase font-sans tracking-wide">
+  1824→            Select Arena Stakes
+  1825→          </label>
+  1826→          <div className="flex flex-col gap-1.5 max-h-[180px] overflow-y-auto pr-1 va-scroll">
+  1827→            {ARENA_TIERS.map((tier) => {
+  1828→              const isSelected = tier.id === selectedArenaId;
+  1829→              const friendAffords = friendChips >= tier.buyIn;
+  1830→              const youAfford = playerChips >= tier.buyIn;
+  1831→              return (
+  1832→                <button
+  1833→                  key={tier.id}
+  1834→                  type="button"
+  1835→                  onClick={() => {
+  1836→                    setSelectedArenaId(tier.id);
+  1837→                    setStatusMessage(null);
+  1838→                  }}
+  1839→                  className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition cursor-pointer ${
+  1840→                    isSelected
+  1841→                      ? 'bg-slate-800 border-indigo-500 shadow-md'
+  1842→                      : 'bg-slate-950/40 border-slate-800/60 hover:border-slate-700'
+  1843→                  }`}
+  1844→                >
+  1845→                  <div className="flex items-center gap-2.5">
+  1846→                    <div
+  1847→                      className="w-2.5 h-2.5 rounded-full"
+  1848→                      style={{ backgroundColor: tier.accentColor }}
+  1849→                    />
+  1850→                    <div>
+  1851→                      <span className="text-xs font-bold text-white block">
+  1852→                        {tier.name}
+  1853→                      </span>
+  1854→                      <span className="text-[9px] text-slate-400 font-sans mt-0.5 leading-none">
+  1855→                        Buy-In: {tier.buyIn.toLocaleString()} c
+  1856→                      </span>
+  1857→                    </div>
+  1858→                  </div>
+  1859→                  <div className="flex flex-col items-end gap-1">
+  1860→                    {!youAfford ? (
+  1861→                      <span className="text-[8px] bg-rose-950/80 text-rose-400 border border-rose-900/40 px-1.5 py-0.5 rounded font-bold font-sans">
+  1862→                        You can&apos;t afford
+  1863→                      </span>
+  1864→                    ) : !friendAffords ? (
+  1865→                      <span className="text-[8px] bg-amber-950/80 text-amber-300 border border-amber-900/40 px-1.5 py-0.5 rounded font-bold font-sans">
+  1866→                        They can&apos;t afford
+  1867→                      </span>
+  1868→                    ) : (
+  1869→                      <span className="text-[8px] bg-emerald-950/80 text-emerald-300 border border-emerald-900/40 px-1.5 py-0.5 rounded font-bold font-sans">
+  1870→                        Eligible 🤝
+  1871→                      </span>
+  1872→                    )}
+  1873→                  </div>
+  1874→                </button>
+  1875→              );
+  1876→            })}
+  1877→          </div>
+  1878→        </div>
+  1879→
+  1880→        {/* Speech bubble */}
+  1881→        {statusMessage && (
+  1882→          <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-xl flex flex-col gap-2 my-4">
+  1883→            <div className="flex items-center gap-2">
+  1884→              <div
+  1885→                className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
+  1886→                style={{
+  1887→                  backgroundColor: `${friend.skinColor}33`,
+  1888→                  color: friend.skinColor,
+  1889→                }}
+  1890→              >
+  1891→                💬
+  1892→              </div>
+  1893→              <span className="text-[10px] font-bold text-slate-300">
+  1894→                {friend.name} responds:
+  1895→              </span>
+  1896→            </div>
+  1897→            <p className="text-xs italic text-slate-300 leading-relaxed pl-7">
+  1898→              &quot;{statusMessage.text}&quot;
+  1899→            </p>
+  1900→
+  1901→            {statusMessage.type === 'counter' &&
+  1902→              statusMessage.counterArenaId && (
+  1903→                <button
+  1904→                  type="button"
+  1905→                  onClick={() => {
+  1906→                    setSelectedArenaId(statusMessage.counterArenaId!);
+  1907→                    setStatusMessage(null);
+  1908→                    notify(
+  1909→                      'Switched buy-in to match counter-proposal!',
+  1910→                      'info',
+  1911→                      onToast,
+  1912→                    );
+  1913→                  }}
+  1914→                  className="mt-1 ml-7 self-start px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-lg text-[10px] font-bold font-sans transition cursor-pointer"
+  1915→                >
+  1916→                  🤝 Accept Proposal &amp; Invite
+  1917→                </button>
+  1918→              )}
+  1919→          </div>
+  1920→        )}
+  1921→
+  1922→        {/* Modal actions */}
+  1923→        <div className="flex items-center gap-2 border-t border-slate-800/60 pt-4 mt-4">
+  1924→          <button
+  1925→            type="button"
+  1926→            onClick={onClose}
+  1927→            className="flex-1 py-2 border border-slate-800 hover:border-slate-700 bg-slate-950/40 text-slate-400 hover:text-white rounded-xl text-xs font-bold font-sans transition cursor-pointer"
+  1928→          >
+  1929→            Cancel
+  1930→          </button>
+  1931→          <button
+  1932→            type="button"
+  1933→            onClick={onSend}
+  1934→            className="flex-1 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 border border-violet-500/30 text-white rounded-xl text-xs font-bold font-sans transition cursor-pointer"
+  1935→          >
+  1936→            Send Co-Op Invite
+  1937→          </button>
+  1938→        </div>
+  1939→      </div>
+  1940→    </div>
+  1941→  );
+  1942→}
+  1943→
+  1944→/* ========================================================================== */
+  1945→/* Guest → Registered Upgrade Banner                                         */
+  1946→/* ========================================================================== */
+  1947→
+  1948→function GuestUpgradeBanner({
+  1949→  onRefresh,
+  1950→  onToast,
+  1951→}: {
+  1952→  onRefresh: () => Promise<void>;
+  1953→  onToast?: ToastFn;
+  1954→}) {
+  1955→  const [open, setOpen] = useState(false);
+  1956→  const [busy, setBusy] = useState(false);
+  1957→  const [error, setError] = useState<string | null>(null);
+  1958→  const [name, setName] = useState('');
+  1959→  const [email, setEmail] = useState('');
+  1960→  const [password, setPassword] = useState('');
+  1961→  const [pin, setPin] = useState('');
+  1962→
+  1963→  if (!open) {
+  1964→    return (
+  1965→      <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/40 via-slate-900 to-indigo-950/40 border border-amber-500/30">
+  1966→        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+  1967→          <div className="flex items-center gap-3 min-w-0">
+  1968→            <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+  1969→              <Shield className="w-5 h-5" />
+  1970→            </div>
+  1971→            <div className="min-w-0">
+  1972→              <h3 className="text-sm font-bold text-amber-300 font-sans">
+  1973→                You&apos;re playing as a Guest
+  1974→              </h3>
+  1975→              <p className="text-xs text-slate-400 font-sans mt-0.5">
+  1976→                Upgrade to a registered account to secure your progress. All chips, stats, cosmetics, and friends carry over.
+  1977→              </p>
+  1978→            </div>
+  1979→          </div>
+  1980→          <button
+  1981→            type="button"
+  1982→            onClick={() => setOpen(true)}
+  1983→            className="shrink-0 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white text-xs font-bold font-sans rounded-xl border border-amber-500 transition cursor-pointer shadow-lg shadow-amber-600/20"
+  1984→          >
+  1985→            <UserPlus className="w-3.5 h-3.5 mr-1.5 inline" />
+  1986→            Upgrade Now
+  1987→          </button>
+  1988→        </div>
+  1989→      </div>
+  1990→    );
+  1991→  }
+  1992→
+  1993→  async function handleUpgrade(e: React.FormEvent) {
+  1994→    e.preventDefault();
+  1995→    setBusy(true);
+  1996→    setError(null);
+  1997→    try {
+  1998→      const res = await fetch('/api/auth/upgrade', {
+  1999→        method: 'POST',
+  2000→        headers: { 'Content-Type': 'application/json' },
+
+[showing lines 1-2000 of 2128; use offset=2001 with limit to continue reading]

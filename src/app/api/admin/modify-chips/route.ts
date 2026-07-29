@@ -26,25 +26,33 @@ export async function POST(req: NextRequest) {
   // Round to int — chips are integers
   const amount = Math.trunc(rawAmount);
 
-  // Atomic update with clamping at 0 (no negative banked balances)
-  const target = await db.player.findUnique({ where: { userTag } });
-  if (!target) {
-    return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+  // Atomic update with clamping at 0 (no negative banked balances) — use transaction
+  let profile: PlayerProfile;
+  try {
+    profile = await db.$transaction(async (tx) => {
+      const target = await tx.player.findUnique({ where: { userTag } });
+      if (!target) throw { code: 'NOT_FOUND' };
+
+      const newChips = Math.max(0, target.bankedChips + amount);
+
+      const updated = await tx.player.update({
+        where: { userTag },
+        data: {
+          bankedChips: newChips,
+          totalEarned: amount > 0 ? target.totalEarned + amount : target.totalEarned,
+          totalLost: amount < 0 ? target.totalLost + Math.abs(amount) : target.totalLost,
+          lastSeenAt: new Date(),
+        },
+      });
+
+      return toProfile(updated);
+    });
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'NOT_FOUND') {
+      return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+    }
+    return NextResponse.json({ error: 'Database error' }, { status: 500 });
   }
 
-  const newChips = Math.max(0, target.bankedChips + amount);
-
-  const updated = await db.player.update({
-    where: { userTag },
-    data: {
-      bankedChips: newChips,
-      // Reflect in totalEarned / totalLost for audit trail
-      totalEarned: amount > 0 ? target.totalEarned + amount : target.totalEarned,
-      totalLost: amount < 0 ? target.totalLost + Math.abs(amount) : target.totalLost,
-      lastSeenAt: new Date(),
-    },
-  });
-
-  const profile: PlayerProfile = toProfile(updated);
   return NextResponse.json({ ok: true, player: profile });
 }
