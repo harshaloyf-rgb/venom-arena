@@ -650,3 +650,31 @@ Stage Summary:
 - Guest PIN: Entire "Security Settings" card hidden for guest accounts in profile; API blocks guest PIN changes
 - Rules Modal: "View Rules & Guide" button on auth page now opens the full 14-section rules modal directly
 - Browser verified: login works, rules modal opens, guest profile has no Security Settings, registered profile shows Security Settings
+
+---
+Task ID: 3
+Agent: main
+Task: Overhaul Tactical Challenges system with 6 major improvements
+
+Work Log:
+- Audited existing challenge system: found 24 templates, no level scaling, no anti-repeat, no category diversity
+- Implemented 4-tier level-scaled pools (Novice/Operative/Veteran/Elite) with 90+ total templates
+- Added anti-repeat logic: queries yesterday's dailies and last week's weeklies, excludes by title
+- Implemented pickDiverse() function to guarantee different categories in each period
+- Added 2 new challenge categories: survive (time-based) and extract_streak (consecutive extractions)
+- Added level-based reward multipliers (×1.0 to ×4.0)
+- Built streak bonus system: 3-day → ×1.5, 7-day → ×2.0, 14-day → ×3.0
+- Updated match result handler to track survive and extract_streak categories
+- Updated progress API with new valid categories
+- Updated dashboard UI: tier badge, streak display, bonus reward toast
+- Updated Rules & Guide Section 10 with full documentation
+- Browser verified: 3 diverse daily challenges generated (extract, kill, survive)
+- Lint clean, pushed to GitHub
+
+Stage Summary:
+- Challenge pool expanded from 24 → 90+ templates across 4 level tiers
+- 7 challenge categories: kill, extract, extract_streak, star_collect, score, arena_entry, survive
+- Anti-repeat prevents yesterday's dailies and last week's weeklies from repeating
+- Category diversity guarantees no duplicate categories in same period
+- Level-based reward multiplier (×1.0 to ×4.0) scales rewards with player growth
+- Streak bonus system rewards consecutive daily completion
