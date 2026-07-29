@@ -697,3 +697,32 @@ Work Log:
 Stage Summary:
 - All code passes quality audit — no duplicates, no wrong code, no bugs found
 - Working tree clean, pushed to GitHub: https://github.com/harshaloyf-rgb/venom-arena
+
+---
+Task ID: 5
+Agent: main
+Task: Arena system overhaul — 30 tiers + 8 improvements
+
+Work Log:
+- Deep audit of entire Play Endless Arenas system (10 files, 6000+ lines)
+- Identified 4 bugs, 4 inconsistencies, 8 improvement suggestions
+- Expanded ARENA_TIERS from 7 → 30 tiers (10c to 100,000,000,000c)
+- 5 difficulty groups: Beginner(1-6), Medium(7-12), High Stakes(13-18), Extreme(19-24), Legendary(25-30)
+- Set all 33 tiers (online + practice) to exactly 30 bots
+- XP multipliers scale from x1.0 to x75
+- Removed dead minExtract from ArenaTier interface and game-canvas
+- Fixed onPlay signature: page.tsx now accepts (arenaId, isOnline?)
+- Passed onToast to ArenaSelector for affordability error toasts
+- Added /stats HTTP endpoint to game-server for live player counts
+- Game-server skips practice room creation (saves CPU)
+- Added "TIER X / 30" badge to arena detail card
+- Fixed rewarded-ad-modal (hardcoded 50 → AD_REWARD_CHIPS from config)
+- Fixed Rules & Guide: "1000 bots" → "30 bots per tier", "25-50" → "30 bots"
+- Browser verified: all 30 tiers render, Tier 30 shows 100B buy-in, practice shows FREE/30bots
+
+Stage Summary:
+- 30 competitive online tiers with smooth exponential buy-in progression
+- All tiers have 30 bots, difficulty-scaled descriptions, unique names
+- Rules & Guide auto-updates from config (30-row tier reference table)
+- All 8 improvement suggestions implemented
+- Pushed to GitHub
