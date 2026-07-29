@@ -23,7 +23,7 @@ function utcMonday(): string {
 // Valid challenge categories
 // ---------------------------------------------------------------------------
 
-const VALID_CATEGORIES = ['kill', 'extract', 'star_collect', 'score', 'arena_entry'] as const;
+const VALID_CATEGORIES = ['kill', 'extract', 'extract_streak', 'star_collect', 'score', 'arena_entry', 'survive'] as const;
 type ChallengeCategory = (typeof VALID_CATEGORIES)[number];
 
 function isValidCategory(v: string): v is ChallengeCategory {
@@ -35,7 +35,7 @@ function isValidCategory(v: string): v is ChallengeCategory {
 // Uses session auth (user JWT).
 //
 // body: {
-//   category: 'kill' | 'extract' | 'star_collect' | 'score' | 'arena_entry',
+//   category: 'kill' | 'extract' | 'extract_streak' | 'star_collect' | 'score' | 'arena_entry' | 'survive',
 //   amount?: number  (defaults to 1)
 // }
 export async function POST(req: NextRequest) {
