@@ -254,3 +254,40 @@ Stage Summary:
 - Offline: FIXED — Virtual bot pool reduces processing from 1000 to ~60 active bots. Performance went from "worst lag" to 52 FPS smooth.
 - Files modified: src/components/game/offline-engine.ts (major rewrite of bot management)
 - Game server: Running via supervisor.py (PID managed, auto-restart)
+
+---
+Task ID: permanent-fix-and-restore
+Agent: main
+Task: Diagnose why all previous work was lost and permanently restore everything with git commit
+
+Work Log:
+- DIAGNOSIS: Found root cause — files were being reverted to last git commit state because previous sessions NEVER committed their changes. Git HEAD had the old/stripped-down versions.
+- Evidence: git show HEAD matched current files exactly (352-line rules modal, broken isOfflineMode). Zero diff.
+- Confirmed two copies of game-rules-modal exist (panels/ vs modals/) but only modals/ is imported by page.tsx.
+- Fix 1: isOfflineMode bug — removed `|| hudRealPlayerCount === 0` from both locations in game-canvas.tsx (lines 462 and 1776)
+- Fix 2: Completely rebuilt game-rules-modal.tsx from 352 lines to 765 lines with ALL 14 sections:
+  - Section 0: Accounts & Getting Started
+  - Section 1: Controls
+  - Section 2: Online vs Offline + Arena Leaderboard InfoCard (online vs offline comparison)
+  - Arena Tiers Reference Table (7 competitive + 3 practice, imported from game-config)
+  - Section 3: Food Orbs + Death Food Orbs + Star Chips (full mechanics)
+  - Section 4: Enhanced Boost (earned mass, 3x/sec, strategy)
+  - Section 5: Enhanced Collision (boundary star rules, bot wall death)
+  - Section 6: Bot AI
+  - Section 7: Map & Spawning
+  - Section 8: Extraction + Extraction UI Elements
+  - Section 9: Complete In-Game HUD Explained (all panels)
+  - Section 10: Tactical Challenges
+  - Section 11: Death & Replay
+  - Section 12: Lobby Leaderboards + Milestone Badge System (7-tier table) + Your Rank + Summit/Global/National/Tiers
+  - Section 13: FAQ (15 items including milestone badge questions)
+- COMMITTED to git: commit 4b68713 — "Fix isOfflineMode HUD bug + Rebuild complete Rules & Guide"
+- Verified: git show HEAD matches working files exactly. 765 lines confirmed.
+
+Stage Summary:
+- ROOT CAUSE IDENTIFIED: Files not committed to git → environment resets them to last commit
+- PERMANENT SOLUTION: Every change MUST be committed to git immediately
+- Files modified: game-canvas.tsx, game-rules-modal.tsx
+- Git commit: 4b68713
+- Lint: Clean
+- Dev server: Compiling successfully
