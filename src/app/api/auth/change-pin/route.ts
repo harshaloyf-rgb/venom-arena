@@ -33,6 +33,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Account not found.' }, { status: 404 });
     }
 
+    // Guest accounts (no email) cannot set a PIN — PIN is for password recovery
+    if (!player.email) {
+      return NextResponse.json({ error: 'Guest accounts cannot set a Security PIN.' }, { status: 403 });
+    }
+
     // If player already has a PIN, verify the current one
     if (player.securityPin) {
       if (!/^\d{4}$/.test(currentPin)) {

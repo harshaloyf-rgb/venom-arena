@@ -2017,8 +2017,13 @@ function SecuritySettingsCard({
     }
   }
 
-  // Only show Change Password for registered accounts (those with passwords)
-  const canChangePassword = !!player.email;
+  // Only show security settings for registered accounts (guests have no password/PIN)
+  const isRegistered = !!player.email;
+  const canChangePassword = isRegistered;
+  const canManagePin = isRegistered;
+
+  // Guest accounts have no password or PIN to manage — hide entire section
+  if (!isRegistered) return null;
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/30 overflow-hidden">
@@ -2092,7 +2097,8 @@ function SecuritySettingsCard({
         </div>
       )}
 
-      {/* PIN row */}
+      {/* PIN row — only for registered accounts (guests have no password to recover) */}
+      {canManagePin && (
       <div className="p-3">
         {!showChangePin ? (
           <div className="flex items-center justify-between">
@@ -2163,6 +2169,7 @@ function SecuritySettingsCard({
           </form>
         )}
       </div>
+      )}
     </div>
   );
 }
