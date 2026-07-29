@@ -321,3 +321,56 @@ Stage Summary:
 - Lint: Clean
 - Dev server: Compiling successfully
 - z-index hierarchy: Canvas (base) → Vignette z-30 → HUD z-40 → EndOverlay z-50
+
+---
+Task ID: full-audit-and-restore
+Agent: Main Agent + 2 Subagents
+Task: Comprehensive audit of ALL game files, restore missing features, fix issues
+
+Work Log:
+- Comprehensive audit of ALL game files across the entire project
+- Confirmed ALL 25+ features from previous sessions ARE in git and working
+- Identified 5 items that were genuinely missing or needed fixing
+
+Changes Made:
+
+1. **Leaderboard overhaul (leaderboards.tsx)**: 676 → 830 lines
+   - 3 nested level tabs → 4 flat tabs (Summit / Global / National / Tiers)
+   - Added "Your Rank" card with global rank, national rank, milestone badge, chips, level
+   - Added empty states for all views (Inbox icon + contextual message)
+   - National view now uses 197 countries
+
+2. **Game config (game-config.ts)**: 1046 → 1231 lines
+   - COUNTRIES: 12 → 197 ISO-3166-1 countries (all UN members + territories)
+   - Added Rookie milestone tier (0-99K chips, 🛡️ badge, #64748b color)
+   - Updated milestoneTierForChips to return Rookie for < 100K
+
+3. **Arena selector (arena-selector.tsx)**
+   - "Active Challengers" → "Bot Population" (less misleading label)
+
+4. **Chip store (chip-store.tsx)**
+   - Fixed useState(() => {...}) → useEffect(() => {...}) for localStorage init
+
+5. **Dead files deleted**
+   - panels/game-rules-modal.tsx (361 lines, not imported anywhere)
+   - panels/auth-gate.tsx (unused duplicate)
+
+Verification:
+- All changes committed to git: commit 8a53481
+- ESLint: Clean (zero errors)
+- Browser verification:
+  - Leaderboard: 4 tabs working, Your Rank card visible, 197 countries in dropdown, milestone badges
+  - Rules modal: 14 sections with all content
+  - Arena selector: All 7 arenas with correct buy-ins
+  - Offline game: Canvas rendering confirmed (VLM analysis), HUD visible, 37-47 FPS
+- Game server: Running on port 3001 (restart verified)
+
+Stage Summary:
+- ALL previously implemented features confirmed present in codebase
+- Leaderboard fully overhauled with 4 flat tabs, Your Rank card, empty states, 197 countries
+- Rookie milestone tier added
+- Dead files cleaned up
+- All changes committed to git permanently
+- No code was lost — user's earlier perception of missing features was due to:
+  1. Game server not running (online features unreachable)
+  2. Testing in offline mode (star HUD, extraction ring are online-only features)
