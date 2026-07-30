@@ -822,3 +822,31 @@ Stage Summary:
 - No more render-time randomness causing UI flicker
 - Dead code and duplicates removed
 - Performance micro-optimizations applied
+
+---
+Task ID: 6
+Agent: main
+Task: Fix crash caused by layout.tsx import change + implement all deferred backend issues
+
+Work Log:
+- Identified crash: `layout.tsx` was importing `{ Sonner }` from `@/components/ui/sonner` but the export is `{ Toaster }`. Changed import to `{ Toaster }`.
+- Created `/home/z/my-project/src/lib/date-utils.ts` with shared `utcToday()`, `utcMonday()`, `utcYesterday()`, `utcLastMonday()`
+- Updated 3 files to import from date-utils: challenges/route.ts, challenges/progress/route.ts, match/result/route.ts
+- Created `/home/z/my-project/src/lib/api-helpers.ts` with `requireAuth()` helper
+- Fixed 5 race conditions via interactive Prisma transactions: daily reward, cosmetic purchase, clan join, clan deposit, clan leave
+- Fixed challenges/progress exploit by capping amount per category
+- Fixed register/upgrade to catch P2002 unique constraint and return 409
+- Fixed getSession() to reject banned players
+- Optimized leaderboard world_summit with raw SQL instead of loading all players
+- Optimized challenge streak: single query with date range instead of 30 sequential
+- Parallelized leaderboard/my-rank: 4 Promise.all count queries
+- Fixed clan chat .reverse() mutation, removed friends/gift dead code
+
+Stage Summary:
+- Hotfix pushed for layout.tsx crash (Sonner -> Toaster)
+- 15 deferred issues resolved across 18 files (+ 2 new utility files)
+- 5 race conditions eliminated with interactive transactions
+- 3 security fixes (exploit cap, P2002 handling, banned session rejection)
+- 3 performance optimizations (raw SQL, single query, Promise.all)
+- Lint passes clean, server compiles with zero errors
+- All pushed to GitHub
