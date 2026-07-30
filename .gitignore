@@ -50,6 +50,10 @@ test
 prompt
 
 server.log
+# Game server runtime files
+mini-services/game-server.log
+mini-services/game-server.pid
+
 # Skills directory
 /skills/tool-results/
 *.txt
