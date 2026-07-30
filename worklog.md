@@ -876,3 +876,35 @@ Stage Summary:
 - Fix: Started game server via supervisor.py (auto-restart on crash)
 - Verified working through full agent-browser test on Caddy gateway port 81
 - All 30 arena tiers operational with 30 bots each
+
+---
+Task ID: 3
+Agent: main
+Task: Online arena improvements — extraction mechanics, bot AI, kill feed, sound effects, replay, visual fixes
+
+Work Log:
+- Read and understood entire game codebase: game-server/index.ts, game-state.ts, game-canvas.tsx, render-helpers.ts, game-config.ts, types.ts
+- Fixed extraction mechanics: server detects steering (angle change > 0.08 rad) during extraction and resets progress. Forward gliding allowed. Emits extract_cancelled_by_steer event.
+- Fixed extraction ring visibility: removed per-snake extraction ring from render-helpers drawSnake. Game-canvas now only draws ring for myId === player's own snake.
+- Added visual bot distinction: bot names display as "[BOT] Name" in muted orange color vs player names in white/green
+- Implemented personality-driven bot AI (5 distinct personalities):
+  - scavenger: cautious edge-dweller, avoids confrontation, only eats safe food
+  - opportunist: balanced, chases smaller snakes when confident, evades larger
+  - hunter: aggressive, chases smaller bots+players, boosts to close gaps, moves toward center
+  - extractor: efficient food vacuum, boosts toward high-value food, less evasive
+  - coward: extremely skittish (2x evade radius), erratic zigzag evasion, nervous wander
+- Added kill feed system: server broadcasts kill_feed events on every death (wall/body/headOn). Client renders scrolling kill feed on left side of HUD with auto-expire (5s).
+- Added procedural sound effects via Web Audio API (game-audio.ts): food collection, kills, death, extraction start/success/restart, boost, wall hit
+- Built OnlineReplayPlayer component: full-screen canvas replay viewer with play/pause, scrub, speed controls, death flash effect, camera tracking, minimap
+- Updated game rules FAQ to match new extraction behavior and ring visibility
+
+Stage Summary:
+- Key files modified: game-server/index.ts, game-server/game-state.ts, game-canvas.tsx, render-helpers.ts, game-rules-modal.tsx
+- New files created: src/lib/game-audio.ts, src/components/game/online-replay-player.tsx
+- Bot AI now has 5 distinct personalities with visible behavioral differences
+- Extraction is more strategic: glide forward allowed, but any turn resets progress
+- Extraction ring is private (only extracting player sees it)
+- Kill feed provides real-time event awareness
+- Sound effects enhance gameplay feedback
+- Online replay system provides post-death review capability
+- All changes verified via agent-browser: guest login → buy in → game loaded with HUD → death screen with replay option

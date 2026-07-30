@@ -744,16 +744,6 @@ export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot, opacity?: nu
     ctx.stroke();
   }
 
-  // Extraction ring
-  if (snake.isExtracting) {
-    ctx.strokeStyle = 'rgba(16, 185, 129, 0.95)';
-    ctx.lineWidth = 3 / zoom;
-    ctx.setLineDash([6 / zoom, 4 / zoom]);
-    ctx.beginPath();
-    ctx.arc(head.x, head.y, radius + 8 / zoom, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
   ctx.restore();
 
   // --- Name label ---
@@ -764,8 +754,15 @@ export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot, opacity?: nu
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     const labelY = head.y - radius - 6 / zoom;
-    ctx.fillStyle = isMe ? '#22c55e' : 'rgba(226, 232, 240, 0.85)';
-    ctx.fillText(snake.name, head.x, labelY);
+    // Bots get a distinct muted orange label with [BOT] tag; players get normal label
+    if (snake.isBot) {
+      ctx.fillStyle = 'rgba(251, 146, 60, 0.75)'; // orange-400 muted
+      const botLabel = `[BOT] ${snake.name}`;
+      ctx.fillText(botLabel, head.x, labelY);
+    } else {
+      ctx.fillStyle = isMe ? '#22c55e' : 'rgba(226, 232, 240, 0.85)';
+      ctx.fillText(snake.name, head.x, labelY);
+    }
     if (snake.userTag) {
       ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
       ctx.font = `${Math.max(8, 9 / zoom)}px monospace`;

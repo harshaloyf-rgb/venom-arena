@@ -578,10 +578,22 @@ export function tickSnakeMovement(
 // ----------------------------------------------------------------------------
 // Bot AI
 // ----------------------------------------------------------------------------
+// Bot AI — personality-driven behavior
+// ----------------------------------------------------------------------------
 
 /**
- * Per-bot AI tick. All bots seek food and evade human players.
- * Self-destruct bots navigate toward the wall.
+ * Per-bot AI tick. Each bot's personality drives distinct behavior:
+ *
+ *  - **scavenger**  — cautious edge-dweller. Stays away from center & players.
+ *                     Only eats food far from danger. Won't chase anything.
+ *  - **opportunist** — balanced. Eats food, evades players at medium range,
+ *                     occasionally chases smaller snakes if confident.
+ *  - **hunter**      — aggressive. Actively chases smaller snakes (head-on
+ *                     intimidation), seeks food aggressively, boosts to close gaps.
+ *  - **extractor**   — efficient food vacuum. Prioritizes dense food clusters,
+ *                     boosts toward high-value orbs. Less evasive (focused).
+ *  - **coward**      — extremely skittish. Flees at 2× evade radius, erratic
+ *                     direction changes, never chases, fastest reaction time.
  */
 export function tickBot(bot: BotSession, room: ArenaRoom, now: number): void {
   if (bot.points.length === 0 || bot.isDead) return;
@@ -590,127 +602,266 @@ export function tickBot(bot: BotSession, room: ArenaRoom, now: number): void {
   const realPlayerCount = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
   const mapRadius = getDynamicMapRadius(Math.max(1, realPlayerCount), now);
 
-  // --- Self-destruct state: navigate to nearest wall ---
+  // --- Self-destruct state: navigate to nearest wall (all personalities behave same) ---
   if (bot.botState === 'selfDestruct') {
-    // Navigate AWAY from center (toward wall) — NEVER boost, go slowly.
     const awayFromCenter = Math.atan2(head.y - room.mapCenterY, head.x - room.mapCenterX);
     bot.desiredAngle = awayFromCenter;
-    bot.wantsBoost = false; // CRITICAL: never boost during self-destruct
+    bot.wantsBoost = false;
 
-    // Still eat food on the way (prioritize nearby food, but keep moving toward wall)
     if (now >= bot.nextThinkAt) {
-      bot.nextThinkAt = now + 120; // think less frequently (move slowly)
+      bot.nextThinkAt = now + 120;
       const foodQuery = room.grid.queryRadius(head.x, head.y, BOT_FOOD_SCAN_RADIUS);
       let bestFood: GridItem | null = null;
       let bestFoodDist = Infinity;
       for (const item of foodQuery.values()) {
-        if (item.kind !== 'food') continue;
-        if ((item.value ?? 0) <= 0) continue;
-        if (item.isStarChip) continue; // bots ignore stars
+        if (item.kind !== 'food' || (item.value ?? 0) <= 0 || item.isStarChip) continue;
         const d = dist(head.x, head.y, item.x, item.y);
-        if (d < bestFoodDist) {
-          bestFoodDist = d;
-          bestFood = item;
-        }
+        if (d < bestFoodDist) { bestFoodDist = d; bestFood = item; }
       }
-      // Blend food-seeking with wall-seeking (80% wall, 20% food if close)
       if (bestFood && bestFoodDist < 120) {
         const foodAngle = Math.atan2(bestFood.y - head.y, bestFood.x - head.x);
         bot.desiredAngle = turnToward(awayFromCenter, foodAngle, 0.03);
       }
     }
-
-    tickSnakeMovement(bot, bot.desiredAngle, false); // NEVER boost
+    tickSnakeMovement(bot, bot.desiredAngle, false);
     return;
   }
 
-  // --- Harvesting state ---
-  if (now >= bot.nextThinkAt) {
-    bot.nextThinkAt = now + 120 + Math.floor(Math.random() * 80);
+  // --- Personality-driven AI ---
+  const shouldBoost = bot.personality === 'hunter' || bot.personality === 'extractor';
+  const thinkInterval = bot.personality === 'coward' ? 80
+    : bot.personality === 'hunter' ? 100
+    : bot.personality === 'extractor' ? 90
+    : 130 + Math.floor(Math.random() * 80);
 
-    // Find nearest food
+  if (now >= bot.nextThinkAt) {
+    bot.nextThinkAt = now + thinkInterval;
+
+    // ── Shared: scan nearby food ──
     let bestFood: GridItem | null = null;
     let bestFoodDist = Infinity;
+    let bestFoodValue = 0;
     const foodQuery = room.grid.queryRadius(head.x, head.y, BOT_FOOD_SCAN_RADIUS);
     for (const item of foodQuery.values()) {
-      if (item.kind !== 'food') continue;
-      if ((item.value ?? 0) <= 0) continue;
-      if (item.isStarChip) continue; // bots ignore stars
+      if (item.kind !== 'food' || (item.value ?? 0) <= 0 || item.isStarChip) continue;
       const d = dist(head.x, head.y, item.x, item.y);
-      if (d < bestFoodDist) {
+      if (d < bestFoodDist || (d < bestFoodDist + 50 && (item.value ?? 0) > bestFoodValue)) {
         bestFoodDist = d;
         bestFood = item;
+        bestFoodValue = item.value ?? 0;
       }
     }
 
-    // Find nearest human player (for evasion)
+    // ── Shared: scan nearest human player ──
     let nearPlayerDist = Infinity;
     let nearPlayerAngle = 0;
-    let nearPlayerVx = 0;
-    let nearPlayerVy = 0;
+    let nearPlayerSize = 0;
     let nearPlayerHx = 0;
     let nearPlayerHy = 0;
+    let nearPlayerVx = 0;
+    let nearPlayerVy = 0;
     for (const p of room.players.values()) {
-      if (p.isDead || p.matchSettling) continue;
-      if (p.points.length === 0) continue;
+      if (p.isDead || p.matchSettling || p.points.length === 0) continue;
       const ph = p.points[0];
       const d = dist(head.x, head.y, ph.x, ph.y);
       if (d < nearPlayerDist) {
         nearPlayerDist = d;
         nearPlayerAngle = Math.atan2(ph.y - head.y, ph.x - head.x);
+        nearPlayerSize = p.size;
         nearPlayerHx = ph.x;
         nearPlayerHy = ph.y;
-        // Estimate player velocity from head angle
         nearPlayerVx = Math.cos(p.angle) * BASE_SPEED;
         nearPlayerVy = Math.sin(p.angle) * BASE_SPEED;
       }
     }
 
-    // Also check nearby body segments (for collision avoidance)
+    // ── Shared: scan nearby body segments (collision threat) ──
     let threatX = 0;
     let threatY = 0;
     let threatDist = Infinity;
     const threatQuery = room.grid.queryRadius(head.x, head.y, 150);
     for (const item of threatQuery.values()) {
-      if (item.kind !== 'segment') continue;
-      if (item.snakeId === bot.id) continue;
-      if (item.segIdx === 0) continue;
+      if (item.kind !== 'segment' || item.snakeId === bot.id || item.segIdx === 0) continue;
       const d = dist(head.x, head.y, item.x, item.y);
-      if (d < threatDist) {
-        threatDist = d;
-        threatX = item.x;
-        threatY = item.y;
+      if (d < threatDist) { threatDist = d; threatX = item.x; threatY = item.y; }
+    }
+
+    // ── Shared: scan nearby bot snakes (for hunter chase) ──
+    let preySnake: SnakeBase | null = null;
+    let preyDist = Infinity;
+    if (bot.personality === 'hunter') {
+      for (const otherBot of room.bots.values()) {
+        if (otherBot.id === bot.id || otherBot.isDead || otherBot.points.length === 0) continue;
+        if (otherBot.size >= bot.size) continue; // only chase smaller bots
+        const oh = otherBot.points[0];
+        const d = dist(head.x, head.y, oh.x, oh.y);
+        if (d < 600 && d < preyDist) { preyDist = d; preySnake = otherBot; }
       }
     }
+
+    const evadeRadius = bot.personality === 'coward' ? BOT_EVADE_RADIUS * 2
+      : bot.personality === 'hunter' ? BOT_EVADE_RADIUS * 0.6
+      : bot.personality === 'extractor' ? BOT_EVADE_RADIUS * 0.8
+      : BOT_EVADE_RADIUS;
 
     let desired: number;
 
-    // Priority 1: Evasion of body segments (immediate danger)
-    if (threatDist < 140) {
-      desired = Math.atan2(head.y - threatY, head.x - threatX);
-    }
-    // Priority 2: Predictive evasion of human players
-    else if (nearPlayerDist < BOT_EVADE_RADIUS) {
-      // Project nearest player position 8 ticks ahead
-      const futurePx = nearPlayerHx + nearPlayerVx * 8;
-      const futurePy = nearPlayerHy + nearPlayerVy * 8;
-      const futureD = dist(head.x, head.y, futurePx, futurePy);
-      if (futureD < BOT_EVADE_RADIUS) {
-        // Steer perpendicular to the player's approach vector
-        const perpAngle = nearPlayerAngle + Math.PI / 2 * (Math.random() > 0.5 ? 1 : -1);
-        desired = perpAngle;
-      } else {
-        // Just steer away from nearest player
-        desired = Math.atan2(head.y - nearPlayerHy, head.x - nearPlayerHx);
+    switch (bot.personality) {
+      // ──────────────────────────────────────────────────
+      // SCAVENGER: cautious edge-dweller, avoids confrontation
+      // ──────────────────────────────────────────────────
+      case 'scavenger': {
+        const distFromCenter = Math.hypot(head.x - room.mapCenterX, head.y - room.mapCenterY);
+        const prefersEdge = distFromCenter < mapRadius * 0.6; // prefer outer ring
+
+        // Priority 1: Immediate body threat
+        if (threatDist < 120) {
+          desired = Math.atan2(head.y - threatY, head.x - threatX);
+        }
+        // Priority 2: Evasion of human players (large radius)
+        else if (nearPlayerDist < evadeRadius * 1.2) {
+          desired = Math.atan2(head.y - nearPlayerHy, head.x - nearPlayerHx);
+          // Erratic evasion: add random jitter
+          desired += (Math.random() - 0.5) * 0.6;
+        }
+        // Priority 3: Move toward edge if too close to center
+        else if (prefersEdge && nearPlayerDist > evadeRadius) {
+          const awayFromCenter = Math.atan2(head.y - room.mapCenterY, head.x - room.mapCenterX);
+          desired = awayFromCenter + (Math.random() - 0.5) * 0.3;
+        }
+        // Priority 4: Seek food (only if safe)
+        else if (bestFood && nearPlayerDist > evadeRadius) {
+          desired = Math.atan2(bestFood.y - head.y, bestFood.x - head.x);
+        }
+        // Priority 5: Wander near edges
+        else {
+          desired = bot.angle + (Math.random() - 0.5) * 0.3;
+        }
+        break;
       }
-    }
-    // Priority 3: Seek food
-    else if (bestFood) {
-      desired = Math.atan2(bestFood.y - head.y, bestFood.x - head.x);
-    }
-    // Priority 4: Wander
-    else {
-      desired = bot.angle + (Math.random() - 0.5) * 0.4;
+
+      // ──────────────────────────────────────────────────
+      // OPPORTUNIST: balanced, sometimes chases if confident
+      // ──────────────────────────────────────────────────
+      case 'opportunist': {
+        const isConfident = bot.size > nearPlayerSize && nearPlayerDist < 400;
+
+        if (threatDist < 140) {
+          desired = Math.atan2(head.y - threatY, head.x - threatX);
+        }
+        // Chase smaller player if confident
+        else if (isConfident && Math.random() > 0.4) {
+          desired = Math.atan2(nearPlayerHy - head.y, nearPlayerHx - head.x);
+        }
+        // Evade larger player
+        else if (nearPlayerDist < evadeRadius && bot.size <= nearPlayerSize) {
+          const futurePx = nearPlayerHx + nearPlayerVx * 8;
+          const futurePy = nearPlayerHy + nearPlayerVy * 8;
+          const futureD = dist(head.x, head.y, futurePx, futurePy);
+          if (futureD < evadeRadius) {
+            const perpAngle = nearPlayerAngle + Math.PI / 2 * (Math.random() > 0.5 ? 1 : -1);
+            desired = perpAngle;
+          } else {
+            desired = Math.atan2(head.y - nearPlayerHy, head.x - nearPlayerHx);
+          }
+        }
+        else if (bestFood) {
+          desired = Math.atan2(bestFood.y - head.y, bestFood.x - head.x);
+        }
+        else {
+          desired = bot.angle + (Math.random() - 0.5) * 0.4;
+        }
+        break;
+      }
+
+      // ──────────────────────────────────────────────────
+      // HUNTER: aggressive, chases smaller snakes, boosts
+      // ──────────────────────────────────────────────────
+      case 'hunter': {
+        // Priority 1: Body threat (still dodge)
+        if (threatDist < 120) {
+          desired = Math.atan2(head.y - threatY, head.x - threatX);
+        }
+        // Priority 2: Chase smaller bot prey
+        else if (preySnake && preyDist < 400) {
+          const preyHead = preySnake.points[0];
+          const interceptAngle = Math.atan2(preyHead.y - head.y, preyHead.x - head.x);
+          desired = interceptAngle;
+          bot.wantsBoost = bot.points.length > BOOST_MIN_LENGTH && preyDist < 300;
+        }
+        // Priority 3: Chase smaller human player
+        else if (nearPlayerDist < 500 && bot.size > nearPlayerSize) {
+          desired = Math.atan2(nearPlayerHy - head.y, nearPlayerHx - head.x);
+          bot.wantsBoost = bot.points.length > BOOST_MIN_LENGTH && nearPlayerDist < 350;
+        }
+        // Priority 4: Aggressive food seeking
+        else if (bestFood) {
+          desired = Math.atan2(bestFood.y - head.y, bestFood.x - head.x);
+          bot.wantsBoost = bot.points.length > BOOST_MIN_LENGTH && bestFoodDist < 200;
+        }
+        // Priority 5: Aggressive wander toward center (where action is)
+        else {
+          const toCenter = Math.atan2(room.mapCenterY - head.y, room.mapCenterX - head.x);
+          desired = toCenter + (Math.random() - 0.5) * 0.3;
+        }
+        break;
+      }
+
+      // ──────────────────────────────────────────────────
+      // EXTRACTOR: efficient food vacuum, focused eating
+      // ──────────────────────────────────────────────────
+      case 'extractor': {
+        // Priority 1: Body threat
+        if (threatDist < 130) {
+          desired = Math.atan2(head.y - threatY, head.x - threatX);
+        }
+        // Priority 2: Evasion (but only at close range — less skittish)
+        else if (nearPlayerDist < evadeRadius * 0.8) {
+          desired = Math.atan2(head.y - nearPlayerHy, head.x - nearPlayerHx);
+        }
+        // Priority 3: Prioritize high-value food
+        else if (bestFood) {
+          desired = Math.atan2(bestFood.y - head.y, bestFood.x - head.x);
+          // Boost toward high-value food
+          bot.wantsBoost = bot.points.length > BOOST_MIN_LENGTH && bestFoodValue >= 3 && bestFoodDist < 250;
+        }
+        // Priority 4: Move toward food-dense areas (toward center)
+        else {
+          const toCenter = Math.atan2(room.mapCenterY - head.y, room.mapCenterX - head.x);
+          desired = toCenter + (Math.random() - 0.5) * 0.2;
+        }
+        break;
+      }
+
+      // ──────────────────────────────────────────────────
+      // COWARD: extremely skittish, erratic, high evade
+      // ──────────────────────────────────────────────────
+      case 'coward': {
+        // Priority 1: Body threat — PANIC
+        if (threatDist < 160) {
+          desired = Math.atan2(head.y - threatY, head.x - threatX);
+          desired += (Math.random() - 0.5) * 0.8; // erratic panic
+        }
+        // Priority 2: Far-range player evasion
+        else if (nearPlayerDist < evadeRadius) {
+          // Run directly away, but with random zigzag
+          const awayAngle = Math.atan2(head.y - nearPlayerHy, head.x - nearPlayerHx);
+          const zigzag = (Math.random() > 0.5 ? 1 : -1) * (0.5 + Math.random() * 0.5);
+          desired = awayAngle + zigzag;
+        }
+        // Priority 3: Only eat food if very safe (no players nearby)
+        else if (bestFood && nearPlayerDist > evadeRadius * 1.5) {
+          desired = Math.atan2(bestFood.y - head.y, bestFood.x - head.x);
+        }
+        // Priority 4: Nervous wander (frequent small turns)
+        else {
+          desired = bot.angle + (Math.random() - 0.5) * 0.6;
+        }
+        break;
+      }
+
+      default:
+        desired = bot.angle + (Math.random() - 0.5) * 0.3;
     }
 
     // Edge avoidance: if near map boundary, turn back toward center
@@ -728,8 +879,9 @@ export function tickBot(bot: BotSession, room: ArenaRoom, now: number): void {
     bot.botState = 'selfDestruct';
   }
 
-  // Bots don't boost in harvesting mode
-  tickSnakeMovement(bot, bot.desiredAngle, false);
+  // Personality-based boosting (hunters and extractors boost; others don't)
+  const canBoost = shouldBoost && bot.points.length > BOOST_MIN_LENGTH;
+  tickSnakeMovement(bot, bot.desiredAngle, canBoost && bot.wantsBoost);
 }
 
 // ----------------------------------------------------------------------------

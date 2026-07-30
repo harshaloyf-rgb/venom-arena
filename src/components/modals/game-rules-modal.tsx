@@ -460,9 +460,9 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
               <InfoCard title="How to Extract" accent="text-amber-300">
                 <ul className="list-disc pl-4 space-y-0.5">
                   <li>Hold <strong>E key</strong> or <strong>EXTRACT</strong> button</li>
-                  <li>3-second progress bar — must hold still</li>
-                  <li><strong>ANY movement resets progress to 0%</strong> — steering does NOT cancel, but you must stay still for a full 3 seconds</li>
-                  <li>A white-to-green <strong>progress ring</strong> appears near your snake head — other players can see it</li>
+                  <li>3-second progress bar — forward gliding is allowed</li>
+                  <li><strong>Steering restarts progress to 0%</strong> — you can glide forward naturally, but any direction change (even slight) resets the timer</li>
+                  <li>A white-to-green <strong>progress ring</strong> appears near your snake head — <strong>only visible to you</strong>, other players cannot see it</li>
                   <li>Extract <strong>anytime</strong> — no minimum threshold</li>
                   <li>Extract <strong>anywhere</strong> — no zone restriction</li>
                 </ul>
@@ -772,8 +772,8 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
             <div className="flex flex-col gap-2.5">
               <FaqItem q="Do I lose my banked vault chips if I crash?" a="No! Your banked vault chips are 100% safe. You only lose the buy-in chips carried in that specific match." />
               <FaqItem q="What is the graduated commission?" a="If ≤3 real players are in the arena, extraction is FREE (0%). If ≥4 real players, 35% commission applies (you keep 65%)." />
-              <FaqItem q="Why did my extraction restart from 0%?" a="Any movement (even tiny steering) while extracting resets the 3-second progress to 0%. Stay perfectly still — other players can see your green progress ring and may try to cut you off!" />
-              <FaqItem q="What is the green ring near extracting players?" a="When a player is extracting, a white-to-green filling circle appears near their snake head showing extraction progress (0-100%). This warns other players that someone is about to bank their chips." />
+              <FaqItem q="Why did my extraction restart from 0%?" a="Any steering (changing direction) while extracting resets the 3-second progress to 0%. Forward gliding is natural and allowed — just don't turn!" />
+              <FaqItem q="What is the green ring near extracting players?" a="When YOU are extracting, a white-to-green progress ring appears near your snake head. It's private — only you can see your own extraction ring." />
               <FaqItem q="Can I Play Again if I don't have enough chips?" a="No. Play Again checks your banked vault balance before letting you rejoin. If you don't have enough chips for the buy-in, you'll see an error and need to earn more chips first." />
               <FaqItem q="Can I extract at any time?" a="Yes! No minimum chip threshold and no zone restriction. Extract from anywhere on the map." />
               <FaqItem q="What happens to bots at score 100?" a="(Online only) They enter self-destruct: slowly navigate toward the wall without boosting, collecting food on the way. Wall death = vanish cleanly." />
