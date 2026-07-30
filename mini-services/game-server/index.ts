@@ -831,7 +831,7 @@ async function handleJoinArena(socket: Socket, payload: unknown): Promise<void> 
     secondaryColor: identity.secondaryColor,
     isPlayer: true,
     isBot: false,
-    carriedChips: 0,
+    carriedChips: room.arena.buyIn,
     score: INITIAL_SPAWN_SCORE,
     boostFrameCounter: 0,
     isExtracting: false,
