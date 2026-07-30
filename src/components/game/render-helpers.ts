@@ -601,7 +601,7 @@ export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot, opacity?: nu
   const stride = pts.length > 60 ? 2 : 1;
 
   // Body width in world units
-  const radius = Math.max(2, snake.size);
+  const radius = Math.max(2, snake.visualRadius ?? snake.size);
   const width = radius * 2;
 
   ctx.save();
@@ -819,7 +819,9 @@ export function drawSnakeWithLayering(
     const otherHead = otherPts[0];
     const dist = Math.hypot(otherHead.x - myHead.x, otherHead.y - myHead.y);
 
-    if (dist < LAYERING_PROXIMITY && snake.size > other.size) {
+    const snakeR = snake.visualRadius ?? snake.size;
+    const otherR = other.visualRadius ?? other.size;
+    if (dist < LAYERING_PROXIMITY && snakeR > otherR) {
       // A smaller snake is close by — fade this (larger) snake
       shouldFade = true;
       break;
