@@ -908,3 +908,28 @@ Stage Summary:
 - Sound effects enhance gameplay feedback
 - Online replay system provides post-death review capability
 - All changes verified via agent-browser: guest login → buy in → game loaded with HUD → death screen with replay option
+
+---
+Task ID: sound-wiring
+Agent: main
+Task: Wire up all dead-code sound effects (star chips, food, boost, wall death) in both online and offline game modes
+
+Work Log:
+- Deep-read game-rules-modal.tsx to understand all documented mechanics (star chips, food, collision, extraction, bot AI)
+- Deep-read game-config.ts, game-state.ts, game-server/index.ts to verify backend implementation
+- Deep-read game-canvas.tsx, offline-engine.ts, render-helpers.ts to understand client rendering and game loop
+- Found that playFoodCollect, playBoost, playWallHit were all DEAD CODE (imported but never called)
+- Star chip system (10 stars on death, each = carried÷10, golden rendering) was fully implemented in backend + renderer but had NO client-side audio feedback
+- Added star chip collection sound trigger in online mode (detect carriedChips increase in snapshot → playFoodCollect('star'))
+- Added food collection sound trigger in online mode (detect score increase → playFoodCollect based on value size)
+- Added boost activation sound trigger in both online and offline modes
+- Added wall-hit vs collision death sound differentiation (wall = playWallHit, collision = playDeath)
+- Added all sounds to offline-engine.ts (food collect, death, kill, boost)
+- Fixed double-sound bug: when star collected (both carriedChips + score increase), only play star sound
+
+Stage Summary:
+- All 6 sound effects now properly triggered: food collect (small/medium/large), star chip collect, kill, death, boost, wall hit
+- Online mode: sounds triggered via snapshot delta detection in onSnapshot handler
+- Offline mode: sounds triggered directly in engine tick loop
+- No lint errors
+- File changes: src/components/game/game-canvas.tsx, src/components/game/offline-engine.ts

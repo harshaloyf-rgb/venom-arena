@@ -42,7 +42,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import { playExtractStart, playExtractSuccess, playExtractRestart, playDeath, playFoodCollect, playKill, initGameAudio, setGameAudioMuted } from '@/lib/game-audio';
+import { playExtractStart, playExtractSuccess, playExtractRestart, playDeath, playFoodCollect, playKill, playBoost, playWallHit, initGameAudio, setGameAudioMuted } from '@/lib/game-audio';
 import {
   AlertTriangle,
   ChevronDown,
@@ -415,6 +415,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
   const prevSnakesRef = useRef<SnakeSnapshot[]>([]); // for kill detection
   const carriedRef = useRef<number>(0); // last known carried chips
   const scoreRef = useRef<number>(0); // last known body-length score
+  const wasBoostingRef = useRef<boolean>(false); // for boost sound trigger
 
   const lastInputEmitRef = useRef<number>(0);
   const lastEmittedAngleRef = useRef<number>(0);
@@ -593,6 +594,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         prevSnakesRef.current = [];
         carriedRef.current = 0;
         scoreRef.current = 0;
+        wasBoostingRef.current = false;
         setPhase('playing');
         setEndScreen(null);
         setHudKills(0);
@@ -672,14 +674,33 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         const me = myId ? data.snakes.find((s) => s.id === myId) : undefined;
         if (me) {
           // [FIXES S10] throttle setState — only when value changes
+          let starCollected = false;
           if (me.carriedChips !== carriedRef.current) {
+            const chipGain = me.carriedChips - carriedRef.current;
+            if (chipGain > 0 && !isOfflineModeRef.current) {
+              // Star chip collected — play the golden star sound
+              playFoodCollect('star');
+              starCollected = true;
+            }
             carriedRef.current = me.carriedChips;
             setHudCarried(me.carriedChips);
           }
           if (me.score !== scoreRef.current) {
+            const scoreGain = me.score - scoreRef.current;
+            if (scoreGain > 0 && !starCollected) {
+              // Food orb collected — determine size from gain amount
+              // Skip sound if star was already collected this frame (star also adds score)
+              const orbSize = scoreGain >= 5 ? 'large' : scoreGain >= 3 ? 'medium' : 'small';
+              playFoodCollect(orbSize);
+            }
             scoreRef.current = me.score;
             setHudScore(me.score);
           }
+          // Boost activation sound
+          if (me.isBoosting && !wasBoostingRef.current) {
+            playBoost();
+          }
+          wasBoostingRef.current = !!me.isBoosting;
 
           // BUILD-13: rank computation differs by mode:
           //  - Online (realPlayerCount > 0): server-provided yourRank
@@ -885,7 +906,12 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         // [FIXES C3] idempotency — if match already ended, ignore.
         if (matchEndedRef.current) return;
         matchEndedRef.current = true;
-        playDeath();
+        // Wall death (no killer) gets wall-hit thud; collision death gets dramatic crash
+        if (!data?.killerName) {
+          playWallHit();
+        } else {
+          playDeath();
+        }
         const killer: KillerInfo | undefined = data?.killerName
           ? {
               name: data.killerName,

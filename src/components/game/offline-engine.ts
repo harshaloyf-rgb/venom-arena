@@ -56,6 +56,7 @@ import {
   type FrameRenderCtx,
   type Particle,
 } from './render-helpers';
+import { playFoodCollect, playDeath, playKill, playBoost, initGameAudio } from '@/lib/game-audio';
 
 // ----------------------------------------------------------------------------
 // Public types
@@ -523,6 +524,7 @@ export class OfflineGameEngine {
     curY: number;
   } | null = null;
   private boostHold: boolean = false;
+  private wasPlayerBoosting: boolean = false;
   private extractHold: boolean = false;
 
   // HUD / overlays DOM
@@ -636,6 +638,8 @@ export class OfflineGameEngine {
     this.attachInput();
     this.buildHUD();
     this.resetWorld();
+    this.wasPlayerBoosting = false;
+    initGameAudio(); // Initialize audio context on user interaction
     this.startTime = performance.now();
     this.lastFrameTime = performance.now();
     this.rafId = requestAnimationFrame(this.frame);
@@ -1183,6 +1187,11 @@ export class OfflineGameEngine {
     if (angle !== null) p.desiredAngle = angle;
     p.wantsBoost = boost;
     p.isBoosting = boost && p.points.length > BOOST_MIN_LENGTH;
+    // Boost activation sound
+    if (p.isBoosting && !this.wasPlayerBoosting) {
+      playBoost();
+    }
+    this.wasPlayerBoosting = p.isBoosting;
 
     // Extraction progress (3-second hold).
     if (p.isExtracting) {
@@ -1267,6 +1276,7 @@ export class OfflineGameEngine {
         // Credit kill to the killer if it's the player.
         if (d.killerId === p.id) {
           p.kills++;
+          playKill(); // Satisfying kill sound
         }
       }
     }
@@ -1298,6 +1308,7 @@ export class OfflineGameEngine {
     // 9) Player death → enter post-death recording (15s of continued simulation).
     if (playerDied && !this.isPostDeathRecording) {
       p.isDead = true;
+      playDeath(); // Dramatic crash sound on death
       this.enterPostDeathRecording();
       // Don't return — continue to replenish food, expire chat, update camera
     }
@@ -1518,11 +1529,14 @@ export class OfflineGameEngine {
       const d = dist(head.x, head.y, item.x, item.y);
       if (d < snake.size + (item.radius || 6) + 6) {
         // Eat food — add its value to the snake's food-score.
-        snake.score += item.value ?? 0;
+        const eatenValue = item.value ?? 0;
+        snake.score += eatenValue;
         item.value = 0;
         if (item.foodRef) item.foodRef.value = 0;
-        // Spawn small particle burst for player only.
+        // Spawn small particle burst + sound for player only.
         if (snake.isPlayer) {
+          const orbSize = eatenValue >= 5 ? 'large' : eatenValue >= 3 ? 'medium' : 'small';
+          playFoodCollect(orbSize);
           this.spawnEatParticles(item.x, item.y, item.radius || 6, item.foodRef?.color ?? '#fbbf24');
         }
       }
