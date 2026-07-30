@@ -534,6 +534,16 @@ function tickRoom(room: ArenaRoom, now: number): void {
       (killer as PlayerSession).kills += 1;
     }
 
+    // Broadcast kill feed to all players in the arena
+    const killFeedMsg = death.cause === 'wall'
+      ? { victimName: dead.name, victimIsBot: dead.isBot, killerName: null, killerIsBot: false, cause: 'wall' as const }
+      : killer
+        ? { victimName: dead.name, victimIsBot: dead.isBot, killerName: killer.name, killerIsBot: killer.isBot, cause: death.cause as string }
+        : { victimName: dead.name, victimIsBot: dead.isBot, killerName: null, killerIsBot: false, cause: death.cause as string };
+    for (const socketId of room.players.keys()) {
+      io.to(socketId).emit('kill_feed', killFeedMsg);
+    }
+
     if (dead.isPlayer) {
       const session = dead as PlayerSession;
       log('info', `${session.identity.userTag} died in ${room.arena.id} (cause=${death.cause}, killer=${death.killerId ?? 'none'})`);
@@ -882,6 +892,21 @@ function handleInput(socket: Socket, payload: unknown): void {
   }
   session.lastInputAt = now;
   session.inputDropCount = 0;
+
+  // ── Extraction steering detection ──
+  // Forward gliding during extraction is allowed (natural movement).
+  // BUT any intentional steering (angle change > threshold) restarts extraction.
+  if (session.isExtracting) {
+    let angleDiff = Math.abs(angle - session.angle);
+    if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+    const STEER_THRESHOLD = 0.08; // ~4.6 degrees — small but intentional steer
+    if (angleDiff > STEER_THRESHOLD) {
+      session.extractionProgress = 0;
+      // Notify client so the UI shows the restart immediately
+      socket.emit('extract_progress', { progress: 0 });
+      socket.emit('extract_cancelled_by_steer', {});
+    }
+  }
 
   session.desiredAngle = angle;
   session.wantsBoost = wantsBoostRaw;

@@ -42,6 +42,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
+import { playExtractStart, playExtractSuccess, playExtractRestart, playDeath, playFoodCollect, playKill, initGameAudio, setGameAudioMuted } from '@/lib/game-audio';
 import {
   AlertTriangle,
   ChevronDown,
@@ -116,6 +117,7 @@ import {
   type Particle,
 } from './render-helpers';
 import { OfflineGameEngine, type OfflineExitResult, type OfflineState } from './offline-engine';
+import { OnlineReplayPlayer, type OnlineReplayData } from './online-replay-player';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -290,6 +292,10 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
   const [lowQuality, setLowQuality] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
+
+  // --- Kill feed state ---
+  const [killFeed, setKillFeed] = useState<Array<{ victimName: string; victimIsBot: boolean; killerName: string | null; killerIsBot: boolean; cause: string; id: number }>>([]);
+  const killFeedIdRef = useRef(0);
 
   // --- BUILD-13: arena leaderboard / minimap / full-map HUD state ---
   // Server-provided fields (online mode only). Zero/empty in offline.
@@ -550,6 +556,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
       const onConnect = () => {
         setIsReconnecting(false);
         setConnectionError(null);
+        initGameAudio(); // Initialize Web Audio on first interaction
         // [FIXES S1] emit join_arena on EVERY connect (including reconnects)
         emitJoin();
         // Reset the ping clock.
@@ -817,6 +824,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         };
         setPhase('ended');
         setHudKills(data.kills);
+        if (data.outcome === 'extract') playExtractSuccess();
         setEndScreen({
           outcome: data.outcome,
           result,
@@ -848,6 +856,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         extractActiveRef.current = true;
         setExtracting(true);
         setExtractProgress(0);
+        playExtractStart();
         // Server's durationMs is informational — progress events drive the bar.
         void data;
       };
@@ -876,6 +885,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         // [FIXES C3] idempotency — if match already ended, ignore.
         if (matchEndedRef.current) return;
         matchEndedRef.current = true;
+        playDeath();
         const killer: KillerInfo | undefined = data?.killerName
           ? {
               name: data.killerName,
@@ -1005,6 +1015,39 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
       socket.on('extract_start', onExtractStart);
       socket.on('extract_progress', onExtractProgress);
       socket.on('extract_fail', onExtractFail);
+      socket.on('extract_cancelled_by_steer', () => {
+        // Steering detected during extraction — progress resets to 0% but extraction continues
+        playExtractRestart();
+        toast({
+          title: '⚠ Steering Detected',
+          description: 'Extraction progress restarted! Keep moving straight.',
+          variant: 'destructive',
+        });
+      });
+      socket.on('kill_feed', (payload: unknown) => {
+        const data = payload as { victimName?: string; victimIsBot?: boolean; killerName?: string | null; killerIsBot?: boolean; cause?: string };
+        if (!data?.victimName) return;
+        const id = ++killFeedIdRef.current;
+        // Play kill sound if the player is involved (killer or victim)
+        if (data.killerName && !data.killerIsBot) {
+          playKill();
+        }
+        setKillFeed(prev => {
+          const next = [...prev, {
+            victimName: data.victimName ?? '',
+            victimIsBot: data.victimIsBot ?? false,
+            killerName: data.killerName ?? null,
+            killerIsBot: data.killerIsBot ?? false,
+            cause: data.cause ?? 'unknown',
+            id,
+          }];
+          return next.slice(-8); // Keep last 8 entries max
+        });
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+          setKillFeed(prev => prev.filter(e => e.id !== id));
+        }, 5000);
+      });
       socket.on('death', onDeath);
       socket.on('chat', onChat);
       socket.on('kicked', onKicked);
@@ -1036,6 +1079,8 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         s.off('extract_start');
         s.off('extract_progress');
         s.off('extract_fail');
+        s.off('extract_cancelled_by_steer');
+        s.off('kill_feed');
         s.off('death');
         s.off('chat');
         s.off('kicked');
@@ -1356,9 +1401,9 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
           }
         }
 
-        // Draw extraction progress rings around extracting snakes
+        // Draw extraction progress rings — ONLY visible to the extracting player themselves
         for (const s of snap.snakes) {
-          if (s.isExtracting && s.extractionProgress > 0 && s.points && s.points.length > 0) {
+          if (s.isExtracting && s.extractionProgress > 0 && s.points && s.points.length > 0 && s.id === myId) {
             const head = s.points[0];
             drawExtractionRing(ctx, head.x, head.y, s.size, s.extractionProgress, cam.zoom);
           }
@@ -2156,6 +2201,31 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         </div>
       )}
 
+      {/* Kill Feed (top-left, below HUD stats) — online arena event log */}
+      {killFeed.length > 0 && (
+        <div className="pointer-events-none absolute left-3 top-28 z-20 flex w-64 max-w-[70vw] flex-col gap-0.5 font-mono">
+          {killFeed.map(entry => (
+            <div
+              key={entry.id}
+              className="animate-in fade-in slide-in-from-left-2 flex items-center gap-1 rounded bg-slate-950/75 px-2 py-1 text-[10px] backdrop-blur-sm"
+            >
+              {entry.cause === 'wall' ? (
+                <span className="text-slate-400">
+                  <span className={entry.victimIsBot ? 'text-orange-400' : 'text-slate-200'}>{entry.victimName}</span>
+                  <span className="text-red-400"> hit the wall</span>
+                </span>
+              ) : (
+                <span className="text-slate-400">
+                  <span className={entry.killerIsBot ? 'text-orange-400' : 'text-emerald-400'}>{entry.killerName}</span>
+                  <span className="text-slate-500"> eliminated </span>
+                  <span className={entry.victimIsBot ? 'text-orange-400' : 'text-red-400'}>{entry.victimName}</span>
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Hold-to-Extract popup (top-center) — AUDIT-A hold-to-extract HUD */}
       {phase === 'playing' && !endScreen && (
         <div className="pointer-events-none absolute left-1/2 top-14 -translate-x-1/2 flex flex-col items-center gap-1 text-center">
@@ -2882,19 +2952,45 @@ function EndOverlay({
           )}
           {hasReplay && showReplay && (
             <div className="mt-3">
-              <ReplayPlayer
-                frames={replayFrames!}
-                myId={replayMyId ?? ''}
-                deathFrameIdx={replayDeathFrameIdx}
-                onClose={() => setShowReplay(false)}
-              />
-              <button
-                type="button"
-                onClick={() => setShowReplay(false)}
-                className="mt-2 flex w-full items-center justify-center gap-1 rounded-md bg-slate-800 py-1.5 text-[10px] font-bold text-slate-300 hover:bg-slate-700 transition-colors"
-              >
-                Hide Replay
-              </button>
+              {!isOfflineMode ? (
+                // Online mode: use the new full-screen OnlineReplayPlayer
+                <OnlineReplayPlayer
+                  replay={{
+                    frames: replayFrames!.map(s => ({
+                      snakes: s.snakes,
+                      foods: s.foods,
+                      worldSize: s.worldSize,
+                      mapRadius: s.mapRadius,
+                      mapCenterX: s.mapCenterX,
+                      mapCenterY: s.mapCenterY,
+                    })),
+                    deathFrameIdx: replayDeathFrameIdx ?? 0,
+                    myId: replayMyId ?? '',
+                    worldSize: replayFrames![0]?.worldSize ?? 8000,
+                    mapRadius: replayFrames![0]?.mapRadius ?? 3800,
+                    mapCenterX: replayFrames![0]?.mapCenterX ?? 0,
+                    mapCenterY: replayFrames![0]?.mapCenterY ?? 0,
+                  }}
+                  onClose={() => setShowReplay(false)}
+                />
+              ) : (
+                // Offline mode: use the existing embedded ReplayPlayer
+                <ReplayPlayer
+                  frames={replayFrames!}
+                  myId={replayMyId ?? ''}
+                  deathFrameIdx={replayDeathFrameIdx}
+                  onClose={() => setShowReplay(false)}
+                />
+              )}
+              {!isOfflineMode && (
+                <button
+                  type="button"
+                  onClick={() => setShowReplay(false)}
+                  className="mt-2 flex w-full items-center justify-center gap-1 rounded-md bg-slate-800 py-1.5 text-[10px] font-bold text-slate-300 hover:bg-slate-700 transition-colors"
+                >
+                  Hide Replay
+                </button>
+              )}
             </div>
           )}
 
