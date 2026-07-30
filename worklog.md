@@ -850,3 +850,29 @@ Stage Summary:
 - 3 performance optimizations (raw SQL, single query, Promise.all)
 - Lint passes clean, server compiles with zero errors
 - All pushed to GitHub
+
+---
+Task ID: fix-online-arena-timeout
+Agent: main
+Task: Debug and fix online arena "authenticating then timeout" issue
+
+Work Log:
+- Traced full online arena join flow: ArenaSelector → handlePlayArena → GameCanvas → /api/auth/token → Socket.IO → game-server (port 3001)
+- Found root cause: **Game server (port 3001) was NOT running** — no bun process listening on port 3001
+- Discovered `getSession()` banned check (added in previous session) was NOT the issue — it correctly handles null player with optional chaining
+- Started game server via `python3 supervisor.py` which daemonizes and auto-restarts on crash
+- Game server creates 30 arena rooms with 30 bots each (900 total)
+- Supervisor handles process death (likely OOM given tight 345MB free memory)
+- Verified full flow end-to-end through Caddy gateway (port 81):
+  - Socket.IO connects via Caddy XTransformPort=3001 proxy
+  - Game server verifies JWT via /api/match/verify
+  - Buy-in deducted atomically via /api/match/join
+  - Player spawned in tier-1 arena
+  - Game canvas renders with Boost, Extract, Minimap, Leaderboard, Quick Chat
+  - Heartbeat confirms stable connection
+
+Stage Summary:
+- Root cause: Game server mini-service was not running (user couldn't connect → timeout)
+- Fix: Started game server via supervisor.py (auto-restart on crash)
+- Verified working through full agent-browser test on Caddy gateway port 81
+- All 30 arena tiers operational with 30 bots each
