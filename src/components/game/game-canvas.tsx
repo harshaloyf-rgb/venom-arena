@@ -2952,7 +2952,7 @@ function EndOverlay({
           )}
           {hasReplay && showReplay && (
             <div className="mt-3">
-              {!isOfflineMode ? (
+              {!isOffline ? (
                 // Online mode: use the new full-screen OnlineReplayPlayer
                 <OnlineReplayPlayer
                   replay={{
@@ -2982,7 +2982,7 @@ function EndOverlay({
                   onClose={() => setShowReplay(false)}
                 />
               )}
-              {!isOfflineMode && (
+              {!isOffline && (
                 <button
                   type="button"
                   onClick={() => setShowReplay(false)}
