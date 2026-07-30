@@ -204,27 +204,25 @@ async function reportMatchResult(payload: ReportResultPayload): Promise<MatchRes
 // Globals
 // ----------------------------------------------------------------------------
 
-const httpServer = createServer();
-const io = new Server(httpServer, {
-  path: '/',
-  cors: { origin: '*', methods: ['GET', 'POST'] },
-  pingTimeout: 60000,
-  pingInterval: 25000,
-});
-
-// Raw HTTP handler for /stats endpoint
-httpServer.on('request', (req, res) => {
-  if (req.url === '/stats' && req.method === 'GET') {
+// Create HTTP server with a pre-Socket.IO handler for the /stats endpoint.
+// This fires BEFORE Socket.IO's handler, so we can safely write the response.
+const httpServer = createServer((req, res) => {
+  if (req.url === '/stats' && req.method === 'GET' && !res.headersSent) {
     const stats: Record<string, { players: number; maxPlayers: number }> = {};
     for (const [roomKey, room] of rooms) {
       stats[roomKey] = { players: room.players.size, maxPlayers: MAX_PLAYERS_PER_SHARD };
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(stats));
-  } else {
-    res.writeHead(404);
-    res.end('Not Found');
   }
+  // All other requests fall through to Socket.IO's handler.
+});
+
+const io = new Server(httpServer, {
+  path: '/',
+  cors: { origin: '*', methods: ['GET', 'POST'] },
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 /** Per-arena rooms, lazily created. Keyed by arena id from ARENA_TIERS. */
