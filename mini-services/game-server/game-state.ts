@@ -42,7 +42,6 @@ import {
   SEGMENT_SPACING,
   SIZE_BASE,
   SIZE_SCORE_FACTOR,
-  STAR_CHIP_GROW,
   STAR_DROP_COUNT,
   TICK_MS,
   TURN_BASE,
@@ -458,8 +457,9 @@ export function dropScoreOrbsAtBody(
 }
 
 /**
- * Drop exactly 10 Star collectibles at a death position.
- * Each star = floor(chips / 10), remainder goes to the last star.
+ * Drop exactly 10 Star collectibles at the exact death position.
+ * Each star = carried chips ÷ 10 (floating point, all equal).
+ * Stars do NOT scatter — they appear at the death position.
  * ONLY for real players. Bots never drop stars.
  */
 export function dropStarsAtDeath(
@@ -470,23 +470,19 @@ export function dropStarsAtDeath(
 ): void {
   if (chips <= 0) return;
 
-  const valuePerStar = Math.floor(chips / STAR_DROP_COUNT);
-  const remainder = chips - valuePerStar * STAR_DROP_COUNT;
-  const scatter = 40;
+  const valuePerStar = chips / STAR_DROP_COUNT; // all 10 stars have the exact same value
 
-  // Always spawn exactly 10 stars. When chips < 10, some stars get value=1
-  // (remainder distributed to last stars) so all 10 are visible.
   for (let i = 0; i < STAR_DROP_COUNT; i++) {
-    const value = Math.max(1, valuePerStar + (i === STAR_DROP_COUNT - 1 ? remainder : 0));
     const id = `food-${room.arena.id}-${room.foodIdCounter++}`;
-    const angle = (i / STAR_DROP_COUNT) * Math.PI * 2;
-    const dist = scatter * 0.5 + Math.random() * scatter * 0.5;
+    // Tiny offset to prevent exact overlap (1px each) — still visually "at death position"
+    const offsetX = (i % 5 - 2) * 2;
+    const offsetY = (Math.floor(i / 5) - 0.5) * 2;
     room.foods.push({
       id,
-      x: x + Math.cos(angle) * dist,
-      y: y + Math.sin(angle) * dist,
+      x: x + offsetX,
+      y: y + offsetY,
       size: 12,
-      value,
+      value: valuePerStar,
       isStarChip: true,
       color: '#fbbf24',
       glowColor: '#f59e0b',
@@ -539,12 +535,12 @@ export function tickSnakeMovement(
   let speed = BASE_SPEED;
   if (snake.isExtracting) {
     speed = EXTRACT_GLIDE_SPEED;
-  } else if (wantsBoost && snake.points.length > BOOST_MIN_LENGTH) {
+  } else if (wantsBoost && snake.points.length > BOOST_MIN_LENGTH && snake.score > INITIAL_SPAWN_SCORE) {
     speed = BOOST_SPEED;
     snake.boostFrameCounter++;
     if (snake.boostFrameCounter >= BOOST_DROP_INTERVAL) {
       snake.boostFrameCounter = 0;
-      if (snake.points.length > BOOST_MIN_LENGTH) {
+      if (snake.points.length > BOOST_MIN_LENGTH + 1 && snake.score > INITIAL_SPAWN_SCORE + 1) {
         // Record tail position BEFORE popping (for food drop)
         const tail = snake.points[snake.points.length - 1];
         droppedFood.push({ x: tail.x, y: tail.y });
@@ -565,8 +561,9 @@ export function tickSnakeMovement(
   // 4) Unshift new head.
   snake.points.unshift({ x: nx, y: ny });
 
-  // 5) Body length = INITIAL_BODY_LENGTH + (score - INITIAL_SPAWN_SCORE)
-  const targetLen = Math.min(MAX_BODY_LENGTH, INITIAL_BODY_LENGTH + Math.max(0, snake.score - INITIAL_SPAWN_SCORE));
+  // 5) Body length = INITIAL_BODY_LENGTH + floor((score - INITIAL_SPAWN_SCORE) / 4)
+  //    Growth rate = 1/4 of food value eaten (per rules).
+  const targetLen = Math.min(MAX_BODY_LENGTH, INITIAL_BODY_LENGTH + Math.max(0, Math.floor((snake.score - INITIAL_SPAWN_SCORE) / 4)));
   while (snake.points.length > targetLen) snake.points.pop();
 
   // 6) Size formula.
@@ -1041,7 +1038,7 @@ export function detectHeadOnCollisions(room: ArenaRoom, now: number): PendingDea
 /**
  * Eat food via spatial grid.
  * Regular food: snake.score += value (1, 3, or 5). ALL snakes eat.
- * Star chips: carriedChips += value, score += STAR_CHIP_GROW. ONLY real players.
+ * Star chips: carriedChips += value ONLY. NO score change. ONLY real players.
  * Bots NEVER collect star chips.
  */
 export function eatFood(room: ArenaRoom): void {
@@ -1060,7 +1057,7 @@ export function eatFood(room: ArenaRoom): void {
           // Star chip: ONLY real players collect (bots skip).
           if (!snake.isPlayer) continue;
           snake.carriedChips += item.value ?? 0;
-          snake.score += STAR_CHIP_GROW;
+          // Star chips do NOT affect score — they only add to carried chips.
         } else {
           // Regular food orb: ALL snakes eat, score += value.
           snake.score += item.value ?? 1;

@@ -1186,7 +1186,7 @@ export class OfflineGameEngine {
     const { angle, boost } = this.computePlayerInput();
     if (angle !== null) p.desiredAngle = angle;
     p.wantsBoost = boost;
-    p.isBoosting = boost && p.points.length > BOOST_MIN_LENGTH;
+    p.isBoosting = boost && p.points.length > BOOST_MIN_LENGTH && p.score > 0;
     // Boost activation sound
     if (p.isBoosting && !this.wasPlayerBoosting) {
       playBoost();
@@ -1342,13 +1342,13 @@ export class OfflineGameEngine {
     let speed = BASE_SPEED;
     if (snake.isExtracting) {
       speed = EXTRACT_GLIDE_SPEED;
-    } else if (wantsBoost && snake.points.length > BOOST_MIN_LENGTH) {
+    } else if (wantsBoost && snake.points.length > BOOST_MIN_LENGTH && snake.score > 0) {
       speed = BOOST_SPEED;
       snake.isBoosting = true;
       snake.boostFrameCounter++;
       if (snake.boostFrameCounter >= BOOST_DROP_INTERVAL) {
         snake.boostFrameCounter = 0;
-        if (snake.points.length > BOOST_MIN_LENGTH) {
+        if (snake.points.length > BOOST_MIN_LENGTH + 1 && snake.score > 1) {
           // Record tail position BEFORE popping (for food drop)
           const tail = snake.points[snake.points.length - 1];
           this.boostDropQueue.push({
@@ -1371,10 +1371,11 @@ export class OfflineGameEngine {
     snake.points.unshift({ x: nx, y: ny });
 
     // Grow / shrink body to target length based on SCORE.
-    // targetLen = INITIAL_BODY_LENGTH + foodScore, clamped to [BOOST_MIN_LENGTH+1, MAX_BODY_LENGTH]
+    // Growth rate = 1/4 of food value eaten (per rules).
+    // targetLen = INITIAL_BODY_LENGTH + floor(score / 4)
     const targetLen = Math.max(
       BOOST_MIN_LENGTH + 1,
-      Math.min(MAX_BODY_LENGTH, INITIAL_BODY_LENGTH + snake.score),
+      Math.min(MAX_BODY_LENGTH, INITIAL_BODY_LENGTH + Math.floor(snake.score / 4)),
     );
     while (snake.points.length > targetLen) snake.points.pop();
 

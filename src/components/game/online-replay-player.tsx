@@ -58,6 +58,7 @@ export function OnlineReplayPlayer({ replay, onClose }: OnlineReplayPlayerProps)
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
   const [currentFrame, setCurrentFrame] = useState(0);
   const [showControls, setShowControls] = useState(true);
+  const [zoom, setZoom] = useState(1);
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const frameAccumRef = useRef(0);
   const lastTimeRef = useRef(0);
@@ -122,7 +123,7 @@ export function OnlineReplayPlayer({ replay, onClose }: OnlineReplayPlayerProps)
       const mySnake = frame.snakes.find(s => s.id === replay.myId);
       const camX = mySnake?.points?.[0]?.x ?? replay.worldSize / 2;
       const camY = mySnake?.points?.[0]?.y ?? replay.worldSize / 2;
-      const zoom = 1;
+      const zoomVal = zoom;
 
       // Clear
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -131,7 +132,7 @@ export function OnlineReplayPlayer({ replay, onClose }: OnlineReplayPlayerProps)
 
       // World-space transform
       ctx.setTransform(dpr, 0, 0, dpr, cssW / 2, cssH / 2);
-      ctx.scale(zoom, zoom);
+      ctx.scale(zoomVal, zoomVal);
       ctx.translate(-camX, -camY);
 
       const rc: FrameRenderCtx = {
@@ -199,7 +200,7 @@ export function OnlineReplayPlayer({ replay, onClose }: OnlineReplayPlayerProps)
       cancelAnimationFrame(animRef.current);
       ro.disconnect();
     };
-  }, [currentFrame, playing, speed, replay, totalFrames, fps]);
+  }, [currentFrame, playing, speed, zoom, replay, totalFrames, fps]);
 
   // Scrub on click
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -255,12 +256,19 @@ export function OnlineReplayPlayer({ replay, onClose }: OnlineReplayPlayerProps)
           showControls ? 'opacity-100' : 'opacity-0'
         }`}
       >
-        {/* Progress bar */}
-        <div className="mb-3 h-1.5 cursor-pointer rounded-full bg-slate-800" onClick={handleCanvasClick}>
+        {/* Progress bar with death marker */}
+        <div className="relative mb-3 h-1.5 cursor-pointer rounded-full bg-slate-800" onClick={handleCanvasClick}>
           <div
             className="h-full rounded-full bg-gradient-to-r from-red-500 to-amber-500 transition-[width] duration-75"
             style={{ width: `${((currentFrame + 1) / totalFrames) * 100}%` }}
           />
+          {/* Death marker — yellow vertical line */}
+          {replay.deathFrameIdx > 0 && replay.deathFrameIdx < totalFrames && (
+            <div
+              className="absolute top-0 h-full w-0.5 bg-yellow-400"
+              style={{ left: `${(replay.deathFrameIdx / (totalFrames - 1)) * 100}%` }}
+            />
+          )}
         </div>
 
         {/* Control buttons */}
@@ -304,15 +312,40 @@ export function OnlineReplayPlayer({ replay, onClose }: OnlineReplayPlayerProps)
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); cycleSpeed(); }}
-            className="ml-4 rounded-lg bg-slate-800/80 px-3 py-1.5 font-mono text-xs text-white transition hover:bg-slate-700"
+            className="rounded-lg bg-slate-800/80 px-3 py-1.5 font-mono text-xs text-white transition hover:bg-slate-700"
           >
             {speed}x
+          </button>
+
+          {/* Zoom controls */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setZoom(z => Math.min(3, z + 0.25)); resetControlsTimer(); }}
+            className="rounded-lg bg-slate-800/80 px-2 py-1.5 font-mono text-xs text-white transition hover:bg-slate-700"
+          >
+            ZOOM +
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setZoom(z => Math.max(0.25, z - 0.25)); resetControlsTimer(); }}
+            className="rounded-lg bg-slate-800/80 px-2 py-1.5 font-mono text-xs text-white transition hover:bg-slate-700"
+          >
+            ZOOM −
+          </button>
+
+          {/* Restart */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setCurrentFrame(0); setPlaying(true); frameAccumRef.current = 0; setZoom(1); resetControlsTimer(); }}
+            className="rounded-lg bg-slate-800/80 px-3 py-1.5 font-mono text-xs text-white transition hover:bg-slate-700"
+          >
+            ↻ RESTART
           </button>
 
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onClose(); }}
-            className="ml-6 rounded-lg bg-slate-800/80 px-4 py-1.5 font-mono text-xs text-white transition hover:bg-slate-700"
+            className="ml-4 rounded-lg bg-slate-800/80 px-4 py-1.5 font-mono text-xs text-white transition hover:bg-slate-700"
           >
             CLOSE
           </button>

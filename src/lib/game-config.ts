@@ -195,7 +195,7 @@ export const EXTRACT_COMMISSION = 0.35; // 35% commission when >=4 real players
 export const RESPAWN_INVULN_MS = 4000; // spawn protection
 export const MAX_BODY_LENGTH = 200; // cap raised for longer games
 export const BOOST_MIN_LENGTH = 8; // need >8 segments to boost
-export const BOOST_DROP_INTERVAL = 40; // drop 1 tail segment every 40 frames
+export const BOOST_DROP_INTERVAL = 10; // drop 1 tail segment every 10 frames (~3 times/sec at 30Hz)
 export const TICK_RATE_HZ = 30;
 export const TICK_MS = 1000 / TICK_RATE_HZ;
 export const BROADCAST_RATE_HZ = 20;
@@ -264,7 +264,6 @@ export const REGULAR_FOOD_GROW = 1; // legacy alias (food value IS the grow amou
 
 // Star collectibles — always exactly 10 dropped on player death
 export const STAR_DROP_COUNT = 10; // ALWAYS exactly 10 stars
-export const STAR_CHIP_GROW = 3; // score bonus when collecting a star (in addition to chip value)
 
 // ----------------------------------------------------------------------------
 // Dynamic Map Scaling (Online Mode)

@@ -383,6 +383,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
   const keysRef = useRef<Set<string>>(new Set());
   const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const mouseActiveRef = useRef<boolean>(false);
+  const mouseLeftDownRef = useRef<boolean>(false); // left-click boost
   const touchAngleRef = useRef<number | null>(null);
   const touchBoostRef = useRef<boolean>(false);
   const joystickRef = useRef<JoystickState | null>(null);
@@ -1559,7 +1560,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         const dy = mousePosRef.current.y - cy;
         const dist = Math.hypot(dx, dy);
         if (dist > MOUSE_DEADZONE_PX) {
-          return { angle: Math.atan2(dy, dx), boost: spaceHeld };
+          return { angle: Math.atan2(dy, dx), boost: spaceHeld || mouseLeftDownRef.current };
         }
       }
       return { angle: null, boost: false };
@@ -1574,7 +1575,14 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
       mousePosRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
       mouseActiveRef.current = true;
     };
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 0) mouseLeftDownRef.current = true;
+    };
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button === 0) mouseLeftDownRef.current = false;
+    };
     const onMouseLeave = () => {
+      mouseLeftDownRef.current = false;
       // Keep last position but mark inactive so we don't keep steering if
       // the user moves off the canvas (e.g., onto the HUD).
     };
@@ -1720,6 +1728,8 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
 
     // Wire up
     canvas.addEventListener('mousemove', onMouseMove);
+    canvas.addEventListener('mousedown', onMouseDown);
+    canvas.addEventListener('mouseup', onMouseUp);
     canvas.addEventListener('mouseleave', onMouseLeave);
     canvas.addEventListener('touchstart', onTouchStart, { passive: false });
     canvas.addEventListener('touchmove', onTouchMove, { passive: false });
@@ -1731,6 +1741,8 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
 
     return () => {
       canvas.removeEventListener('mousemove', onMouseMove);
+      canvas.removeEventListener('mousedown', onMouseDown);
+      canvas.removeEventListener('mouseup', onMouseUp);
       canvas.removeEventListener('mouseleave', onMouseLeave);
       canvas.removeEventListener('touchstart', onTouchStart);
       canvas.removeEventListener('touchmove', onTouchMove);
@@ -2124,7 +2136,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
                         {entry.name || 'Unknown'}
                       </span>
                       {entry.isPlayer && (
-                        <span className="shrink-0 rounded bg-indigo-500/30 px-1 text-[9px] font-bold text-indigo-200">
+                        <span className={`shrink-0 rounded px-1 text-[9px] font-bold ${isOfflineMode ? 'bg-emerald-500/30 text-emerald-200' : 'bg-indigo-500/30 text-indigo-200'}`}>
                           YOU
                         </span>
                       )}
