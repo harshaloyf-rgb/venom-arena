@@ -1,42 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { utcLastMonday, utcToday, utcYesterday, utcMonday } from '@/lib/date-utils';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
-/** Get today's date in UTC as YYYY-MM-DD */
-function utcToday(): string {
-  const now = new Date();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
-}
-
-/** Get the most recent Monday in UTC as YYYY-MM-DD */
-function utcMonday(): string {
-  const now = new Date();
-  const day = now.getUTCDay(); // 0=Sun … 6=Sat
-  const diff = day === 0 ? 6 : day - 1; // shift so Monday=0
-  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff));
-  return `${monday.getUTCFullYear()}-${String(monday.getUTCMonth() + 1).padStart(2, '0')}-${String(monday.getUTCDate()).padStart(2, '0')}`;
-}
-
-/** Get yesterday's date in UTC as YYYY-MM-DD */
-function utcYesterday(): string {
-  const now = new Date();
-  const yesterday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1));
-  return `${yesterday.getUTCFullYear()}-${String(yesterday.getUTCMonth() + 1).padStart(2, '0')}-${String(yesterday.getUTCDate()).padStart(2, '0')}`;
-}
-
-/** Get the previous week's Monday in UTC as YYYY-MM-DD */
-function utcLastMonday(): string {
-  const now = new Date();
-  const day = now.getUTCDay();
-  const diff = day === 0 ? 6 : day - 1;
-  const thisMonday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff));
-  const lastMonday = new Date(Date.UTC(thisMonday.getUTCFullYear(), thisMonday.getUTCMonth(), thisMonday.getUTCDate() - 7));
-  return `${lastMonday.getUTCFullYear()}-${String(lastMonday.getUTCMonth() + 1).padStart(2, '0')}-${String(lastMonday.getUTCDate()).padStart(2, '0')}`;
-}
 
 /** Pick N random items from an array (no duplicates) */
 function pickRandom<T>(arr: T[], n: number): T[] {
@@ -305,29 +272,45 @@ const WEEKLY_POOLS: Record<LevelTier, ChallengeTemplate[]> = {
 /** Count consecutive days where ALL daily challenges were claimed */
 async function calculateStreak(playerId: string): Promise<{ streak: number; multiplier: number }> {
   const today = utcToday();
+
+  // Compute the date 30 days ago as YYYY-MM-DD
+  const d = new Date(today + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() - 29);
+  const thirtyDaysAgo = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+
+  // Fetch ALL daily challenges for the last 30 days in a single query
+  const recentChallenges = await db.challenge.findMany({
+    where: {
+      playerId,
+      type: 'daily',
+      periodStart: { gte: thirtyDaysAgo },
+    },
+    select: { periodStart: true, claimed: true },
+  });
+
+  // Group by date
+  const byDate = new Map<string, boolean[]>();
+  for (const c of recentChallenges) {
+    const list = byDate.get(c.periodStart) ?? [];
+    list.push(c.claimed);
+    byDate.set(c.periodStart, list);
+  }
+
+  // Walk backwards from today checking consecutive claimed days
   let streak = 0;
-  let checkDate = today;
-
-  // Look back up to 30 days
   for (let i = 0; i < 30; i++) {
-    if (i > 0) {
-      // Move to previous day
-      const d = new Date(checkDate + 'T00:00:00Z');
-      d.setUTCDate(d.getUTCDate() - 1);
-      checkDate = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-    }
+    const checkDate = new Date(today + 'T00:00:00Z');
+    checkDate.setUTCDate(checkDate.getUTCDate() - i);
+    const key = `${checkDate.getUTCFullYear()}-${String(checkDate.getUTCMonth() + 1).padStart(2, '0')}-${String(checkDate.getUTCDate()).padStart(2, '0')}`;
 
-    const dayChallenges = await db.challenge.findMany({
-      where: { playerId, type: 'daily', periodStart: checkDate },
-    });
-
-    if (dayChallenges.length === 0) {
-      // No challenges for this day — check if it's today (first visit) or a gap
+    const dayClaims = byDate.get(key);
+    if (!dayClaims || dayClaims.length === 0) {
+      // No challenges for this day
       if (i === 0) continue; // today may not have challenges yet
       break; // gap found — streak ends
     }
 
-    const allClaimed = dayChallenges.length > 0 && dayChallenges.every((c) => c.claimed);
+    const allClaimed = dayClaims.every(Boolean);
     if (allClaimed) {
       streak++;
     } else if (i === 0) {

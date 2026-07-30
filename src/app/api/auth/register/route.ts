@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { PrismaClientKnownRequestError } from '@prisma/client';
 import {
   signSession,
   setSessionCookie,
@@ -61,6 +62,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ player: toProfile(player) });
   } catch (e) {
+    if (e instanceof PrismaClientKnownRequestError && e.code === 'P2002') {
+      return NextResponse.json({ error: 'Email already registered. Try logging in.' }, { status: 409 });
+    }
     console.error('[auth/register] error', e);
     return NextResponse.json({ error: 'Registration failed. Please try again.' }, { status: 500 });
   }

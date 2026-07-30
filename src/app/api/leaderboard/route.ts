@@ -53,35 +53,35 @@ export async function GET(req: NextRequest) {
   }>;
 
   if (view === 'world_summit') {
-    // Get #1 player from each country
-    const allPlayers = await db.player.findMany({
-      where: { banned: false },
-      orderBy: { [type]: 'desc' },
-      select: {
-        userTag: true,
-        name: true,
-        country: true,
-        bankedChips: true,
-        level: true,
-      },
-    });
+    // Use raw SQL to get only the top player per country — avoids loading all players
+    const rawRows = await db.$queryRaw<Array<{
+      id: string;
+      userTag: string;
+      name: string;
+      country: string;
+      bankedChips: number;
+      level: number;
+      banned: boolean;
+    }>>`
+      SELECT p.* FROM Player p INNER JOIN (
+        SELECT country, MAX(bankedChips) as maxChips FROM Player WHERE banned = 0 AND country IS NOT NULL AND country != '' GROUP BY country
+      ) top ON p.country = top.country AND p.bankedChips = top.maxChips WHERE p.banned = 0 ORDER BY p.bankedChips DESC
+    `;
 
-    // Group by country and take #1 from each
-    const countryMap = new Map<string, typeof allPlayers[0]>();
-    for (const p of allPlayers) {
-      if (!countryMap.has(p.country)) {
-        countryMap.set(p.country, p);
-      }
-    }
+    // Map raw rows to the expected shape
+    let summitPlayers = rawRows.map(r => ({
+      userTag: r.userTag,
+      name: r.name,
+      country: r.country,
+      bankedChips: Number(r.bankedChips),
+      level: Number(r.level),
+    }));
 
     // Apply milestone filter
-    let summitPlayers = Array.from(countryMap.values());
     if (milestone) {
       summitPlayers = summitPlayers.filter(p => p.bankedChips >= milestoneMin && p.bankedChips < milestoneMax);
     }
 
-    // Sort by bankedChips desc and limit
-    summitPlayers.sort((a, b) => b.bankedChips - a.bankedChips);
     players = summitPlayers.slice(0, limit);
   } else {
     // Global or National view

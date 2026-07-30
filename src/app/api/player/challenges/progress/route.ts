@@ -1,23 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
-
-// ---------------------------------------------------------------------------
-// Date helpers
-// ---------------------------------------------------------------------------
-
-function utcToday(): string {
-  const now = new Date();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
-}
-
-function utcMonday(): string {
-  const now = new Date();
-  const day = now.getUTCDay(); // 0=Sun … 6=Sat
-  const diff = day === 0 ? 6 : day - 1; // shift so Monday=0
-  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff));
-  return `${monday.getUTCFullYear()}-${String(monday.getUTCMonth() + 1).padStart(2, '0')}-${String(monday.getUTCDate()).padStart(2, '0')}`;
-}
+import { utcToday, utcMonday } from '@/lib/date-utils';
 
 // ---------------------------------------------------------------------------
 // Valid challenge categories
@@ -29,6 +13,17 @@ type ChallengeCategory = (typeof VALID_CATEGORIES)[number];
 function isValidCategory(v: string): v is ChallengeCategory {
   return (VALID_CATEGORIES as readonly string[]).includes(v);
 }
+
+// Max amount per request to prevent exploitation
+const MAX_AMOUNT_PER_CATEGORY: Record<ChallengeCategory, number> = {
+  kill: 10,
+  extract: 1,
+  extract_streak: 1,
+  star_collect: 10,
+  score: 1000,
+  arena_entry: 1,
+  survive: 1,
+};
 
 // POST /api/player/challenges/progress
 // Called by the game canvas during gameplay to track real-time challenge progress.
@@ -46,7 +41,6 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const category = String(body.category || '').trim();
-  const amount = Math.max(1, Math.floor(Number(body.amount) || 1));
 
   if (!category || !isValidCategory(category)) {
     return NextResponse.json(
@@ -54,6 +48,9 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
+
+  const maxAmount = MAX_AMOUNT_PER_CATEGORY[category];
+  const amount = Math.max(1, Math.min(maxAmount, Math.floor(Number(body.amount) || 1)));
 
   const playerId = session.playerId;
   const today = utcToday();
