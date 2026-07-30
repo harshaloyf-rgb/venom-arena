@@ -20,6 +20,7 @@
 import {
   BOT_NAMES,
   BOT_SKINS,
+  INITIAL_SPAWN_SCORE,
   type ArenaTier,
   getCosmeticById,
   type Skin,

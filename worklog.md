@@ -112,6 +112,24 @@ Stage Summary:
 - Zero new TypeScript compilation errors
 
 ---
+Task ID: 8
+Agent: main
+Task: Fix offline game crash + re-verify
+
+Work Log:
+- Found `INITIAL_SPAWN_SCORE is not defined` error in GameCanvas (offline-engine.ts used it without importing)
+- Added `INITIAL_SPAWN_SCORE` to the import list from `@/lib/game-config`
+- Re-verified offline game launches and runs at 60fps with zero console errors
+- Verified admin panel at /admin loads with all 10 category tabs
+- Verified all HUD elements render: Score, Kills, Rank, Boost, Extract, Quick Chat, Leaderboard, Leave
+
+Stage Summary:
+- Fixed critical missing import bug that prevented offline game from loading
+- Game runs cleanly: 60fps, 1000 bots, full HUD
+- Admin panel fully functional with all configurable parameters
+- All planned features (scaled growth, angle neck protection, skin system, food system) active
+
+---
 Task ID: 7
 Agent: main
 Task: Browser verification
