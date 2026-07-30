@@ -1424,7 +1424,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         for (const s of snap.snakes) {
           if (s.isPlayer && s.carriedChips > 0 && s.points && s.points.length > 0) {
             const head = s.points[0];
-            drawChipLabel(ctx, head.x, head.y, s.carriedChips, s.size, cam.zoom);
+            drawChipLabel(ctx, head.x, head.y, s.carriedChips, s.visualRadius ?? s.size, cam.zoom);
           }
         }
 
@@ -1432,7 +1432,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         for (const s of snap.snakes) {
           if (s.isExtracting && s.extractionProgress > 0 && s.points && s.points.length > 0 && s.id === myId) {
             const head = s.points[0];
-            drawExtractionRing(ctx, head.x, head.y, s.size, s.extractionProgress, cam.zoom);
+            drawExtractionRing(ctx, head.x, head.y, s.visualRadius ?? s.size, s.extractionProgress, cam.zoom);
           }
         }
       }

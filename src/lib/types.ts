@@ -92,6 +92,8 @@ export interface SnakeSnapshot {
   country?: string;
   isBoosting: boolean; // whether snake is actively boosting (for head-on collision rendering)
   botState?: 'harvesting' | 'selfDestruct'; // online bots only; undefined for players
+  visualRadius?: number;
+  collisionRadius?: number;
 }
 
 export interface FoodSnapshot {

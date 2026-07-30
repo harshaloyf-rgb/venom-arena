@@ -32,19 +32,11 @@ import { createServer } from 'http';
 import { Server, type Socket } from 'socket.io';
 import {
   ARENA_TIERS,
-  BOT_SELF_DESTRUCT_THRESHOLD,
-  EXTRACT_DURATION_MS,
-  INITIAL_BODY_LENGTH,
-  INITIAL_SPAWN_SCORE,
-  FOOD_ORB_SMALL,
-  RESPAWN_INVULN_MS,
-  SIZE_BASE,
-  SIZE_SCORE_FACTOR,
   TICK_MS,
   WORLD_SIZE,
   getArenaById,
-  getDynamicMapRadius,
 } from '../../src/lib/game-config';
+import { calcVisualRadius, calcBaseMapRadius, getFoodOrbs } from '../../src/lib/snake-engine.js';
 import {
   type ArenaRoom,
   type BotSession,
@@ -465,18 +457,20 @@ function tickRoom(room: ArenaRoom, now: number): void {
   for (const session of room.players.values()) {
     if (session.isDead || session.matchSettling) continue;
     try {
-      const dropped = tickSnakeMovement(session, session.desiredAngle, session.wantsBoost);
+      const dropped = tickSnakeMovement(session, session.desiredAngle, session.wantsBoost, room.cfg);
       // Add boost-dropped food orbs to the room.
       for (const pt of dropped) {
+        const cfgOrbs = getFoodOrbs(room.cfg);
+        const smallOrb = cfgOrbs.find(o => o.size === 'small') ?? cfgOrbs[0];
         room.foods.push({
           id: `food-${room.arena.id}-${room.foodIdCounter++}`,
           x: pt.x,
           y: pt.y,
-          size: FOOD_ORB_SMALL.radius,
-          value: 1,
+          size: smallOrb.radius,
+          value: smallOrb.value,
           isStarChip: false,
-          color: FOOD_ORB_SMALL.color,
-          glowColor: FOOD_ORB_SMALL.glowColor,
+          color: smallOrb.color,
+          glowColor: smallOrb.glowColor,
           orbSize: 'small',
         });
       }
@@ -583,11 +577,11 @@ function tickRoom(room: ArenaRoom, now: number): void {
     if (!session.isExtracting) continue;
 
     session.extractionProgress += TICK_MS;
-    const progress = Math.min(1, session.extractionProgress / EXTRACT_DURATION_MS);
+    const progress = Math.min(1, session.extractionProgress / room.cfg.extractionDurationMs);
     const sock = io.sockets.sockets.get(session.id);
     if (sock) sock.emit('extract_progress', { progress });
 
-    if (session.extractionProgress >= EXTRACT_DURATION_MS) {
+    if (session.extractionProgress >= room.cfg.extractionDurationMs) {
       // Extraction success — settle asynchronously.
       settleMatch(room, session, 'extract').catch((err) => {
         log('error', `settleMatch(extract) failed: ${(err as Error).message}`);
@@ -815,29 +809,30 @@ async function handleJoinArena(socket: Socket, payload: unknown): Promise<void> 
     return;
   }
 
+  const cfg = room.cfg;
   const realPlayerCount = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
-  const mapRadius = getDynamicMapRadius(Math.max(1, realPlayerCount));
-  const spawn = findSafeSpawnPoint(room, mapRadius - 200, room.mapCenterX, room.mapCenterY);
+  const baseRadius = calcBaseMapRadius(Math.max(1, realPlayerCount), cfg);
+  const spawn = findSafeSpawnPoint(room, baseRadius - 200, room.mapCenterX, room.mapCenterY);
   const angle = Math.random() * Math.PI * 2;
   const session: PlayerSession = {
     id: socket.id,
     name: identity.name,
     userTag: identity.userTag,
     country: identity.country,
-    points: initialBody(spawn.x, spawn.y, angle, INITIAL_BODY_LENGTH),
+    points: initialBody(spawn.x, spawn.y, angle, cfg.initialBodyLength, cfg.segmentSpacing),
     angle,
-    size: SIZE_BASE + Math.sqrt(INITIAL_SPAWN_SCORE) * SIZE_SCORE_FACTOR,
+    size: calcVisualRadius(cfg.initialSpawnScore, cfg),
     color: identity.color,
     secondaryColor: identity.secondaryColor,
     isPlayer: true,
     isBot: false,
     carriedChips: room.arena.buyIn,
-    score: INITIAL_SPAWN_SCORE,
+    score: cfg.initialSpawnScore,
     boostFrameCounter: 0,
     isExtracting: false,
     extractionProgress: 0,
     isDead: false,
-    spawnProtectedUntil: Date.now() + RESPAWN_INVULN_MS,
+    spawnProtectedUntil: Date.now() + cfg.spawnProtectionMs,
     identity,
     desiredAngle: angle,
     wantsBoost: false,
@@ -921,7 +916,8 @@ function handleExtract(socket: Socket): void {
   // NO zone check — extract anywhere (matches original design).
   session.isExtracting = true;
   session.extractionProgress = 0;
-  socket.emit('extract_start', { durationMs: EXTRACT_DURATION_MS });
+  const room = session.arenaId ? rooms.get(session.arenaId) : null;
+  socket.emit('extract_start', { durationMs: room?.cfg.extractionDurationMs ?? 3000 });
 }
 
 /** Cancel an in-progress extraction. */

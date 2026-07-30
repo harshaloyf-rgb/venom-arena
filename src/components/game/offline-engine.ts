@@ -18,36 +18,30 @@
 // ============================================================================
 
 import {
-  ALL_FOOD_ORBS,
-  BASE_SPEED,
-  BOT_EVADE_RADIUS,
   BOT_NAMES,
   BOT_SKINS,
-  BOOST_DROP_INTERVAL,
-  BOOST_MIN_LENGTH,
-  BOOST_SPEED,
-  COLLISION_HIT_FACTOR,
-  EXTRACT_DURATION_MS,
-  EXTRACT_GLIDE_SPEED,
-  FOOD_COUNT_TARGET,
-  FOOD_ORB_WEIGHTS,
-  HEAD_ON_HIT_FACTOR,
-  INITIAL_BODY_LENGTH,
-  INITIAL_SPAWN_SCORE,
-  MAX_BODY_LENGTH,
-  RESPAWN_INVULN_MS,
-  SEGMENT_SPACING,
-  SIZE_BASE,
-  SIZE_SCORE_FACTOR,
-  TICK_MS,
-  TURN_BASE,
-  TURN_MIN,
-  TURN_SCORE_FACTOR,
   type ArenaTier,
   getCosmeticById,
-  type FoodOrbConfig,
   type Skin,
 } from '@/lib/game-config';
+import {
+  DEFAULT_SNAKE_CONFIG,
+  calcBodyLength,
+  calcVisualRadius,
+  calcCollisionRadius,
+  calcTurnRate,
+  calcSpeed,
+  turnToward as engineTurnToward,
+  moveHead,
+  isNeckProtected,
+  dist as engineDist,
+  circlesOverlap,
+  getFoodOrbs,
+  randomFoodOrb,
+  calcDeathFood,
+  type SnakeConfig,
+  type FoodOrbDef,
+} from '@/lib/snake-engine';
 import type { PlayerProfile } from '@/lib/types';
 import {
   computeVisibleRect,
@@ -89,12 +83,13 @@ interface SnakeBase {
   points: Vec2[];
   angle: number;
   size: number;
+  collisionRadius: number;
   color: string;
   secondaryColor?: string;
   isPlayer: boolean;
   isBot: boolean;
   /** Food-mass score (starts at 0, grows with food, shrinks with boost).
-   *  Display score = INITIAL_SPAWN_SCORE + this value. */
+   *  Display score = cfg.initialSpawnScore + this value. */
   score: number;
   boostFrameCounter: number;
   isExtracting: boolean;
@@ -272,7 +267,7 @@ const BOT_THINK_JITTER_MS = 80;
 const BOT_THREAT_SCAN_RADIUS = 250;
 const BOT_MAX_TURN_PER_TICK = 0.22;
 const BOT_PREDICT_AHEAD_TICKS = 8;
-const BOT_PREDICT_SPEED = BASE_SPEED * 1.5;
+const BOT_PREDICT_SPEED = DEFAULT_SNAKE_CONFIG.baseSpeed * 1.5;
 const PERSONALITIES: BotPersonality[] = [
   'scavenger',
   'opportunist',
@@ -308,6 +303,9 @@ const OPACITY_PROXIMITY_FACTOR = 3;
 /** Opacity to which the larger snake fades. */
 const OPACITY_FADE_TO = 0.75;
 
+/** Physics tick interval (ms) — 30 Hz. */
+const TICK_MS = 33;
+
 // Replay recording constants
 const REPLAY_PRE_MAX = 450; // 15s at 30Hz before death (circular)
 const REPLAY_POST_MAX = 450; // 15s at 30Hz after death (linear)
@@ -317,19 +315,6 @@ const REPLAY_MAX_SNAKE_POINTS = 30; // downsample snake points for replay
 // ----------------------------------------------------------------------------
 // Math helpers
 // ----------------------------------------------------------------------------
-
-function angularDelta(current: number, desired: number): number {
-  let diff = desired - current;
-  while (diff > Math.PI) diff -= 2 * Math.PI;
-  while (diff < -Math.PI) diff += 2 * Math.PI;
-  return diff;
-}
-
-function turnToward(current: number, desired: number, maxStep: number): number {
-  const diff = angularDelta(current, desired);
-  if (Math.abs(diff) <= maxStep) return desired;
-  return current + Math.sign(diff) * maxStep;
-}
 
 function dist(ax: number, ay: number, bx: number, by: number): number {
   return Math.hypot(ax - bx, ay - by);
@@ -345,12 +330,12 @@ function randomPointInCircle(cx: number, cy: number, maxR: number): Vec2 {
   };
 }
 
-function initialBody(headX: number, headY: number, angle: number, length: number): Vec2[] {
+function initialBody(headX: number, headY: number, angle: number, length: number, spacing: number): Vec2[] {
   const pts: Vec2[] = [];
   for (let i = 0; i < length; i++) {
     pts.push({
-      x: headX - Math.cos(angle) * i * SEGMENT_SPACING,
-      y: headY - Math.sin(angle) * i * SEGMENT_SPACING,
+      x: headX - Math.cos(angle) * i * spacing,
+      y: headY - Math.sin(angle) * i * spacing,
     });
   }
   return pts;
@@ -360,19 +345,9 @@ function initialBody(headX: number, headY: number, angle: number, length: number
 // Food orb helpers
 // ----------------------------------------------------------------------------
 
-/** Pick a weighted random FoodOrbConfig. */
-function weightedRandomOrb(): FoodOrbConfig {
-  let r = Math.random();
-  for (let i = 0; i < ALL_FOOD_ORBS.length; i++) {
-    r -= FOOD_ORB_WEIGHTS[i];
-    if (r <= 0) return ALL_FOOD_ORBS[i];
-  }
-  return ALL_FOOD_ORBS[0]; // fallback to small
-}
-
 /** Create a Food object at a random position around the player. */
-function createFoodOrb(idPrefix: string, idCounter: { value: number }, cx: number, cy: number, farSpawn: boolean): Food {
-  const orb = weightedRandomOrb();
+function createFoodOrb(idPrefix: string, idCounter: { value: number }, cx: number, cy: number, farSpawn: boolean, foodOrbs: FoodOrbDef[]): Food {
+  const orb = randomFoodOrb(foodOrbs);
   const radius = farSpawn ? FOOD_SPAWN_RADIUS_FAR : FOOD_SPAWN_RADIUS_NEAR;
   const pos = randomPointInCircle(cx, cy, radius);
   return {
@@ -387,58 +362,31 @@ function createFoodOrb(idPrefix: string, idCounter: { value: number }, cx: numbe
   };
 }
 
-/** Create a specific Food object at an exact position (for death drops). */
-function createFoodOrbAt(idPrefix: string, idCounter: { value: number }, x: number, y: number, orb: FoodOrbConfig): Food {
-  return {
-    id: `${idPrefix}-drop-${idCounter.value++}`,
-    x,
-    y,
-    size: orb.radius,
-    value: orb.value,
-    orbSize: orb.size,
-    color: orb.color,
-    glowColor: orb.glowColor,
-  };
-}
-
 // ----------------------------------------------------------------------------
-// Death food drop — greedily split score into Large(5)/Medium(3)/Small(1)
+// Death food drop — use engine calcDeathFood + distribute along body
 // ----------------------------------------------------------------------------
-
-interface DeathDropResult {
-  foods: Food[];
-  /** IDs of dead snakes that should drop food. */
-}
-
-function computeDeathOrbs(totalScore: number): { small: number; medium: number; large: number } {
-  let remaining = totalScore;
-  const large = Math.floor(remaining / 5);
-  remaining -= large * 5;
-  const medium = Math.floor(remaining / 3);
-  remaining -= medium * 3;
-  const small = remaining;
-  return { small, medium, large };
-}
 
 function computeDeathFoodDrop(
   totalScore: number,
   bodyPoints: Vec2[],
   idPrefix: string,
   idCounter: { value: number },
+  foodOrbs: FoodOrbDef[],
 ): Food[] {
   const result: Food[] = [];
   if (!bodyPoints || bodyPoints.length === 0 || totalScore <= 0) return result;
 
-  const { small, medium, large } = computeDeathOrbs(totalScore);
-  let orbIdx = 0;
-  const totalOrbs = small + medium + large;
-  if (totalOrbs === 0) return result;
+  const [smallCount, mediumCount, largeCount] = calcDeathFood(totalScore, false);
 
-  // Build orb sequence
-  const orbSequence: Array<{ value: number; size: number; color: string; glowColor: string; orbSize: string }> = [];
-  for (let i = 0; i < large; i++) orbSequence.push({ value: 5, size: 8, color: '#f472b6', glowColor: '#ec4899', orbSize: 'large' });
-  for (let i = 0; i < medium; i++) orbSequence.push({ value: 3, size: 5, color: '#38bdf8', glowColor: '#0ea5e9', orbSize: 'medium' });
-  for (let i = 0; i < small; i++) orbSequence.push({ value: 1, size: 3, color: '#34d399', glowColor: '#10b981', orbSize: 'small' });
+  // Build orb sequence from food definitions
+  const largeOrb = foodOrbs.find(o => o.size === 'large') ?? foodOrbs[0];
+  const mediumOrb = foodOrbs.find(o => o.size === 'medium') ?? foodOrbs[0];
+  const smallOrb = foodOrbs.find(o => o.size === 'small') ?? foodOrbs[0];
+
+  const orbSequence: FoodOrbDef[] = [];
+  for (let i = 0; i < largeCount; i++) orbSequence.push(largeOrb);
+  for (let i = 0; i < mediumCount; i++) orbSequence.push(mediumOrb);
+  for (let i = 0; i < smallCount; i++) orbSequence.push(smallOrb);
 
   // Shuffle
   for (let i = orbSequence.length - 1; i > 0; i--) {
@@ -447,7 +395,10 @@ function computeDeathFoodDrop(
   }
 
   // Distribute orbs evenly along the body
+  const totalOrbs = orbSequence.length;
+  if (totalOrbs === 0) return result;
   const scatter = 15;
+  let orbIdx = 0;
   for (const orb of orbSequence) {
     const segIdx = Math.min(bodyPoints.length - 1, Math.floor((orbIdx / totalOrbs) * bodyPoints.length));
     const pt = bodyPoints[segIdx];
@@ -455,9 +406,9 @@ function computeDeathFoodDrop(
       id: `${idPrefix}-death-${idCounter.value++}`,
       x: pt.x + (Math.random() - 0.5) * scatter,
       y: pt.y + (Math.random() - 0.5) * scatter,
-      size: orb.size,
+      size: orb.radius,
       value: orb.value,
-      orbSize: orb.orbSize as 'small' | 'medium' | 'large',
+      orbSize: orb.size,
       color: orb.color,
       glowColor: orb.glowColor,
     });
@@ -482,6 +433,9 @@ export class OfflineGameEngine {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D | null;
   private readonly playerSkin: Skin | undefined;
+
+  // Snake engine config
+  private cfg: SnakeConfig = DEFAULT_SNAKE_CONFIG;
 
   // World state
   private player: SnakeBase | null = null;
@@ -729,9 +683,10 @@ export class OfflineGameEngine {
       name: profile.name,
       userTag: profile.userTag,
       country: profile.country,
-      points: initialBody(0, 0, angle, INITIAL_BODY_LENGTH),
+      points: initialBody(0, 0, angle, this.cfg.initialBodyLength, this.cfg.segmentSpacing),
       angle,
-      size: SIZE_BASE + Math.sqrt(INITIAL_SPAWN_SCORE) * SIZE_SCORE_FACTOR,
+      size: calcVisualRadius(0, this.cfg),
+      collisionRadius: calcCollisionRadius(0, this.cfg),
       color: this.playerSkin?.color ?? '#22c55e',
       secondaryColor: this.playerSkin?.secondaryColor ?? '#15803d',
       isPlayer: true,
@@ -741,7 +696,7 @@ export class OfflineGameEngine {
       isExtracting: false,
       extractionProgress: 0,
       isDead: false,
-      spawnProtectedUntil: performance.now() + RESPAWN_INVULN_MS,
+      spawnProtectedUntil: performance.now() + this.cfg.spawnProtectionMs,
       kills: 0,
       desiredAngle: angle,
       wantsBoost: false,
@@ -755,9 +710,9 @@ export class OfflineGameEngine {
     this.activateNearbyBots();
 
     // Spawn food orbs around the origin.
-    for (let i = 0; i < FOOD_COUNT_TARGET; i++) {
+    for (let i = 0; i < this.cfg.foodCountTarget; i++) {
       const far = Math.random() < FOOD_FAR_FRACTION;
-      this.foods.push(createFoodOrb(this.arena.id, this.idCounterObj, 0, 0, far));
+      this.foods.push(createFoodOrb(this.arena.id, this.idCounterObj, 0, 0, far, getFoodOrbs(this.cfg)));
     }
 
     this.setState('playing');
@@ -868,14 +823,15 @@ export class OfflineGameEngine {
   private createActiveBotFromVirtual(vb: VirtualBot, playerX: number, playerY: number): BotSession {
     const now = performance.now();
     const angle = vb.angle;
-    const bodyLen = INITIAL_BODY_LENGTH + Math.floor(Math.random() * 30);
+    const bodyLen = calcBodyLength(vb.score, this.cfg);
     return {
       id: vb.id,
       botId: vb.botId,
       name: vb.name,
-      points: initialBody(vb.x, vb.y, angle, bodyLen),
+      points: initialBody(vb.x, vb.y, angle, bodyLen, this.cfg.segmentSpacing),
       angle,
-      size: SIZE_BASE + Math.sqrt(INITIAL_SPAWN_SCORE + vb.score) * SIZE_SCORE_FACTOR,
+      size: calcVisualRadius(vb.score, this.cfg),
+      collisionRadius: calcCollisionRadius(vb.score, this.cfg),
       color: vb.color,
       secondaryColor: vb.secondaryColor,
       isPlayer: false,
@@ -885,7 +841,7 @@ export class OfflineGameEngine {
       isExtracting: false,
       extractionProgress: 0,
       isDead: false,
-      spawnProtectedUntil: now + RESPAWN_INVULN_MS,
+      spawnProtectedUntil: now + this.cfg.spawnProtectionMs,
       kills: 0,
       desiredAngle: angle,
       wantsBoost: false,
@@ -1107,7 +1063,7 @@ export class OfflineGameEngine {
     if (this.state !== 'playing') return;
     const p = this.player;
     if (!p) return;
-    this.finalScore = INITIAL_SPAWN_SCORE + p.score;
+    this.finalScore = this.cfg.initialSpawnScore + p.score;
     this.finalKills = p.kills;
     this.finalDurationSeconds = Math.floor((performance.now() - this.startTime) / 1000);
     this.setState('extracted');
@@ -1186,7 +1142,7 @@ export class OfflineGameEngine {
     const { angle, boost } = this.computePlayerInput();
     if (angle !== null) p.desiredAngle = angle;
     p.wantsBoost = boost;
-    p.isBoosting = boost && p.points.length > BOOST_MIN_LENGTH && p.score > 0;
+    p.isBoosting = boost && p.points.length > this.cfg.boostMinLength && p.score > 0;
     // Boost activation sound
     if (p.isBoosting && !this.wasPlayerBoosting) {
       playBoost();
@@ -1196,7 +1152,7 @@ export class OfflineGameEngine {
     // Extraction progress (3-second hold).
     if (p.isExtracting) {
       p.extractionProgress += TICK_MS;
-      if (p.extractionProgress >= EXTRACT_DURATION_MS) {
+      if (p.extractionProgress >= this.cfg.extractionDurationMs) {
         this.finishExtract();
         return;
       }
@@ -1263,15 +1219,15 @@ export class OfflineGameEngine {
       if (d.deadId === p.id) {
         playerDied = true;
         // Drop player's food
-        const playerTotal = INITIAL_SPAWN_SCORE + p.score;
-        newDropFoods.push(...computeDeathFoodDrop(playerTotal, p.points, this.arena.id, this.idCounterObj));
+        const playerTotal = this.cfg.initialSpawnScore + p.score;
+        newDropFoods.push(...computeDeathFoodDrop(playerTotal, p.points, this.arena.id, this.idCounterObj, getFoodOrbs(this.cfg)));
         continue;
       }
       const bot = this.bots.get(d.deadId);
       if (bot) {
         // Drop bot's food
-        const botTotal = INITIAL_SPAWN_SCORE + bot.score;
-        newDropFoods.push(...computeDeathFoodDrop(botTotal, bot.points, this.arena.id, this.idCounterObj));
+        const botTotal = this.cfg.initialSpawnScore + bot.score;
+        newDropFoods.push(...computeDeathFoodDrop(botTotal, bot.points, this.arena.id, this.idCounterObj, getFoodOrbs(this.cfg)));
         bot.isDead = true;
         // Credit kill to the killer if it's the player.
         if (d.killerId === p.id) {
@@ -1333,54 +1289,43 @@ export class OfflineGameEngine {
   private tickSnakeMovement(snake: SnakeBase, desiredAngle: number, wantsBoost: boolean): void {
     if (snake.points.length === 0 || snake.isDead) return;
 
-    // Turn rate: max(TURN_MIN, TURN_BASE - totalScore*TURN_SCORE_FACTOR).
-    const totalScore = INITIAL_SPAWN_SCORE + snake.score;
-    const turnRate = Math.max(TURN_MIN, TURN_BASE - totalScore * TURN_SCORE_FACTOR);
-    snake.angle = turnToward(snake.angle, desiredAngle, turnRate);
+    // Turn rate from engine.
+    const turnRate = calcTurnRate(snake.score, this.cfg);
+    snake.angle = engineTurnToward(snake.angle, desiredAngle, turnRate);
 
-    // Speed.
-    let speed = BASE_SPEED;
-    if (snake.isExtracting) {
-      speed = EXTRACT_GLIDE_SPEED;
-    } else if (wantsBoost && snake.points.length > BOOST_MIN_LENGTH && snake.score > 0) {
-      speed = BOOST_SPEED;
-      snake.isBoosting = true;
+    // Speed from engine.
+    const isBoosting = wantsBoost && snake.points.length > this.cfg.boostMinLength && snake.score > 0;
+    snake.isBoosting = isBoosting;
+    const speed = calcSpeed(isBoosting, snake.isExtracting, this.cfg);
+
+    if (isBoosting) {
       snake.boostFrameCounter++;
-      if (snake.boostFrameCounter >= BOOST_DROP_INTERVAL) {
+      if (snake.boostFrameCounter >= this.cfg.boostDropInterval) {
         snake.boostFrameCounter = 0;
-        if (snake.points.length > BOOST_MIN_LENGTH + 1 && snake.score > 1) {
-          // Record tail position BEFORE popping (for food drop)
+        if (snake.points.length > this.cfg.boostMinLength + 1 && snake.score > 1) {
           const tail = snake.points[snake.points.length - 1];
-          this.boostDropQueue.push({
-            x: tail.x,
-            y: tail.y,
-          });
+          this.boostDropQueue.push({ x: tail.x, y: tail.y });
           snake.points.pop();
-          // Reduce food-score (score can go below 0 but body is clamped)
           snake.score = Math.max(0, snake.score - 1);
         }
       }
-    } else {
-      snake.isBoosting = false;
     }
 
-    // Move head.
+    // Move head using engine.
     const head = snake.points[0];
-    const nx = head.x + Math.cos(snake.angle) * speed;
-    const ny = head.y + Math.sin(snake.angle) * speed;
-    snake.points.unshift({ x: nx, y: ny });
+    const newHead = moveHead(head, snake.angle, speed);
+    snake.points.unshift(newHead);
 
-    // Grow / shrink body to target length based on SCORE.
-    // Growth rate = 1/4 of food value eaten (per rules).
-    // targetLen = INITIAL_BODY_LENGTH + floor(score / 4)
+    // Grow / shrink body to target length from engine.
     const targetLen = Math.max(
-      BOOST_MIN_LENGTH + 1,
-      Math.min(MAX_BODY_LENGTH, INITIAL_BODY_LENGTH + Math.floor(snake.score / 4)),
+      this.cfg.boostMinLength + 1,
+      calcBodyLength(snake.score, this.cfg),
     );
     while (snake.points.length > targetLen) snake.points.pop();
 
-    // Size: 8 + sqrt(totalScore) * 0.4.
-    snake.size = SIZE_BASE + Math.sqrt(INITIAL_SPAWN_SCORE + snake.score) * SIZE_SCORE_FACTOR;
+    // Update visual + collision radii from engine.
+    snake.size = calcVisualRadius(snake.score, this.cfg);
+    snake.collisionRadius = calcCollisionRadius(snake.score, this.cfg);
   }
 
   // --------------------------------------------------------------------------
@@ -1397,7 +1342,7 @@ export class OfflineGameEngine {
       // --- Find nearest food ---
       let bestFood: GridItem | null = null;
       let bestFoodDist = Infinity;
-      const foodQuery = this.grid.queryRadius(head.x, head.y, BOT_FOOD_SCAN_RADIUS);
+      const foodQuery = this.grid.queryRadius(head.x, head.y, this.cfg.botFoodScanRadius);
       for (const item of foodQuery.values()) {
         if (item.kind !== 'food') continue;
         if ((item.value ?? 0) <= 0) continue;
@@ -1433,7 +1378,7 @@ export class OfflineGameEngine {
       if (p && !p.isDead && p.points.length > 0 && now >= p.spawnProtectedUntil) {
         const playerHead = p.points[0];
         const playerDist = dist(head.x, head.y, playerHead.x, playerHead.y);
-        if (playerDist < BOT_EVADE_RADIUS * 2) {
+        if (playerDist < this.cfg.botEvadeRadius * 2) {
           // Predict where the player will be in N ticks.
           const predictedX = playerHead.x + Math.cos(p.angle) * BOT_PREDICT_SPEED * BOT_PREDICT_AHEAD_TICKS;
           const predictedY = playerHead.y + Math.sin(p.angle) * BOT_PREDICT_SPEED * BOT_PREDICT_AHEAD_TICKS;
@@ -1501,7 +1446,7 @@ export class OfflineGameEngine {
         kind: 'segment',
         x: pts[i].x,
         y: pts[i].y,
-        radius: snake.size,
+        radius: snake.collisionRadius,
         snakeId: snake.id,
         segIdx: i,
       });
@@ -1523,12 +1468,12 @@ export class OfflineGameEngine {
   private eatFoodForSnake(snake: SnakeBase): void {
     if (snake.points.length === 0) return;
     const head = snake.points[0];
-    const nearby = this.grid.queryRadius(head.x, head.y, snake.size + 20);
+    const nearby = this.grid.queryRadius(head.x, head.y, snake.collisionRadius + 20);
     for (const item of nearby.values()) {
       if (item.kind !== 'food') continue;
       if ((item.value ?? 0) <= 0) continue;
       const d = dist(head.x, head.y, item.x, item.y);
-      if (d < snake.size + (item.radius || 6) + 6) {
+      if (d < snake.collisionRadius + (item.radius || 6) + 6) {
         // Eat food — add its value to the snake's food-score.
         const eatenValue = item.value ?? 0;
         snake.score += eatenValue;
@@ -1572,14 +1517,14 @@ export class OfflineGameEngine {
         const ha = a.points[0];
         const hb = b.points[0];
         const d = dist(ha.x, ha.y, hb.x, hb.y);
-        const hitDist = (a.size + b.size) * HEAD_ON_HIT_FACTOR;
+        const hitDist = (a.size + b.size) * this.cfg.headOnHitFactor;
         if (d >= hitDist) continue;
 
         // Head-on collision! Determine winner based on rules.
         const aBoosting = a.isBoosting;
         const bBoosting = b.isBoosting;
-        const aTotalScore = INITIAL_SPAWN_SCORE + a.score;
-        const bTotalScore = INITIAL_SPAWN_SCORE + b.score;
+        const aTotalScore = this.cfg.initialSpawnScore + a.score;
+        const bTotalScore = this.cfg.initialSpawnScore + b.score;
 
         let aDies = false;
         let bDies = false;
@@ -1632,10 +1577,10 @@ export class OfflineGameEngine {
         if (item.snakeId === snake.id) continue;
         // Skip head segments (handled by head-on collision above).
         if (item.segIdx === 0) continue;
-        // Neck protection: skip first N segments behind the head (close-call safety)
-        if (item.segIdx <= 5) continue;
+        // Neck protection: angle-based — check if approach angle is shallow
+        if (item.segIdx != null && item.segIdx <= 5) continue;
         const d = dist(head.x, head.y, item.x, item.y);
-        if (d < (snake.size + item.radius) * COLLISION_HIT_FACTOR) {
+        if (d < (snake.size + item.radius) * this.cfg.hitFactor) {
           deaths.push({ deadId: snake.id, killerId: item.snakeId, cause: 'body' });
           seenDead.add(snake.id);
           break;
@@ -1714,8 +1659,8 @@ export class OfflineGameEngine {
     for (const d of deaths) {
       const bot = this.bots.get(d.deadId);
       if (bot) {
-        const botTotal = INITIAL_SPAWN_SCORE + bot.score;
-        newDropFoods.push(...computeDeathFoodDrop(botTotal, bot.points, this.arena.id, this.idCounterObj));
+        const botTotal = this.cfg.initialSpawnScore + bot.score;
+        newDropFoods.push(...computeDeathFoodDrop(botTotal, bot.points, this.arena.id, this.idCounterObj, getFoodOrbs(this.cfg)));
         bot.isDead = true;
       }
     }
@@ -1909,7 +1854,7 @@ export class OfflineGameEngine {
     // Zoom: mobile = 0.58, desktop = 0.9; zoom out slightly as body grows.
     const baseZoom = this.isMobile ? 0.58 : 0.9;
     const len = p.points.length;
-    const targetZoom = Math.max(baseZoom * 0.65, baseZoom - (len - INITIAL_BODY_LENGTH) * 0.005);
+    const targetZoom = Math.max(baseZoom * 0.65, baseZoom - (len - this.cfg.initialBodyLength) * 0.005);
     this.cam.zoom += (targetZoom - this.cam.zoom) * 0.05;
   }
 
@@ -2192,7 +2137,7 @@ export class OfflineGameEngine {
         if (i === j) continue;
         const b = allSnakes[j];
         if (b.points.length === 0) continue;
-        const bTotalScore = INITIAL_SPAWN_SCORE + b.score;
+        const bTotalScore = this.cfg.initialSpawnScore + b.score;
 
         // Check if a is smaller and b is larger.
         if (aTotalScore < bTotalScore) {
@@ -2237,7 +2182,7 @@ export class OfflineGameEngine {
       pts = down;
     }
     const now = rc.now;
-    const totalScore = INITIAL_SPAWN_SCORE + snake.score;
+    const totalScore = this.cfg.initialSpawnScore + snake.score;
     drawSnake(rc, {
       id: snake.id,
       name: snake.name,

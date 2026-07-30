@@ -183,3 +183,14 @@ model ChallengeProgress {
 
   @@unique([playerId, category, periodType, periodStart])
 }
+
+model GameConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique // e.g. "snake.collisionRadius"
+  value     String   // JSON-encoded value (number, string, boolean, or object)
+  label     String   // human-readable name for admin panel
+  category  String   // "snake_physics" | "food_system" | "map_settings" | "boost_system" | "collision" | "economy" | "bot_settings" | "extraction" | "spawning"
+  order     Int      @default(0) // display order within category
+  type      String   @default("number") // "number" | "boolean" | "string" | "json"
+  updatedAt DateTime @updatedAt
+}
