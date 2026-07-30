@@ -31,7 +31,14 @@ export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) return null;
-  return verifySession(token);
+  const payload = verifySession(token);
+  if (!payload) return null;
+
+  // Invalidate session for banned players
+  const player = await db.player.findUnique({ where: { id: payload.playerId }, select: { banned: true } });
+  if (player?.banned === true) return null;
+
+  return payload;
 }
 
 export async function setSessionCookie(token: string, maxAgeSeconds?: number) {

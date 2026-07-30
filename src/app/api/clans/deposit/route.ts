@@ -18,26 +18,44 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Max deposit is 1,000,000 chips per transaction.' }, { status: 400 });
   }
 
-  const me = await db.player.findUnique({ where: { id: session.playerId } });
-  if (!me) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
-  if (me.clanTag !== tag) return NextResponse.json({ error: 'You are not a member of this clan.' }, { status: 403 });
-  if (me.bankedChips < amount) return NextResponse.json({ error: 'Insufficient chips.' }, { status: 400 });
+  try {
+    const result = await db.$transaction(async (tx) => {
+      const me = await tx.player.findUnique({ where: { id: session.playerId } });
+      if (!me) throw new Error('PLAYER_NOT_FOUND');
+      if (me.clanTag !== tag) throw new Error('NOT_MEMBER');
+      if (me.bankedChips < amount) throw new Error('INSUFFICIENT');
 
-  const clan = await db.clan.findUnique({ where: { tag } });
-  if (!clan) return NextResponse.json({ error: 'Clan not found.' }, { status: 404 });
+      const clan = await tx.clan.findUnique({ where: { tag } });
+      if (!clan) throw new Error('CLAN_NOT_FOUND');
 
-  // Atomic: deduct from player, add to clan treasury
-  await db.$transaction([
-    db.player.update({
-      where: { id: me.id },
-      data: { bankedChips: { decrement: amount }, totalLost: { increment: amount } },
-    }),
-    db.clan.update({
-      where: { tag },
-      data: { bankedChips: { increment: amount } },
-    }),
-  ]);
+      // Atomic: deduct from player, add to clan treasury
+      await tx.player.update({
+        where: { id: me.id },
+        data: { bankedChips: { decrement: amount }, totalLost: { increment: amount } },
+      });
+      await tx.clan.update({
+        where: { tag },
+        data: { bankedChips: { increment: amount } },
+      });
 
-  const updated = await db.clan.findUnique({ where: { tag }, select: { bankedChips: true } });
-  return NextResponse.json({ ok: true, newTreasury: updated?.bankedChips || 0 });
+      const updated = await tx.clan.findUnique({ where: { tag }, select: { bankedChips: true } });
+      return updated?.bankedChips || 0;
+    });
+
+    return NextResponse.json({ ok: true, newTreasury: result });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const errorMap: Record<string, { error: string; status: number }> = {
+      PLAYER_NOT_FOUND: { error: 'Not found.', status: 404 },
+      NOT_MEMBER: { error: 'You are not a member of this clan.', status: 403 },
+      INSUFFICIENT: { error: 'Insufficient chips.', status: 400 },
+      CLAN_NOT_FOUND: { error: 'Clan not found.', status: 404 },
+    };
+    if (msg in errorMap) {
+      const { error, status } = errorMap[msg];
+      return NextResponse.json({ error }, { status });
+    }
+    console.error('[clans/deposit] error', e);
+    return NextResponse.json({ error: 'Deposit failed.' }, { status: 500 });
+  }
 }

@@ -20,23 +20,22 @@ export async function GET() {
     return NextResponse.json({ error: 'Player not found' }, { status: 404 });
   }
 
-  // Global rank: count players with MORE bankedChips + 1
-  const globalRank =
-    (await db.player.count({
+  // Run all 4 count queries in parallel
+  const [globalRank, nationalRank, totalGlobal, totalNational] = await Promise.all([
+    // Global rank: count players with MORE bankedChips + 1
+    db.player.count({
       where: { banned: false, bankedChips: { gt: player.bankedChips } },
-    })) + 1;
-
-  // National rank: count in same country with more chips + 1
-  const nationalRank =
-    (await db.player.count({
+    }).then((c) => c + 1),
+    // National rank: count in same country with more chips + 1
+    db.player.count({
       where: { banned: false, country: player.country, bankedChips: { gt: player.bankedChips } },
-    })) + 1;
-
-  // Total players for context
-  const totalGlobal = await db.player.count({ where: { banned: false } });
-  const totalNational = await db.player.count({
-    where: { banned: false, country: player.country },
-  });
+    }).then((c) => c + 1),
+    // Total players for context
+    db.player.count({ where: { banned: false } }),
+    db.player.count({
+      where: { banned: false, country: player.country },
+    }),
+  ]);
 
   const tier = milestoneTierForChips(player.bankedChips);
 

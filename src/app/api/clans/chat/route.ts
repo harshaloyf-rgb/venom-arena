@@ -17,10 +17,10 @@ export async function GET(req: NextRequest) {
 
   const messages = await db.clanMessage.findMany({
     where: { clanTag: tag },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: 'asc' },
     take: 50,
   });
-  return NextResponse.json({ messages: messages.reverse() });
+  return NextResponse.json({ messages });
 }
 
 export async function POST(req: NextRequest) {

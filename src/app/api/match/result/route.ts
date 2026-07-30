@@ -2,23 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { toProfile } from '@/lib/player-helpers';
 import { getArenaById, levelFromXp } from '@/lib/game-config';
-
-// ---------------------------------------------------------------------------
-// Date helpers (duplicated from challenges/route.ts — needed for period lookup)
-// ---------------------------------------------------------------------------
-
-function utcToday(): string {
-  const now = new Date();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
-}
-
-function utcMonday(): string {
-  const now = new Date();
-  const day = now.getUTCDay(); // 0=Sun … 6=Sat
-  const diff = day === 0 ? 6 : day - 1; // shift so Monday=0
-  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff));
-  return `${monday.getUTCFullYear()}-${String(monday.getUTCMonth() + 1).padStart(2, '0')}-${String(monday.getUTCDate()).padStart(2, '0')}`;
-}
+import { utcToday, utcMonday } from '@/lib/date-utils';
 
 // ---------------------------------------------------------------------------
 // Challenge progress updater (runs inside the caller's Prisma transaction)

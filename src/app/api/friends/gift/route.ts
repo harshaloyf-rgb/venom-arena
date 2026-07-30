@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const toTag = String(body.userTag || '').toUpperCase().trim();
   const amount = Math.max(1, Math.min(1000, Math.floor(Number(body.amount) || 0)));
-  if (!toTag || amount <= 0) return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });
+  if (!toTag) return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });
   if (toTag === session.userTag) return NextResponse.json({ error: 'Cannot gift yourself.' }, { status: 400 });
 
   const result = await db.$transaction(async (tx) => {
