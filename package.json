@@ -3,7 +3,7 @@
   "version": "0.2.1",
   "private": true,
   "scripts": {
-    "dev": "bash start-game-server.sh && next dev -p 3000 2>&1 | tee dev.log",
+    "dev": "bash start-game-server.sh && python3 next-supervisor.py 2>/dev/null || (next dev -p 3000 2>&1 | tee dev.log)",
     "dev:game-server": "cd mini-services/game-server && bun run dev",
     "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
