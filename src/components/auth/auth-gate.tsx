@@ -15,6 +15,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/components/providers/auth-provider';
+import { GameRulesModal } from '@/components/modals/game-rules-modal';
 import {
   Skull,
   Zap,
@@ -257,6 +258,7 @@ function AuthScreen() {
         </Card>
 
         {/* Game Rules Modal */}
+        <GameRulesModal isOpen={rulesOpen} onClose={() => setRulesOpen(false)} />
 
         {/* Forgot Password Modal */}
         <Dialog open={forgotOpen} onOpenChange={(open) => { setForgotOpen(open); setError(null); }}>
