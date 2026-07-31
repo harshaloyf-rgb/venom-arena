@@ -508,15 +508,20 @@ function tickRoom(room: ArenaRoom, now: number): void {
       // Stars: real players always get 10 stars; selfDestruct bots get 0.
       if (dead.isPlayer && dead.carriedChips > 0) {
         dropStarsAtDeath(room, headX, headY, dead.carriedChips);
+        log('info', `Wall-death star drop: ${dead.name} → 10 stars (${Math.floor(dead.carriedChips)} chips) at (${headX.toFixed(0)},${headY.toFixed(0)})`);
       }
       // Bot wall death (selfDestruct): 0 food, 0 stars — vanish cleanly.
     } else {
       // Body or headOn collision: ALL snakes drop score orbs (sum = snake.score).
       // selfDestruct bots that die by COLLISION still drop food (only WALL death vanishes cleanly).
+      const foodCountBefore = room.foods.length;
       dropScoreOrbsAtBody(room, dead.points, dead.score, dead.color);
+      const foodDropped = room.foods.length - foodCountBefore;
+      log('info', `Death food drop: ${dead.name} (${dead.isBot?'bot':'player'}) score=${dead.score} bodyLen=${dead.points.length} → ${foodDropped} orbs`);
       // Stars: real players only.
       if (dead.isPlayer && dead.carriedChips > 0) {
         dropStarsAtDeath(room, headX, headY, dead.carriedChips);
+        log('info', `Death star drop: ${dead.name} → 10 stars (${Math.floor(dead.carriedChips)} chips) at (${headX.toFixed(0)},${headY.toFixed(0)})`);
       }
     }
 
@@ -536,6 +541,21 @@ function tickRoom(room: ArenaRoom, now: number): void {
         : { victimName: dead.name, victimIsBot: dead.isBot, killerName: null, killerIsBot: false, cause: death.cause as string };
     for (const socketId of room.players.keys()) {
       io.to(socketId).emit('kill_feed', killFeedMsg);
+    }
+
+    // Notify all players about death food/star drops so they can show visual effects.
+    if (death.cause !== 'wall') {
+      const dropEvent = {
+        x: headX,
+        y: headY,
+        score: dead.score,
+        bodyPoints: dead.points.slice(0, Math.min(60, dead.points.length)),
+        color: dead.color,
+        droppedStars: dead.isPlayer && dead.carriedChips > 0 ? 10 : 0,
+      };
+      for (const socketId of room.players.keys()) {
+        io.to(socketId).emit('death_food_drop', dropEvent);
+      }
     }
 
     if (dead.isPlayer) {
