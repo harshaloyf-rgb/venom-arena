@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getSession, hashPassword, verifyPassword } from '@/lib/auth';
+import { getSession, hashPassword, verifyPassword, signSession, setSessionCookie } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,10 +30,20 @@ export async function POST(req: NextRequest) {
     }
 
     const newHash = await hashPassword(newPassword);
-    await db.player.update({
+    // Increment tokenVersion to invalidate all existing sessions
+    const updated = await db.player.update({
       where: { id: session.playerId },
-      data: { passwordHash: newHash },
+      data: { passwordHash: newHash, tokenVersion: { increment: 1 } },
     });
+
+    // Re-sign session with new tokenVersion
+    const token = await signSession({
+      playerId: updated.id,
+      userTag: updated.userTag,
+      role: updated.role as 'player' | 'admin',
+      tokenVersion: updated.tokenVersion,
+    });
+    await setSessionCookie(token);
 
     return NextResponse.json({ ok: true });
   } catch (e) {

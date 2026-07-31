@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { seedGameConfig } from '@/lib/game-config-db'
+import { getSession } from '@/lib/auth'
 
 /**
  * GET /api/admin/config
  * Returns all GameConfig rows. If the table is empty, seeds defaults first.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const session = await getSession();
+  if (!session || session.role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  }
   let rows = await db.gameConfig.findMany({ orderBy: { order: 'asc' } })
 
   if (rows.length === 0) {
@@ -43,6 +48,10 @@ export async function GET() {
  * Updates the given config keys with new values. Returns all configs after update.
  */
 export async function PUT(req: NextRequest) {
+  const session = await getSession();
+  if (!session || session.role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  }
   const body = await req.json().catch(() => ({ updates: [] }))
   const updates: { key: string; value: unknown }[] = body.updates ?? []
 

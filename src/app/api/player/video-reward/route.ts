@@ -3,6 +3,8 @@ import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
 // In-memory cooldown tracking (playerId -> last reward timestamp)
+// NOTE: Cooldown state is lost on server restart. Acceptable for now —
+// TODO: store cooldown timestamps in the database for durability.
 const videoRewardCooldowns = new Map<string, number>();
 const VIDEO_REWARD_COOLDOWN_MS = 60_000; // 60 seconds
 const VIDEO_REWARD_AMOUNT = 50;

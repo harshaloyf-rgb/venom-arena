@@ -111,7 +111,8 @@ async function updateChallengeProgress(
 // }
 export async function POST(req: NextRequest) {
   const internalSecret = req.headers.get('x-internal-secret');
-  const expected = process.env.INTERNAL_SECRET || 'venom-arena-internal-dev';
+  const expected = process.env.INTERNAL_SECRET;
+  if (!expected) throw new Error('INTERNAL_SECRET env var is required');
   if (internalSecret !== expected) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -140,6 +141,18 @@ export async function POST(req: NextRequest) {
   //  * Practice (rewardMultiplier=0): 0 chips, 0 XP.
   const score = Math.max(0, Math.floor(Number(body.score) || 0));
   const bankedAmountFromBody = Math.max(0, Math.floor(Number(body.bankedAmount) || 0));
+
+  // Validate bankedAmount <= carriedChips on extract (H-09)
+  if (outcome === 'extract' && bankedAmountFromBody > carriedChips) {
+    return NextResponse.json({ error: 'bankedAmount cannot exceed carriedChips.' }, { status: 400 });
+  }
+
+  // Replay-attack protection: reject results older than 5 minutes (H-14)
+  const matchTimestamp = Number(body.timestamp) || 0;
+  if (matchTimestamp && Date.now() - matchTimestamp > 5 * 60 * 1000) {
+    return NextResponse.json({ error: 'Match result expired.' }, { status: 400 });
+  }
+
   const chipsEarned = outcome === 'extract' ? bankedAmountFromBody : 0;
   const chipsLost = outcome === 'death' ? carriedChips : 0;
   // XP formula: floor((score*5 + kills*50) * rewardMultiplier)

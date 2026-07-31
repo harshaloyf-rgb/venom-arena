@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { PrismaClientKnownRequestError } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
   signSession,
   setSessionCookie,
@@ -9,9 +9,14 @@ import {
 } from '@/lib/auth';
 import { toProfile, encodeSkins } from '@/lib/player-helpers';
 import { DEFAULT_UNLOCKED_SKINS } from '@/lib/constants';
+import { rateLimit } from '@/lib/api-helpers';
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit: max 10 per 15 min per IP
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const rl = rateLimit(`register:${ip}`, 10, 15 * 60 * 1000);
+    if (rl) return rl;
     const body = await req.json().catch(() => ({}));
     const email = String(body.email || '').toLowerCase().trim();
     const password = String(body.password || '');
@@ -24,8 +29,8 @@ export async function POST(req: NextRequest) {
     if (password.length < 6) {
       return NextResponse.json({ error: 'Password must be at least 6 characters.' }, { status: 400 });
     }
-    if (!name) {
-      return NextResponse.json({ error: 'Display name is required.' }, { status: 400 });
+    if (!name || name.length < 2) {
+      return NextResponse.json({ error: 'Display name must be at least 2 characters.' }, { status: 400 });
     }
     if (pin && !/^\d{4}$/.test(pin)) {
       return NextResponse.json({ error: 'Security PIN must be exactly 4 digits.' }, { status: 400 });
@@ -62,7 +67,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ player: toProfile(player) });
   } catch (e) {
-    if (e instanceof PrismaClientKnownRequestError && e.code === 'P2002') {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
       return NextResponse.json({ error: 'Email already registered. Try logging in.' }, { status: 409 });
     }
     console.error('[auth/register] error', e);

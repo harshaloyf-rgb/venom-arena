@@ -7,9 +7,14 @@ import {
 } from '@/lib/auth';
 import { toProfile, encodeSkins } from '@/lib/player-helpers';
 import { DEFAULT_UNLOCKED_SKINS } from '@/lib/constants';
+import { rateLimit } from '@/lib/api-helpers';
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit: max 10 per 15 min per IP
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const rl = rateLimit(`guest:${ip}`, 10, 15 * 60 * 1000);
+    if (rl) return rl;
     const body = await req.json().catch(() => ({}));
     const name = String(body.name || 'Guest').trim().slice(0, 20) || 'Guest';
 

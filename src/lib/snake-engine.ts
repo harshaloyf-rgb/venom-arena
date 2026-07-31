@@ -283,6 +283,12 @@ export function moveHead(pos: Vec2, angle: number, speed: number): Vec2 {
 // ----------------------------------------------------------------------------
 // Body Management
 // ----------------------------------------------------------------------------
+// NOTE: The path-based body system (buildInitialPath, extendPath,
+// sampleSegments) below is a MORE ACCURATE approach that maintains even
+// segment spacing. The current online/offline engines use a simpler
+// points.unshift/pop approach. These functions are kept for future
+// migration but are NOT yet called by any engine.
+// ----------------------------------------------------------------------------
 
 /**
  * Build an initial body: `length` segments strung out behind the head.

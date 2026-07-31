@@ -10,7 +10,8 @@ import { getArenaById } from '@/lib/game-config';
 // returns: { ok: boolean, player: {...} | null, reason?: string }
 export async function POST(req: NextRequest) {
   const internalSecret = req.headers.get('x-internal-secret');
-  const expected = process.env.INTERNAL_SECRET || 'venom-arena-internal-dev';
+  const expected = process.env.INTERNAL_SECRET;
+  if (!expected) throw new Error('INTERNAL_SECRET env var is required');
   if (internalSecret !== expected) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }

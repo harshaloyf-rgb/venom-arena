@@ -371,63 +371,60 @@ export async function GET() {
   const excludeDailyTitles = new Set(yesterdayDailies.map((c) => c.title));
   const excludeWeeklyTitles = new Set(lastWeekWeeklies.map((c) => c.title));
 
-  // Check existing daily challenges for today
-  const existingDaily = await db.challenge.findMany({
-    where: { playerId, type: 'daily', periodStart: today },
-  });
-
-  // Check existing weekly challenges for this week
-  const existingWeekly = await db.challenge.findMany({
-    where: { playerId, type: 'weekly', periodStart: monday },
-  });
-
-  // ── Generate daily challenges if needed ──
-  if (existingDaily.length === 0) {
-    let pool = DAILY_POOLS[tier];
-    // Exclude yesterday's titles (anti-repeat)
-    pool = excludeByTitle(pool, excludeDailyTitles);
-    // Fallback: if pool is too small after exclusions, use full pool
-    if (pool.length < 3) pool = DAILY_POOLS[tier];
-    // Pick 3 diverse challenges (different categories guaranteed)
-    const templates = pickDiverse(pool, 3);
-
-    await db.challenge.createMany({
-      data: templates.map((t) => ({
-        playerId,
-        type: 'daily',
-        category: t.category,
-        title: t.title,
-        description: t.description,
-        target: t.target,
-        reward: Math.floor(t.reward * rewardMult),
-        periodStart: today,
-      })),
+  // ── Generate challenges inside a transaction to prevent duplicates ──
+  await db.$transaction(async (tx) => {
+    // Re-check daily challenges for today
+    const existingDaily = await tx.challenge.findMany({
+      where: { playerId, type: 'daily', periodStart: today },
     });
-  }
 
-  // ── Generate weekly challenges if needed ──
-  if (existingWeekly.length === 0) {
-    let pool = WEEKLY_POOLS[tier];
-    // Exclude last week's titles (anti-repeat)
-    pool = excludeByTitle(pool, excludeWeeklyTitles);
-    // Fallback: if pool is too small after exclusions, use full pool
-    if (pool.length < 2) pool = WEEKLY_POOLS[tier];
-    // Pick 2 diverse challenges (different categories guaranteed)
-    const templates = pickDiverse(pool, 2);
-
-    await db.challenge.createMany({
-      data: templates.map((t) => ({
-        playerId,
-        type: 'weekly',
-        category: t.category,
-        title: t.title,
-        description: t.description,
-        target: t.target,
-        reward: Math.floor(t.reward * rewardMult),
-        periodStart: monday,
-      })),
+    // Re-check weekly challenges for this week
+    const existingWeekly = await tx.challenge.findMany({
+      where: { playerId, type: 'weekly', periodStart: monday },
     });
-  }
+
+    // ── Generate daily challenges if needed ──
+    if (existingDaily.length === 0) {
+      let pool = DAILY_POOLS[tier];
+      pool = excludeByTitle(pool, excludeDailyTitles);
+      if (pool.length < 3) pool = DAILY_POOLS[tier];
+      const templates = pickDiverse(pool, 3);
+
+      await tx.challenge.createMany({
+        data: templates.map((t) => ({
+          playerId,
+          type: 'daily',
+          category: t.category,
+          title: t.title,
+          description: t.description,
+          target: t.target,
+          reward: Math.floor(t.reward * rewardMult),
+          periodStart: today,
+        })),
+      });
+    }
+
+    // ── Generate weekly challenges if needed ──
+    if (existingWeekly.length === 0) {
+      let pool = WEEKLY_POOLS[tier];
+      pool = excludeByTitle(pool, excludeWeeklyTitles);
+      if (pool.length < 2) pool = WEEKLY_POOLS[tier];
+      const templates = pickDiverse(pool, 2);
+
+      await tx.challenge.createMany({
+        data: templates.map((t) => ({
+          playerId,
+          type: 'weekly',
+          category: t.category,
+          title: t.title,
+          description: t.description,
+          target: t.target,
+          reward: Math.floor(t.reward * rewardMult),
+          periodStart: monday,
+        })),
+      });
+    }
+  });
 
   // Fetch all active challenges (today's daily + this week's weekly)
   const challenges = await db.challenge.findMany({
@@ -471,49 +468,66 @@ export async function POST(req: NextRequest) {
 
   const playerId = session.playerId;
 
-  // Find the challenge and verify ownership
-  const challenge = await db.challenge.findUnique({
-    where: { id: challengeId },
-  });
-
-  if (!challenge || challenge.playerId !== playerId) {
-    return NextResponse.json({ error: 'Challenge not found.' }, { status: 404 });
-  }
-
-  if (!challenge.completed) {
-    return NextResponse.json({ error: 'Challenge not yet completed.' }, { status: 400 });
-  }
-
-  if (challenge.claimed) {
-    return NextResponse.json({ error: 'Already claimed.' }, { status: 400 });
-  }
-
-  // Calculate streak bonus
+  // Calculate streak bonus (outside transaction — read-only)
   const { multiplier } = await calculateStreak(playerId);
-  const baseReward = challenge.reward;
-  const bonusReward = Math.floor(baseReward * (multiplier - 1)); // bonus = base × (mult - 1)
-  const totalReward = baseReward + bonusReward;
 
-  // Credit reward chips and mark as claimed (atomic transaction)
-  await db.$transaction([
-    db.player.update({
-      where: { id: playerId },
-      data: {
-        bankedChips: { increment: totalReward },
-        totalEarned: { increment: totalReward },
-      },
-    }),
-    db.challenge.update({
-      where: { id: challengeId },
-      data: { claimed: true },
-    }),
-  ]);
+  // Credit reward chips and mark as claimed (atomic transaction with re-check)
+  try {
+    const result = await db.$transaction(async (tx) => {
+      // Re-check inside transaction to prevent double-claim
+      const challenge = await tx.challenge.findUnique({
+        where: { id: challengeId },
+      });
 
-  return NextResponse.json({
-    success: true,
-    reward: totalReward,
-    baseReward,
-    bonusReward,
-    streakMultiplier: multiplier,
-  });
+      if (!challenge || challenge.playerId !== playerId) {
+        throw new Error('not_found');
+      }
+      if (!challenge.completed) {
+        throw new Error('not_completed');
+      }
+      if (challenge.claimed) {
+        throw new Error('already_claimed');
+      }
+
+      const baseReward = challenge.reward;
+      const bonusReward = Math.floor(baseReward * (multiplier - 1));
+      const totalReward = baseReward + bonusReward;
+
+      const updated = await tx.player.update({
+        where: { id: playerId },
+        data: {
+          bankedChips: { increment: totalReward },
+          totalEarned: { increment: totalReward },
+        },
+      });
+
+      await tx.challenge.update({
+        where: { id: challengeId },
+        data: { claimed: true },
+      });
+
+      return { totalReward, baseReward, bonusReward, newBankedChips: updated.bankedChips };
+    });
+
+    return NextResponse.json({
+      success: true,
+      reward: result.totalReward,
+      baseReward: result.baseReward,
+      bonusReward: result.bonusReward,
+      streakMultiplier: multiplier,
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const errorMap: Record<string, { error: string; status: number }> = {
+      not_found: { error: 'Challenge not found.', status: 404 },
+      not_completed: { error: 'Challenge not yet completed.', status: 400 },
+      already_claimed: { error: 'Already claimed.', status: 400 },
+    };
+    if (msg in errorMap) {
+      const { error, status } = errorMap[msg];
+      return NextResponse.json({ error }, { status });
+    }
+    console.error('[challenges/claim] error', e);
+    return NextResponse.json({ error: 'Failed to claim challenge.' }, { status: 500 });
+  }
 }

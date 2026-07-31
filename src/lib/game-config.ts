@@ -184,38 +184,16 @@ export function getCosmeticById(id: string): Skin | undefined {
 // ----------------------------------------------------------------------------
 export const WORLD_SIZE = 8000;
 export const WORLD_RADIUS = 4000; // center of 8000x8000 world (used for offline infinite offset)
-export const INITIAL_BODY_LENGTH = 20; // Base body value at spawn (score starts at 20)
+// NOTE: Physics constants (speed, turn rate, collision, boost, etc.) are now in
+// src/lib/snake-engine.ts as DEFAULT_SNAKE_CONFIG. The values below are only
+// the ones still referenced by non-engine code.
+
 export const INITIAL_SPAWN_SCORE = 20; // Starting score — all food collected adds to this
-export const SEGMENT_SPACING = 6;
-export const BASE_SPEED = 4.5; // normal snake speed (reduced for better control)
-export const BOOST_SPEED = 8.0; // boost speed (reduced for better control)
-export const EXTRACT_GLIDE_SPEED = 3.2; // speed while extracting
-export const EXTRACT_DURATION_MS = 3000; // 3-second extraction
-export const EXTRACT_COMMISSION = 0.35; // 35% commission when >=4 real players
-export const RESPAWN_INVULN_MS = 4000; // spawn protection
-export const MAX_BODY_LENGTH = 200; // cap raised for longer games
-export const BOOST_MIN_LENGTH = 8; // need >8 segments to boost
-export const BOOST_DROP_INTERVAL = 10; // drop 1 tail segment every 10 frames (~3 times/sec at 30Hz)
 export const TICK_RATE_HZ = 30;
 export const TICK_MS = 1000 / TICK_RATE_HZ;
 export const BROADCAST_RATE_HZ = 20;
 export const BROADCAST_MS = 1000 / BROADCAST_RATE_HZ;
 export const MAX_SNAPSHOTS_PER_SECOND = 20;
-
-// Turn rate
-export const TURN_BASE = 0.35; // increased for much tighter control
-export const TURN_MIN = 0.08;
-export const TURN_SCORE_FACTOR = 0.0003; // further reduced impact of score on turn rate
-
-// Size formula
-export const SIZE_BASE = 8;
-export const SIZE_SCORE_FACTOR = 0.4;
-
-// Snake collision hit factor
-export const COLLISION_HIT_FACTOR = 0.75;
-
-// Head-on collision hit factor (slightly tighter for head-head)
-export const HEAD_ON_HIT_FACTOR = 0.8;
 
 // ----------------------------------------------------------------------------
 // Food Orb System — Three size variants

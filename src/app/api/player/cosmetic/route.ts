@@ -77,26 +77,37 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'equip') {
-    const player = await db.player.findUnique({ where: { id: session.playerId } });
-    if (!player) return NextResponse.json({ error: 'Player not found.' }, { status: 404 });
+    try {
+      const result = await db.$transaction(async (tx) => {
+        const player = await tx.player.findUnique({ where: { id: session.playerId } });
+        if (!player) throw new Error('PLAYER_NOT_FOUND');
 
-    let unlocked: string[] = (() => {
-      try { return JSON.parse(player.unlockedSkins || '[]') as string[]; } catch { return []; }
-    })();
-    if (!unlocked.includes(skinId)) {
-      return NextResponse.json({ error: 'You do not own this item.' }, { status: 403 });
+        const unlocked = (() => {
+          try { return JSON.parse(player.unlockedSkins || '[]') as string[]; } catch { return []; }
+        })();
+        if (!unlocked.includes(skinId)) {
+          throw new Error('NOT_OWNED');
+        }
+        const data: Record<string, string | null> = {};
+        if (cosmetic.type === 'skin') data.currentSkin = skinId;
+        if (cosmetic.type === 'trail') data.currentTrail = skinId;
+        if (cosmetic.type === 'death') data.currentDeath = skinId;
+        if (cosmetic.type === 'flag') data.currentFlag = skinId;
+        if (cosmetic.type === 'banner') data.currentBanner = skinId;
+        const updated = await tx.player.update({
+          where: { id: player.id },
+          data,
+        });
+        return updated;
+      });
+      return NextResponse.json({ player: toProfile(result) });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg === 'PLAYER_NOT_FOUND') return NextResponse.json({ error: 'Player not found.' }, { status: 404 });
+      if (msg === 'NOT_OWNED') return NextResponse.json({ error: 'You do not own this item.' }, { status: 403 });
+      console.error('[cosmetic/equip] error', e);
+      return NextResponse.json({ error: 'Equip failed.' }, { status: 500 });
     }
-    const data: Record<string, string | null> = {};
-    if (cosmetic.type === 'skin') data.currentSkin = skinId;
-    if (cosmetic.type === 'trail') data.currentTrail = skinId;
-    if (cosmetic.type === 'death') data.currentDeath = skinId;
-    if (cosmetic.type === 'flag') data.currentFlag = skinId;
-    if (cosmetic.type === 'banner') data.currentBanner = skinId;
-    const updated = await db.player.update({
-      where: { id: player.id },
-      data,
-    });
-    return NextResponse.json({ player: toProfile(updated) });
   }
 
   return NextResponse.json({ error: 'Unknown action.' }, { status: 400 });

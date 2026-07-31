@@ -14,6 +14,9 @@ export async function POST(req: NextRequest) {
   if (!tag || amount <= 0) {
     return NextResponse.json({ error: 'Invalid tag or amount.' }, { status: 400 });
   }
+  if (amount < 1) {
+    return NextResponse.json({ error: 'Minimum deposit is 1 chip.' }, { status: 400 });
+  }
   if (amount > 1_000_000) {
     return NextResponse.json({ error: 'Max deposit is 1,000,000 chips per transaction.' }, { status: 400 });
   }

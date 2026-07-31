@@ -53,6 +53,7 @@ model Player {
   // Admin / moderation
   role            String   @default("player") // player | admin
   banned          Boolean  @default(false)
+  tokenVersion    Int      @default(0) // incremented on password change to invalidate sessions
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

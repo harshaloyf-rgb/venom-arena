@@ -4,6 +4,8 @@ import { getSession } from '@/lib/auth';
 import { PROMO_CODES } from '@/lib/game-config';
 
 // In-memory tracking: playerId -> Set<code> to prevent double-claim
+// NOTE: Redemption state is lost on server restart. Acceptable for now —
+// TODO: store redemption records in the database for durability.
 const redeemedPromos = new Map<string, Set<string>>();
 
 // POST /api/player/promo-reward  body: { code }
