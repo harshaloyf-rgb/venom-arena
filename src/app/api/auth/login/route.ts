@@ -6,12 +6,17 @@ import {
   verifyPassword,
 } from '@/lib/auth';
 import { toProfile } from '@/lib/player-helpers';
+import { rateLimit } from '@/lib/api-helpers';
 
 const SESSION_REMEMBER_DAYS = 30;
 const SESSION_DEFAULT_DAYS = 7;
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit: max 10 per 15 min per IP
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const rl = rateLimit(`login:${ip}`, 10, 15 * 60 * 1000);
+    if (rl) return rl;
     const body = await req.json().catch(() => ({}));
     const email = String(body.email || '').toLowerCase().trim();
     const password = String(body.password || '');

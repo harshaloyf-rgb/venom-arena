@@ -21,7 +21,8 @@ export async function POST() {
       // Check remaining members and handle cleanup
       const remaining = await tx.player.count({ where: { clanTag } });
       if (remaining === 0) {
-        await tx.clan.delete({ where: { tag: clanTag } }).catch(() => {});
+        // Don't swallow errors — let them propagate so transaction rolls back
+        await tx.clan.delete({ where: { tag: clanTag } });
       } else if (wasLeader) {
         // Promote oldest member to Leader
         const oldest = await tx.player.findFirst({

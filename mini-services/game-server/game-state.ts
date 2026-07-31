@@ -26,6 +26,7 @@ import {
   calcCollisionRadius,
   calcTurnRate,
   calcSpeed,
+  calcDeathFood,
   turnToward as engineTurnToward,
   moveHead,
   isNeckProtected,
@@ -379,22 +380,8 @@ export function spawnRandomFood(room: ArenaRoom): Food {
 // ----------------------------------------------------------------------------
 
 /**
- * Compute the mix of Small(1), Medium(3), Large(5) orbs that sum to exactly totalScore.
- * Greedily picks Large first, then Medium, then Small.
- */
-export function computeDeathOrbs(totalScore: number): { small: number; medium: number; large: number } {
-  let remaining = totalScore;
-  const large = Math.floor(remaining / 5);
-  remaining -= large * 5;
-  const medium = Math.floor(remaining / 3);
-  remaining -= medium * 3;
-  const small = remaining;
-  return { small, medium, large };
-}
-
-/**
  * Drop score orbs (S/M/L) that sum to exactly totalScore along a body path.
- * Used for body-collision deaths (NOT wall deaths).
+ * Uses calcDeathFood from snake-engine for the mix calculation.
  */
 export function dropScoreOrbsAtBody(
   room: ArenaRoom,
@@ -404,16 +391,16 @@ export function dropScoreOrbsAtBody(
 ): void {
   if (!bodyPoints || bodyPoints.length === 0 || totalScore <= 0) return;
 
-  const { small, medium, large } = computeDeathOrbs(totalScore);
+  const [smallCount, mediumCount, largeCount] = calcDeathFood(totalScore, false);
   let orbIdx = 0;
-  const totalOrbs = small + medium + large;
+  const totalOrbs = smallCount + mediumCount + largeCount;
   if (totalOrbs === 0) return;
 
   // Interleave S/M/L along the body for visual spread
   const orbSequence: Array<{ value: number; size: number; color: string; glowColor: string; orbSize: 'small' | 'medium' | 'large' }> = [];
-  for (let i = 0; i < large; i++) orbSequence.push({ value: 5, size: 8, color: '#f472b6', glowColor: '#ec4899', orbSize: 'large' });
-  for (let i = 0; i < medium; i++) orbSequence.push({ value: 3, size: 5, color: '#38bdf8', glowColor: '#0ea5e9', orbSize: 'medium' });
-  for (let i = 0; i < small; i++) orbSequence.push({ value: 1, size: 3, color: '#34d399', glowColor: '#10b981', orbSize: 'small' });
+  for (let i = 0; i < largeCount; i++) orbSequence.push({ value: 5, size: 8, color: '#f472b6', glowColor: '#ec4899', orbSize: 'large' });
+  for (let i = 0; i < mediumCount; i++) orbSequence.push({ value: 3, size: 5, color: '#38bdf8', glowColor: '#0ea5e9', orbSize: 'medium' });
+  for (let i = 0; i < smallCount; i++) orbSequence.push({ value: 1, size: 3, color: '#34d399', glowColor: '#10b981', orbSize: 'small' });
 
   // Shuffle for visual variety
   for (let i = orbSequence.length - 1; i > 0; i--) {

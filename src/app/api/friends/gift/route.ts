@@ -13,50 +13,61 @@ export async function POST(req: NextRequest) {
   if (!toTag) return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });
   if (toTag === session.userTag) return NextResponse.json({ error: 'Cannot gift yourself.' }, { status: 400 });
 
-  const result = await db.$transaction(async (tx) => {
-    const sender = await tx.player.findUnique({ where: { id: session.playerId } });
-    if (!sender) throw new Error('sender_missing');
-    if (sender.bankedChips < amount) throw new Error('insufficient');
+  let result: { bankedChips: number } | null = null;
+  let appError: string | null = null;
 
-    const recipient = await tx.player.findUnique({ where: { userTag: toTag } });
-    if (!recipient) throw new Error('recipient_missing');
+  try {
+    result = await db.$transaction(async (tx) => {
+      // Re-check balance inside transaction to prevent double-spend
+      const sender = await tx.player.findUnique({ where: { id: session.playerId } });
+      if (!sender) throw new Error('sender_missing');
+      if (sender.bankedChips < amount) throw new Error('insufficient');
 
-    // must be friends
-    const f = await tx.friendship.findFirst({
-      where: {
-        OR: [
-          { initiatorId: sender.id, recipientId: recipient.id, status: 'accepted' },
-          { initiatorId: recipient.id, recipientId: sender.id, status: 'accepted' },
-        ],
-      },
-    });
-    if (!f) throw new Error('not_friends');
+      const recipient = await tx.player.findUnique({ where: { userTag: toTag } });
+      if (!recipient) throw new Error('recipient_missing');
 
-    const updatedSender = await tx.player.update({
-      where: { id: sender.id },
-      data: { bankedChips: { decrement: amount }, totalLost: { increment: amount } },
-    });
-    await tx.player.update({
-      where: { id: recipient.id },
-      data: { bankedChips: { increment: amount }, totalEarned: { increment: amount } },
-    });
-    await tx.gift.create({
-      data: { fromId: sender.id, toId: recipient.id, amount },
-    });
-    return updatedSender;
-  }).catch((e) => {
-    return { error: String(e.message || e) };
-  });
+      // must be friends
+      const f = await tx.friendship.findFirst({
+        where: {
+          OR: [
+            { initiatorId: sender.id, recipientId: recipient.id, status: 'accepted' },
+            { initiatorId: recipient.id, recipientId: sender.id, status: 'accepted' },
+          ],
+        },
+      });
+      if (!f) throw new Error('not_friends');
 
-  if ('error' in result) {
-    const map: Record<string, string> = {
+      const updatedSender = await tx.player.update({
+        where: { id: sender.id },
+        data: { bankedChips: { decrement: amount }, totalLost: { increment: amount } },
+      });
+      await tx.player.update({
+        where: { id: recipient.id },
+        data: { bankedChips: { increment: amount }, totalEarned: { increment: amount } },
+      });
+      await tx.gift.create({
+        data: { fromId: sender.id, toId: recipient.id, amount },
+      });
+      return updatedSender;
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const appErrors: Record<string, string> = {
       insufficient: 'Not enough chips.',
       not_friends: 'You can only gift friends.',
       sender_missing: 'Sender missing.',
       recipient_missing: 'Recipient not found.',
     };
-    const msg = map[result.error] || 'Gift failed.';
-    return NextResponse.json({ error: msg }, { status: 400 });
+    if (msg in appErrors) {
+      appError = appErrors[msg];
+    } else {
+      console.error('[friends/gift] error', e);
+      return NextResponse.json({ error: 'Gift failed.' }, { status: 500 });
+    }
   }
-  return NextResponse.json({ ok: true, newBankedChips: result.bankedChips });
+
+  if (appError) {
+    return NextResponse.json({ error: appError }, { status: 400 });
+  }
+  return NextResponse.json({ ok: true, newBankedChips: result!.bankedChips });
 }

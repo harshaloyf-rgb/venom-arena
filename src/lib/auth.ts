@@ -3,7 +3,11 @@ import { cookies } from 'next/headers';
 import { db } from './db';
 import bcrypt from 'bcryptjs';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'venom-arena-dev-secret-change-in-prod';
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error('JWT_SECRET env var is required');
+  return secret;
+}
 const COOKIE_NAME = 'va_session';
 const SESSION_DAYS = 30;
 
@@ -11,17 +15,20 @@ export interface SessionPayload {
   playerId: string;
   userTag: string;
   role: 'player' | 'admin';
+  tokenVersion?: number;
   iat?: number;
   exp?: number;
 }
 
 export async function signSession(payload: Omit<SessionPayload, 'iat' | 'exp'>, expiresIn?: string): Promise<string> {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: expiresIn || `${SESSION_DAYS}d` });
+  // @ts-expect-error jwt.sign overload mismatch with SessionPayload
+  return jwt.sign(payload, getJwtSecret(), { expiresIn: expiresIn || `${SESSION_DAYS}d` });
 }
 
 export function verifySession(token: string): SessionPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as SessionPayload;
+    // @ts-expect-error jwt.verify return type
+    return jwt.verify(token, getJwtSecret()) as SessionPayload;
   } catch {
     return null;
   }
@@ -34,9 +41,10 @@ export async function getSession(): Promise<SessionPayload | null> {
   const payload = verifySession(token);
   if (!payload) return null;
 
-  // Invalidate session for banned players
-  const player = await db.player.findUnique({ where: { id: payload.playerId }, select: { banned: true } });
+  // Invalidate session for banned players and token version mismatches
+  const player = await db.player.findUnique({ where: { id: payload.playerId }, select: { banned: true, tokenVersion: true } });
   if (player?.banned === true) return null;
+  if (payload.tokenVersion !== undefined && player && payload.tokenVersion !== player.tokenVersion) return null;
 
   return payload;
 }

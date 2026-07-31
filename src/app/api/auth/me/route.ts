@@ -4,13 +4,21 @@ import { getSession } from '@/lib/auth';
 import { toProfile } from '@/lib/player-helpers';
 
 export async function GET() {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ player: null });
+  try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ player: null });
+    }
+    const player = await db.player.findUnique({ where: { id: session.playerId } });
+    if (!player) {
+      return NextResponse.json({ player: null });
+    }
+    if (player.banned) {
+      return NextResponse.json({ error: 'banned' }, { status: 403 });
+    }
+    return NextResponse.json({ player: toProfile(player) });
+  } catch (e) {
+    console.error('[auth/me] error', e);
+    return NextResponse.json({ player: null }, { status: 500 });
   }
-  const player = await db.player.findUnique({ where: { id: session.playerId } });
-  if (!player || player.banned) {
-    return NextResponse.json({ player: null });
-  }
-  return NextResponse.json({ player: toProfile(player) });
 }

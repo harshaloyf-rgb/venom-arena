@@ -16,23 +16,56 @@ export async function POST(req: NextRequest) {
   const target = await db.player.findUnique({ where: { userTag: targetTag } });
   if (!target) return NextResponse.json({ error: 'Player not found.' }, { status: 404 });
 
-  // Already exists?
-  const existing = await db.friendship.findFirst({
-    where: {
-      OR: [
-        { initiatorId: session.playerId, recipientId: target.id },
-        { initiatorId: target.id, recipientId: session.playerId },
-      ],
-    },
-  });
-  if (existing) {
-    if (existing.status === 'accepted') return NextResponse.json({ error: 'Already friends.' }, { status: 400 });
-    if (existing.status === 'blocked') return NextResponse.json({ error: 'Cannot send request.' }, { status: 403 });
-    return NextResponse.json({ error: 'Request already pending.' }, { status: 400 });
-  }
+  try {
+    await db.$transaction(async (tx) => {
+      // Already exists? Check inside transaction to prevent race condition
+      const existing = await tx.friendship.findFirst({
+        where: {
+          OR: [
+            { initiatorId: session.playerId, recipientId: target.id },
+            { initiatorId: target.id, recipientId: session.playerId },
+          ],
+        },
+      });
+      if (existing) {
+        if (existing.status === 'accepted') throw new Error('already_friends');
+        if (existing.status === 'blocked') throw new Error('blocked');
+        throw new Error('pending');
+      }
 
-  await db.friendship.create({
-    data: { initiatorId: session.playerId, recipientId: target.id, status: 'pending' },
-  });
-  return NextResponse.json({ ok: true });
+      // Max friends limit check
+      const friendCount = await tx.friendship.count({
+        where: {
+          OR: [
+            { initiatorId: session.playerId, status: 'accepted' },
+            { recipientId: session.playerId, status: 'accepted' },
+          ],
+        },
+      });
+      if (friendCount >= 100) throw new Error('max_friends');
+
+      await tx.friendship.create({
+        data: { initiatorId: session.playerId, recipientId: target.id, status: 'pending' },
+      });
+    });
+    return NextResponse.json({ ok: true });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const errorMap: Record<string, { error: string; status: number }> = {
+      already_friends: { error: 'Already friends.', status: 400 },
+      blocked: { error: 'Cannot send request.', status: 403 },
+      pending: { error: 'Request already pending.', status: 400 },
+      max_friends: { error: 'You have reached the maximum number of friends (100).', status: 400 },
+    };
+    if (msg in errorMap) {
+      const { error, status } = errorMap[msg];
+      return NextResponse.json({ error }, { status });
+    }
+    // Unique constraint violation (duplicate from race condition)
+    if (msg.includes('Unique')) {
+      return NextResponse.json({ error: 'Request already pending.', status: 400 });
+    }
+    console.error('[friends/request] error', e);
+    return NextResponse.json({ error: 'Failed to send request.' }, { status: 500 });
+  }
 }

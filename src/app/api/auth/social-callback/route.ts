@@ -39,8 +39,8 @@ export async function GET(req: NextRequest) {
   const cookieStore = await cookies();
   const savedState = cookieStore.get(`oauth_state_${p}`)?.value;
   const receivedState = url.searchParams.get('state');
-  if (savedState && receivedState && savedState !== receivedState) {
-    console.error(`[oauth/${p}] CSRF state mismatch`);
+  if (!savedState || !receivedState || savedState !== receivedState) {
+    console.error(`[oauth/${p}] CSRF state missing or mismatch`);
     return NextResponse.redirect(new URL('/?oauth_error=csrf_mismatch', url.origin));
   }
   cookieStore.delete(`oauth_state_${p}`);
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     const cookieStore = await cookies();
     const savedState = cookieStore.get('oauth_state_apple')?.value;
     const receivedState = (formData.get('state') as string | null) || '';
-    if (savedState && receivedState && savedState !== receivedState) {
+    if (!savedState || !receivedState || savedState !== receivedState) {
       return NextResponse.redirect(new URL('/?oauth_error=csrf_mismatch', req.nextUrl.origin));
     }
     cookieStore.delete('oauth_state_apple');
@@ -159,6 +159,10 @@ async function handleOAuthLogin(provider: OAuthProvider, userInfo: OAuthUserInfo
       if (existingByEmail) {
         if (existingByEmail.banned) {
           return NextResponse.redirect(new URL('/?oauth_error=account_banned', origin));
+        }
+        // If the account already has a different OAuth provider linked, reject
+        if (existingByEmail.oauthProvider && existingByEmail.oauthProvider !== provider) {
+          return NextResponse.redirect(new URL('/?oauth_error=account_already_linked', origin));
         }
         const linked = await db.player.update({
           where: { id: existingByEmail.id },

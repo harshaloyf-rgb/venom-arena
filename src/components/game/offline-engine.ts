@@ -1228,7 +1228,7 @@ export class OfflineGameEngine {
         : this.bots.get(d.deadId);
       if (!deadSnake || deadSnake.points.length === 0) continue;
 
-      const totalScore = this.cfg.initialSpawnScore + deadSnake.score;
+      const totalScore = deadSnake.score;
       const dropped = computeDeathFoodDrop(totalScore, deadSnake.points, this.arena.id, this.idCounterObj, getFoodOrbs(this.cfg));
       newDropFoods.push(...dropped);
 
@@ -1671,7 +1671,7 @@ export class OfflineGameEngine {
     for (const d of deaths) {
       const bot = this.bots.get(d.deadId);
       if (bot) {
-        const botTotal = this.cfg.initialSpawnScore + bot.score;
+        const botTotal = bot.score;
         newDropFoods.push(...computeDeathFoodDrop(botTotal, bot.points, this.arena.id, this.idCounterObj, getFoodOrbs(this.cfg)));
         // Spawn food burst particles for bot deaths during post-death too
         this.spawnFoodBurstParticles(bot.points, bot.color);

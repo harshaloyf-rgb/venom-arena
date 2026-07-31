@@ -11,16 +11,16 @@ import { getSession, signSession } from '@/lib/auth';
  * we never expose the cookie value itself).
  */
 export async function GET() {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ token: null }, { status: 401 });
-  }
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ token: null }, { status: 401 });
+    }
     const token = await signSession({
       playerId: session.playerId,
       userTag: session.userTag,
       role: session.role,
-    });
+    }, '24h');
     return NextResponse.json({ token });
   } catch (e) {
     console.error('[auth/token] sign error', e);

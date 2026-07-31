@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { PrismaClientKnownRequestError } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { getSession, signSession, setSessionCookie, hashPassword } from '@/lib/auth';
 import { toProfile } from '@/lib/player-helpers';
 
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ player: toProfile(upgraded) });
   } catch (e) {
-    if (e instanceof PrismaClientKnownRequestError && e.code === 'P2002') {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
       return NextResponse.json({ error: 'Email already registered. Try a different email.' }, { status: 409 });
     }
     console.error('[auth/upgrade] error', e);

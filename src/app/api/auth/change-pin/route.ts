@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import bcrypt from 'bcryptjs';
 
 /**
  * POST /api/auth/change-pin
@@ -43,14 +44,16 @@ export async function POST(req: NextRequest) {
       if (!/^\d{4}$/.test(currentPin)) {
         return NextResponse.json({ error: 'Current Security PIN (4 digits) is required.' }, { status: 400 });
       }
-      if (player.securityPin !== currentPin) {
+      const valid = await bcrypt.compare(currentPin, player.securityPin);
+      if (!valid) {
         return NextResponse.json({ error: 'Current Security PIN is incorrect.' }, { status: 401 });
       }
     }
 
+    const hash = await bcrypt.hash(newPin, 10);
     await db.player.update({
       where: { id: session.playerId },
-      data: { securityPin: newPin },
+      data: { securityPin: hash },
     });
 
     return NextResponse.json({
