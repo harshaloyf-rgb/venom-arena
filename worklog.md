@@ -256,3 +256,45 @@ Stage Summary:
 - Next.js server now runs persistently as a daemon with auto-restart
 - Preview panel can load the full app through caddy gateway on port 81
 - Page title, CSS, JS bundles, and API all verified working through proxy
+
+---
+Task ID: leaderboard-improvements
+Agent: main
+Task: Implement comprehensive leaderboard improvements with cross-system integration
+
+Work Log:
+- Read and analyzed all interconnected systems: Hall of Fame, Championships, Highlights, Clan System, and Leaderboards
+- Identified that leaderboards were completely siloed from other systems (no clan tags, no championship status, no HOF badges, no regional view)
+- Rewrote src/components/panels/leaderboards.tsx (~1115 lines) with the following improvements:
+  1. **New Regional tab** — APAC/NA/EU/LATAM filter bridging Leaderboards with Championship regions
+  2. **Clan tag column** on all tabs (connects to Clan System)
+  3. **Championship prize tier badges** on all rows (connects to Championship system)
+  4. **HOF milestone indicator** (Award icon) for immortalized players (connects to Hall of Fame)
+  5. **"Find Me" button** with auto-scroll + highlight animation on all tabs
+  6. **Search** on ALL tabs (was only on National before)
+  7. **Top 3 Podium** visual for Global tab (2nd/1st/3rd layout)
+  8. **Rank change indicators** (↑↓/− with color coding)
+  9. **Live Esports Ticker** mini-bar (connects to Hall of Fame commentary system)
+  10. **Enhanced Your Rank card** with Regional rank, Clan info, Championship status, HOF badge (7 columns)
+  11. **Tier achiever counts** and HOF threshold info in Tiers tab
+  12. **Cross-linked badge** on Global tab showing connection to Championship & HOF
+  13. **EnrichedEntry** type extending LeaderboardEntry with clanTag, isHOF, championshipPrize, rankChange, region
+  14. **REGION_MAP** for country→region mapping used by both client and API
+- Updated src/app/api/leaderboard/route.ts:
+  - Added 'regional' view support with country list filtering
+  - Added clanTag, region to response entries
+  - Added region query parameter validation
+- Updated src/app/api/leaderboard/my-rank/route.ts:
+  - Added regionalRank, region, regionName, clanTag to response
+  - Added regional count query (parallel with existing queries)
+- Fixed negative chips in Summit tab (Math.max floor)
+- Fixed React hooks rules violation (moved useMemo before early return)
+- Removed unused imports (PanelSkeleton, PUBLIC_CLANS, CHAMPIONSHIP_PRIZE_TIERS)
+- Verified: lint passes clean, all 5 tabs render correctly in browser, no console errors
+
+Stage Summary:
+- Leaderboard now has 5 tabs: Summit, Global, National, Regional, Tiers
+- All systems interconnected: Clan tags, Championship prizes, HOF badges, Regional grouping
+- Live ticker, Find Me, search on all tabs, Top 3 podium, rank change indicators
+- Backend API supports regional view and returns clan/region data
+- my-rank API returns regional rank and clan tag
