@@ -508,6 +508,11 @@ export class OfflineGameEngine {
   private finalKills: number = 0;
   private finalDurationSeconds: number = 0;
 
+  // Food drop debug
+  private lastFoodDropInfo: string = '';
+  private lastFoodDropTime: number = 0;
+  private debugDeathsDetected: number = 0;
+
   // Particles
   private particles: Particle[] = [];
   private metallicCache: Map<string, CanvasGradient> = new Map();
@@ -1212,6 +1217,7 @@ export class OfflineGameEngine {
 
     // 6) Collision detection (body collision + head-on collision). NO wall death.
     const deaths = this.detectCollisions(now);
+    this.debugDeathsDetected = deaths.length;
 
     // 7) Apply deaths + drop food.
     let playerDied = false;
@@ -1244,6 +1250,8 @@ export class OfflineGameEngine {
     // Add dropped food to the world.
     if (newDropFoods.length > 0) {
       this.foods.push(...newDropFoods);
+      this.lastFoodDropInfo = `+${newDropFoods.length} food orbs (${deaths.length} deaths, foods now: ${this.foods.length})`;
+      this.lastFoodDropTime = now;
     }
 
     // 8) Remove dead bots and recycle their virtual bots.
@@ -1673,6 +1681,8 @@ export class OfflineGameEngine {
 
     if (newDropFoods.length > 0) {
       this.foods.push(...newDropFoods);
+      this.lastFoodDropInfo = `+${newDropFoods.length} food orbs (post-death bot kill, foods now: ${this.foods.length})`;
+      this.lastFoodDropTime = performance.now();
     }
 
     // Remove dead bots and recycle virtual bots
@@ -1960,6 +1970,29 @@ export class OfflineGameEngine {
 
     // Reset transform for screen-space overlays.
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // Debug: show food drop info + food count + collision info.
+    ctx.save();
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#475569';
+    const pState = this.player?.isDead ? 'DEAD' : (this.isPostDeathRecording ? 'POST-DEATH' : 'ALIVE');
+    ctx.fillText(`Foods:${this.foods.length} Bots:${this.bots.size} Deaths:${this.debugDeathsDetected} ${pState}`, 10, cssH - 10);
+    ctx.restore();
+    // Flash food drop banner (fades after 4s).
+    if (this.lastFoodDropInfo && now - this.lastFoodDropTime < 4000) {
+      const alpha = Math.max(0, 1 - (now - this.lastFoodDropTime) / 4000);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.font = 'bold 18px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fbbf24';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 3;
+      ctx.strokeText(`FOOD DROP: ${this.lastFoodDropInfo}`, cssW / 2, 50);
+      ctx.fillText(`FOOD DROP: ${this.lastFoodDropInfo}`, cssW / 2, 50);
+      ctx.restore();
+    }
 
     // Joystick (touch).
     this.drawJoystick(ctx);
