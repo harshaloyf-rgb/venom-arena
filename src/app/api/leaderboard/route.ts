@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
 
   const type = url.searchParams.get('type') === 'level' ? 'level' : 'bankedChips';
-  const limit = Math.min(Number(url.searchParams.get('limit')) || 100, 100);
+  const limit = Math.min(Number(url.searchParams.get('limit')) || 1000, 1000);
   const view = url.searchParams.get('view') || 'global';
   const country = url.searchParams.get('country') || '';
   const milestone = url.searchParams.get('milestone') || '';

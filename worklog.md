@@ -298,3 +298,24 @@ Stage Summary:
 - Live ticker, Find Me, search on all tabs, Top 3 podium, rank change indicators
 - Backend API supports regional view and returns clan/region data
 - my-rank API returns regional rank and clan tag
+
+---
+Task ID: leaderboard-v2
+Agent: main
+Task: Leaderboard UX overhaul — tab clarity, 1-to-N ranking, Find Me fix, demo data cleanup
+
+Work Log:
+- **Tab descriptions**: Added clear explanation box for every tab (Summit/Global/National/Regional/Tiers) with title, description, and scope line. User now instantly understands what each tab shows.
+- **1-to-N ranking**: Removed all client-side mock data generators (generateGlobalRanks, generateCountrySummit, generateNationalBoard, generateRegionalBoard, generateMilestoneBoard). All boards now fetch from `/api/leaderboard` API with `limit=1000` (up from 100). No more artificial 100-entry cap.
+- **API limit increase**: Changed default+max limit in `/api/leaderboard/route.ts` from 100 to 1000.
+- **Find Me fix**: Replaced DOM-only search with `/api/leaderboard/my-rank` API call. If player is in the current visible list, scrolls to and highlights them. If NOT in the list (e.g. viewing wrong country/region/tier), shows a detailed rank summary card (Global/National/Regional ranks, chips, level, clan, milestone) with a dismiss button. Never shows "play more matches" again.
+- **Demo data cleanup**: Removed ALL mock/fake player data. When API returns 0 entries for a view, only 3 clearly labeled entries appear with `DEMO` badge and grey styling (Demo_Player_Alpha/Beta/Gamma, userTags DEMO-001/002/003). Header shows "· Showing demo data" indicator. Contextual messages explain why (e.g., "Demo — no real players ranked in India yet").
+- **Removed dead code**: Deleted COUNTRY_SEEDS, HOF_ACHIEVER_TAGS, CLAN_TAGS, mockClanTagFor, mockRankChange, INITIAL_COMMENTARY/COMMENTARY_NAMES imports, old playerRankInfo card, LiveTicker simplified.
+- **Verified**: Lint clean, all 5 tabs render in browser, Find Me works (scrolls to player or shows rank card), demo data shows correctly with DEMO badges, no console errors.
+
+Stage Summary:
+- Complete rewrite of leaderboards.tsx from 1119 lines of mock-heavy code to ~975 lines of API-driven code
+- Every tab has a clear description explaining its purpose and scope
+- All ranking is 1-to-N (real players only, no artificial caps)
+- Find Me always works — shows rank card when player not in current view
+- Demo data: 3 entries with DEMO badge only when board is empty, never confused with real data
