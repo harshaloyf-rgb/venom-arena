@@ -1,40 +1,15 @@
-// Player helper utilities — minimal version for auth routes
+import { db } from './db';
+import type { Player } from '@prisma/client';
 import type { PlayerProfile } from './types';
 
-// Convert a Prisma Player row to a PlayerProfile (strips passwordHash, parses JSON arrays)
-export function toProfile(p: {
-  id: string;
-  userTag: string;
-  name: string;
-  email: string | null;
-  country: string;
-  avatar: string | null;
-  role: string;
-  bankedChips: number;
-  totalEarned: number;
-  totalLost: number;
-  level: number;
-  xp: number;
-  lifetimeKills: number;
-  lifetimeDeaths: number;
-  lifetimeExtracts: number;
-  bestStreak: number;
-  biggestExtract: number;
-  dailyStreak: number;
-  lastDailyClaim: string | null;
-  unlockedSkins: string;
-  currentSkin: string;
-  currentTrail: string;
-  currentDeath: string;
-  currentFlag: string | null;
-  currentBanner: string | null;
-  clanTag: string | null;
-  clanRank: string | null;
-  securityPin: string | null;
-  oauthProvider: string | null;
-  createdAt: Date;
-  lastSeenAt: Date;
-}): PlayerProfile {
+export function toProfile(p: Player): PlayerProfile {
+  let unlocked: string[] = [];
+  try {
+    unlocked = JSON.parse(p.unlockedSkins || '[]');
+    if (!Array.isArray(unlocked)) unlocked = [];
+  } catch {
+    unlocked = [];
+  }
   return {
     id: p.id,
     userTag: p.userTag,
@@ -55,7 +30,7 @@ export function toProfile(p: {
     biggestExtract: p.biggestExtract,
     dailyStreak: p.dailyStreak,
     lastDailyClaim: p.lastDailyClaim,
-    unlockedSkins: safeParseJSON<string[]>(p.unlockedSkins, []),
+    unlockedSkins: unlocked,
     currentSkin: p.currentSkin,
     currentTrail: p.currentTrail,
     currentDeath: p.currentDeath,
@@ -70,16 +45,12 @@ export function toProfile(p: {
   };
 }
 
-// Encode a string array as JSON for SQLite storage
+// Serialized JSON helper for unlockedSkins
 export function encodeSkins(skins: string[]): string {
-  return JSON.stringify(skins);
+  return JSON.stringify(Array.from(new Set(skins)));
 }
 
-// Safe JSON parse helper
-function safeParseJSON<T>(str: string, fallback: T): T {
-  try {
-    return JSON.parse(str) as T;
-  } catch {
-    return fallback;
-  }
+export async function getFirstAdmin(): Promise<Player | null> {
+  const admin = await db.player.findFirst({ where: { role: 'admin' } });
+  return admin;
 }
