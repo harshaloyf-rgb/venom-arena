@@ -1075,6 +1075,35 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
           setKillFeed(prev => prev.filter(e => e.id !== id));
         }, 5000);
       });
+      socket.on('death_food_drop', (payload: unknown) => {
+        const data = payload as {
+          x?: number; y?: number; score?: number;
+          bodyPoints?: Array<{ x: number; y: number }>;
+          color?: string; droppedStars?: number;
+        };
+        if (!data?.bodyPoints || data.bodyPoints.length === 0) return;
+        const arr = particlesRef.current;
+        const foodColors = ['#34d399', '#38bdf8', '#f472b6', '#fbbf24'];
+        const step = Math.max(1, Math.floor(data.bodyPoints.length / 12));
+        for (let i = 0; i < data.bodyPoints.length; i += step) {
+          const pt = data.bodyPoints[i];
+          const count = 2 + Math.floor(Math.random() * 2);
+          for (let j = 0; j < count; j++) {
+            const a = Math.random() * Math.PI * 2;
+            const sp = 40 + Math.random() * 100;
+            arr.push({
+              x: pt.x, y: pt.y,
+              vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+              life: 500 + Math.random() * 400,
+              maxLife: 900,
+              color: foodColors[Math.floor(Math.random() * foodColors.length)],
+              size: 2 + Math.random() * 3,
+            });
+          }
+        }
+        // Cap particles
+        if (arr.length > MAX_PARTICLES) arr.splice(0, arr.length - MAX_PARTICLES);
+      });
       socket.on('death', onDeath);
       socket.on('chat', onChat);
       socket.on('kicked', onKicked);
@@ -1108,6 +1137,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
         s.off('extract_fail');
         s.off('extract_cancelled_by_steer');
         s.off('kill_feed');
+        s.off('death_food_drop');
         s.off('death');
         s.off('chat');
         s.off('kicked');

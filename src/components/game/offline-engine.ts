@@ -1217,19 +1217,22 @@ export class OfflineGameEngine {
     let playerDied = false;
     const newDropFoods: Food[] = [];
     for (const d of deaths) {
+      const deadSnake = d.deadId === p.id
+        ? p
+        : this.bots.get(d.deadId);
+      if (!deadSnake || deadSnake.points.length === 0) continue;
+
+      const totalScore = this.cfg.initialSpawnScore + deadSnake.score;
+      const dropped = computeDeathFoodDrop(totalScore, deadSnake.points, this.arena.id, this.idCounterObj, getFoodOrbs(this.cfg));
+      newDropFoods.push(...dropped);
+
+      // Spawn visible food burst particles along the body so the drop is unmistakable.
+      this.spawnFoodBurstParticles(deadSnake.points, deadSnake.color);
+
       if (d.deadId === p.id) {
         playerDied = true;
-        // Drop player's food
-        const playerTotal = this.cfg.initialSpawnScore + p.score;
-        newDropFoods.push(...computeDeathFoodDrop(playerTotal, p.points, this.arena.id, this.idCounterObj, getFoodOrbs(this.cfg)));
-        continue;
-      }
-      const bot = this.bots.get(d.deadId);
-      if (bot) {
-        // Drop bot's food
-        const botTotal = this.cfg.initialSpawnScore + bot.score;
-        newDropFoods.push(...computeDeathFoodDrop(botTotal, bot.points, this.arena.id, this.idCounterObj, getFoodOrbs(this.cfg)));
-        bot.isDead = true;
+      } else {
+        deadSnake.isDead = true;
         // Credit kill to the killer if it's the player.
         if (d.killerId === p.id) {
           p.kills++;
@@ -1662,6 +1665,8 @@ export class OfflineGameEngine {
       if (bot) {
         const botTotal = this.cfg.initialSpawnScore + bot.score;
         newDropFoods.push(...computeDeathFoodDrop(botTotal, bot.points, this.arena.id, this.idCounterObj, getFoodOrbs(this.cfg)));
+        // Spawn food burst particles for bot deaths during post-death too
+        this.spawnFoodBurstParticles(bot.points, bot.color);
         bot.isDead = true;
       }
     }
@@ -2288,6 +2293,34 @@ export class OfflineGameEngine {
         color,
         size: 3 + Math.random() * 3,
       });
+    }
+  }
+
+  /**
+   * Spawn visible food-burst particles along a dead snake's body.
+   * Samples every Nth body segment and emits 2-3 small glowing orbs that
+   * fly outward briefly — makes the food drop impossible to miss.
+   */
+  private spawnFoodBurstParticles(bodyPoints: Vec2[], snakeColor: string): void {
+    const step = Math.max(1, Math.floor(bodyPoints.length / 12));
+    const foodColors = ['#34d399', '#38bdf8', '#f472b6', '#fbbf24']; // S/M/L/Star
+    for (let i = 0; i < bodyPoints.length; i += step) {
+      const pt = bodyPoints[i];
+      const count = 2 + Math.floor(Math.random() * 2);
+      for (let j = 0; j < count; j++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 40 + Math.random() * 100;
+        this.particles.push({
+          x: pt.x,
+          y: pt.y,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          life: 500 + Math.random() * 400,
+          maxLife: 900,
+          color: foodColors[Math.floor(Math.random() * foodColors.length)],
+          size: 2 + Math.random() * 3,
+        });
+      }
     }
   }
 
