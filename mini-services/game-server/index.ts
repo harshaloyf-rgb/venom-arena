@@ -1,1082 +1,777 @@
-// ============================================================================
-// index.ts — Venom Arena Socket.IO game server (mini-service, port 3001).
-// ----------------------------------------------------------------------------
-// Server-authoritative multiplayer snake. The Next.js app (port 3000) talks
-// to this server via the Caddy gateway using io("/?XTransformPort=3001").
-//
-// Architectural fixes vs the OLD broken server (see worklog ANALYSIS-1):
-//  * Auth is mandatory — sockets without a valid JWT (verified via
-//    POST /api/match/verify) are disconnected at the middleware. No
-//    "auth optional, admit anyway" path.
-//  * Identity is the verify response only. We never trust any subsequent
-//    client-supplied userTag/name/color/skin.
-//  * One socket per userTag — a new connection kicks the prior socket.
-//  * Movement is server-authoritative — clients send only `angle`; the
-//    server computes position. Teleport is impossible.
-//  * Buy-in is deducted atomically by /api/match/join (Next.js + Prisma
-//    transaction). We never touch the DB directly.
-//  * Match results are reported exactly once via /api/match/result, guarded
-//    by a `matchSettling` flag to prevent double-credit on disconnect races.
-//  * Recursive setTimeout (not setInterval) for both tick and broadcast
-//    loops — a slow tick can't overlap the next.
-//  * Every tick is wrapped in try/catch; one bad snake never kills the loop.
-//  * Spatial hash grid (see spatial-grid.ts) keeps collision detection
-//    near-linear instead of O(n²).
-//  * Broadcasts happen at 20 Hz, not every tick, and snapshot points are
-//    downsampled to 60 to keep payloads small.
-//  * uncaughtException / unhandledRejection are logged, never fatal.
-//  * Graceful shutdown on SIGINT/SIGTERM broadcasts `server_shutdown` then exits.
-// ============================================================================
+// ============================================================
+// Venom Arena — Complete Online Game Server (Socket.IO, port 3001)
+// Single-file, server-authoritative, 30-tick game loop
+// ============================================================
 
-import { createServer } from 'http';
-import { Server, type Socket } from 'socket.io';
-import {
-  ARENA_TIERS,
-  TICK_MS,
-  WORLD_SIZE,
-  getArenaById,
-} from '../../src/lib/game-config';
-import { calcVisualRadius, calcBaseMapRadius, getFoodOrbs } from '../../src/lib/snake-engine.js';
-import {
-  type ArenaRoom,
-  type BotSession,
-  type PendingDeath,
-  type PlayerIdentity,
-  type PlayerSession,
-  type SnakeBase,
-  buildSnapshot,
-  collectAllSnakes,
-  createArenaRoom,
-  detectCollisions,
-  detectHeadOnCollisions,
-  dropScoreOrbsAtBody,
-  dropStarsAtDeath,
-  eatFood,
-  ensureBots,
-  expireChat,
-  findSafeSpawnPoint,
-  initialBody,
-  randomSpawnPoint,
-  recomputeLeader,
-  replenishFood,
-  spawnBot,
-  tickBot,
-  tickSnakeMovement,
-} from './game-state.js';
+import { Server, Socket } from 'socket.io';
 
-// ----------------------------------------------------------------------------
-// Config
-// ----------------------------------------------------------------------------
+// ---- Inline Type Definitions (copied from game-types.ts) ----
 
-const PORT = Number(process.env.PORT ?? 3001);
-const INTERNAL_SECRET = process.env.INTERNAL_SECRET ?? 'venom-arena-internal-dev';
-const NEXT_APP_URL = (process.env.NEXT_APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-
-const BROADCAST_MS = 1000 / 20; // 20 Hz
-const MAX_SNAPSHOTS_PER_SECOND = 20;
-const INPUT_MIN_INTERVAL_MS = 1000 / MAX_SNAPSHOTS_PER_SECOND; // 50ms
-const CHAT_MIN_INTERVAL_MS = 2000;
-const CHAT_MAX_LEN = 80;
-const HTTP_TIMEOUT_MS = 3000;
-
-// ----------------------------------------------------------------------------
-// Logging — single sink for all output (no console.log elsewhere)
-// ----------------------------------------------------------------------------
-
-type LogLevel = 'info' | 'warn' | 'error';
-function log(level: LogLevel, msg: string): void {
-  const now = new Date();
-  const hh = String(now.getHours()).padStart(2, '0');
-  const mm = String(now.getMinutes()).padStart(2, '0');
-  const ss = String(now.getSeconds()).padStart(2, '0');
-  const prefix = `[${hh}:${mm}:${ss}] [${level.toUpperCase()}]`;
-  if (level === 'error') {
-    process.stderr.write(`${prefix} ${msg}\n`);
-  } else {
-    process.stdout.write(`${prefix} ${msg}\n`);
-  }
+interface Point {
+  x: number;
+  y: number;
 }
 
-// ----------------------------------------------------------------------------
-// HTTP helpers (server-to-server, with 3s timeout + try/catch)
-// ----------------------------------------------------------------------------
-
-interface VerifyResponse {
-  ok: boolean;
-  reason?: string;
-  player?: PlayerIdentity;
-}
-
-interface JoinResponse {
-  ok: boolean;
-  reason?: string;
-  player?: unknown;
-}
-
-interface MatchResultResponse {
-  player?: unknown;
-  chipsEarned?: number;
-  chipsLost?: number;
-  xpGained?: number;
-  newLevel?: number;
-  newBankedChips?: number;
-}
-
-/** Call POST /api/match/verify to validate the client's JWT and fetch its identity. */
-async function verifyToken(token: string): Promise<VerifyResponse> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${NEXT_APP_URL}/api/match/verify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-internal-secret': INTERNAL_SECRET },
-      body: JSON.stringify({ token }),
-      signal: controller.signal,
-    });
-    return (await res.json()) as VerifyResponse;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/** Call POST /api/match/join — atomically deducts buyIn on the Next.js side. */
-async function joinMatch(userTag: string, arenaId: string): Promise<JoinResponse> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${NEXT_APP_URL}/api/match/join`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-internal-secret': INTERNAL_SECRET },
-      body: JSON.stringify({ userTag, arenaId }),
-      signal: controller.signal,
-    });
-    return (await res.json()) as JoinResponse;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-interface ReportResultPayload {
-  userTag: string;
-  arenaId: string;
-  outcome: 'extract' | 'death';
-  carriedChips: number;
-  kills: number;
-  durationSeconds: number;
-  killerTag?: string;
-  score?: number;
-  bankedAmount?: number;
-}
-
-/** Call POST /api/match/result — credits/debits the player's account. */
-async function reportMatchResult(payload: ReportResultPayload): Promise<MatchResultResponse | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${NEXT_APP_URL}/api/match/result`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-internal-secret': INTERNAL_SECRET },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      log('error', `match/result HTTP ${res.status} for ${payload.userTag}`);
-      return null;
-    }
-    return (await res.json()) as MatchResultResponse;
-  } catch (err) {
-    log('error', `match/result fetch failed for ${payload.userTag}: ${(err as Error).message}`);
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// ----------------------------------------------------------------------------
-// Globals
-// ----------------------------------------------------------------------------
-
-// Create HTTP server with a pre-Socket.IO handler for the /stats endpoint.
-// This fires BEFORE Socket.IO's handler, so we can safely write the response.
-const httpServer = createServer((req, res) => {
-  if (req.url === '/stats' && req.method === 'GET' && !res.headersSent) {
-    const stats: Record<string, { players: number; maxPlayers: number }> = {};
-    for (const [roomKey, room] of rooms) {
-      stats[roomKey] = { players: room.players.size, maxPlayers: MAX_PLAYERS_PER_SHARD };
-    }
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(stats));
-  }
-  // All other requests fall through to Socket.IO's handler.
-});
-
-const io = new Server(httpServer, {
-  path: '/',
-  cors: { origin: '*', methods: ['GET', 'POST'] },
-  pingTimeout: 60000,
-  pingInterval: 25000,
-});
-
-/** Per-arena rooms, lazily created. Keyed by arena id from ARENA_TIERS. */
-const rooms = new Map<string, ArenaRoom>();
-/** Enforces one socket per userTag: userTag → socketId. */
-const userTagToSocket = new Map<string, string>();
-
-/** Per-socket data shape (typed helper). */
-interface SocketData {
-  identity?: PlayerIdentity;
-  playerSession?: PlayerSession;
-}
-
-function getSocketData(s: Socket): SocketData {
-  return s.data as SocketData;
-}
-
-/** Max real players per arena shard before auto-creating a new instance. */
-const MAX_PLAYERS_PER_SHARD = 1000;
-
-/**
- * Get-or-create an ArenaRoom for `arenaId`. If the primary shard is full
- * (>= MAX_PLAYERS_PER_SHARD real players), find or create the next shard.
- * Shards are keyed as `{arenaId}` (shard 0), `{arenaId}#2` (shard 1), etc.
- */
-function getOrCreateRoom(arenaId: string): ArenaRoom | null {
-  const arena = getArenaById(arenaId);
-  if (!arena) return null;
-
-  // Try shard 0, then 1, 2, ... until we find one with capacity.
-  let shardIdx = 0;
-  while (true) {
-    const roomKey = shardIdx === 0 ? arenaId : `${arenaId}#${shardIdx + 1}`;
-    let room = rooms.get(roomKey);
-    if (room && room.players.size < MAX_PLAYERS_PER_SHARD) {
-      return room;
-    }
-    if (!room) {
-      // Create a new shard.
-      room = createArenaRoom(arena);
-      rooms.set(roomKey, room);
-      ensureBots(room);
-      log('info', `Created arena shard ${roomKey} with ${room.bots.size} bots (shard ${shardIdx})`);
-      return room;
-    }
-    shardIdx++;
-    // Safety: don't infinite-loop if somehow all shards are full (shouldn't happen).
-    if (shardIdx > 200) {
-      log('error', `Arena ${arenaId} has >200 shards, rejecting join`);
-      return null;
-    }
-  }
-}
-
-/** Get the shard key for a room (for logging / debugging). */
-function getRoomKey(room: ArenaRoom): string {
-  for (const [key, r] of rooms.entries()) {
-    if (r === room) return key;
-  }
-  return room.arena.id;
-}
-
-// ----------------------------------------------------------------------------
-// Match settlement (called after extract success or collision death)
-// ----------------------------------------------------------------------------
-
-interface MatchResultClientPayload {
-  outcome: 'extract' | 'death';
-  arenaId: string;
-  arenaName: string;
-  chipsExtracted: number;
-  commission: number;
-  bankedAmount: number;
-  kills: number;
+interface Snake {
+  id: string;
+  name: string;
+  userTag?: string;
+  points: Point[];
+  angle: number;
+  targetAngle: number;
+  size: number;
+  color: string;
+  isPlayer: boolean;
+  isBot: boolean;
+  isDead: boolean;
   score: number;
-  xpGained: number;
-  newLevel: number;
-  newBankedChips: number;
-  durationSeconds: number;
+  kills: number;
+  carriedChips: number;
+  isBoosting: boolean;
+  isExtracting: boolean;
+  extractionProgress: number;
+  spawnProtected: boolean;
+  botTarget?: Point | null;
+  botState?: 'wander' | 'chase' | 'flee' | 'harvest';
+  deathTime?: number;
 }
 
-/**
- * Settle a player's match: call /api/match/result, emit `match_result` to
- * the player, and remove them from the room. Idempotent via the
- * `matchSettling` flag — concurrent calls short-circuit.
- */
-async function settleMatch(
-  room: ArenaRoom,
-  session: PlayerSession,
-  outcome: 'extract' | 'death',
-  killer?: SnakeBase,
-): Promise<void> {
-  if (session.matchSettling) return;
-  session.matchSettling = true;
-  session.isExtracting = false;
-  session.extractionProgress = 0;
+interface Food {
+  id: string;
+  x: number;
+  y: number;
+  size: number;
+  value: number;
+  isStarChip: boolean;
+  color: string;
+  glowColor?: string;
+}
 
-  const now = Date.now();
-  const durationSeconds = Math.max(0, Math.floor((now - session.joinedAt) / 1000));
-  const carriedChips = Math.max(0, Math.floor(session.carriedChips));
-  const kills = session.kills;
-  const killerTag = killer?.userTag;
-  const score = session.score;
+interface GameSnapshot {
+  tick: number;
+  snakes: Snake[];
+  foods: Food[];
+  worldSize: number;
+  killFeed: KillFeedEntry[];
+}
 
-  // Dynamic commission: 0% if <=3 real players in arena, 35% if >=4.
-  const realPlayerCount = room.players.size;
-  const commissionRate = realPlayerCount <= 3 ? 0 : 0.35;
-  const commission = outcome === 'extract' ? Math.floor(carriedChips * commissionRate) : 0;
-  const bankedAmount = outcome === 'extract' ? (carriedChips - commission) : 0;
+interface KillFeedEntry {
+  killerId: string;
+  killerName: string;
+  victimId: string;
+  victimName: string;
+  tick: number;
+}
 
-  const result = await reportMatchResult({
-    userTag: session.identity.userTag,
-    arenaId: room.arena.id,
-    outcome,
-    carriedChips,
-    kills,
-    durationSeconds,
-    killerTag,
-    score,
-    bankedAmount,
-  });
+interface PlayerInput {
+  targetAngle: number;
+  boosting: boolean;
+  extracting: boolean;
+}
 
-  const payload: MatchResultClientPayload = {
-    outcome,
-    arenaId: room.arena.id,
-    arenaName: room.arena.name,
-    chipsExtracted: outcome === 'extract' ? carriedChips : 0,
-    commission,
-    bankedAmount,
-    kills,
-    score,
-    xpGained: result?.xpGained ?? 0,
-    newLevel: result?.newLevel ?? session.identity.level,
-    newBankedChips: result?.newBankedChips ?? 0,
-    durationSeconds,
-  };
+// ---- Constants ----
 
-  const socket = io.sockets.sockets.get(session.id);
-  if (socket) {
-    // Emit death BEFORE match_result so the client's onDeath handler
-    // runs first (sets up post-death replay recording). If match_result
-    // arrived first it would set matchEndedRef=true and cause onDeath
-    // to bail via its idempotency guard.
-    if (outcome === 'death') {
-      socket.emit('death', {
-        killerId: killer?.id,
-        killerName: killer?.name,
-        killerTag: killer?.userTag,
-        killerColor: killer?.color,
-        killerIsBot: killer?.isBot ?? true,
-      });
-    }
-    socket.emit('match_result', payload);
-  }
+const SNAKE_COLORS = [
+  '#ef4444', '#f59e0b', '#06b6d4', '#a855f7', '#ec4899',
+  '#f97316', '#14b8a6', '#6366f1', '#84cc16',
+];
 
-  // For death: keep the player in the room for 16 s so the broadcast
-  // loop continues sending snapshots.  The client records 15 s of
-  // post-death frames (300 frames at 20 Hz) for the replay.  After the
-  // window expires we clean up.  The session is already marked
-  // isDead + matchSettling, so the tick loop skips movement/collisions.
-  if (outcome === 'death') {
-    const sid = session.id;
-    const roomId = room.arena.id;
-    setTimeout(() => {
-      const r = rooms.get(roomId);
-      if (r) r.players.delete(sid);
-      const s = io.sockets.sockets.get(sid);
-      if (s) {
-        const d = getSocketData(s);
-        d.playerSession = undefined;
+const BOT_NAMES = [
+  'Viper', 'Cobra', 'Mamba', 'Asp', 'Python',
+  'Rattler', 'Taipan', 'Krait', 'Adder', 'Boa',
+  'Sidewinder', 'Copperhead', 'Kingsnake', 'Coral', 'Cottonmouth',
+  'Diamondback', 'Bushmaster', 'Ferdelance', 'BlackMamba', 'Basilisk',
+];
+
+const PLAYER_COLOR = '#22c55e';
+
+const CFG = {
+  worldSize: 5000,
+  foodCount: 300,
+  starChipCount: 15,
+  botCount: 20,
+  snakeSpeed: 3,
+  boostSpeed: 5.5,
+  turnSpeed: 0.08,
+  initialScore: 20,
+  segmentSpacing: 8,
+  collisionRadius: 10,
+  foodRadius: 5,
+  starRadius: 8,
+  extractionTime: 5000,
+  spawnProtectionTime: 3000,
+  deathFoodDropRate: 0.4,
+  deathStarDropCount: 10,
+  botReactionTime: 200,
+  tickRate: 33, // ~30fps
+};
+
+const FOOD_COLORS = ['#f87171', '#fb923c', '#fbbf24', '#a3e635', '#34d399', '#60a5fa', '#c084fc', '#f472b6'];
+
+// ---- Helpers ----
+
+let idCounter = 0;
+function nextId(prefix: string): string {
+  return `${prefix}_${++idCounter}`;
+}
+
+function dist(ax: number, ay: number, bx: number, by: number): number {
+  const dx = ax - bx;
+  const dy = ay - by;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function normalizeAngle(a: number): number {
+ while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+}
+
+function lerpAngle(from: number, to: number, t: number): number {
+  const diff = normalizeAngle(to - from);
+  return from + diff * t;
+}
+
+function randRange(min: number, max: number): number {
+  return min + Math.random() * (max - min);
+}
+
+function pickRandom<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
+}
+
+function snakeRadius(score: number): number {
+  return Math.min(6 + score * 0.04, 20);
+}
+
+function bodySegmentCount(score: number): number {
+  return Math.max(Math.floor(score), 1);
+}
+
+// ---- Game State ----
+
+const snakes: Snake[] = [];
+const foods: Food[] = [];
+const killFeed: KillFeedEntry[] = [];
+let tick = 0;
+
+const playerInputs = new Map<string, PlayerInput>();
+const socketSnakeMap = new Map<string, string>(); // socketId -> snakeId
+const snakeSocketMap = new Map<string, string>(); // snakeId -> socketId
+const spawnTimes = new Map<string, number>();
+
+// ---- Snake Factory ----
+
+function findSafeSpawnPoint(): Point {
+  const margin = 300;
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const x = randRange(margin, CFG.worldSize - margin);
+    const y = randRange(margin, CFG.worldSize - margin);
+    let safe = true;
+    for (const snake of snakes) {
+      if (snake.isDead) continue;
+      if (dist(x, y, snake.points[0].x, snake.points[0].y) < 150) {
+        safe = false;
+        break;
       }
-      log('info', `Post-death replay window expired — removed ${session.identity.userTag} from ${roomId}`);
-    }, 16_000);
-  } else {
-    // Extract: remove immediately (no post-death replay needed).
-    room.players.delete(session.id);
-    if (socket) {
-      const data = getSocketData(socket);
-      data.playerSession = undefined;
     }
+    if (safe) return { x, y };
   }
-  log('info', `${session.identity.userTag} ${outcome} in ${room.arena.id}: chips=${carriedChips} kills=${kills} dur=${durationSeconds}s`);
+  return { x: CFG.worldSize / 2 + randRange(-200, 200), y: CFG.worldSize / 2 + randRange(-200, 200) };
 }
 
-// ----------------------------------------------------------------------------
-// Tick loop (recursive setTimeout — a slow tick can't overlap the next)
-// ----------------------------------------------------------------------------
-
-function tickRoom(room: ArenaRoom, now: number): void {
-  room.tick++;
-
-  // 1) Rebuild spatial grid from scratch each tick.
-  room.grid.clear();
-
-  // 2) Insert all snake body segments (skip dead / empty).
-  for (const snake of collectAllSnakes(room)) {
-    if (snake.isDead) continue;
-    if (snake.points.length === 0) continue;
-    for (let i = 0; i < snake.points.length; i++) {
-      const p = snake.points[i];
-      room.grid.insert({
-        id: `${snake.id}:${i}`,
-        kind: 'segment',
-        x: p.x,
-        y: p.y,
-        radius: snake.size,
-        snakeId: snake.id,
-        segIdx: i,
-      });
-    }
-  }
-
-  // 3) Insert all food (skip already-eaten with value=0).
-  for (const food of room.foods) {
-    if (food.value <= 0) continue;
-    room.grid.insert({
-      id: food.id,
-      kind: 'food',
-      x: food.x,
-      y: food.y,
-      radius: food.size,
-      value: food.value,
-      isStarChip: food.isStarChip,
-      color: food.color,
-      foodRef: food, // <-- reference to the REAL food object so eatFood can zero it
+function createSnake(name: string, color: string, isPlayer: boolean, isBot: boolean): Snake {
+  const spawn = findSafeSpawnPoint();
+  const angle = Math.random() * Math.PI * 2;
+  const segCount = bodySegmentCount(CFG.initialScore);
+  const points: Point[] = [];
+  for (let i = 0; i < segCount; i++) {
+    points.push({
+      x: spawn.x - Math.cos(angle) * i * CFG.segmentSpacing,
+      y: spawn.y - Math.sin(angle) * i * CFG.segmentSpacing,
     });
   }
 
-  // 4) Bot AI tick.
-  for (const bot of room.bots.values()) {
-    if (bot.isDead) continue;
-    try {
-      tickBot(bot, room, now);
-    } catch (err) {
-      log('error', `Bot tick error in ${room.arena.id}: ${(err as Error).message}`);
-    }
-  }
-
-  // 5) Player movement (server-authoritative — apply desired angle + speed).
-  for (const session of room.players.values()) {
-    if (session.isDead || session.matchSettling) continue;
-    try {
-      const dropped = tickSnakeMovement(session, session.desiredAngle, session.wantsBoost, room.cfg);
-      // Add boost-dropped food orbs to the room.
-      for (const pt of dropped) {
-        const cfgOrbs = getFoodOrbs(room.cfg);
-        const smallOrb = cfgOrbs.find(o => o.size === 'small') ?? cfgOrbs[0];
-        room.foods.push({
-          id: `food-${room.arena.id}-${room.foodIdCounter++}`,
-          x: pt.x,
-          y: pt.y,
-          size: smallOrb.radius,
-          value: smallOrb.value,
-          isStarChip: false,
-          color: smallOrb.color,
-          glowColor: smallOrb.glowColor,
-          orbSize: 'small',
-        });
-      }
-    } catch (err) {
-      log('error', `Player movement error: ${(err as Error).message}`);
-    }
-  }
-
-  // 6) Collision detection (body + head-on).
-  let deaths: PendingDeath[] = [];
-  try {
-    deaths = detectCollisions(room, now);
-    // Head-on collisions processed AFTER body collisions (already-dead snakes skipped).
-    const headOnDeaths = detectHeadOnCollisions(room, now);
-    deaths = deaths.concat(headOnDeaths);
-  } catch (err) {
-    log('error', `Collision detection error in ${room.arena.id}: ${(err as Error).message}`);
-  }
-
-  // 7) Apply deaths with CORRECT drop rules per spec:
-  //    Body/headOn collision: drop score orbs (ALL snakes, including selfDestruct bots) + 10 stars (real players only).
-  //    Wall death: drop 0 food (score destroyed) + 10 stars (real players only).
-  //    Bot selfDestruct WALL death: 0 food, 0 stars (vanish cleanly).
-  //    Bot selfDestruct COLLISION death: STILL drops food (only wall death vanishes cleanly).
-  for (const death of deaths) {
-    const dead = room.players.get(death.deadId) || (room.bots.get(death.deadId) as SnakeBase | undefined);
-    if (!dead || dead.isDead) continue;
-    dead.isDead = true;
-
-    const headX = dead.points[0]?.x ?? 0;
-    const headY = dead.points[0]?.y ?? 0;
-
-    if (death.cause === 'wall') {
-      // Wall death: NO food orbs (score destroyed).
-      // Stars: real players always get 10 stars; selfDestruct bots get 0.
-      if (dead.isPlayer && dead.carriedChips > 0) {
-        dropStarsAtDeath(room, headX, headY, dead.carriedChips);
-        log('info', `Wall-death star drop: ${dead.name} → 10 stars (${Math.floor(dead.carriedChips)} chips) at (${headX.toFixed(0)},${headY.toFixed(0)})`);
-      }
-      // Bot wall death (selfDestruct): 0 food, 0 stars — vanish cleanly.
-    } else {
-      // Body or headOn collision: ALL snakes drop score orbs (sum = snake.score).
-      // selfDestruct bots that die by COLLISION still drop food (only WALL death vanishes cleanly).
-      const foodCountBefore = room.foods.length;
-      dropScoreOrbsAtBody(room, dead.points, dead.score, dead.color);
-      const foodDropped = room.foods.length - foodCountBefore;
-      log('info', `Death food drop: ${dead.name} (${dead.isBot?'bot':'player'}) score=${dead.score} bodyLen=${dead.points.length} → ${foodDropped} orbs`);
-      // Stars: real players only.
-      if (dead.isPlayer && dead.carriedChips > 0) {
-        dropStarsAtDeath(room, headX, headY, dead.carriedChips);
-        log('info', `Death star drop: ${dead.name} → 10 stars (${Math.floor(dead.carriedChips)} chips) at (${headX.toFixed(0)},${headY.toFixed(0)})`);
-      }
-    }
-
-    // Credit killer's kill counter (only if killer is alive). Bots don't track kills.
-    const killer = death.killerId && death.killerId !== 'wall'
-      ? (room.players.get(death.killerId) ?? room.bots.get(death.killerId))
-      : undefined;
-    if (killer && !killer.isDead && killer.isPlayer) {
-      (killer as PlayerSession).kills += 1;
-    }
-
-    // Broadcast kill feed to all players in the arena
-    const killFeedMsg = death.cause === 'wall'
-      ? { victimName: dead.name, victimIsBot: dead.isBot, killerName: null, killerIsBot: false, cause: 'wall' as const }
-      : killer
-        ? { victimName: dead.name, victimIsBot: dead.isBot, killerName: killer.name, killerIsBot: killer.isBot, cause: death.cause as string }
-        : { victimName: dead.name, victimIsBot: dead.isBot, killerName: null, killerIsBot: false, cause: death.cause as string };
-    for (const socketId of room.players.keys()) {
-      io.to(socketId).emit('kill_feed', killFeedMsg);
-    }
-
-    // Notify all players about death food/star drops so they can show visual effects.
-    if (death.cause !== 'wall') {
-      const dropEvent = {
-        x: headX,
-        y: headY,
-        score: dead.score,
-        bodyPoints: dead.points.slice(0, Math.min(60, dead.points.length)),
-        color: dead.color,
-        droppedStars: dead.isPlayer && dead.carriedChips > 0 ? 10 : 0,
-      };
-      for (const socketId of room.players.keys()) {
-        io.to(socketId).emit('death_food_drop', dropEvent);
-      }
-    }
-
-    if (dead.isPlayer) {
-      const session = dead as PlayerSession;
-      log('info', `${session.identity.userTag} died in ${room.arena.id} (cause=${death.cause}, killer=${death.killerId ?? 'none'})`);
-      // Settle asynchronously — never throw out of the tick loop.
-      settleMatch(room, session, 'death', death.cause === 'wall' ? undefined : killer).catch((err) => {
-        log('error', `settleMatch(death) failed: ${(err as Error).message}`);
-      });
-    } else {
-      // Bot dies: remove + respawn a fresh one to keep the bot count stable.
-      room.bots.delete(dead.id);
-      try {
-        const fresh = spawnNewBot(room);
-        if (fresh) room.bots.set(fresh.id, fresh);
-      } catch (err) {
-        log('error', `Bot respawn error: ${(err as Error).message}`);
-      }
-    }
-  }
-
-  // 8) Food collision (credits carriedChips, marks food as eaten via sentinel).
-  try {
-    eatFood(room);
-  } catch (err) {
-    log('error', `eatFood error in ${room.arena.id}: ${(err as Error).message}`);
-  }
-
-  // 9) Replenish food up to target.
-  try {
-    replenishFood(room);
-  } catch (err) {
-    log('error', `replenishFood error in ${room.arena.id}: ${(err as Error).message}`);
-  }
-
-  // 10) Extraction progress for players. NO zone check — extract anywhere.
-  for (const session of room.players.values()) {
-    if (session.isDead || session.matchSettling) continue;
-    if (!session.isExtracting) continue;
-
-    session.extractionProgress += TICK_MS;
-    const progress = Math.min(1, session.extractionProgress / room.cfg.extractionDurationMs);
-    const sock = io.sockets.sockets.get(session.id);
-    if (sock) sock.emit('extract_progress', { progress });
-
-    if (session.extractionProgress >= room.cfg.extractionDurationMs) {
-      // Extraction success — settle asynchronously.
-      settleMatch(room, session, 'extract').catch((err) => {
-        log('error', `settleMatch(extract) failed: ${(err as Error).message}`);
-      });
-    }
-  }
-
-  // 11) Recompute leader + expire chat bubbles.
-  try {
-    recomputeLeader(room);
-  } catch (err) {
-    log('error', `recomputeLeader error: ${(err as Error).message}`);
-  }
-  try {
-    expireChat(room, now);
-  } catch (err) {
-    log('error', `expireChat error: ${(err as Error).message}`);
-  }
-}
-
-function tickOnce(): void {
-  const now = Date.now();
-  try {
-    for (const room of rooms.values()) {
-      // Skip empty rooms (no players) for CPU savings — bots stay idle.
-      if (room.players.size === 0) continue;
-      try {
-        tickRoom(room, now);
-      } catch (err) {
-        log('error', `Tick error in arena ${room.arena.id}: ${(err as Error).message}`);
-      }
-    }
-  } catch (err) {
-    log('error', `Tick loop fatal: ${(err as Error).message}`);
-  } finally {
-    setTimeout(tickOnce, TICK_MS);
-  }
-}
-
-// Local helper so tickRoom can spawn a bot safely (never throws out of the tick loop).
-function spawnNewBot(room: ArenaRoom): BotSession | null {
-  try {
-    return spawnBot(room);
-  } catch {
-    return null;
-  }
-}
-
-// ----------------------------------------------------------------------------
-// Broadcast loop (20 Hz — independent of tick rate)
-// ----------------------------------------------------------------------------
-
-function broadcastOnce(): void {
-  try {
-    for (const room of rooms.values()) {
-      if (room.players.size === 0) continue;
-      // Build one base snapshot per room, then customize yourRank per viewer.
-      for (const socketId of room.players.keys()) {
-        let snapshot: ReturnType<typeof buildSnapshot>;
-        try {
-          snapshot = buildSnapshot(room, socketId);
-        } catch (err) {
-          log('error', `Snapshot build error in ${room.arena.id}: ${(err as Error).message}`);
-          continue;
-        }
-        io.to(socketId).emit('snapshot', snapshot);
-      }
-    }
-  } catch (err) {
-    log('error', `Broadcast loop fatal: ${(err as Error).message}`);
-  } finally {
-    setTimeout(broadcastOnce, BROADCAST_MS);
-  }
-}
-
-// ----------------------------------------------------------------------------
-// Socket.IO auth middleware
-// ----------------------------------------------------------------------------
-
-io.use(async (socket, next) => {
-  const token = (socket.handshake.auth as { token?: unknown })?.token;
-  if (typeof token !== 'string' || token.length === 0) {
-    return next(new Error('No token provided'));
-  }
-  try {
-    const result = await verifyToken(token);
-    if (!result.ok || !result.player) {
-      return next(new Error(result.reason || 'invalid_token'));
-    }
-    getSocketData(socket).identity = result.player;
-    return next();
-  } catch (err) {
-    log('warn', `Verify fetch failed: ${(err as Error).message}`);
-    return next(new Error('verify_failed'));
-  }
-});
-
-// ----------------------------------------------------------------------------
-// Connection handler
-// ----------------------------------------------------------------------------
-
-io.on('connection', (socket: Socket) => {
-  const data = getSocketData(socket);
-  const identity = data.identity;
-  if (!identity) {
-    // Should never happen — middleware rejects unauthed sockets.
-    socket.disconnect(true);
-    return;
-  }
-
-  // One socket per userTag: kick any prior session.
-  const prior = userTagToSocket.get(identity.userTag);
-  if (prior && prior !== socket.id) {
-    const priorSock = io.sockets.sockets.get(prior);
-    if (priorSock) {
-      priorSock.emit('kicked', { reason: 'Another session opened for this account' });
-      priorSock.disconnect(true);
-    }
-  }
-  userTagToSocket.set(identity.userTag, socket.id);
-  log('info', `Socket connected: ${identity.userTag} (${socket.id})`);
-
-  // ----- join_arena -----
-  socket.on('join_arena', (payload: unknown) => {
-    void handleJoinArena(socket, payload);
-  });
-
-  // ----- input -----
-  socket.on('input', (payload: unknown) => {
-    handleInput(socket, payload);
-  });
-
-  // ----- extract -----
-  socket.on('extract', () => {
-    handleExtract(socket);
-  });
-
-  // ----- cancel_extract -----
-  socket.on('cancel_extract', () => {
-    handleCancelExtract(socket);
-  });
-
-  // ----- chat -----
-  socket.on('chat', (payload: unknown) => {
-    handleChat(socket, payload);
-  });
-
-  // ----- leave -----
-  socket.on('leave', () => {
-    handleLeave(socket, 'client requested');
-  });
-
-  // ----- disconnect -----
-  socket.on('disconnect', (reason: string) => {
-    handleLeave(socket, `disconnected (${reason})`);
-    // Clean up userTag → socket mapping (only if we still own it).
-    const ident = getSocketData(socket).identity;
-    if (ident && userTagToSocket.get(ident.userTag) === socket.id) {
-      userTagToSocket.delete(ident.userTag);
-    }
-    log('info', `Socket disconnected: ${ident?.userTag ?? 'unknown'} (${reason})`);
-  });
-
-  socket.on('error', (err: Error) => {
-    log('error', `Socket error (${socket.id}): ${err.message}`);
-  });
-});
-
-// ----------------------------------------------------------------------------
-// Event handlers
-// ----------------------------------------------------------------------------
-
-async function handleJoinArena(socket: Socket, payload: unknown): Promise<void> {
-  const data = getSocketData(socket);
-  const identity = data.identity;
-  if (!identity) return;
-
-  if (!payload || typeof payload !== 'object') {
-    socket.emit('join_error', { reason: 'invalid_arena' });
-    return;
-  }
-  const arenaId = String((payload as { arenaId?: unknown }).arenaId || '');
-  const arena = getArenaById(arenaId);
-  if (!arena) {
-    socket.emit('join_error', { reason: 'invalid_arena' });
-    return;
-  }
-
-  // Already in a match? Reject.
-  if (data.playerSession) {
-    socket.emit('join_error', { reason: 'already_in_match' });
-    return;
-  }
-
-  // Server-to-server: atomically deduct buyIn on the Next.js side.
-  let joinResult;
-  try {
-    joinResult = await joinMatch(identity.userTag, arenaId);
-  } catch (err) {
-    log('error', `joinMatch fetch failed: ${(err as Error).message}`);
-    socket.emit('join_error', { reason: 'invalid_arena' });
-    return;
-  }
-
-  if (!joinResult.ok) {
-    const reason = joinResult.reason;
-    if (reason === 'insufficient_chips') {
-      socket.emit('join_error', { reason: 'insufficient_chips' });
-      return;
-    }
-    if (reason === 'banned') {
-      socket.emit('join_error', { reason: 'banned' });
-      socket.emit('kicked', { reason: 'Account banned' });
-      socket.disconnect(true);
-      return;
-    }
-    socket.emit('join_error', { reason: 'invalid_arena' });
-    return;
-  }
-
-  // Spawn the player.
-  const room = getOrCreateRoom(arenaId);
-  if (!room) {
-    socket.emit('join_error', { reason: 'invalid_arena' });
-    return;
-  }
-
-  const cfg = room.cfg;
-  const realPlayerCount = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
-  const baseRadius = calcBaseMapRadius(Math.max(1, realPlayerCount), cfg);
-  const spawn = findSafeSpawnPoint(room, baseRadius - 200, room.mapCenterX, room.mapCenterY);
-  const angle = Math.random() * Math.PI * 2;
-  const session: PlayerSession = {
-    id: socket.id,
-    name: identity.name,
-    userTag: identity.userTag,
-    country: identity.country,
-    points: initialBody(spawn.x, spawn.y, angle, cfg.initialBodyLength, cfg.segmentSpacing),
+  const snake: Snake = {
+    id: nextId('snake'),
+    name,
+    points,
     angle,
-    size: calcVisualRadius(cfg.initialSpawnScore, cfg),
-    color: identity.color,
-    secondaryColor: identity.secondaryColor,
-    isPlayer: true,
-    isBot: false,
-    carriedChips: room.arena.buyIn,
-    score: cfg.initialSpawnScore,
-    boostFrameCounter: 0,
+    targetAngle: angle,
+    size: snakeRadius(CFG.initialScore),
+    color,
+    isPlayer,
+    isBot,
+    isDead: false,
+    score: CFG.initialScore,
+    kills: 0,
+    carriedChips: 0,
+    isBoosting: false,
     isExtracting: false,
     extractionProgress: 0,
-    isDead: false,
-    spawnProtectedUntil: Date.now() + cfg.spawnProtectionMs,
-    identity,
-    desiredAngle: angle,
-    wantsBoost: false,
-    kills: 0,
-    joinedAt: Date.now(),
-    lastInputAt: 0,
-    inputDropCount: 0,
-    lastChatAt: 0,
-    arenaId,
-    matchSettling: false,
+    spawnProtected: true,
+    botState: isBot ? 'wander' : undefined,
+    botTarget: isBot ? null : undefined,
   };
 
-  room.players.set(socket.id, session);
-  data.playerSession = session;
-
-  socket.emit('joined', {
-    arenaId,
-    worldSize: WORLD_SIZE,
-    yourId: socket.id,
-  });
-
-  log('info', `${identity.userTag} joined ${arenaId} (buyIn=${arena.buyIn})`);
+  // Register spawn time for protection tracking
+  spawnTimes.set(snake.id, Date.now());
+  return snake;
 }
 
-/** Validate + rate-limit a client input packet. Server applies position; client only sends angle. */
-function handleInput(socket: Socket, payload: unknown): void {
-  const session = getSocketData(socket).playerSession;
-  if (!session || session.isDead || session.matchSettling) return;
+// ---- Food Factory ----
 
-  if (!payload || typeof payload !== 'object') return;
-  const obj = payload as { angle?: unknown; wantsBoost?: unknown };
-  const angleRaw = obj.angle;
-  const wantsBoostRaw = obj.wantsBoost;
-
-  if (typeof angleRaw !== 'number' || !Number.isFinite(angleRaw)) return;
-  if (typeof wantsBoostRaw !== 'boolean') return;
-
-  // Normalize angle into [0, 2π).
-  let angle = angleRaw;
-  while (angle < 0) angle += 2 * Math.PI;
-  while (angle >= 2 * Math.PI) angle -= 2 * Math.PI;
-
-  // Rate-limit: max MAX_SNAPSHOTS_PER_SECOND per second.
-  const now = Date.now();
-  const delta = now - session.lastInputAt;
-  if (delta < INPUT_MIN_INTERVAL_MS) {
-    session.inputDropCount++;
-    if (session.inputDropCount % 20 === 0) {
-      log('warn', `${session.identity.userTag} input flood: ${session.inputDropCount} packets dropped`);
-    }
-    return;
-  }
-  session.lastInputAt = now;
-  session.inputDropCount = 0;
-
-  // ── Extraction steering detection ──
-  // Forward gliding during extraction is allowed (natural movement).
-  // BUT any intentional steering (angle change > threshold) restarts extraction.
-  if (session.isExtracting) {
-    let angleDiff = Math.abs(angle - session.angle);
-    if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
-    const STEER_THRESHOLD = 0.08; // ~4.6 degrees — small but intentional steer
-    if (angleDiff > STEER_THRESHOLD) {
-      session.extractionProgress = 0;
-      // Notify client so the UI shows the restart immediately
-      socket.emit('extract_progress', { progress: 0 });
-      socket.emit('extract_cancelled_by_steer', {});
-    }
-  }
-
-  session.desiredAngle = angle;
-  session.wantsBoost = wantsBoostRaw;
-}
-
-/** Start extraction. Validates the player is within the extract zone. */
-function handleExtract(socket: Socket): void {
-  const session = getSocketData(socket).playerSession;
-  if (!session || session.isDead || session.matchSettling) return;
-  if (session.isExtracting) return;
-
-  // NO zone check — extract anywhere (matches original design).
-  session.isExtracting = true;
-  session.extractionProgress = 0;
-  const room = session.arenaId ? rooms.get(session.arenaId) : null;
-  socket.emit('extract_start', { durationMs: room?.cfg.extractionDurationMs ?? 3000 });
-}
-
-/** Cancel an in-progress extraction. */
-function handleCancelExtract(socket: Socket): void {
-  const session = getSocketData(socket).playerSession;
-  if (!session) return;
-  session.isExtracting = false;
-  session.extractionProgress = 0;
-}
-
-/** Validate + rate-limit a chat message; broadcast to the room. */
-function handleChat(socket: Socket, payload: unknown): void {
-  const session = getSocketData(socket).playerSession;
-  const identity = getSocketData(socket).identity;
-  if (!session || !identity) return;
-  if (!payload || typeof payload !== 'object') return;
-  const raw = (payload as { message?: unknown }).message;
-  if (typeof raw !== 'string') return;
-  const message = raw.trim().slice(0, CHAT_MAX_LEN);
-  if (message.length === 0) return;
-
-  const now = Date.now();
-  if (now - session.lastChatAt < CHAT_MIN_INTERVAL_MS) return;
-  session.lastChatAt = now;
-
-  session.chatMessage = message;
-  session.chatExpiry = now + 4000;
-
-  const room = session.arenaId ? rooms.get(session.arenaId) : null;
-  if (!room) return;
-  const chatPayload = {
-    senderId: session.id,
-    senderName: session.name,
-    senderTag: session.userTag,
-    message,
+function createFood(isStarChip: boolean): Food {
+  const margin = 50;
+  return {
+    id: nextId('food'),
+    x: randRange(margin, CFG.worldSize - margin),
+    y: randRange(margin, CFG.worldSize - margin),
+    size: isStarChip ? CFG.starRadius : CFG.foodRadius,
+    value: isStarChip ? 5 : 1,
+    isStarChip,
+    color: isStarChip ? '#fbbf24' : pickRandom(FOOD_COLORS),
+    glowColor: isStarChip ? '#fde68a' : undefined,
   };
-  for (const socketId of room.players.keys()) {
-    io.to(socketId).emit('chat', chatPayload);
+}
+
+function initFoods(): void {
+  for (let i = 0; i < CFG.foodCount; i++) foods.push(createFood(false));
+  for (let i = 0; i < CFG.starChipCount; i++) foods.push(createFood(true));
+}
+
+function maintainFoodCount(): void {
+  let regularCount = 0;
+  let starCount = 0;
+  for (const f of foods) {
+    if (f.isStarChip) starCount++;
+    else regularCount++;
+  }
+
+  const regularToSpawn = CFG.foodCount - regularCount;
+  for (let i = 0; i < regularToSpawn; i++) foods.push(createFood(false));
+
+  const starToSpawn = CFG.starChipCount - starCount;
+  for (let i = 0; i < starToSpawn; i++) foods.push(createFood(true));
+}
+
+// ---- Movement ----
+
+function moveSnake(snake: Snake): void {
+  if (snake.isDead) return;
+
+  const speed = snake.isBoosting ? CFG.boostSpeed : CFG.snakeSpeed;
+
+  // Smooth angle interpolation
+  snake.angle = lerpAngle(snake.angle, snake.targetAngle, CFG.turnSpeed);
+
+  // Move head
+  const head = snake.points[0];
+  const newHead: Point = {
+    x: head.x + Math.cos(snake.angle) * speed,
+    y: head.y + Math.sin(snake.angle) * speed,
+  };
+  snake.points.unshift(newHead);
+
+  // Trim tail to correct length
+  const targetLen = bodySegmentCount(snake.score);
+  while (snake.points.length > targetLen) {
+    snake.points.pop();
+  }
+
+  // Update visual size
+  snake.size = snakeRadius(snake.score);
+
+  // Boost cost: lose 0.15 score per tick
+  if (snake.isBoosting && snake.score > CFG.initialScore) {
+    snake.score = Math.max(CFG.initialScore, snake.score - 0.15);
   }
 }
 
-/** Remove a player from their arena; scatter carried chips as star-chips (no DB write). */
-function handleLeave(socket: Socket, reason: string): void {
-  const data = getSocketData(socket);
-  const session = data.playerSession;
-  if (!session) return;
+// ---- Food Collision ----
 
-  const room = session.arenaId ? rooms.get(session.arenaId) : null;
-  if (room) {
-    // Forfeit carried chips as 10 star collectibles at death position.
-    if (!session.isDead && !session.matchSettling && session.carriedChips > 0) {
-      try {
-        dropStarsAtDeath(room, session.points[0]?.x ?? 0, session.points[0]?.y ?? 0, session.carriedChips);
-      } catch (err) {
-        log('error', `dropStarsAtDeath error on leave: ${(err as Error).message}`);
+function tickFoodCollision(snake: Snake): void {
+  if (snake.isDead) return;
+
+  const head = snake.points[0];
+  const eatRadius = snake.size + CFG.foodRadius;
+
+  for (let i = foods.length - 1; i >= 0; i--) {
+    const food = foods[i];
+    if (dist(head.x, head.y, food.x, food.y) < eatRadius) {
+      if (food.isStarChip) {
+        snake.carriedChips += food.value;
+      } else {
+        snake.score += food.value;
+      }
+      foods.splice(i, 1);
+    }
+  }
+}
+
+// ---- Snake-Snake Collision ----
+
+function tickSnakeCollision(): void {
+  // Collect deaths to process after iteration to avoid mutation during loop
+  const deaths: Array<{ victim: Snake; killer: Snake | null; dropLoot: boolean }> = [];
+
+  for (let i = 0; i < snakes.length; i++) {
+    const victim = snakes[i];
+    if (victim.isDead || victim.spawnProtected) continue;
+
+    const vHead = victim.points[0];
+
+    // Wall death
+    if (vHead.x < 0 || vHead.x > CFG.worldSize || vHead.y < 0 || vHead.y > CFG.worldSize) {
+      deaths.push({ victim, killer: null, dropLoot: false });
+      continue;
+    }
+
+    // Check against other snakes' bodies
+    for (let j = 0; j < snakes.length; j++) {
+      if (i === j) continue;
+      const other = snakes[j];
+      if (other.isDead) continue;
+
+      const oRadius = CFG.collisionRadius;
+      const combinedRadius = CFG.collisionRadius + oRadius;
+      const oHead = other.points[0];
+
+      // Quick bounding check: if victim head is farther than the entire body extent, skip
+      const quickDist = dist(vHead.x, vHead.y, oHead.x, oHead.y);
+      const bodyExtent = Math.min((other.points.length - 1) * CFG.segmentSpacing, 800);
+      if (quickDist > bodyExtent + combinedRadius) continue;
+
+      // Check head against body segments (skip first 5 for neck protection)
+      let collided = false;
+      for (let k = 5; k < other.points.length; k++) {
+        const seg = other.points[k];
+        if (dist(vHead.x, vHead.y, seg.x, seg.y) < combinedRadius) {
+          collided = true;
+          break;
+        }
+      }
+
+      if (collided) {
+        // Head-on: if heads are very close, it's a head-to-head collision
+        if (quickDist < combinedRadius * 2) {
+          if (victim.score < other.score) {
+            deaths.push({ victim, killer: other, dropLoot: true });
+          } else if (victim.score > other.score) {
+            deaths.push({ victim: other, killer: victim, dropLoot: true });
+          } else {
+            // Equal: both die
+            deaths.push({ victim, killer: other, dropLoot: true });
+            deaths.push({ victim: other, killer: victim, dropLoot: true });
+          }
+        } else {
+          // Body collision: victim ran into other's body
+          deaths.push({ victim, killer: other, dropLoot: true });
+        }
+        break; // victim can only die once per tick
       }
     }
-    room.players.delete(socket.id);
   }
 
-  data.playerSession = undefined;
-  log('info', `${session.identity.userTag} left arena ${session.arenaId ?? '?'} (${reason})`);
-}
-
-// ----------------------------------------------------------------------------
-// Process-level guards (the OLD server had none → one bad write killed it)
-// ----------------------------------------------------------------------------
-
-process.on('uncaughtException', (err) => {
-  log('error', `uncaughtException: ${err.stack || err.message}`);
-});
-
-process.on('unhandledRejection', (reason) => {
-  const msg = reason instanceof Error ? reason.message : String(reason);
-  log('error', `unhandledRejection: ${msg}`);
-});
-
-function gracefulShutdown(signal: string): void {
-  log('info', `${signal} received — broadcasting server_shutdown and exiting`);
-  try {
-    io.emit('server_shutdown', {});
-  } catch (err) {
-    log('error', `shutdown broadcast failed: ${(err as Error).message}`);
+  // Process all collected deaths
+  for (const d of deaths) {
+    killSnake(d.victim, d.killer, d.dropLoot);
   }
-  // Give sockets a moment to flush, then exit.
-  setTimeout(() => process.exit(0), 400);
-  // Hard exit fallback if flush hangs.
-  setTimeout(() => process.exit(1), 2000).unref();
 }
 
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-// Log SIGHUP so we can diagnose if the sandbox is hanging up the process.
-process.on('SIGHUP', () => {
-  log('warn', 'SIGHUP received — ignoring (nohup-style)');
-});
-// Log SIGPIPE so we don't die silently if a socket write fails on a closed pipe.
-process.on('SIGPIPE', () => {
-  log('warn', 'SIGPIPE received — ignoring');
-});
+// ---- Death Handling ----
 
-// Diagnostic: log when the event loop is about to drain. If bun decides to
-// exit cleanly (no more refs), this tells us why.
-process.on('beforeExit', (code) => {
-  log('warn', `beforeExit code=${code} — event loop empty, process will exit`);
-});
-process.on('exit', (code) => {
-  log('warn', `exit code=${code}`);
-});
+function killSnake(victim: Snake, killer: Snake | null, dropLoot: boolean): void {
+  if (victim.isDead) return;
+  victim.isDead = true;
+  victim.deathTime = Date.now();
+  victim.isBoosting = false;
+  victim.isExtracting = false;
 
-// Heartbeat: log every 15s so we can pinpoint when the process dies.
-function heartbeat(): void {
-  log('info', `heartbeat — rooms=${rooms.size} players=${countPlayers()}`);
-  setTimeout(heartbeat, 15000);
+  if (dropLoot) {
+    // Drop food orbs along body
+    const orbCount = Math.max(1, Math.floor(victim.score * CFG.deathFoodDropRate));
+    const step = Math.max(1, Math.floor(victim.points.length / orbCount));
+    for (let i = 0; i < victim.points.length; i += step) {
+      const p = victim.points[i];
+      foods.push({
+        id: nextId('food'),
+        x: p.x + randRange(-10, 10),
+        y: p.y + randRange(-10, 10),
+        size: CFG.foodRadius + 1,
+        value: 1,
+        isStarChip: false,
+        color: victim.color,
+      });
+    }
+
+    // Drop star chips at head if snake had any
+    if (victim.carriedChips > 0) {
+      const starCount = Math.min(victim.carriedChips, CFG.deathStarDropCount);
+      const head = victim.points[0];
+      for (let i = 0; i < starCount; i++) {
+        foods.push({
+          id: nextId('food'),
+          x: head.x + randRange(-30, 30),
+          y: head.y + randRange(-30, 30),
+          size: CFG.starRadius,
+          value: 5,
+          isStarChip: true,
+          color: '#fbbf24',
+          glowColor: '#fde68a',
+        });
+      }
+    }
+  }
+
+  // Award kill to killer
+  if (killer && !killer.isDead) {
+    killer.kills += 1;
+    killer.score += Math.floor(victim.score * 0.1);
+  }
+
+  // Kill feed
+  const killerName = killer ? killer.name : 'Wall';
+  killFeed.push({
+    killerId: killer?.id || 'wall',
+    killerName,
+    victimId: victim.id,
+    victimName: victim.name,
+    tick,
+  });
+  while (killFeed.length > 10) killFeed.shift();
+
+  // Send you_died to player
+  const socketId = snakeSocketMap.get(victim.id);
+  if (socketId) {
+    io.to(socketId).emit('you_died', {
+      killerName,
+      score: victim.score,
+      kills: victim.kills,
+      chips: victim.carriedChips,
+    });
+  }
+
+  console.log(
+    `[Death] ${victim.name} killed by ${killerName} | score: ${Math.floor(victim.score)} | drops: ${dropLoot ? 'yes' : 'no (wall)'}`
+  );
 }
-function countPlayers(): number {
-  let n = 0;
-  for (const room of rooms.values()) n += room.players.size;
-  return n;
+
+// ---- Bot AI ----
+
+function tickBotAI(snake: Snake): void {
+  if (snake.isDead || !snake.isBot) return;
+
+  const head = snake.points[0];
+  const wallMargin = 200;
+
+  // Wall avoidance (highest priority)
+  if (
+    head.x < wallMargin || head.x > CFG.worldSize - wallMargin ||
+    head.y < wallMargin || head.y > CFG.worldSize - wallMargin
+  ) {
+    const cx = CFG.worldSize / 2;
+    const cy = CFG.worldSize / 2;
+    snake.targetAngle = Math.atan2(cy - head.y, cx - head.x);
+    snake.botState = 'wander';
+    snake.isBoosting = false;
+    return;
+  }
+
+  // Re-evaluate decision periodically (~2% chance per tick = ~every 1.5s at 30fps)
+  if (!snake.botTarget || Math.random() < 0.02) {
+    updateBotDecision(snake, head);
+  }
+
+  // Steer towards target
+  if (snake.botTarget) {
+    snake.targetAngle = Math.atan2(
+      snake.botTarget.y - head.y,
+      snake.botTarget.x - head.x,
+    );
+    // Add slight wobble for natural movement
+    snake.targetAngle += (Math.random() - 0.5) * 0.1;
+  }
+
+  // Boost when chasing and close to prey
+  snake.isBoosting =
+    snake.botState === 'chase' && snake.botTarget
+      ? dist(head.x, head.y, snake.botTarget.x, snake.botTarget.y) < 200
+      : false;
 }
 
-// ----------------------------------------------------------------------------
-// Boot
-// ----------------------------------------------------------------------------
+function updateBotDecision(snake: Snake, head: Point): void {
+  let nearestThreat: Snake | null = null;
+  let nearestThreatDist = 300;
+  let nearestPrey: Snake | null = null;
+  let nearestPreyDist = 400;
+  let nearestFood: Food | null = null;
+  let nearestFoodDist = 500;
 
-log('warn', 'CORS is open (origin: *) — OK for dev (Caddy restricts in prod)');
-log('info', `NEXT_APP_URL=${NEXT_APP_URL}  PORT=${PORT}`);
+  for (const other of snakes) {
+    if (other.id === snake.id || other.isDead) continue;
+    const d = dist(head.x, head.y, other.points[0].x, other.points[0].y);
 
-// Pre-create all online arenas so bots are ready when the first player joins.
-for (const tier of ARENA_TIERS) {
-  getOrCreateRoom(tier.id);
+    if (other.score > snake.score * 1.2 && d < nearestThreatDist) {
+      nearestThreat = other;
+      nearestThreatDist = d;
+    }
+    if (other.score < snake.score * 0.7 && d < nearestPreyDist && !other.spawnProtected) {
+      nearestPrey = other;
+      nearestPreyDist = d;
+    }
+  }
+
+  for (const food of foods) {
+    const d = dist(head.x, head.y, food.x, food.y);
+    if (d < nearestFoodDist) {
+      nearestFood = food;
+      nearestFoodDist = d;
+    }
+  }
+
+  // Priority: flee > chase > harvest > wander
+  if (nearestThreat && nearestThreatDist < 200) {
+    snake.botState = 'flee';
+    const tHead = nearestThreat.points[0];
+    snake.botTarget = {
+      x: head.x + (head.x - tHead.x) * 2,
+      y: head.y + (head.y - tHead.y) * 2,
+    };
+    snake.isBoosting = true;
+  } else if (nearestPrey && nearestPreyDist < 300 && snake.score > 30) {
+    snake.botState = 'chase';
+    snake.botTarget = nearestPrey.points[0];
+  } else if (nearestFood) {
+    snake.botState = 'harvest';
+    snake.botTarget = { x: nearestFood.x, y: nearestFood.y };
+    snake.isBoosting = false;
+  } else {
+    snake.botState = 'wander';
+    snake.botTarget = {
+      x: clamp(head.x + randRange(-300, 300), 100, CFG.worldSize - 100),
+      y: clamp(head.y + randRange(-300, 300), 100, CFG.worldSize - 100),
+    };
+    snake.isBoosting = false;
+  }
 }
-log('info', `Pre-created ${rooms.size} arena rooms`);
 
-// Start tick + broadcast loops.
-setTimeout(tickOnce, TICK_MS);
-setTimeout(broadcastOnce, BROADCAST_MS);
-setTimeout(heartbeat, 15000);
+// ---- Extraction (star chips → score conversion) ----
 
-httpServer.listen(PORT, () => {
-  log('info', `Venom Arena game server listening on port ${PORT}`);
+function tickExtraction(snake: Snake): void {
+  if (snake.isDead || !snake.isExtracting || snake.carriedChips <= 0) {
+    snake.isExtracting = false;
+    snake.extractionProgress = 0;
+    return;
+  }
+
+  snake.extractionProgress += CFG.tickRate;
+  if (snake.extractionProgress >= CFG.extractionTime) {
+    const bonus = snake.carriedChips * 10;
+    snake.score += bonus;
+    console.log(`[Extract] ${snake.name} extracted ${snake.carriedChips} chips → +${bonus} score`);
+    snake.carriedChips = 0;
+    snake.extractionProgress = 0;
+    snake.isExtracting = false;
+  }
+}
+
+// ---- Spawn Protection ----
+
+function tickSpawnProtection(): void {
+  const now = Date.now();
+  for (const snake of snakes) {
+    if (snake.spawnProtected) {
+      const st = spawnTimes.get(snake.id);
+      if (st && now - st > CFG.spawnProtectionTime) {
+        snake.spawnProtected = false;
+      }
+    }
+  }
+}
+
+// ---- Bot Management ----
+
+let botNameIndex = 0;
+
+function spawnBot(): Snake {
+  const name = BOT_NAMES[botNameIndex % BOT_NAMES.length];
+  botNameIndex++;
+  const color = SNAKE_COLORS[botNameIndex % SNAKE_COLORS.length];
+  const bot = createSnake(name, color, false, true);
+  snakes.push(bot);
+  return bot;
+}
+
+function maintainBots(): void {
+  const now = Date.now();
+
+  // 1. Collect dead bots that should respawn (3s cooldown)
+  const toRemove: number[] = [];
+  for (let i = 0; i < snakes.length; i++) {
+    const snake = snakes[i];
+    if (snake.isBot && snake.isDead && snake.deathTime && now - snake.deathTime > 3000) {
+      toRemove.push(i);
+    }
+  }
+
+  // 2. Remove dead bots (iterate in reverse to preserve indices)
+  for (let i = toRemove.length - 1; i >= 0; i--) {
+    const idx = toRemove[i];
+    spawnTimes.delete(snakes[idx].id);
+    snakes.splice(idx, 1);
+  }
+
+  // 3. Count alive bots after cleanup
+  let aliveBots = 0;
+  for (const snake of snakes) {
+    if (snake.isBot && !snake.isDead) aliveBots++;
+  }
+
+  // 4. Spawn deficit bots
+  const deficit = CFG.botCount - aliveBots;
+  for (let i = 0; i < deficit; i++) {
+    spawnBot();
+  }
+}
+
+// ---- Main Game Tick ----
+
+function gameTick(): void {
+  tick++;
+
+  // 1. Process player inputs
+  for (const snake of snakes) {
+    if (snake.isDead || !snake.isPlayer) continue;
+    const input = playerInputs.get(snake.id);
+    if (input) {
+      snake.targetAngle = input.targetAngle;
+      snake.isBoosting = input.boosting;
+      snake.isExtracting = input.extracting;
+    }
+  }
+
+  // 2. Bot AI
+  for (const snake of snakes) {
+    if (snake.isBot && !snake.isDead) {
+      tickBotAI(snake);
+    }
+  }
+
+  // 3. Move all snakes
+  for (const snake of snakes) {
+    moveSnake(snake);
+  }
+
+  // 4. Food collision
+  for (const snake of snakes) {
+    tickFoodCollision(snake);
+  }
+
+  // 5. Snake collision
+  tickSnakeCollision();
+
+  // 6. Extraction
+  for (const snake of snakes) {
+    tickExtraction(snake);
+  }
+
+  // 7. Spawn protection
+  tickSpawnProtection();
+
+  // 8. Maintain food count
+  maintainFoodCount();
+
+  // 9. Bot management
+  maintainBots();
+
+  // 10. Build and broadcast snapshot (include ALL foods, including death drops)
+  const snapshot: GameSnapshot = {
+    tick,
+    snakes: snakes.filter(s => !s.isDead),
+    foods,
+    worldSize: CFG.worldSize,
+    killFeed,
+  };
+
+  io.emit('snapshot', snapshot);
+}
+
+// ---- Socket.IO Server ----
+
+const io = new Server(3001, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST'],
+  },
+  transports: ['websocket', 'polling'],
 });
+
+io.on('connection', (socket: Socket) => {
+  console.log(`[Connect] socket=${socket.id}`);
+
+  socket.on('join', (data: { name: string; userTag?: string }) => {
+    const name = (data.name || 'Player').slice(0, 20);
+    const snake = createSnake(name, PLAYER_COLOR, true, false);
+    if (data.userTag) snake.userTag = data.userTag;
+
+    snakes.push(snake);
+    socketSnakeMap.set(socket.id, snake.id);
+    snakeSocketMap.set(snake.id, socket.id);
+
+    console.log(`[Join] ${name} (${snake.id}) | players: ${snakes.filter(s => s.isPlayer && !s.isDead).length}`);
+  });
+
+  socket.on('input', (data: PlayerInput) => {
+    const snakeId = socketSnakeMap.get(socket.id);
+    if (snakeId) {
+      playerInputs.set(snakeId, data);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    const snakeId = socketSnakeMap.get(socket.id);
+    if (!snakeId) return;
+
+    const idx = snakes.findIndex(s => s.id === snakeId);
+    if (idx !== -1) {
+      const snake = snakes[idx];
+      if (!snake.isDead) {
+        // Drop loot on disconnect (treat as kill, not wall death)
+        killSnake(snake, null, true);
+      }
+      snakes.splice(idx, 1);
+    }
+
+    playerInputs.delete(snakeId);
+    socketSnakeMap.delete(socket.id);
+    snakeSocketMap.delete(snakeId);
+    spawnTimes.delete(snakeId);
+    console.log(`[Disconnect] socket=${socket.id} snake=${snakeId}`);
+  });
+});
+
+// ---- Initialization ----
+
+console.log('================================================');
+console.log('  Venom Arena Game Server — Starting on port 3001');
+console.log('================================================');
+
+initFoods();
+
+for (let i = 0; i < CFG.botCount; i++) {
+  spawnBot();
+}
+
+console.log(`[Init] Spawned ${CFG.foodCount} food, ${CFG.starChipCount} stars, ${CFG.botCount} bots`);
+console.log(`[Init] Game tick: ${CFG.tickRate}ms (~${Math.round(1000 / CFG.tickRate)} fps)`);
+console.log(`[Init] World size: ${CFG.worldSize}x${CFG.worldSize}`);
+
+// Start game loop
+setInterval(gameTick, CFG.tickRate);
+
+console.log('[Init] Game loop started — server ready');
