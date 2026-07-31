@@ -1,20 +1,12 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
+    "target": "ES2022",
+    "module": "ES2022",
     "moduleResolution": "bundler",
-    "lib": ["ESNext"],
     "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "noUnusedLocals": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "allowImportingTsExtensions": false,
-    "noEmit": true,
-    "types": ["bun-types"]
+    "outDir": "dist"
   },
-  "include": ["**/*.ts", "../src/lib/game-config.ts", "../src/lib/types.ts"]
+  "include": ["."]
 }
