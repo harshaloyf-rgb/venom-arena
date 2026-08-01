@@ -514,3 +514,21 @@ Stage Summary:
 - Milestones Wing now matches Champions Wing pattern: search bar + filter pills + table cards
 - Each tier card has all players visible inside (no scrolling between tiers needed)
 - Players ranked by induction order so users can see who was 1st, 2nd, 3rd to achieve each tier
+---
+Task ID: fix-tier-names
+Agent: main
+Task: Fix missing tier names on Milestone Wing filter buttons
+
+Work Log:
+- Analyzed user screenshot showing tier filter buttons only displayed emoji+number (e.g. "🥉 1") without the tier name
+- Found root cause in hall-of-fame.tsx line 979: `t.name.split(' ')[0]` only extracted the first word (number)
+- Fixed by creating a `shortLabel` computed from `t.name` using chained `.replace()` calls to remove verbose suffixes
+- Initial fix had wrong replace order — ` (1 MILLION)` and ` (10,000,000) LEGENDARY` needed to be removed BEFORE ` CHIPS MILESTONE`
+- Verified all 6 tier buttons now show: "🥉 1 LAKH", "🥈 5 LAKH", "🥇 10 LAKH", "💎 25 LAKH", "🔮 50 LAKH", "👑 1 CRORE"
+- Verified search bar and Find Me button are visible and functional
+- Verified tier filtering works correctly
+- Verified search + filter combination works
+
+Stage Summary:
+- Tier filter buttons in Milestones Wing now display proper names with emoji prefix
+- All interactive features (search, Find Me, tier filtering) verified working via Agent Browser
