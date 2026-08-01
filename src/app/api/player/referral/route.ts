@@ -1,17 +1,8 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { toProfile } from '@/lib/player-helpers';
+import { ensureReferralCode } from '@/lib/player-helpers';
 import { REFERRAL_REWARD, REFERRAL_MATCH_THRESHOLD } from '@/lib/game-config';
-
-function generateReferralCode(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let code = '';
-  for (let i = 0; i < 4; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return `VIPER-${code}`;
-}
 
 // GET /api/player/referral — get referral code + list of referred players
 export async function GET() {
@@ -19,16 +10,9 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    let player = await db.player.findUnique({ where: { id: session.playerId } });
+    const referralCode = await ensureReferralCode(session.playerId);
+    const player = await db.player.findUnique({ where: { id: session.playerId } });
     if (!player) return NextResponse.json({ error: 'Player not found.' }, { status: 404 });
-
-    // Auto-generate referral code if missing
-    if (!player.referralCode) {
-      player = await db.player.update({
-        where: { id: player.id },
-        data: { referralCode: generateReferralCode() },
-      });
-    }
 
     const referrals = await db.referral.findMany({
       where: { referrerId: player.id },

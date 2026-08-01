@@ -11,7 +11,7 @@ import {
   getUserInfo,
   type OAuthProvider,
 } from '@/lib/oauth';
-import { encodeSkins } from '@/lib/player-helpers';
+import { encodeSkins, generateReferralCode } from '@/lib/player-helpers';
 import { DEFAULT_UNLOCKED_SKINS } from '@/lib/constants';
 
 /**
@@ -117,7 +117,6 @@ export async function POST(req: NextRequest) {
 // ============================================================================
 
 import type { OAuthUserInfo } from '@/lib/oauth';
-import { toProfile } from '@/lib/player-helpers';
 
 async function handleOAuthLogin(provider: OAuthProvider, userInfo: OAuthUserInfo, origin: string) {
   try {
@@ -185,6 +184,7 @@ async function handleOAuthLogin(provider: OAuthProvider, userInfo: OAuthUserInfo
     // 3. Create a brand new account
     const userTag = await generateUniqueUserTag();
     const displayName = userInfo.name || userInfo.email?.split('@')[0] || 'Player';
+    const referralCode = generateReferralCode();
 
     const player = await db.player.create({
       data: {
@@ -199,6 +199,7 @@ async function handleOAuthLogin(provider: OAuthProvider, userInfo: OAuthUserInfo
         totalEarned: 150,
         oauthProvider: provider,
         oauthProviderId: userInfo.providerId,
+        referralCode,
       },
     });
 

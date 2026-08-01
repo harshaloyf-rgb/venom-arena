@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { toProfile } from '@/lib/player-helpers';
+import { toProfile, ensureReferralCode } from '@/lib/player-helpers';
 
 export async function GET() {
   try {
@@ -9,13 +9,20 @@ export async function GET() {
     if (!session) {
       return NextResponse.json({ player: null });
     }
-    const player = await db.player.findUnique({ where: { id: session.playerId } });
+    let player = await db.player.findUnique({ where: { id: session.playerId } });
     if (!player) {
       return NextResponse.json({ player: null });
     }
     if (player.banned) {
       return NextResponse.json({ error: 'banned' }, { status: 403 });
     }
+
+    // Auto-generate referral code for existing users who don't have one
+    if (!player.referralCode) {
+      await ensureReferralCode(player.id);
+      player = await db.player.findUnique({ where: { id: session.playerId } })!;
+    }
+
     return NextResponse.json({ player: toProfile(player) });
   } catch (e) {
     console.error('[auth/me] error', e);

@@ -5,7 +5,7 @@ import {
   setSessionCookie,
   generateUniqueUserTag,
 } from '@/lib/auth';
-import { toProfile, encodeSkins } from '@/lib/player-helpers';
+import { toProfile, encodeSkins, generateReferralCode } from '@/lib/player-helpers';
 import { DEFAULT_UNLOCKED_SKINS } from '@/lib/constants';
 import { rateLimit } from '@/lib/api-helpers';
 
@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
     const name = String(body.name || 'Guest').trim().slice(0, 20) || 'Guest';
 
     const userTag = await generateUniqueUserTag();
+    const referralCode = generateReferralCode();
     const player = await db.player.create({
       data: {
         email: null,
@@ -29,6 +30,7 @@ export async function POST(req: NextRequest) {
         unlockedSkins: encodeSkins(DEFAULT_UNLOCKED_SKINS),
         bankedChips: 150,
         totalEarned: 150,
+        referralCode,
       },
     });
 
