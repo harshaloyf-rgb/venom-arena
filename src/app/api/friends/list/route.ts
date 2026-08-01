@@ -46,6 +46,7 @@ function toFriend(p: any, status: string) {
     country: p.country,
     level: p.level,
     bankedChips: p.bankedChips,
+    clanTag: p.clanTag || null,
     status,
     online: Date.now() - new Date(p.lastSeenAt).getTime() < 60_000,
   };

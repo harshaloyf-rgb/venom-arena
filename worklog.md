@@ -894,3 +894,22 @@ Work Log:
 
 Stage Summary:
 - P4 features complete
+---
+Task ID: 2
+Agent: main
+Task: Fix 3 critical data contract bugs in Friends & Search system (P1-P4 implementation was already done in prior session)
+
+Work Log:
+- Read and audited full social-panel.tsx (749 lines), all 7 friend API routes, 3 player API routes
+- Identified Bug #1: /api/friends/history returns `{ gifts }` but frontend reads `data.entries`
+- Identified Bug #2: /api/players/countries returns `{ code, count }` but frontend expects `{ code, name, count }`
+- Identified Bug #3: /api/friends/list toFriend() missing `clanTag` field (frontend maps it but always undefined)
+- Fixed Bug #1: Changed response key from `{ gifts }` to `{ entries: gifts }` in history/route.ts
+- Fixed Bug #2: Added `countryName` import from game-config, mapped `name: countryName(g.country)` in countries/route.ts
+- Fixed Bug #3: Added `clanTag: p.clanTag || null` to toFriend() in list/route.ts
+- Ran lint — 0 errors
+- Verified with Agent Browser: all 3 tabs render correctly, search works with real API, friend request flow works end-to-end (Connect → Outgoing Requests shows), zero console errors
+
+Stage Summary:
+- All 3 data contract bugs fixed. Friends & Search is now fully functional.
+- Files changed: /api/friends/history/route.ts, /api/players/countries/route.ts, /api/friends/list/route.ts
