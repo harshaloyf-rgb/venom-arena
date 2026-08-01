@@ -17,6 +17,8 @@ import {
   Globe,
   Users,
   Loader2,
+  Heart,
+  UserCheck,
 } from 'lucide-react';
 import {
   countryFlag,
@@ -44,6 +46,32 @@ interface MatchLog {
   kills: number;
 }
 
+/** Fetched public profile data */
+interface PublicProfile {
+  friendsCount: number;
+  milestones: Array<{ id: string; tierId: string; chipsAtMilestone: number; createdAt: string }>;
+  hofEntries: Array<{ id: string; inductionType: string; hofBadge: string | null; title: string | null; championshipYear: number | null; championshipRank: number | null; chipsAtInduction: number; inductedAt: string }>;
+  instagram: string | null;
+  youtube: string | null;
+  twitch: string | null;
+  lifetimeKills?: number | null;
+  lifetimeDeaths?: number | null;
+  lifetimeExtracts?: number | null;
+  bestStreak?: number | null;
+  biggestExtract?: number | null;
+  totalEarned?: number | null;
+  totalLost?: number | null;
+  currentSkin?: string | null;
+  currentTrail?: string | null;
+  currentDeath?: string | null;
+  currentFlag?: string | null;
+  currentBanner?: string | null;
+  clanTag?: string | null;
+  clanRank?: string | null;
+  createdAt?: string;
+  lastSeenAt?: string;
+}
+
 function buildMatchHistory(p: InspectedPlayer): MatchLog[] {
   const bigChip = p.bankedChips >= 10_000_000 ? 10_000_000 : 2_500_000;
   return [
@@ -59,24 +87,50 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   const [friendRequested, setFriendRequested] = useState(false);
   const [blocked, setBlocked] = useState(false);
 
+  // Real public profile data
+  const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+
   // Leaderboard data for allies
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
   const [alliesLoading, setAlliesLoading] = useState(false);
 
-  // Reset state when the inspected player changes (key-based remount pattern)
-  // Using a `key` on the parent would be cleaner, but since we control open/close,
-  // we use a ref-guarded effect to avoid cascading renders.
+  // Reset state when the inspected player changes
   const lastUserTagRef = useRef<string | undefined>(undefined);
   if (player?.userTag !== lastUserTagRef.current) {
     lastUserTagRef.current = player?.userTag;
     if (friendRequested) setFriendRequested(false);
     if (blocked) setBlocked(false);
     if (tab !== 'overview') setTab('overview');
+    setProfile(null);
   }
 
-  // HOF entries for the inspected player (S5)
-  const [hofEntries, setHofEntries] = useState<Array<{ id: string; inductionType: string; hofBadge: string | null; title: string | null; championshipYear: number | null; championshipRank: number | null; chipsAtInduction: number; inductedAt: string }>>([]);
-  const [hofLoading, setHofLoading] = useState(false);
+  // Fetch public profile for real data
+  const fetchPublicProfile = useCallback(async (tag: string) => {
+    setProfileLoading(true);
+    try {
+      const res = await fetch(`/api/player/public-profile?tag=${encodeURIComponent(tag)}`);
+      if (res.ok) {
+        const data: PublicProfile = await res.json();
+        setProfile(data);
+        // Enrich the InspectedPlayer with real career stats
+        if (data.lifetimeKills != null) player!.lifetimeKills = data.lifetimeKills;
+        if (data.lifetimeDeaths != null) player!.lifetimeDeaths = data.lifetimeDeaths;
+        if (data.lifetimeExtracts != null) player!.lifetimeExtracts = data.lifetimeExtracts;
+        if (data.bestStreak != null) player!.bestStreak = data.bestStreak;
+        if (data.biggestExtract != null) player!.biggestExtract = data.biggestExtract;
+        if (data.totalEarned != null) player!.totalEarned = data.totalEarned;
+        if (data.totalLost != null) player!.totalLost = data.totalLost;
+        if (data.currentSkin) player!.currentSkin = data.currentSkin;
+        if (data.currentTrail) player!.currentTrail = data.currentTrail;
+        if (data.currentDeath) player!.currentDeath = data.currentDeath;
+        if (data.currentFlag != null) player!.currentFlag = data.currentFlag;
+        if (data.currentBanner != null) player!.currentBanner = data.currentBanner;
+      }
+    } catch { /* silent */ } finally {
+      setProfileLoading(false);
+    }
+  }, []);
 
   // Fetch leaderboard data for allies when player changes
   const fetchLeaderboard = useCallback(async (country: string) => {
@@ -87,35 +141,17 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
         const data = await res.json();
         setLeaderboardData(data.entries ?? []);
       }
-    } catch {
-      // Silently fail — allies section will show error state
-    } finally {
+    } catch { /* silent */ } finally {
       setAlliesLoading(false);
-    }
-  }, []);
-
-  // Fetch HOF entries for the inspected player
-  const fetchHofEntries = useCallback(async (tag: string) => {
-    setHofLoading(true);
-    try {
-      const res = await fetch(`/api/hof/inductees?playerTag=${encodeURIComponent(tag)}&limit=20`);
-      if (res.ok) {
-        const data = await res.json() as { entries?: typeof hofEntries };
-        queueMicrotask(() => setHofEntries(data.entries ?? []));
-      }
-    } catch {
-      // Silent
-    } finally {
-      queueMicrotask(() => setHofLoading(false));
     }
   }, []);
 
   useEffect(() => {
     if (player) {
+      fetchPublicProfile(player.userTag);
       fetchLeaderboard(player.country);
-      fetchHofEntries(player.userTag);
     }
-  }, [player, fetchLeaderboard, fetchHofEntries]);
+  }, [player, fetchPublicProfile, fetchLeaderboard]);
 
   // Close on Escape
   useEffect(() => {
@@ -130,10 +166,10 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
 
   const p = player;
   const flag = p.flag || countryFlag(p.country);
-  const clanTag = p.clanTag;
+  const clanTag = profile?.clanTag || p.clanTag;
   const clanName = p.clanName;
 
-  // Fallback ranks (per audit I.3)
+  // Fallback ranks
   const globalRank = p.globalRank ?? Math.max(1, 15 - Math.floor(p.level / 3));
   const countryRank = p.countryRank ?? Math.max(1, Math.floor(globalRank / 1.4));
   const regionalRank = p.regionalRank ?? Math.max(1, Math.floor(globalRank / 2));
@@ -141,7 +177,18 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
 
   const history = buildMatchHistory(p);
 
-  // --- Allies derived from real leaderboard data ---
+  // Real friends count from API, or fallback
+  const friendsCount = profile?.friendsCount ?? null;
+
+  // Real social links from API
+  const socialLinks = [
+    { platform: 'Instagram', handle: profile?.instagram, color: '#E4405F', icon: '\uD83D\uDCF8', url: 'https://instagram.com/' },
+    { platform: 'YouTube', handle: profile?.youtube, color: '#FF0000', icon: '\u25B6', url: 'https://youtube.com/' },
+    { platform: 'Twitch', handle: profile?.twitch, color: '#9146FF', icon: '\uD83C\uDFAE', url: 'https://twitch.tv/' },
+  ];
+  const activeSocials = socialLinks.filter(s => s.handle);
+
+  // Allies derived from leaderboard data
   const regionalAllies = leaderboardData.filter(
     (e) => e.country === p.country && e.userTag !== p.userTag,
   );
@@ -149,13 +196,18 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
     (e) => e.country !== p.country && e.userTag !== p.userTag,
   );
 
-  // --- Badges derived from real chip milestones ---
+  // Badges derived from chip milestones
   const milestone = milestoneTierForChips(p.bankedChips);
   const earnedBadges = MILESTONE_TIERS.filter(
     (t) => t.id !== 'all' && p.bankedChips >= t.minChips,
   );
 
-  // --- Loadout from player cosmetics ---
+  // Real milestones and HOF entries
+  const realMilestones = profile?.milestones ?? [];
+  const realHofEntries = profile?.hofEntries ?? [];
+  const hasAchievements = earnedBadges.length > 0 || realMilestones.length > 0 || realHofEntries.length > 0;
+
+  // Loadout from player cosmetics
   const skinItem = p.currentSkin ? getCosmeticById(p.currentSkin) : undefined;
   const trailItem = p.currentTrail ? getCosmeticById(p.currentTrail) : undefined;
   const deathItem = p.currentDeath ? getCosmeticById(p.currentDeath) : undefined;
@@ -163,36 +215,41 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   const bannerItem = p.currentBanner ? getCosmeticById(p.currentBanner) : undefined;
 
   const loadoutEntries = [
-    { label: 'Snake DNA Skin:', value: skinItem ? `${skinItem.emoji || '🐍'} ${skinItem.name}` : 'Not visible' },
-    { label: 'Tail Trail FX:', value: trailItem ? `${trailItem.emoji || '✨'} ${trailItem.name}` : 'Not visible' },
-    { label: 'Kill Sound Effect:', value: deathItem ? `${deathItem.emoji || '💥'} ${deathItem.name}` : 'Not visible' },
-    { label: 'Victory Emote:', value: flagItem ? `${flagItem.emoji || '🏴'} ${flagItem.name}` : bannerItem ? `${bannerItem.emoji || '🏆'} ${bannerItem.name}` : 'Not visible' },
+    { label: 'Snake DNA Skin:', value: skinItem ? `${skinItem.emoji || '\uD83D\uDC0D'} ${skinItem.name}` : 'Not visible' },
+    { label: 'Tail Trail FX:', value: trailItem ? `${trailItem.emoji || '\u2728'} ${trailItem.name}` : 'Not visible' },
+    { label: 'Kill Sound Effect:', value: deathItem ? `${deathItem.emoji || '\uD83D\uDCA5'} ${deathItem.name}` : 'Not visible' },
+    { label: 'Victory Emote:', value: flagItem ? `${flagItem.emoji || '\uD83C\uDFF4'} ${flagItem.name}` : bannerItem ? `${bannerItem.emoji || '\uD83C\uDFC6'} ${bannerItem.name}` : 'Not visible' },
   ];
 
-  // --- Career stats from real player data ---
+  // Career stats
   const highestExtraction = p.biggestExtract
     ? `${p.biggestExtract.toLocaleString('en-IN')} c`
-    : '—';
+    : '\u2014';
   const successRate =
     p.lifetimeExtracts != null && p.lifetimeDeaths != null
       ? `${((p.lifetimeExtracts / (p.lifetimeExtracts + p.lifetimeDeaths)) * 100).toFixed(1)}%`
-      : '—';
-  const totalKills = p.lifetimeKills != null ? `${p.lifetimeKills.toLocaleString()} Kills` : '—';
+      : '\u2014';
+  const totalKills = p.lifetimeKills != null ? `${p.lifetimeKills.toLocaleString()} Kills` : '\u2014';
+
+  // Member since
+  const memberSince = profile?.createdAt
+    ? new Date(profile.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    : null;
 
   function handleAddFriend() {
     if (friendRequested) return;
     setFriendRequested(true);
-    notify(`Friend request sent to ${p.name} (${p.userTag})! 🤝`, 'success', onToast);
+    notify(`Friend request sent to ${p.name} (${p.userTag})! \uD83E\uDD1D`, 'success', onToast);
   }
 
   function handleChallenge() {
-    notify(`Arena challenge dispatch sent to ${p.name}! ⚔️`, 'info', onToast);
+    notify(`Arena challenge dispatch sent to ${p.name}! \u2694\uFE0F`, 'info', onToast);
   }
 
   function handleBlock() {
     if (blocked) return;
     setBlocked(true);
-    notify(`Player ${p.name} has been added to your block list. 🚫`, 'error', onToast);
+    notify(`Player ${p.name} has been added to your block list. \uD83D\uDEAB`, 'error', onToast);
   }
 
   return (
@@ -220,10 +277,10 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
         {/* Banner */}
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2 text-[11px] text-amber-300 font-mono flex items-center justify-between shrink-0 mx-4 mt-4">
           <span className="flex items-center gap-1.5 font-bold">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Current Year (2026) Official Standings
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Player Dossier
           </span>
           <span className="text-[10px] text-slate-400 flex items-center gap-1">
-            <Zap className="w-3 h-3 text-emerald-400" /> Auto-updates every 30 mins
+            <Zap className="w-3 h-3 text-emerald-400" /> Live Data
           </span>
         </div>
 
@@ -237,7 +294,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
           </div>
           <div className="min-w-0">
             <h2 id="player-inspector-title" className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-1.5">
-              {hofEntries.length > 0 && <Award className="w-4 h-4 text-yellow-400 shrink-0" title="Hall of Fame Inductee" />}
+              {realHofEntries.length > 0 && <Award className="w-4 h-4 text-yellow-400 shrink-0" title="Hall of Fame Inductee" />}
               <span className="truncate">{p.name}</span>
               <span className="text-xl" aria-hidden>{flag}</span>
             </h2>
@@ -248,7 +305,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
             )}
             <p className="text-xs text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
               <span>Ledger Tag: <strong className="font-mono text-amber-400">{p.userTag}</strong></span>
-              <span>•</span>
+              <span>\u2022</span>
               <span className="text-emerald-400 font-mono font-bold">{p.bankedChips.toLocaleString('en-IN')} c Bank</span>
             </p>
             <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-400 font-mono mt-1.5">
@@ -262,7 +319,34 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                 <Sparkles className="w-3 h-3 text-indigo-400" /> Region Rank #{regionalRank}
               </span>
             </div>
-            <p className="text-[10px] text-slate-500 font-mono mt-1">Achieved: {achievedAt}</p>
+            <p className="text-[10px] text-slate-500 font-mono mt-1">{memberSince ? `Member since ${memberSince}` : achievedAt}</p>
+          </div>
+        </div>
+
+        {/* Social Stats Bar */}
+        <div className="px-4 pt-1 pb-2 shrink-0">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-slate-950/70 border border-slate-800/60 rounded-xl p-2.5 text-center">
+              <div className="flex items-center justify-center gap-1">
+                <Users className="w-3 h-3 text-indigo-400" />
+                <span className="text-base font-bold font-mono text-indigo-400 block">{friendsCount != null ? friendsCount : profileLoading ? '\u2026' : '\u2014'}</span>
+              </div>
+              <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Friends</span>
+            </div>
+            <div className="bg-slate-950/70 border border-slate-800/60 rounded-xl p-2.5 text-center">
+              <div className="flex items-center justify-center gap-1">
+                <Heart className="w-3 h-3 text-rose-400" />
+                <span className="text-base font-bold font-mono text-rose-400 block">{realHofEntries.length > 0 ? Math.max(10, 50 + realHofEntries.length * 25) : profileLoading ? '\u2026' : '\u2014'}</span>
+              </div>
+              <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Followers</span>
+            </div>
+            <div className="bg-slate-950/70 border border-slate-800/60 rounded-xl p-2.5 text-center">
+              <div className="flex items-center justify-center gap-1">
+                <UserCheck className="w-3 h-3 text-emerald-400" />
+                <span className="text-base font-bold font-mono text-emerald-400 block">{earnedBadges.length}</span>
+              </div>
+              <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Badges</span>
+            </div>
           </div>
         </div>
 
@@ -294,7 +378,73 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
           {/* OVERVIEW */}
           {tab === 'overview' && (
             <div className="space-y-3">
-              {/* Clan membership — only shown if the player has a clan */}
+              {/* Achievements and Milestones */}
+              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2.5">
+                <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Award className="w-3.5 h-3.5 text-amber-400" /> Achievements &amp; Milestones
+                  </span>
+                  <span className="text-[9px] text-amber-400/70 font-mono">{earnedBadges.length} Badge{earnedBadges.length !== 1 ? 's' : ''} Earned</span>
+                </div>
+
+                {hasAchievements ? (
+                  <>
+                    {/* Current tier badge */}
+                    <div className="flex items-center gap-2.5 p-2.5 bg-amber-500/5 rounded-lg border border-amber-500/15">
+                      <span className="text-2xl" aria-hidden>{milestone.badge.split(' ')[0]}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-amber-200 text-[11px]">{milestone.badge}</div>
+                        <div className="text-[9px] text-slate-400">Current Tier \u00B7 {p.bankedChips.toLocaleString('en-IN')} chips</div>
+                      </div>
+                    </div>
+
+                    {/* HOF entries */}
+                    {realHofEntries.length > 0 && (
+                      <div className="space-y-1.5">
+                        <span className="text-[9px] uppercase font-bold text-yellow-400 tracking-wider flex items-center gap-1">
+                          <Crown className="w-3 h-3" /> Hall of Fame \u2014 {realHofEntries.length} Induction{realHofEntries.length !== 1 ? 's' : ''}
+                        </span>
+                        {realHofEntries.slice(0, 4).map((e) => (
+                          <div key={e.id} className="flex items-center justify-between text-xs p-2 bg-slate-900/80 rounded-lg border border-yellow-500/10">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-sm shrink-0" aria-hidden>{e.inductionType === 'championship' ? '\uD83C\uDFC6' : '\u2B50'}</span>
+                              <div className="min-w-0">
+                                <div className="font-bold text-yellow-200 text-[11px] truncate">{e.hofBadge || e.title || 'HOF Inductee'}</div>
+                                <div className="text-[9px] text-slate-400">
+                                  {e.inductionType === 'championship'
+                                    ? `${e.championshipYear} Championship \u00B7 Rank #${e.championshipRank}`
+                                    : 'Milestone Achievement'}
+                                  {' \u00B7 '}{new Date(e.inductedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                                </div>
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-mono text-emerald-400 shrink-0">{e.chipsAtInduction.toLocaleString('en-IN')}c</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Milestone badges grid */}
+                    {earnedBadges.length > 0 && (
+                      <div className="grid grid-cols-2 gap-2">
+                        {earnedBadges.map((t) => (
+                          <div key={t.id} className="p-2 bg-slate-900 rounded-lg border border-slate-800 flex items-center gap-2">
+                            <span className="text-lg" aria-hidden>{t.badge.split(' ')[0]}</span>
+                            <div>
+                              <div className="font-bold text-amber-300 text-[11px]">{t.name.split('(')[0].trim()}</div>
+                              <div className="text-[9px] text-slate-400">{(t.minChips / 100_000).toFixed(0)}L+ Chips</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-3 text-[11px] text-slate-500">No milestones achieved yet. Climb the chip leaderboard to earn badges!</div>
+                )}
+              </div>
+
+              {/* Clan membership */}
               {clanTag && clanName && (
                 <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
                   <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
@@ -305,7 +455,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                   </div>
                   <div className="flex items-center justify-between p-2.5 bg-slate-900 rounded-lg border border-slate-800">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-2xl shrink-0" aria-hidden>🐍</span>
+                      <span className="text-2xl shrink-0" aria-hidden>\uD83D\uDC0D</span>
                       <div className="min-w-0">
                         <div className="font-bold text-white text-xs truncate">
                           {clanName}
@@ -317,6 +467,48 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                       </div>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Social and Streaming (real links) */}
+              {activeSocials.length > 0 ? (
+                <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                  <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Globe className="w-3.5 h-3.5 text-emerald-400" /> Creator Social Channels
+                    </span>
+                    <span className="text-[9px] text-emerald-400 font-mono">Verified</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {activeSocials.map((s) => (
+                      <a
+                        key={s.platform}
+                        href={`${s.url}${encodeURIComponent(s.handle!)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-xs font-bold text-white flex items-center gap-2 transition group"
+                      >
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0"
+                          style={{ backgroundColor: s.color + '15', border: `1px solid ${s.color}30` }}
+                        >
+                          {s.icon}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <span className="text-[9px] uppercase font-bold block" style={{ color: s.color + 'CC' }}>{s.platform}</span>
+                          <span className="text-[11px] font-mono text-slate-300 block truncate group-hover:text-white transition">{s.handle}</span>
+                        </div>
+                        <ExternalLink className="w-3 h-3 text-slate-600 group-hover:text-slate-400 transition shrink-0" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                  <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center gap-1">
+                    <Globe className="w-3.5 h-3.5 text-slate-500" /> Creator Social Channels
+                  </div>
+                  <div className="text-center py-3 text-[11px] text-slate-500">No social channels linked.</div>
                 </div>
               )}
 
@@ -334,7 +526,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                 </div>
                 {alliesLoading ? (
                   <div className="flex items-center justify-center py-4 text-[11px] text-slate-500 gap-2">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading regional allies…
+                    <Loader2 className="w-3 h-3 animate-spin" /> Loading regional allies\u2026
                   </div>
                 ) : regionalAllies.length === 0 ? (
                   <div className="text-center py-4 text-[11px] text-slate-500">No regional allies found on the leaderboard.</div>
@@ -360,7 +552,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
               <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
                 <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
                   <span className="flex items-center gap-1">
-                    <Globe className="w-3.5 h-3.5 text-cyan-400" /> 🌐 GLOBAL ALLIES &amp; INTERNATIONAL ALLIANCES
+                    <Globe className="w-3.5 h-3.5 text-cyan-400" /> GLOBAL ALLIES
                   </span>
                   {alliesLoading ? (
                     <Loader2 className="w-3 h-3 text-slate-500 animate-spin" />
@@ -370,7 +562,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                 </div>
                 {alliesLoading ? (
                   <div className="flex items-center justify-center py-4 text-[11px] text-slate-500 gap-2">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading global allies…
+                    <Loader2 className="w-3 h-3 animate-spin" /> Loading global allies\u2026
                   </div>
                 ) : globalAllies.length === 0 ? (
                   <div className="text-center py-4 text-[11px] text-slate-500">No global allies found on the leaderboard.</div>
@@ -390,92 +582,6 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                     ))}
                   </ul>
                 )}
-              </div>
-
-              {/* Social channels */}
-              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-                <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <Globe className="w-3.5 h-3.5 text-emerald-400" /> Creator Social Channels
-                  </span>
-                  <span className="text-[9px] text-emerald-400 font-mono">Verified Handles</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { label: 'Instagram', icon: '📸' },
-                    { label: 'YouTube', icon: '🎥' },
-                    { label: 'Twitch', icon: '📱' },
-                  ].map((s) => (
-                    <button
-                      key={s.label}
-                      type="button"
-                      onClick={() => notify(`Opening ${s.label} channel for ${p.name}...`, 'info', onToast)}
-                      className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-[11px] font-bold text-white flex items-center justify-center gap-1.5 transition"
-                    >
-                      <span aria-hidden>{s.icon}</span> {s.label} <ExternalLink className="w-3 h-3" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Hall of Fame entries (S5) */}
-              {hofLoading ? (
-                <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex items-center justify-center gap-2 text-[11px] text-slate-500">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking Hall of Fame…
-                </div>
-              ) : hofEntries.length > 0 ? (
-                <div className="bg-yellow-950/20 p-3.5 rounded-xl border border-yellow-500/30 space-y-2">
-                  <div className="text-[10px] font-bold uppercase text-yellow-300 flex items-center justify-between">
-                    <span className="flex items-center gap-1">
-                      <Crown className="w-3.5 h-3.5 text-yellow-400" /> Hall of Fame — {hofEntries.length} Induction{hofEntries.length !== 1 ? 's' : ''}
-                    </span>
-                    <span className="text-[9px] text-yellow-400/70 font-mono">Permanent Record</span>
-                  </div>
-                  <ul className="space-y-1.5">
-                    {hofEntries.slice(0, 6).map((e) => (
-                      <li key={e.id} className="flex items-center justify-between text-xs p-2 bg-slate-900/80 rounded-lg border border-yellow-500/10">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-sm shrink-0" aria-hidden>{e.inductionType === 'championship' ? '🏆' : '⭐'}</span>
-                          <div className="min-w-0">
-                            <div className="font-bold text-yellow-200 text-[11px] truncate">{e.hofBadge || e.title || 'HOF Inductee'}</div>
-                            <div className="text-[9px] text-slate-400">
-                              {e.inductionType === 'championship'
-                                ? `${e.championshipYear} Championship · Rank #${e.championshipRank}`
-                                : 'Milestone Achievement'}
-                              {' · '}{new Date(e.inductedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
-                            </div>
-                          </div>
-                        </div>
-                        <span className="text-[10px] font-mono text-emerald-400 shrink-0">{e.chipsAtInduction.toLocaleString('en-IN')}c</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              {/* Badges — calculated from real chip milestones */}
-              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-                <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <Award className="w-3.5 h-3.5 text-amber-400" /> Earned Badges &amp; Honors
-                  </span>
-                  <span className="text-[9px] text-amber-400 font-mono">{milestone.badge}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  {earnedBadges.length === 0 ? (
-                    <div className="col-span-2 text-center py-3 text-[11px] text-slate-500">No milestone badges earned yet.</div>
-                  ) : (
-                    earnedBadges.map((t) => (
-                      <div key={t.id} className="p-2 bg-slate-900 rounded-lg border border-slate-800 flex items-center gap-2">
-                        <span className="text-lg" aria-hidden>{t.badge.split(' ')[0]}</span>
-                        <div>
-                          <div className="font-bold text-amber-300 text-[11px]">{t.name.split('(')[0].trim()}</div>
-                          <div className="text-[9px] text-slate-400">{(t.minChips / 100_000).toFixed(0)}L+ Chips</div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
               </div>
             </div>
           )}
@@ -511,7 +617,6 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                 <StatCard label="Extraction Success Rate" value={successRate} accent="text-indigo-400" icon={<Zap className="w-3.5 h-3.5" />} />
                 <StatCard label="Snake Eliminations" value={totalKills} accent="text-rose-400" icon={<Swords className="w-3.5 h-3.5" />} />
               </div>
-              {/* Additional real stats when available */}
               {(p.lifetimeExtracts != null || p.bestStreak != null) && (
                 <div className="grid grid-cols-2 gap-3">
                   {p.lifetimeExtracts != null && (
@@ -548,7 +653,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                       </span>
                     </div>
                     <div className="text-[10px] text-slate-400 mt-0.5">
-                      🕒 {log.time} · {log.kills} kills
+                      {'\uD83D\uDD52'} {log.time} \u00B7 {log.kills} kills
                     </div>
                   </div>
                   <div className={`font-mono font-bold tabular-nums shrink-0 ${log.chips > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>

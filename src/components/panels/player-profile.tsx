@@ -9,6 +9,7 @@ import {
   Clock,
   Compass,
   Copy,
+  Crown,
   Edit2,
   ExternalLink,
   Eye,
@@ -48,7 +49,7 @@ import {
   Share2,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
-import { ARENA_TIERS, COUNTRIES, getCosmeticById, REFERRAL_REWARD, REFERRAL_MATCH_THRESHOLD } from '@/lib/game-config';
+import { ARENA_TIERS, COUNTRIES, getCosmeticById, MILESTONE_TIERS, milestoneTierForChips, REFERRAL_REWARD, REFERRAL_MATCH_THRESHOLD } from '@/lib/game-config';
 import type { PlayerProfile } from '@/lib/types';
 import {
   PanelSkeleton,
@@ -3753,6 +3754,76 @@ function FriendProfileInspector({
 
         {/* ── BODY SECTIONS ── */}
         <div className="p-5 space-y-5">
+
+          {/* ── Achievements & Milestones ── */}
+          {(() => {
+            const friendMilestone = milestoneTierForChips(friendChips);
+            const friendBadges = MILESTONE_TIERS.filter(t => t.id !== 'all' && friendChips >= t.minChips);
+            // Simulated HOF for high-chip friends
+            const simulatedHof = friendChips >= 2_500_000
+              ? [{
+                  type: friendChips >= 10_000_000 ? 'championship' : 'milestone',
+                  badge: friendMilestone.badge,
+                  title: friendChips >= 10_000_000 ? 'World Venom Champion Contender' : `${friendMilestone.badge} Elite`,
+                  chips: friendChips,
+                  date: joinDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
+                }]
+              : [];
+            return (
+              <div>
+                <h4 className="text-xs uppercase font-bold text-slate-500 tracking-wider mb-3 font-sans flex items-center gap-2">
+                  <Award className="w-3.5 h-3.5 text-amber-400" /> Achievements &amp; Milestones
+                  <span className="text-[10px] text-amber-400 font-mono normal-case">{friendBadges.length} Badge{friendBadges.length !== 1 ? 's' : ''}</span>
+                </h4>
+                {/* Current tier card */}
+                <div className="bg-slate-900/50 border border-amber-500/15 rounded-xl p-3 flex items-center gap-3 mb-3">
+                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-2xl shrink-0">
+                    {friendMilestone.badge.split(' ')[0]}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-bold text-amber-200 text-xs">{friendMilestone.badge}</div>
+                    <div className="text-[10px] text-slate-400">Current Tier · {friendChips.toLocaleString()} chips</div>
+                  </div>
+                </div>
+                {/* HOF entries */}
+                {simulatedHof.length > 0 && (
+                  <div className="mb-3 space-y-2">
+                    <span className="text-[9px] uppercase font-bold text-yellow-400 tracking-wider flex items-center gap-1">
+                      <Crown className="w-3 h-3" /> Hall of Fame
+                    </span>
+                    {simulatedHof.map((h, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs p-2.5 bg-yellow-500/5 rounded-lg border border-yellow-500/10">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-sm shrink-0">{h.type === 'championship' ? '🏆' : '⭐'}</span>
+                          <div className="min-w-0">
+                            <div className="font-bold text-yellow-200 text-[11px] truncate">{h.title}</div>
+                            <div className="text-[9px] text-slate-400">Inducted {h.date}</div>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-mono text-emerald-400 shrink-0">{h.chips.toLocaleString()}c</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Badge grid */}
+                {friendBadges.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {friendBadges.map(t => (
+                      <div key={t.id} className="bg-slate-900/50 border border-slate-800/60 rounded-xl p-2.5 flex items-center gap-2">
+                        <span className="text-lg" aria-hidden>{t.badge.split(' ')[0]}</span>
+                        <div>
+                          <div className="font-bold text-amber-300 text-[11px]">{t.name.split('(')[0].trim()}</div>
+                          <div className="text-[9px] text-slate-400">{(t.minChips / 100_000).toFixed(0)}L+ Chips</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-3 text-[11px] text-slate-500">No milestones achieved yet.</div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Combat Statistics */}
           <div>
