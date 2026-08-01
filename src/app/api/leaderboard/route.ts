@@ -21,11 +21,15 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
 
   const type = url.searchParams.get('type') === 'level' ? 'level' : 'bankedChips';
-  const limit = Math.min(Number(url.searchParams.get('limit')) || 1000, 1000);
   const view = url.searchParams.get('view') || 'global';
   const country = url.searchParams.get('country') || '';
   const milestone = url.searchParams.get('milestone') || '';
   const region = url.searchParams.get('region') || '';
+
+  // Global view gets 1-to-N (up to 1000), all others are top 100
+  const isGlobal = view === 'global' && !milestone;
+  const maxLimit = isGlobal ? 1000 : 100;
+  const limit = Math.min(Number(url.searchParams.get('limit')) || maxLimit, maxLimit);
 
   // Validate view
   if (!['global', 'national', 'world_summit', 'regional'].includes(view)) {
@@ -71,6 +75,11 @@ export async function GET(req: NextRequest) {
     ? Object.entries(REGION_MAP).filter(([, r]) => r === region).map(([c]) => c)
     : [];
 
+  // Tie-breaking order: bankedChips DESC → level DESC → createdAt ASC (veteran wins)
+  const tieBreakOrder = type === 'level'
+    ? [{ level: 'desc' as const }, { bankedChips: 'desc' as const }, { createdAt: 'asc' as const }]
+    : [{ bankedChips: 'desc' as const }, { level: 'desc' as const }, { createdAt: 'asc' as const }];
+
   let players: Array<{
     userTag: string;
     name: string;
@@ -78,10 +87,11 @@ export async function GET(req: NextRequest) {
     bankedChips: number;
     level: number;
     clanTag: string | null;
+    createdAt: Date;
   }>;
 
   if (view === 'world_summit') {
-    // Top player per country
+    // Top player per country — tie-break: chips DESC, level DESC, createdAt ASC
     const rawRows = await db.$queryRaw<Array<{
       id: string;
       userTag: string;
@@ -90,11 +100,12 @@ export async function GET(req: NextRequest) {
       bankedChips: number;
       level: number;
       clanTag: string | null;
+      createdAt: Date;
       banned: boolean;
     }>>`
       SELECT p.* FROM Player p INNER JOIN (
         SELECT country, MAX(bankedChips) as maxChips FROM Player WHERE banned = 0 AND country IS NOT NULL AND country != '' GROUP BY country
-      ) top ON p.country = top.country AND p.bankedChips = top.maxChips WHERE p.banned = 0 ORDER BY p.bankedChips DESC
+      ) top ON p.country = top.country AND p.bankedChips = top.maxChips WHERE p.banned = 0 ORDER BY p.bankedChips DESC, p.level DESC, p.createdAt ASC
     `;
 
     let summitPlayers = rawRows.map(r => ({
@@ -104,6 +115,7 @@ export async function GET(req: NextRequest) {
       bankedChips: Number(r.bankedChips),
       level: Number(r.level),
       clanTag: r.clanTag,
+      createdAt: r.createdAt,
     }));
 
     if (milestone) {
@@ -123,7 +135,7 @@ export async function GET(req: NextRequest) {
     const fetchLimit = milestone ? Math.max(limit * 5, 500) : limit;
     const rawPlayers = await db.player.findMany({
       where,
-      orderBy: { [type]: 'desc' },
+      orderBy: tieBreakOrder,
       take: fetchLimit,
       select: {
         userTag: true,
@@ -132,6 +144,7 @@ export async function GET(req: NextRequest) {
         bankedChips: true,
         level: true,
         clanTag: true,
+        createdAt: true,
       },
     });
 
@@ -163,6 +176,7 @@ export async function GET(req: NextRequest) {
     entries,
     view,
     total: entries.length,
+    isGlobal1toN: isGlobal,
   };
 
   if (view === 'national') response.country = country;

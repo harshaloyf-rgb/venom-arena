@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { milestoneTierForChips } from '@/lib/game-config';
+import { milestoneTierForChips, MILESTONE_TIERS } from '@/lib/game-config';
 
 // ── Regional mapping (mirrors client-side) ──────────────────────
 const REGION_MAP: Record<string, string> = {
@@ -19,8 +19,15 @@ function regionOf(countryCode: string): string {
   return REGION_MAP[countryCode] || 'EU';
 }
 
+interface MilestoneEntry {
+  tier: string;
+  badge: string;
+  color: string;
+  chips: number;
+  achievedAt: string;
+}
+
 // GET /api/leaderboard/my-rank
-// Returns the authenticated player's rank summary including regional
 export async function GET() {
   const session = await getSession();
   if (!session?.userTag) {
@@ -29,7 +36,7 @@ export async function GET() {
 
   const player = await db.player.findUnique({
     where: { userTag: session.userTag },
-    select: { userTag: true, country: true, bankedChips: true, level: true, clanTag: true },
+    select: { id: true, userTag: true, country: true, bankedChips: true, level: true, clanTag: true },
   });
 
   if (!player) {
@@ -41,17 +48,44 @@ export async function GET() {
     .filter(([, r]) => r === playerRegion)
     .map(([c]) => c);
 
-  // Run all rank queries in parallel
-  const [globalRank, nationalRank, regionalRank, totalGlobal, totalNational, totalRegional] = await Promise.all([
-    db.player.count({ where: { banned: false, bankedChips: { gt: player.bankedChips } } }).then((c) => c + 1),
-    db.player.count({ where: { banned: false, country: player.country, bankedChips: { gt: player.bankedChips } } }).then((c) => c + 1),
-    db.player.count({
-      where: { banned: false, country: { in: regionCountries }, bankedChips: { gt: player.bankedChips } },
-    }).then((c) => c + 1),
-    db.player.count({ where: { banned: false } }),
-    db.player.count({ where: { banned: false, country: player.country } }),
-    db.player.count({ where: { banned: false, country: { in: regionCountries } } }),
-  ]);
+  let globalRank: number;
+  let nationalRank: number;
+  let regionalRank: number;
+  let totalGlobal: number;
+  let totalNational: number;
+  let totalRegional: number;
+  let milestoneHistory: MilestoneEntry[] = [];
+
+  try {
+    [globalRank, nationalRank, regionalRank, totalGlobal, totalNational, totalRegional, milestoneHistory] = await Promise.all([
+      db.player.count({ where: { banned: false, bankedChips: { gt: player.bankedChips } } }).then((c) => c + 1),
+      db.player.count({ where: { banned: false, country: player.country, bankedChips: { gt: player.bankedChips } } }).then((c) => c + 1),
+      db.player.count({
+        where: { banned: false, country: { in: regionCountries }, bankedChips: { gt: player.bankedChips } },
+      }).then((c) => c + 1),
+      db.player.count({ where: { banned: false } }),
+      db.player.count({ where: { banned: false, country: player.country } }),
+      db.player.count({ where: { banned: false, country: { in: regionCountries } } }),
+      // Fetch milestone timestamps
+      db.playerMilestone.findMany({
+        where: { playerId: player.id },
+        orderBy: { createdAt: 'asc' },
+        select: { tierId: true, chipsAtMilestone: true, createdAt: true },
+      }).then((ms) => ms.map(m => {
+        const t = MILESTONE_TIERS.find(mt => mt.id === m.tierId);
+        return {
+          tier: m.tierId,
+          badge: t?.badge || m.tierId,
+          color: t?.color || '#94a3b8',
+          chips: m.chipsAtMilestone,
+          achievedAt: m.createdAt.toISOString(),
+        };
+      })),
+    ]);
+  } catch (err: unknown) {
+    console.error('[my-rank] error:', err);
+    return NextResponse.json({ error: 'DB error', detail: err instanceof Error ? err.message : String(err) }, { status: 500 });
+  }
 
   const tier = milestoneTierForChips(player.bankedChips);
 
@@ -70,5 +104,6 @@ export async function GET() {
     totalGlobal,
     totalNational,
     totalRegional,
+    milestones: milestoneHistory,
   });
 }

@@ -71,6 +71,7 @@ model Player {
   friendsFrom     Friendship[] @relation("friendshipInitiator")
   friendsTo       Friendship[] @relation("friendshipRecipient")
   challenges      Challenge[]
+  milestones      PlayerMilestone[]
 
   @@index([bankedChips(sort: Desc)])
   @@index([level(sort: Desc)])
@@ -183,6 +184,20 @@ model ChallengeProgress {
   createdAt   DateTime @default(now())
 
   @@unique([playerId, category, periodType, periodStart])
+}
+
+// Player milestone tracking — records when a player first reaches each chip tier
+model PlayerMilestone {
+  id              String   @id @default(cuid())
+  playerId        String
+  player          Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  tierId          String   // bronze | silver | gold | platinum | diamond | omega
+  chipsAtMilestone Int     // banked chips when milestone was recorded
+  createdAt       DateTime @default(now())
+
+  @@unique([playerId, tierId])
+  @@index([playerId])
+  @@index([tierId, createdAt])
 }
 
 model GameConfig {
