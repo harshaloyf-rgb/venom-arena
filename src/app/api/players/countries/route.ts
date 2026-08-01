@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { countryName } from '@/lib/game-config';
 
 // GET /api/players/countries — unique country codes with player counts
 export async function GET() {
@@ -16,6 +17,7 @@ export async function GET() {
 
   const countries = groups.map((g) => ({
     code: g.country,
+    name: countryName(g.country),
     count: g._count,
   }));
 

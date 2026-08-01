@@ -69,5 +69,5 @@ export async function GET(req: NextRequest) {
     }));
   }
 
-  return NextResponse.json({ gifts });
+  return NextResponse.json({ entries: gifts });
 }
