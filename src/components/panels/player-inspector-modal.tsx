@@ -238,8 +238,21 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
 
   function handleAddFriend() {
     if (friendRequested) return;
-    setFriendRequested(true);
-    notify(`Friend request sent to ${p.name} (${p.userTag})! \uD83E\uDD1D`, 'success', onToast);
+    fetch('/api/friends/request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userTag: p.userTag }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.ok) {
+          setFriendRequested(true);
+          notify(`Friend request sent to ${p.name}! 🤝`, 'success', onToast);
+        } else {
+          notify(data.error || 'Failed to send request.', 'error', onToast);
+        }
+      })
+      .catch(() => notify('Network error.', 'error', onToast));
   }
 
   function handleChallenge() {
@@ -248,8 +261,21 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
 
   function handleBlock() {
     if (blocked) return;
-    setBlocked(true);
-    notify(`Player ${p.name} has been added to your block list. \uD83D\uDEAB`, 'error', onToast);
+    fetch('/api/friends/block', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userTag: p.userTag }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.ok) {
+          setBlocked(true);
+          notify(`Player ${p.name} has been blocked. 🚫`, 'error', onToast);
+        } else {
+          notify(data.error || 'Failed to block player.', 'error', onToast);
+        }
+      })
+      .catch(() => notify('Network error.', 'error', onToast));
   }
 
   return (
