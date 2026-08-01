@@ -1083,3 +1083,34 @@ Stage Summary:
 - 3 share card types: Match Result, Player Profile, Milestone Achievement
 - Dead code removed: SAMPLE_CLIPS, ShowcaseClip, INSPECTOR_ALLIES_REGIONAL/GLOBAL, INSPECTOR_BADGES, INSPECTOR_LOADOUT (~80 lines)
 - 0 ESLint errors
+---
+Task ID: 7
+Agent: main
+Task: Highlights Feed v2 — Marketing-first overhaul (zero-spend marketing strategy)
+
+Work Log:
+- Updated Prisma schema: added cardType (user-clip|match-card) + matchData (JSON) to Clip model
+- Modified /api/player/match-history POST to auto-publish impressive matches (5K+ chips or 3+ kills) as match-cards
+- Created /api/stats/live endpoint (today's matches, extracts, chips, kills, total players, top clip)
+- Updated /api/clips GET: no-auth required for browsing, added cardType filter, YouTube thumbnail extraction
+- Updated /api/clips/featured: auto-curates from today's best match-cards then highest upvoted
+- Created MatchCardVisual React component: DOM-based inline card renderer (compact + hero variants)
+- Complete rewrite of clip-showcase.tsx (560 → 870 lines):
+  - Instagram/TikTok-style vertical scroll feed instead of black grid
+  - No-login onboarding banner with sign-in CTA
+  - Live stats ticker bar (today's activity, total players)
+  - Infinite scroll with IntersectionObserver
+  - Filter: All / Match Cards / Video Clips
+  - "Can you beat this?" CTA for non-logged-in first card
+  - Match cards render as beautiful branded stat visuals inline
+  - Video clips show YouTube thumbnails (auto-extracted) or styled gradient cards
+  - Instagram Reels added as platform option
+  - Engagement: upvote, view profile, external watch link
+- Verified: zero lint errors, zero console errors, browser-verified
+- Committed and pushed: e90bb72
+
+Stage Summary:
+- Highlights is now a public-facing marketing feed visible to all visitors
+- Every impressive match auto-becomes content (5K+ chips or 3+ kills)
+- Users record from their own device and share YouTube/Instagram/Twitch links
+- No video storage, no recording costs — just URL strings + auto-rendered stat cards
