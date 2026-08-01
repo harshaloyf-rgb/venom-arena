@@ -12,7 +12,7 @@ export async function GET() {
   }
 
   const player = await db.player.findUnique({
-    where: { id: session.userId },
+    where: { id: session.playerId },
     select: { id: true, bankedChips: true },
   });
 
