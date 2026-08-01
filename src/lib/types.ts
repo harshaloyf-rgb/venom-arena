@@ -23,6 +23,9 @@ export interface PlayerProfile {
 
   dailyStreak: number;
   lastDailyClaim: string | null;
+  lastHourlyClaim: string | null;
+  streakFreezes: number;
+  referralCode: string | null;
 
   unlockedSkins: string[];
   currentSkin: string;

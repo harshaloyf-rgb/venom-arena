@@ -532,3 +532,77 @@ Work Log:
 Stage Summary:
 - Tier filter buttons in Milestones Wing now display proper names with emoji prefix
 - All interactive features (search, Find Me, tier filtering) verified working via Agent Browser
+
+---
+Task ID: 2
+Agent: subagent (general-purpose)
+Task: Rewrite daily claim API with UTC, level-scaled rewards, streak milestones, seasonal bonus
+
+Work Log:
+- Replaced `new Date().toISOString().slice(0,10)` with `utcToday()` from `@/lib/date-utils`
+- Added `levelRewardMultiplier(player.level)` — multiplies base reward by 1×/1.5×/2.5×/4× based on level
+- Added seasonal bonus: checks `SEASONAL_BONUS_DAYS[today]`, applies multiplier if date matches
+- Added streak milestone auto-check: after updating streak, checks 30/60/90 milestones against `STREAK_MILESTONES`
+- Milestone claim is guarded by `StreakMilestoneClaim` unique constraint to prevent duplicates
+- On milestone hit: auto-creates `StreakMilestoneClaim` record and adds bonus chips atomically
+- Response shape expanded to include `baseReward`, `levelMultiplier`, `seasonalBonus`, `streakMilestone`
+- All logic stays inside the existing `db.$transaction` for atomicity
+
+Stage Summary:
+- Daily reward is now `Math.floor(baseReward × levelMultiplier × seasonalMultiplier)`
+- Level tiers: ≤5→1×, ≤15→1.5×, ≤30→2.5×, 31+→4×
+- Seasonal bonus days are date-keyed (e.g. New Year 2×, Republic Day 2×)
+- Streak milestones (30/60/90) auto-award bonus chips and return milestone info in response
+- Full backward compatibility: still idempotent per day, same error handling
+
+---
+Task ID: 3-7
+Agent: subagent (fullstack-developer)
+Task: Create hourly+freeze+spin+history+referral API routes
+
+Work Log:
+- Created `src/app/api/player/hourly/route.ts` (GET + POST)
+  - GET returns canClaim, timeLeftMs, nextReward range
+  - POST claims hourly reward with 1h cooldown, level multiplier, seasonal bonus
+  - Transaction-safe: check+update+record inside db.$transaction
+- Created `src/app/api/player/streak/freeze/route.ts` (POST)
+  - Buy streak freeze: checks max (3) and cost (500c), transaction-safe
+- Created `src/app/api/player/spin/route.ts` (GET + POST)
+  - GET returns freeSpinsToday, spinsToday, cost
+  - POST: weighted random prize selection from SPIN_PRIZES (cumulative weight array)
+  - Supports free (1/day) and paid (200c) spins, level+seasonal multipliers
+  - Transaction-safe spin execution
+- Created `src/app/api/player/claims/history/route.ts` (GET)
+  - Unified claim history across 6 tables: DailyClaim, HourlyClaim, LuckySpin, StreakMilestoneClaim, PromoReward, VideoReward
+  - Parallel Promise.all queries (12 total: 6 findMany + 6 count) — no UNION needed
+  - JS merge-sort by createdAt DESC, in-memory pagination with accurate total count
+  - Unified shape: { id, type, reward, detail, createdAt }
+- Created `src/app/api/player/referral/route.ts` (GET + POST)
+  - GET: auto-generates VIPER-XXXX code if missing, returns code + referred player list
+  - POST: links new player to referrer code with validations (no self-referral, no double-link, code must exist)
+  - Transaction-safe referral creation
+- All routes follow established patterns: getSession auth, toProfile response, error-specific catch blocks
+- TypeScript type-check: zero new errors from these 5 files
+
+Stage Summary:
+- 5 new API routes created: /api/player/hourly, /api/player/streak/freeze, /api/player/spin, /api/player/claims/history, /api/player/referral
+- All routes are transaction-safe and follow project error-handling conventions
+- Claims history uses parallel queries + JS merge-sort for SQLite compatibility
+- Referral system supports auto-generated VIPER-XXXX codes with validation guards
+
+---
+Task ID: 8
+Agent: subagent
+Task: Move promo and video reward tracking from in-memory Maps to the database
+
+Work Log:
+- Rewrote `src/app/api/player/promo-reward/route.ts`: removed `redeemedPromos` in-memory Map/Set, replaced with `db.promoReward.findFirst({ where: { playerId, code } })` dedup check; chip credit + record creation wrapped in `db.$transaction()`; response now returns `{ player: toProfile(updated), reward, label }`
+- Rewrote `src/app/api/player/video-reward/route.ts`: removed `videoRewardCooldowns` in-memory Map, replaced with `db.videoReward.findFirst({ where: { playerId }, orderBy: { createdAt: 'desc' } })` cooldown check; chip credit + record creation wrapped in `db.$transaction()`; response now returns `{ player: toProfile(updated), reward, cooldownSeconds: 60 }`
+- Added `@@unique([playerId, code])` constraint to `PromoReward` model in prisma/schema.prisma for DB-level double-claim prevention
+- Ran `prisma db push` to apply unique constraint
+- Verified no type errors in changed files; frontend consumers (rewarded-ad-modal.tsx, chip-store.tsx) remain compatible (they only use `data.reward` and `data.error`)
+
+Stage Summary:
+- Both promo and video reward APIs are now fully DB-backed — state survives server restarts
+- PromoReward has a unique constraint on (playerId, code) as a safety net
+- VideoReward cooldown is derived from the most recent record's createdAt timestamp

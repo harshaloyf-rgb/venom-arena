@@ -41,6 +41,9 @@ model Player {
   // Daily rewards
   dailyStreak     Int      @default(0)
   lastDailyClaim  String?  // ISO date (YYYY-MM-DD)
+  lastHourlyClaim DateTime? // last hourly claim timestamp
+  streakFreezes   Int      @default(0) // purchasable streak protection
+  referralCode    String?  @unique // e.g. "VIPER-A7X2"
 
   // Cosmetics — JSON-encoded arrays/objects (default set in code on register)
   unlockedSkins   String   @default("[]")
@@ -65,6 +68,13 @@ model Player {
 
   // Relations
   dailyClaims     DailyClaim[]
+  hourlyClaims    HourlyClaim[]
+  streakMilestones StreakMilestoneClaim[]
+  luckySpins      LuckySpin[]
+  promoRewards    PromoReward[]
+  videoRewards    VideoReward[]
+  referralsSent   Referral[]    @relation("referralSender")
+  referralsReceived Referral[]  @relation("referralReceiver")
   purchases       Purchase[]
   sentGifts       Gift[]     @relation("giftFrom")
   receivedGifts   Gift[]     @relation("giftTo")
@@ -116,6 +126,75 @@ model DailyClaim {
   createdAt DateTime @default(now())
 
   @@unique([playerId, day])
+}
+
+model HourlyClaim {
+  id        String   @id @default(cuid())
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId  String
+  reward    Int
+  createdAt DateTime @default(now())
+
+  @@index([playerId, createdAt])
+}
+
+model StreakMilestoneClaim {
+  id        String   @id @default(cuid())
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId  String
+  milestone Int      // 30, 60, 90
+  reward    Int
+  createdAt DateTime @default(now())
+
+  @@unique([playerId, milestone])
+}
+
+model LuckySpin {
+  id        String   @id @default(cuid())
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId  String
+  reward    Int
+  prizeTier String   // "common" | "rare" | "epic" | "legendary"
+  createdAt DateTime @default(now())
+
+  @@index([playerId, createdAt])
+}
+
+model PromoReward {
+  id        String   @id @default(cuid())
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId  String
+  code      String
+  reward    Int
+  createdAt DateTime @default(now())
+
+  @@index([playerId])
+  @@unique([playerId, code])
+}
+
+model VideoReward {
+  id        String   @id @default(cuid())
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId  String
+  reward    Int
+  createdAt DateTime @default(now())
+
+  @@index([playerId, createdAt])
+}
+
+model Referral {
+  id            String   @id @default(cuid())
+  referrer      Player   @relation("referralSender", fields: [referrerId], references: [id], onDelete: Cascade)
+  referrerId    String
+  referred      Player   @relation("referralReceiver", fields: [referredId], references: [id], onDelete: Cascade)
+  referredId    String
+  status        String   @default("pending") // pending | active | claimed
+  matchesPlayed Int      @default(0)
+  reward        Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  @@unique([referredId])
+  @@index([referrerId])
 }
 
 model Purchase {
