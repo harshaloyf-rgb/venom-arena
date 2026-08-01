@@ -91,6 +91,7 @@ interface HofStats {
   totalEntries: number;
   byType: { milestone?: number; championship?: number };
   milestoneFirstAchievers: Record<string, { playerName: string; userTag: string; country: string; inductedAt: string } | null>;
+  milestoneCounts: Record<string, number>;
   championshipYears: { year: number; inducteeCount: number }[];
 }
 
@@ -155,6 +156,153 @@ function HoFTabBtn({ active, onClick, icon: Icon, label }: HoFTabBtnProps) {
     >
       <Icon className="w-3.5 h-3.5" /> {label}
     </button>
+  );
+}
+
+// ── Milestones Tier List (groups entries by tier) ───────────────────
+
+interface MilestonesTierListProps {
+  entries: InducteeEntry[];
+  tierFilter: string;
+  stats: HofStats | null;
+  firstAchievers: Record<string, { playerName: string; userTag: string; country: string; inductedAt: string } | null>;
+  onInspectPlayer?: (p: InspectedPlayer) => void;
+}
+
+function MilestonesTierList({ entries, tierFilter, stats, firstAchievers, onInspectPlayer }: MilestonesTierListProps) {
+  const grouped = useMemo(() => {
+    const map: Record<string, InducteeEntry[]> = {};
+    for (const e of entries) {
+      const tid = e.milestoneTierId || 'unknown';
+      if (!map[tid]) map[tid] = [];
+      map[tid].push(e);
+    }
+    return map;
+  }, [entries]);
+
+  const displayedTiers = tierFilter === 'all'
+    ? HALL_OF_FAME_TIERS
+    : HALL_OF_FAME_TIERS.filter((t) => t.id === tierFilter);
+
+  return (
+    <div className="space-y-4">
+      {displayedTiers.map((tier) => {
+        const tierEntries = grouped[tier.id] || [];
+        const isFirstOpen = tierFilter !== 'all' || tier.id === HALL_OF_FAME_TIERS[0]?.id;
+        return (
+          <MilestoneTierCard
+            key={tier.id}
+            tier={tier}
+            entries={tierEntries}
+            realCount={stats?.milestoneCounts?.[tier.id]}
+            firstAchiever={firstAchievers[tier.id] ?? null}
+            defaultOpen={isFirstOpen || tierEntries.length > 0}
+            onInspectPlayer={onInspectPlayer}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Milestone Tier Card (collapsible, shows ALL inductees) ─────────────
+
+interface MilestoneTierCardProps {
+  tier: (typeof HALL_OF_FAME_TIERS)[number];
+  entries: InducteeEntry[];
+  realCount?: number;
+  firstAchiever: { playerName: string; userTag: string; country: string; inductedAt: string } | null;
+  defaultOpen: boolean;
+  onInspectPlayer?: (p: InspectedPlayer) => void;
+}
+
+function MilestoneTierCard({ tier, entries, realCount, firstAchiever, defaultOpen, onInspectPlayer }: MilestoneTierCardProps) {
+  const [open, setOpen] = useState(defaultOpen);
+  const displayCount = realCount ?? entries.length;
+
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-950/80 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-3 p-4 hover:bg-slate-900/40 transition text-left"
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-xl shrink-0" aria-hidden>{tier.badge.split(' ')[0]}</span>
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-white truncate">{tier.name}</div>
+            <div className="text-[10px] font-mono text-slate-400">{fmtChips(tier.chips)}c threshold</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[10px] font-mono font-bold text-yellow-400 bg-yellow-500/10 px-2 py-0.5 rounded-full border border-yellow-500/30">
+            {displayCount} {displayCount === 1 ? 'inductee' : 'inductees'}
+          </span>
+          {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        </div>
+      </button>
+
+      {open && (
+        <div className="border-t border-slate-800">
+          {entries.length === 0 ? (
+            <div className="px-4 py-6 text-center text-xs text-slate-500">
+              No inductees yet for this tier. Be the first!
+            </div>
+          ) : (
+            <ol className="divide-y divide-slate-900 max-h-64 overflow-y-auto va-scroll">
+              {entries.map((entry, idx) => {
+                const isFirst = firstAchiever && entry.playerTag === firstAchiever.userTag;
+                return (
+                  <li
+                    key={entry.id}
+                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-900/40 transition-colors"
+                  >
+                    <span className="w-6 text-center text-[10px] font-mono font-bold text-slate-500 shrink-0">
+                      {idx + 1}
+                    </span>
+                    <span className="text-base shrink-0" aria-hidden>{countryFlag(entry.country)}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-bold text-white truncate">{entry.playerName}</span>
+                        {isFirst && (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/30 shrink-0">
+                            <Check className="w-2.5 h-2.5" /> First!
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] font-mono text-slate-500 truncate">{entry.playerTag}{entry.clanTag ? ` [${entry.clanTag}]` : ''}</div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-[11px] font-mono font-bold text-emerald-400">{fmtChips(entry.chipsAtInduction)}c</div>
+                      <div className="text-[9px] font-mono text-slate-500">{fmtDate(entry.inductedAt)}</div>
+                    </div>
+                    {onInspectPlayer && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onInspectPlayer({
+                            id: entry.playerId,
+                            name: entry.playerName,
+                            userTag: entry.playerTag,
+                            country: entry.country,
+                            level: entry.level,
+                            clanTag: entry.clanTag,
+                          });
+                        }}
+                        className="text-[9px] font-mono text-slate-500 hover:text-yellow-300 px-1.5 py-0.5 rounded border border-slate-800 hover:border-yellow-500/40 transition shrink-0"
+                      >
+                        Inspect
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -753,8 +901,8 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
           <div className="rounded-xl border border-yellow-500/30 bg-yellow-950/10 p-3 text-[11px] text-yellow-200 leading-relaxed">
             <strong>PERMANENT MILESTONE IMMORTALITY</strong>
             <br />
-            Whenever a player reaches a milestone target (from 1 Lakh to 1 Crore Chips),
-            their record is permanently inscribed in the Hall of Fame.
+            Every player who crosses a milestone threshold gets permanently inducted.
+            Filter by tier to see <strong>all inductees</strong> — not just the first.
           </div>
 
           {/* Total inducted count */}
@@ -769,7 +917,7 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
 
           {/* Tier filter */}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-mono uppercase tracking-widest text-slate-500">Tier:</span>
+            <span className="text-[10px] font-mono uppercase tracking-widest text-slate-500">Filter:</span>
             <button
               type="button"
               onClick={() => setMileTierFilter('all')}
@@ -797,118 +945,51 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
             </div>
           )}
 
-          {/* Milestone tiers grid (with real first achievers or fallback) */}
-          {!mileLoading && (
+          {/* No real data → show tier preview cards */}
+          {!mileLoading && mileIsDemo && (
             <>
-              {mileIsDemo ? (
-                /* Fallback: show HALL_OF_FAME_TIERS with their firstAchiever data */
-                <>
-                  <div className="px-4 py-2 bg-slate-900 rounded-xl border border-slate-800 flex items-center gap-2">
-                    <span className="text-[9px] font-mono font-bold text-slate-400 px-2 py-0.5 bg-slate-800 rounded-full border border-slate-700">
-                      DEMO
-                    </span>
-                    <span className="text-[10px] text-slate-500">No real milestone inductees yet. Showing tier definitions with seed first-achievers.</span>
+              <div className="px-4 py-2 bg-slate-900 rounded-xl border border-slate-800 flex items-center gap-2">
+                <span className="text-[9px] font-mono font-bold text-slate-400 px-2 py-0.5 bg-slate-800 rounded-full border border-slate-700">
+                  AWAITING INDUCTEES
+                </span>
+                <span className="text-[10px] text-slate-500">No milestone inductees yet. Below are the 6 milestone tiers — be the first to break through!</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {HALL_OF_FAME_TIERS.map((tier) => (
+                  <div
+                    key={tier.id}
+                    className="relative p-4 rounded-2xl border border-slate-800 bg-slate-950/80 shadow-md overflow-hidden"
+                  >
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-yellow-500/5 rounded-full blur-3xl pointer-events-none" aria-hidden />
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <span className="text-[10px] font-mono uppercase tracking-widest text-yellow-400">{tier.badge}</span>
+                        <h3 className="text-sm font-bold text-white mt-0.5">{tier.name}</h3>
+                      </div>
+                      <div className="text-right">
+                        <MicroLabel>Threshold</MicroLabel>
+                        <div className="font-mono font-bold text-emerald-400 text-sm mt-0.5">{fmtChips(tier.chips)}c</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-center gap-2 text-[10px] text-slate-500">
+                      <Users className="w-3 h-3" />
+                      <span>0 inductees — be the first!</span>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {HALL_OF_FAME_TIERS.map((tier) => {
-                      const realFirst = mileFirstAchievers[tier.id];
-                      const fa = realFirst
-                        ? { name: realFirst.playerName, userTag: realFirst.userTag, country: realFirst.country, dateStr: fmtDate(realFirst.inductedAt) }
-                        : tier.firstAchiever;
-                      return (
-                        <div
-                          key={tier.id}
-                          className="relative p-5 rounded-2xl border border-slate-800 bg-slate-950/80 shadow-md flex flex-col gap-3 overflow-hidden opacity-70"
-                        >
-                          <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/5 rounded-full blur-3xl pointer-events-none" aria-hidden />
-                          <div className="flex items-start justify-between gap-2 relative">
-                            <div className="min-w-0">
-                              <span className="text-[10px] font-mono uppercase tracking-widest text-yellow-400 inline-block">{tier.badge}</span>
-                              <h3 className="text-sm font-bold text-white mt-1">{tier.name}</h3>
-                            </div>
-                            <span className="text-[9px] font-mono font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700 shrink-0">
-                              DEMO
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-3 p-3 bg-slate-900/60 rounded-xl border border-slate-800">
-                            <div className="w-10 h-10 rounded-lg bg-gradient-to-tr from-yellow-500 to-amber-700 flex items-center justify-center text-lg shrink-0" aria-hidden>
-                              {countryFlag(fa.country)}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="text-sm font-bold text-white truncate flex items-center gap-1.5">
-                                {fa.name}
-                                <span className="inline-flex items-center gap-0.5 text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/30">
-                                  <Check className="w-2.5 h-2.5" /> First!
-                                </span>
-                              </div>
-                              <div className="text-[10px] font-mono text-slate-400 mt-0.5">
-                                {fa.userTag} · 🕒 {fa.dateStr}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between text-[11px] text-slate-400">
-                            <div>
-                              <MicroLabel>Chips Threshold</MicroLabel>
-                              <div className="font-mono font-bold text-emerald-400 mt-0.5">{fmtChips(tier.chips)}c</div>
-                            </div>
-                            <div className="text-right">
-                              <MicroLabel>Seed Achievers</MicroLabel>
-                              <div className="font-mono font-bold text-yellow-400 mt-0.5">{tier.totalAchieversCount.toLocaleString()}</div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              ) : (
-                /* Real data: table view */
-                <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-                  <div className="grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-                    <div className="col-span-2">Tier</div>
-                    <div className="col-span-3">First Achiever</div>
-                    <div className="col-span-2">Badge</div>
-                    <div className="col-span-2 text-right">Chips Threshold</div>
-                    <div className="col-span-2">Date</div>
-                    <div className="col-span-1 text-right">Count</div>
-                  </div>
-                  <ol className="divide-y divide-slate-900 max-h-96 overflow-y-auto va-scroll">
-                    {mileEntries.map((entry) => {
-                      const tier = HALL_OF_FAME_TIERS.find((t) => t.id === entry.milestoneTierId);
-                      return (
-                        <li
-                          key={entry.id}
-                          className="grid grid-cols-12 gap-2 items-center px-4 py-3 text-sm hover:bg-slate-900/40 transition-colors"
-                        >
-                          <div className="col-span-2 min-w-0">
-                            <div className="text-[11px] font-bold text-white truncate">{tier?.name.split(' ')[0] || entry.milestoneTierId}</div>
-                          </div>
-                          <div className="col-span-3 min-w-0">
-                            <div className="font-bold text-white truncate flex items-center gap-1.5">
-                              <span aria-hidden>{countryFlag(entry.country)}</span>
-                              {entry.playerName}
-                            </div>
-                            <div className="text-[10px] font-mono text-slate-500 truncate">{entry.playerTag}</div>
-                          </div>
-                          <div className="col-span-2">
-                            <span className="text-[11px] text-yellow-300 truncate block">{tier?.badge || entry.hofBadge || '🏅'}</span>
-                          </div>
-                          <div className="col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums text-[11px]">
-                            {fmtChips(tier?.chips || entry.chipsAtInduction)}c
-                          </div>
-                          <div className="col-span-2 text-[10px] font-mono text-slate-400">{fmtDate(entry.inductedAt)}</div>
-                          <div className="col-span-1 text-right text-[10px] font-mono text-slate-500">
-                            <span className="text-[9px] font-bold text-yellow-400 bg-yellow-500/10 px-1.5 py-0.5 rounded-full border border-yellow-500/30">{tier?.totalAchieversCount.toLocaleString() || '—'}</span>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                </div>
-              )}
+                ))}
+              </div>
             </>
+          )}
+
+          {/* Real data → grouped tier cards with ALL inductees */}
+          {!mileLoading && !mileIsDemo && (
+            <MilestonesTierList
+              entries={mileEntries}
+              tierFilter={mileTierFilter}
+              stats={stats}
+              firstAchievers={mileFirstAchievers}
+              onInspectPlayer={onInspectPlayer}
+            />
           )}
         </div>
       )}
