@@ -791,3 +791,28 @@ Stage Summary:
 - PlayerInspectorModal now fetches real data and shows achievements, social stats, real social links
 - FriendProfileInspector now shows achievements/milestones/badges section
 - Both inspection screens are now consistent with achievements
+
+---
+Task ID: 2
+Agent: main
+Task: Syndicate v2 - additional improvements (kick, settings, stats, quick deposit, online status, rank colors)
+
+Work Log:
+- Created /api/clans/kick endpoint (Leader/Co-Leader can kick, Co-Leader can't kick other Co-Leaders, logs activity)
+- Created /api/clans/settings endpoint (Leader-only, edit name/description/emblem, logs activity)
+- Created /api/clans/stats endpoint (aggregate member stats: kills, deaths, K/D, extracts, wealth, levels, online count)
+- Added quick deposit buttons (10%, 25%, 50%, MAX) to treasury section
+- Added member online status (green dot + "online" text based on lastSeenAt within 5 min)
+- Added rank-colored chat names (Leader=amber, Co-Leader=purple, Viper=indigo)
+- Added Stats sub-tab with combat dashboard (kills/deaths/KD/extracts/wealth/levels/streaks)
+- Added Settings modal (Leader-only) for editing clan name, description, emblem
+- Added Kick button on member roster (Leader/Co-Leader can kick, can't kick Leader/self)
+- Added 5-column stats row (Rank, Members with online count, Level with XP bar, Treasury, Total Deposited)
+- Fixed React hooks rules violation (useMemo before early return)
+- Fixed sub-tab rendering with object array instead of const tuple
+
+Stage Summary:
+- 3 new API endpoints (kick, settings, stats)
+- 4 new frontend features (settings modal, stats tab, kick, quick deposit)
+- 3 UX improvements (online status, rank-colored chat, 5-column stats)
+- All verified in browser, committed and pushed
