@@ -431,6 +431,9 @@ model Clip {
   featured       Boolean  @default(false)
   cardType       String   @default("user-clip")  // "user-clip" | "match-card"
   matchData      String?                           // JSON: { outcome, chipsLost, snakeLength, durationSec, isOnline }
+  status         String   @default("pending")      // "pending" | "approved" | "rejected" — user clips need admin approval
+  reviewedBy     String?                           // admin playerId who reviewed
+  reviewedAt     DateTime?
   createdAt      DateTime @default(now())
 
   @@index([playerId, createdAt(sort: Desc)])
@@ -438,6 +441,7 @@ model Clip {
   @@index([upvotes(sort: Desc)])
   @@index([createdAt(sort: Desc)])
   @@index([cardType, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
 }
 
 model ClipUpvote {
