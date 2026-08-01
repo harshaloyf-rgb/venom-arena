@@ -354,3 +354,38 @@ Stage Summary:
 - Find Me is per-tab, color-matched to each tab's accent color
 - All 5 tabs verified in browser: Summit, Global, National, Regional, Tiers
 - Lint clean, zero console errors
+
+---
+Task ID: rules-guide-leaderboard
+Agent: main
+Task: Update Rules & Guide leaderboard section to match current implementation
+
+Work Log:
+- Read entire Section 12 (LOBBY LEADERBOARDS) in game-rules-modal.tsx
+- Identified 8 outdated/wrong items and 7 missing topics
+- Rewrote Section 12 with 12 InfoCards (was 8):
+  1. "What is the Lobby Leaderboard?" — Fixed: 5 tabs (was "three levels"), listed all 5
+  2. "Find Me — Per-Tab Rank Lookup" — NEW: documented per-tab Find Me with scroll + rank card
+  3. "Tie-Breaking Rules" — NEW: 3-step tie-break (chips→level→join date), badge descriptions
+  4. "Summit — World Cup" — Fixed: removed "Level 3" naming, added columns list, top 100
+  5. "Global Rankings (1-to-N)" — Fixed: was "Top 100", now correctly 1-to-N, documented podium
+  6. "National Rankings" — Fixed: removed "Level 2" naming, added columns list
+  7. "Regional Rankings" — NEW: APAC/NA/EU/LATAM with country lists
+  8. "Milestone Badge System" — Kept existing table (unchanged, accurate)
+  9. "Milestone Tier Ranks" — Fixed: removed "Level 1" naming, added FIRST badge + columns
+  10. "Milestone History" — NEW: progress bar, timeline, timestamps, next milestone hint
+  11. "Championship Prize Badges" — NEW: World Champion/Elite 10/Masters 50/Qualifier 100
+  12. "Search & Player Inspector" — Merged search doc + updated inspector description
+  13. "Empty Boards & Demo Data" — Updated: 3 demo entries with DEMO badge
+  14. "Auto-Refresh & Live Ticker" — Added live ticker documentation
+- Added 3 new FAQ items:
+  - "How does tie-breaking work on the leaderboard?"
+  - "What is the Milestone History section?"
+  - "How does Find Me work?"
+- Updated existing milestone badge FAQ to mention timestamp recording
+- Verified in browser: all sections render, new FAQ items visible
+
+Stage Summary:
+- Rules & Guide Section 12 fully rewritten to match current leaderboard implementation
+- 8 outdated items fixed, 7 missing topics added, 3 new FAQ items
+- Lint clean, browser-verified
