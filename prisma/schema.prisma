@@ -72,6 +72,7 @@ model Player {
   friendsTo       Friendship[] @relation("friendshipRecipient")
   challenges      Challenge[]
   milestones      PlayerMilestone[]
+  championshipRegs ChampionshipRegistration[]
 
   @@index([bankedChips(sort: Desc)])
   @@index([level(sort: Desc)])
@@ -209,4 +210,41 @@ model GameConfig {
   order     Int      @default(0) // display order within category
   type      String   @default("number") // "number" | "boolean" | "string" | "json"
   updatedAt DateTime @updatedAt
+}
+
+// Championship — annual tournament tracking per player
+model ChampionshipRegistration {
+  id            String    @id @default(cuid())
+  playerId      String
+  player        Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  year          Int                              // e.g. 2026
+  gamesPlayed   Int       @default(0)
+  isActive      Boolean   @default(true)
+  registeredAt  DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([playerId, year])
+  @@index([year, isActive])
+  @@index([playerId, year])
+}
+
+// Championship archive — historical championship data for past years
+model ChampionshipArchive {
+  id                String    @id @default(cuid())
+  year              Int       @unique                 // e.g. 2025
+  title             String                            // "2025 Annual Venom World Championship"
+  status            String    @default("completed")   // completed | active
+  winnerTag         String?                           // userTag of the global winner
+  winnerName        String?
+  winnerCountry     String?
+  winnerClanTag     String?
+  winnerChips       Int?
+  totalParticipants Int       @default(0)
+  topClanTag        String?                           // clan with most top-100 members
+  topClanName       String?
+  payoutsProcessed  Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  finalizedAt       DateTime?
+
+  @@index([year])
 }
