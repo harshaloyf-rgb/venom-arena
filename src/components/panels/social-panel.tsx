@@ -57,6 +57,7 @@ interface SearchPlayer {
   clanTag: string | null;
   online: boolean;
   avatar: string | null;
+  relation: 'none' | 'friend' | 'pending_sent' | 'pending_received';
 }
 
 interface GiftEntry {
@@ -413,6 +414,9 @@ export function SocialPanel({ onToast }: SocialPanelProps) {
       if (!res.ok) { notify(data.error || 'Failed to send request.', 'error', onToast); return; }
       notify(`Connected with ${p.name}! 🤝`, 'success', onToast);
       await fetchFriends();
+      // Re-fetch search so the relation badge updates (Connect → Sent)
+      setSearchOffset(0);
+      await fetchSearch(searchQuery, searchCountry, 0);
     } catch {
       notify('Network error. Please try again.', 'error', onToast);
     }
@@ -425,8 +429,6 @@ export function SocialPanel({ onToast }: SocialPanelProps) {
   /* ================================================================ */
   /*  JSX                                                               */
   /* ================================================================ */
-
-  const allTags = new Set([...friends.map((f) => f.userTag), ...pendingSent.map((p) => p.userTag)]);
 
   return (
     <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 overflow-hidden">
@@ -644,8 +646,8 @@ export function SocialPanel({ onToast }: SocialPanelProps) {
                   </li>
                 ) : (
                   searchResults.map((p) => {
-                    const isFriend = allTags.has(p.userTag);
                     const isSelf = p.userTag === player.userTag;
+                    const rel = p.relation || 'none';
                     return (
                       <li key={p.userTag} className="px-4 py-3 text-sm flex items-center justify-between gap-3 hover:bg-slate-900/40 transition-colors">
                         <div className="flex items-center gap-3 min-w-0">
@@ -666,9 +668,17 @@ export function SocialPanel({ onToast }: SocialPanelProps) {
                         </div>
                         {isSelf ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-800 px-2 py-1 rounded-full">You</span>
-                        ) : isFriend ? (
+                        ) : rel === 'friend' ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded-full">
                             <Check className="w-3 h-3" /> Connected
+                          </span>
+                        ) : rel === 'pending_sent' ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-1 rounded-full">
+                            <Clock className="w-3 h-3" /> Sent
+                          </span>
+                        ) : rel === 'pending_received' ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/30 px-2 py-1 rounded-full">
+                            <UserPlus className="w-3 h-3" /> Accept
                           </span>
                         ) : (
                           <button type="button" onClick={() => handleConnectSearch(p)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-violet-600/20 border border-violet-500/40 text-violet-300 hover:bg-violet-600 hover:text-white transition flex items-center gap-1">

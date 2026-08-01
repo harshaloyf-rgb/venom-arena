@@ -913,3 +913,27 @@ Work Log:
 Stage Summary:
 - All 3 data contract bugs fixed. Friends & Search is now fully functional.
 - Files changed: /api/friends/history/route.ts, /api/players/countries/route.ts, /api/friends/list/route.ts
+---
+Task ID: 3
+Agent: main
+Task: Deep audit — re-inspect Friends & Search for missed issues
+
+Work Log:
+- Line-by-line audited every API response shape vs frontend field reads (9 API calls)
+- Checked schema model fields vs API query usage (Friendship, Gift, Player, MatchHistory)
+- Searched all imports from game-config.ts to find dead exports
+- Verified dashboard notification badge (pendingFriendCount) works correctly
+- Verified remove route works for both remove-friend and decline-request flows
+- Found 4 additional issues and fixed all of them:
+  1. Dead code: SOCIAL_COUNTRY_FILTER (13 lines), PublicClan interface + PUBLIC_CLANS (42 lines), BOT_REPLIES (9 lines) still in game-config.ts with zero consumers — removed all ~64 lines
+  2. Search API did not exclude blocked players — added blocked-player filter query before search
+  3. Search results used local allTags Set (only friends+pendingSent) — missed pending_received. Refactored: search API now returns `relation` field per player ('none'|'friend'|'pending_sent'|'pending_received'). Frontend shows 4 badge states: Connect, Connected, Sent, Accept
+  4. Gift API incremented totalEarned for recipient — receiving a gift is not gameplay earning. Removed the increment.
+  5. handleConnectSearch did not re-fetch search after sending request — Connect button stayed stale. Added search re-fetch after successful friend request.
+- Fixed accidental duplicate handleLoadMoreSearch function definition
+- All fixes verified with Agent Browser: search shows 'Sent' badge after connecting, Gift History loads, outgoing requests show, zero console errors
+
+Stage Summary:
+- 4 bugs found and fixed, 1 UX improvement added
+- Files changed: game-config.ts, players/search/route.ts, friends/gift/route.ts, social-panel.tsx
+- Total dead code removed: ~64 lines from game-config.ts
