@@ -685,3 +685,26 @@ Stage Summary:
 - Identity Anti-Tamper Logs: security seal, device info, verification hashes, tamper detection
 - All references to "Dossier" renamed to "Agent Profile"
 - Lint clean, zero runtime errors, all features browser-verified
+---
+Task ID: referral-redeem-ui
+Agent: main
+Task: Add "Enter Invite Code" UI so friends can actually redeem referral codes
+
+Work Log:
+- Added state: redeemCode, redeemLoading, redeemResult, alreadyReferred
+- Added handleRedeemCode handler with POST to /api/player/referral
+- Added useEffect to auto-populate redeemCode from ?ref= URL query param
+- Added "Got an Invite Code?" input section in Friends tab below ReferralBanner
+- Updated GET /api/player/referral to return hasReferrer, referrerName, referrerCode
+- Updated ReferralData type to include new fields
+- fetchReferralData now sets alreadyReferred=true when hasReferrer is true
+- When code is linked, shows green "Invite Code Linked by <name>" banner
+- Fixed mountedRef staleness bug with dedicated redeemRef for dedup
+- Renamed lucide Link import to LinkIcon to avoid conflicts
+- Verified via Agent Browser: code input enables button, invalid code shows error, friend profile inspection works
+
+Stage Summary:
+- Full referral code redemption flow is now complete end-to-end
+- Backend API already existed (POST /api/player/referral)
+- Users can: generate code, copy code, share link, AND NOW enter/redeem a received code
+- ?ref= URL param auto-populates the input for invite link recipients
