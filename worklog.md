@@ -494,3 +494,23 @@ Stage Summary:
 - Users can click expand/collapse, Inspect, and filter buttons to understand the feature
 - DEMO_MILESTONES has 10 entries showing multiple players per tier (addressing user's earlier feedback about N players per tier)
 - Inspect button now passes correct InspectedPlayer shape with flag, bankedChips, achievedAt
+---
+Task ID: S4-milestones-redesign
+Agent: main
+Task: Redesign Milestones Wing — rank-based tables inside tier cards + search bar
+
+Work Log:
+- Removed collapsible MilestoneTierCard (expand/collapse behavior)
+- Created new non-collapsible MilestoneTierCard with rank-based 12-column grid table
+- Table headers: Rank | Player | Badge | Chips | Date | Action
+- Rank display: #1 (👑 crown), #2 (🥈), #3 (🥉), #4+ (gray #N)
+- Added mileSearch state + search bar (search by name, tag, or clan)
+- Search filters client-side, only shows tier cards with matching players
+- Updated MilestonesTierList to pass search prop and isDemo flag
+- Removed old collapsible component and unused imports (ChevronDown, ChevronUp, etc.)
+- Verified: all 6 tiers show tables inside, search "Viper" shows 3 matching players across 3 tiers, Inspect button works
+
+Stage Summary:
+- Milestones Wing now matches Champions Wing pattern: search bar + filter pills + table cards
+- Each tier card has all players visible inside (no scrolling between tiers needed)
+- Players ranked by induction order so users can see who was 1st, 2nd, 3rd to achieve each tier
