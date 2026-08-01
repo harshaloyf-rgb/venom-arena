@@ -169,6 +169,7 @@ export async function GET(req: NextRequest) {
       region: regionOf(p.country || ''),
       milestoneBadge: tier.badge,
       milestoneColor: tier.color,
+      createdAt: p.createdAt.toISOString(),
     };
   });
 
