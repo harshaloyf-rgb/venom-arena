@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
       });
       await tx.player.update({
         where: { id: recipient.id },
-        data: { bankedChips: { increment: amount }, totalEarned: { increment: amount } },
+        data: { bankedChips: { increment: amount } },
       });
       await tx.gift.create({
         data: { fromId: sender.id, toId: recipient.id, amount },

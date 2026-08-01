@@ -19,6 +19,28 @@ export async function GET(req: NextRequest) {
   // Build where clause
   const conditions: any[] = [{ id: { not: session.playerId } }];
 
+  // Exclude blocked players
+  const blockedIds = await db.friendship.findMany({
+    where: {
+      OR: [
+        { initiatorId: session.playerId, status: 'blocked' },
+        { recipientId: session.playerId, status: 'blocked' },
+      ],
+    },
+    select: {
+      initiatorId: true,
+      recipientId: true,
+    },
+  });
+  const blockedPlayerIds = new Set(
+    blockedIds.flatMap((b) =>
+      b.initiatorId === session.playerId ? [b.recipientId] : [b.initiatorId],
+    ),
+  );
+  if (blockedPlayerIds.size > 0) {
+    conditions.push({ id: { notIn: Array.from(blockedPlayerIds) } });
+  }
+
   if (query) {
     conditions.push({
       OR: [
@@ -39,10 +61,41 @@ export async function GET(req: NextRequest) {
     : { lastSeenAt: 'desc' as const };
 
   try {
+  // Fetch existing friendships to annotate search results
+  const friendships = await db.friendship.findMany({
+    where: {
+      OR: [
+        { initiatorId: session.playerId },
+        { recipientId: session.playerId },
+      ],
+      status: { in: ['accepted', 'pending'] },
+    },
+    select: {
+      initiatorId: true,
+      recipientId: true,
+      status: true,
+    },
+  });
+
+  // Build a map: playerId -> relation
+  const pid = session.playerId;
+  const relationMap = new Map<string, string>();
+  for (const f of friendships) {
+    const otherId = f.initiatorId === pid ? f.recipientId : f.initiatorId;
+    if (f.status === 'accepted') {
+      relationMap.set(otherId, 'friend');
+    } else if (f.initiatorId === pid) {
+      relationMap.set(otherId, 'pending_sent');
+    } else {
+      relationMap.set(otherId, 'pending_received');
+    }
+  }
+
   const [players, total] = await Promise.all([
     db.player.findMany({
       where,
       select: {
+        id: true,
         userTag: true,
         name: true,
         country: true,
@@ -69,6 +122,7 @@ export async function GET(req: NextRequest) {
     lastSeenAt: p.lastSeenAt,
     avatar: p.avatar,
     online: Date.now() - new Date(p.lastSeenAt).getTime() < 5 * 60 * 1000,
+    relation: (relationMap.get(p.id) as string) || 'none',
   }));
 
   return NextResponse.json({ players: results, total });

@@ -886,74 +886,7 @@ export const GLOBAL_COMMUNITY_PLAYERS: GlobalPlayer[] = [
   { name: 'Paris_Serpent', userTag: 'FRA-1190', country: 'FR', level: 38, chips: 1_950_000, skinColor: '#8b5cf6', status: 'offline' },
 ];
 
-export const SOCIAL_COUNTRY_FILTER = [
-  { code: 'ALL', name: 'All Countries', flag: '🌐' },
-  { code: 'IN', name: 'India', flag: '🇮🇳' },
-  { code: 'US', name: 'United States', flag: '🇺🇸' },
-  { code: 'JP', name: 'Japan', flag: '🇯🇵' },
-  { code: 'KR', name: 'South Korea', flag: '🇰🇷' },
-  { code: 'GB', name: 'United Kingdom', flag: '🇬🇧' },
-  { code: 'DE', name: 'Germany', flag: '🇩🇪' },
-  { code: 'BR', name: 'Brazil', flag: '🇧🇷' },
-  { code: 'AU', name: 'Australia', flag: '🇦🇺' },
-  { code: 'CA', name: 'Canada', flag: '🇨🇦' },
-  { code: 'FR', name: 'France', flag: '🇫🇷' },
-];
-
-// Public clans (SocialPanel.tsx — distinct from ClanSystem.tsx)
-export interface PublicClan {
-  id: string;
-  name: string;
-  tag: string;
-  emblem: string;
-  level: number;
-  bankedChips: number;
-  description: string;
-  members: { name: string; role: string; level: number; chips: number }[];
-}
-
-export const PUBLIC_CLANS: PublicClan[] = [
-  {
-    id: 'c-1',
-    name: 'Apex Predators',
-    tag: 'APEX',
-    emblem: '🦅',
-    level: 8,
-    bankedChips: 15_000,
-    description: 'Elite hunters only. Extract with 100+ chips or get kicked.',
-    members: [
-      { name: 'VenomKing', role: 'Leader', level: 55, chips: 5000 },
-      { name: 'ApexViper', role: 'Co-Leader', level: 42, chips: 3500 },
-      { name: 'StrikeFast', role: 'Viper', level: 22, chips: 1200 },
-    ],
-  },
-  {
-    id: 'c-2',
-    name: 'Slinky Syndicate',
-    tag: 'SLYK',
-    emblem: '🐍',
-    level: 5,
-    bankedChips: 4_500,
-    description: "Casual chip collectors. Let's grow together!",
-    members: [
-      { name: 'CozyCobra', role: 'Leader', level: 31, chips: 2000 },
-      { name: 'ShadowSlinker', role: 'Viper', level: 18, chips: 800 },
-      { name: 'GoldHoarder', role: 'Viper', level: 15, chips: 500 },
-    ],
-  },
-];
-
 export const PRESET_EMBLEMS = ['🐍', '🦅', '🎯', '💀', '💎', '🔥', '👑', '⚡', '🏆', '☣️'];
-
-export const BOT_REPLIES = [
-  'Nice run in the High-Stakes Arena today! 🏆',
-  'That was an insane cut-off! Easy food. 💥',
-  "Don't forget to deposit chips, we need that Level 10 Clan Buff! 💎",
-  'Who is up for some Venom Arena lobbies? 🐍',
-  'Just extracted with 250 chips, feeling like a god! 😎',
-  'Slinky style, baby! 😂',
-  'Be careful of VenomKing, he was hunting everyone in Tier 3!',
-];
 
 // ----------------------------------------------------------------------------
 // ClanSystem.tsx — 3 sample clans
