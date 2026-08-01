@@ -3,33 +3,41 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Award,
+  BadgeCheck,
   Calendar,
   Check,
   Clock,
   Compass,
   Copy,
   Edit2,
+  ExternalLink,
   Eye,
   Filter,
+  Flag,
   Gamepad2,
   Globe,
+  Heart,
   History,
   Landmark,
   Link as LinkIcon,
   Lock,
   LogOut,
+  MessageCircle,
   Monitor,
   RefreshCw,
   Search,
   Shield,
   Skull,
   Sparkles,
+  Star,
   Swords,
   Target,
   Timer,
   Trash2,
   Trophy,
   Upload,
+  UserCheck,
+  UserMinus,
   UserPlus,
   Users,
   Wifi,
@@ -108,6 +116,7 @@ interface Friend {
   status: FriendStatus;
   level: number;
   skinColor: string;
+  country: string;
   giftSentToday: boolean;
   giftReceivedToday: boolean;
 }
@@ -188,6 +197,7 @@ const INITIAL_FRIENDS: Friend[] = [
     status: 'online',
     level: 42,
     skinColor: '#10b981',
+    country: 'IN',
     giftSentToday: false,
     giftReceivedToday: true,
   },
@@ -198,6 +208,7 @@ const INITIAL_FRIENDS: Friend[] = [
     status: 'in-match',
     level: 18,
     skinColor: '#a855f7',
+    country: 'US',
     giftSentToday: false,
     giftReceivedToday: false,
   },
@@ -208,6 +219,7 @@ const INITIAL_FRIENDS: Friend[] = [
     status: 'offline',
     level: 29,
     skinColor: '#eab308',
+    country: 'JP',
     giftSentToday: true,
     giftReceivedToday: false,
   },
@@ -218,6 +230,7 @@ const INITIAL_FRIENDS: Friend[] = [
     status: 'idle',
     level: 55,
     skinColor: '#ef4444',
+    country: 'BR',
     giftSentToday: false,
     giftReceivedToday: false,
   },
@@ -228,6 +241,7 @@ const INITIAL_FRIENDS: Friend[] = [
     status: 'in-match',
     level: 33,
     skinColor: '#06b6d4',
+    country: 'GB',
     giftSentToday: false,
     giftReceivedToday: true,
   },
@@ -238,6 +252,7 @@ const INITIAL_FRIENDS: Friend[] = [
     status: 'online',
     level: 61,
     skinColor: '#f97316',
+    country: 'KR',
     giftSentToday: true,
     giftReceivedToday: false,
   },
@@ -1858,6 +1873,7 @@ function ProfileContent({
           {/* Friend profile inspector dialog */}
           <FriendProfileInspector
             friend={inspectingFriend}
+            allFriends={friends}
             onClose={() => setInspectingFriend(null)}
           />
 
@@ -3498,11 +3514,21 @@ function friendHash(friend: Friend, offset: number): number {
 
 function FriendProfileInspector({
   friend,
+  allFriends,
   onClose,
 }: {
   friend: Friend | null;
+  allFriends: Friend[];
   onClose: () => void;
 }) {
+  const [isFollowing, setIsFollowing] = useState(() => {
+    if (!friend) return false;
+    try {
+      const followed: string[] = JSON.parse(localStorage.getItem('venom_following') || '[]');
+      return followed.includes(friend.id);
+    } catch { return false; }
+  });
+
   if (!friend) return null;
 
   const friendChips = getFriendSimulatedChips(friend);
@@ -3514,7 +3540,7 @@ function FriendProfileInspector({
         ? 'In Match'
         : 'Offline';
 
-  // Simulated deterministic stats based on friend identity
+  // ── Deterministic simulated stats ──
   const kills = friendHash(friend, 100);
   const deaths = friendHash(friend, 200);
   const extracts = friendHash(friend, 300);
@@ -3524,6 +3550,21 @@ function FriendProfileInspector({
   const biggestExtract = friendHash(friend, 500) * 5;
   const totalMatches = kills + deaths;
   const winStreak = Math.min(bestStreak, 12);
+
+  // Social graph stats (deterministic)
+  const friendCount = 8 + (friendHash(friend, 1000) % 40);
+  const followerCount = 30 + (friendHash(friend, 1100) % 470);
+  const followingCount = 5 + (friendHash(friend, 1200) % 80);
+
+  // Mutual friends (pick from your friend list)
+  const mutualFriends = allFriends
+    .filter(f => f.id !== friend.id)
+    .sort((a, b) => {
+      const ha = friendHash({ ...friend, id: a.id }, 2000);
+      const hb = friendHash({ ...friend, id: b.id }, 2000);
+      return ha - hb;
+    })
+    .slice(0, Math.min(3, allFriends.length - 1));
 
   // Simulated recent matches
   const arenas = ['Slum Alley', 'Neon Grid', 'Viper Syndicate', 'Toxic Wasteland', 'Crimson District'];
@@ -3546,60 +3587,153 @@ function FriendProfileInspector({
   const equippedSkin = skinNames[friendHash(friend, 800) % skinNames.length];
   const equippedTrail = trailNames[friendHash(friend, 900) % trailNames.length];
 
+  // Simulated social links (deterministic handles)
+  const socials = [
+    { platform: 'YouTube', handle: `@${friend.name.toLowerCase().replace(/\s/g, '')}Gaming`, color: '#FF0000', icon: '▶' },
+    { platform: 'Instagram', handle: `@${friend.name.toLowerCase().replace(/\s/g, '')}_va`, color: '#E4405F', icon: '📷' },
+    { platform: 'Twitch', handle: `${friend.name.toLowerCase().replace(/\s/g, '')}tv`, color: '#9146FF', icon: '🎮' },
+    { platform: 'Discord', handle: `${friend.name.toLowerCase().replace(/\s/g, '')}#0001`, color: '#5865F2', icon: '💬' },
+  ];
+  const activeSocials = socials.filter((_, i) => friendHash(friend, 1300 + i * 3) % 5 !== 0);
+
+  // Playstyle tag
+  const kdNum = parseFloat(kd);
+  const playstyle = kdNum > 2.5
+    ? { label: 'Aggressive Predator', color: 'text-rose-400 bg-rose-500/10 border-rose-500/20' }
+    : kdNum > 1.5
+      ? { label: 'Balanced Striker', color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' }
+      : { label: 'Stealth Extractor', color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20' };
+
+  // Favorite arena
+  const arenaCounts: Record<string, number> = {};
+  recentMatches.forEach(m => { arenaCounts[m.arena] = (arenaCounts[m.arena] || 0) + 1; });
+  const favoriteArena = Object.entries(arenaCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || arenas[0];
+
+  // Member since (simulated)
+  const daysAgo = 30 + (friendHash(friend, 1400) % 600);
+  const joinDate = new Date(Date.now() - daysAgo * 86_400_000);
+  const memberSince = joinDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+
+  // Country flag
+  const countryFlag = friend.country
+    ? COUNTRIES.find(c => c.code === friend.country)?.flag || '🌐'
+    : '🌐';
+  const countryName = friend.country
+    ? COUNTRIES.find(c => c.code === friend.country)?.name || 'Unknown'
+    : 'Unknown';
+
+  const isVerified = friend.level >= 50;
+
+  const toggleFollow = () => {
+    try {
+      const followed: string[] = JSON.parse(localStorage.getItem('venom_following') || '[]');
+      if (isFollowing) {
+        const idx = followed.indexOf(friend.id);
+        if (idx > -1) followed.splice(idx, 1);
+      } else {
+        followed.push(friend.id);
+      }
+      localStorage.setItem('venom_following', JSON.stringify(followed));
+      setIsFollowing(!isFollowing);
+    } catch { /* ignore */ }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       {/* Modal */}
       <div
-        className="relative bg-slate-950 border border-slate-800 text-white max-w-lg w-[95vw] max-h-[90vh] overflow-y-auto va-scroll rounded-2xl shadow-2xl"
+        className="relative bg-slate-950 border border-slate-800 text-white max-w-2xl w-[95vw] max-h-[92vh] overflow-y-auto va-scroll rounded-2xl shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Hero header */}
+        {/* ── HERO HEADER ── */}
         <div className="relative p-5 pb-4 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border-b border-slate-800">
-          <div className="absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl pointer-events-none" style={{ backgroundColor: friend.skinColor + '15' }} />
+          <div className="absolute top-0 right-0 w-40 h-40 rounded-full blur-3xl pointer-events-none" style={{ backgroundColor: friend.skinColor + '15' }} />
+          <div className="absolute bottom-0 left-0 w-32 h-32 rounded-full blur-3xl pointer-events-none" style={{ backgroundColor: friend.skinColor + '08' }} />
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute top-3 right-3 p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer z-10"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          <div className="flex items-start gap-4 mb-4">
+            {/* Avatar */}
+            <div className="w-18 h-18 rounded-2xl flex items-center justify-center border-2 relative shadow-lg shrink-0" style={{ borderColor: friend.skinColor + '60', backgroundColor: friend.skinColor + '15' }}>
+              <span className="text-4xl select-none">🐍</span>
+              <span className="absolute -bottom-1.5 -right-1.5 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold shadow" style={{ color: friend.skinColor }}>
+                Lvl {friend.level}
+              </span>
+            </div>
+
+            {/* Name + tag + status */}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-lg font-bold text-white">{friend.name}</h3>
+                {isVerified && <BadgeCheck className="w-5 h-5 text-cyan-400 shrink-0" />}
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${playstyle.color}`}>{playstyle.label}</span>
+              </div>
+              <p className="text-xs text-slate-400 font-mono mt-0.5">
+                #{friend.userTag}
+                <span className="mx-1.5 text-slate-700">•</span>
+                {countryFlag} {countryName}
+              </p>
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className={`flex items-center gap-1.5 text-[11px] font-bold uppercase font-mono ${
+                  friend.status === 'online' ? 'text-emerald-400' :
+                  friend.status === 'idle' ? 'text-amber-400' :
+                  friend.status === 'in-match' ? 'text-fuchsia-400' :
+                  'text-slate-500'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${
+                    friend.status === 'online' ? 'bg-emerald-500' :
+                    friend.status === 'idle' ? 'bg-amber-500 animate-pulse' :
+                    friend.status === 'in-match' ? 'bg-fuchsia-500 animate-pulse' :
+                    'bg-slate-600'
+                  }`} />
+                  {statusText}
+                </span>
+                {friend.status === 'in-match' && (
+                  <span className="text-[10px] bg-fuchsia-500/15 border border-fuchsia-500/25 text-fuchsia-400 px-2 py-0.5 rounded-full font-bold animate-pulse">LIVE</span>
+                )}
+                <span className="text-[10px] text-slate-600 font-sans">Member since {memberSince}</span>
+              </div>
+            </div>
+
+            {/* Follow button */}
             <button
               type="button"
-              onClick={onClose}
-              className="absolute top-3 right-3 p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer z-10"
-              aria-label="Close"
+              onClick={toggleFollow}
+              className={`shrink-0 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer border flex items-center gap-1.5 ${
+                isFollowing
+                  ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-rose-500/10 hover:border-rose-500/20 hover:text-rose-400'
+                  : 'bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-500 hover:to-pink-500 border-fuchsia-500/30 text-white shadow-lg shadow-fuchsia-500/15'
+              }`}
             >
-              <X className="w-4 h-4" />
+              {isFollowing ? <><UserMinus className="w-3.5 h-3.5" /> Unfollow</> : <><UserPlus className="w-3.5 h-3.5" /> Follow</>}
             </button>
+          </div>
 
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center border-2 relative shadow-lg" style={{ borderColor: friend.skinColor + '60', backgroundColor: friend.skinColor + '15' }}>
-                <span className="text-3xl select-none">🐍</span>
-                <span className="absolute -bottom-1.5 -right-1.5 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold shadow" style={{ color: friend.skinColor }}>
-                  Lvl {friend.level}
-                </span>
+          {/* Social Stats Bar */}
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="bg-slate-900/70 border border-slate-800/60 rounded-xl p-2.5 text-center">
+              <span className="text-base font-bold font-mono text-indigo-400 block">{friendCount}</span>
+              <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Friends</span>
+            </div>
+            <div className="bg-slate-900/70 border border-slate-800/60 rounded-xl p-2.5 text-center">
+              <div className="flex items-center justify-center gap-1">
+                <Heart className={`w-3 h-3 ${isFollowing ? 'text-rose-400 fill-rose-400' : 'text-slate-500'}`} />
+                <span className="text-base font-bold font-mono text-rose-400">{followerCount + (isFollowing ? 1 : 0)}</span>
               </div>
-              <div className="min-w-0">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  {friend.name}
-                </h3>
-                <p className="text-xs text-slate-400 font-mono">#{friend.userTag}</p>
-                <div className="flex items-center gap-2 mt-1.5">
-                  <span className={`flex items-center gap-1.5 text-[11px] font-bold uppercase font-mono ${
-                    friend.status === 'online' ? 'text-emerald-400' :
-                    friend.status === 'idle' ? 'text-amber-400' :
-                    friend.status === 'in-match' ? 'text-fuchsia-400' :
-                    'text-slate-500'
-                  }`}>
-                    <span className={`w-2 h-2 rounded-full ${
-                      friend.status === 'online' ? 'bg-emerald-500' :
-                      friend.status === 'idle' ? 'bg-amber-500 animate-pulse' :
-                      friend.status === 'in-match' ? 'bg-fuchsia-500 animate-pulse' :
-                      'bg-slate-600'
-                    }`} />
-                    {statusText}
-                  </span>
-                  {friend.status === 'in-match' && (
-                    <span className="text-[10px] bg-fuchsia-500/15 border border-fuchsia-500/25 text-fuchsia-400 px-2 py-0.5 rounded-full font-bold animate-pulse">LIVE</span>
-                  )}
-                </div>
-              </div>
+              <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Followers</span>
+            </div>
+            <div className="bg-slate-900/70 border border-slate-800/60 rounded-xl p-2.5 text-center">
+              <span className="text-base font-bold font-mono text-emerald-400 block">{followingCount}</span>
+              <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Following</span>
             </div>
           </div>
 
@@ -3617,11 +3751,14 @@ function FriendProfileInspector({
           </div>
         </div>
 
+        {/* ── BODY SECTIONS ── */}
         <div className="p-5 space-y-5">
+
           {/* Combat Statistics */}
           <div>
             <h4 className="text-xs uppercase font-bold text-slate-500 tracking-wider mb-3 font-sans flex items-center gap-2">
               <Target className="w-3.5 h-3.5 text-indigo-400" /> Combat Statistics
+              <span className="ml-auto text-[9px] text-slate-600 font-normal normal-case tracking-normal">{totalMatches} total matches • Fav: {favoriteArena}</span>
             </h4>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <div className="bg-slate-900/50 border border-slate-800/60 rounded-xl p-3 text-center">
@@ -3645,10 +3782,6 @@ function FriendProfileInspector({
                 <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Extractions</span>
               </div>
               <div className="bg-slate-900/50 border border-slate-800/60 rounded-xl p-3 text-center">
-                <span className="text-lg font-bold font-mono text-amber-400 block">{totalMatches}</span>
-                <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Total Matches</span>
-              </div>
-              <div className="bg-slate-900/50 border border-slate-800/60 rounded-xl p-3 text-center">
                 <span className="text-lg font-bold font-mono text-fuchsia-400 block">{winStreak}</span>
                 <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Best Streak</span>
               </div>
@@ -3656,8 +3789,72 @@ function FriendProfileInspector({
                 <span className="text-lg font-bold font-mono text-emerald-400 block">+{biggestExtract}</span>
                 <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Big Extract</span>
               </div>
+              <div className="bg-slate-900/50 border border-slate-800/60 rounded-xl p-3 text-center">
+                <span className="text-lg font-bold font-mono text-amber-400 block">{Math.round((extracts / Math.max(totalMatches, 1)) * 100)}%</span>
+                <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Win Rate</span>
+              </div>
             </div>
           </div>
+
+          {/* Social Links */}
+          {activeSocials.length > 0 && (
+            <div>
+              <h4 className="text-xs uppercase font-bold text-slate-500 tracking-wider mb-3 font-sans flex items-center gap-2">
+                <Globe className="w-3.5 h-3.5 text-cyan-400" /> Social & Streaming
+              </h4>
+              <div className="grid grid-cols-2 gap-2.5">
+                {activeSocials.map(s => (
+                  <div
+                    key={s.platform}
+                    className="bg-slate-900/50 border border-slate-800/60 rounded-xl p-3 flex items-center gap-3 group cursor-pointer hover:border-slate-700 transition"
+                    onClick={() => window.open(`https://${s.platform.toLowerCase()}.com/search?q=${encodeURIComponent(s.handle)}`, '_blank')}
+                  >
+                    <div
+                      className="w-9 h-9 rounded-lg flex items-center justify-center text-base shrink-0"
+                      style={{ backgroundColor: s.color + '15', border: `1px solid ${s.color}30` }}
+                    >
+                      {s.icon}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[9px] uppercase font-bold block" style={{ color: s.color + 'CC' }}>{s.platform}</span>
+                      <span className="text-[11px] font-mono text-slate-300 block truncate group-hover:text-white transition">{s.handle}</span>
+                    </div>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition shrink-0" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Mutual Allies */}
+          {mutualFriends.length > 0 && (
+            <div>
+              <h4 className="text-xs uppercase font-bold text-slate-500 tracking-wider mb-3 font-sans flex items-center gap-2">
+                <Users className="w-3.5 h-3.5 text-violet-400" /> Mutual Allies
+                <span className="text-[10px] text-violet-400 font-mono normal-case">{mutualFriends.length}</span>
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {mutualFriends.map(mf => (
+                  <div
+                    key={mf.id}
+                    className="flex items-center gap-2 bg-slate-900/50 border border-slate-800/60 rounded-xl px-3 py-2 hover:border-slate-700 transition"
+                  >
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center border shrink-0" style={{ borderColor: mf.skinColor + '40', backgroundColor: mf.skinColor + '15' }}>
+                      <span className="text-xs">🐍</span>
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[11px] font-bold text-slate-200 block truncate max-w-[100px]">{mf.name}</span>
+                      <span className={`text-[9px] font-mono ${
+                        mf.status === 'online' ? 'text-emerald-400' :
+                        mf.status === 'in-match' ? 'text-fuchsia-400' :
+                        mf.status === 'idle' ? 'text-amber-400' : 'text-slate-500'
+                      }`}>{mf.status === 'in-match' ? 'In Match' : mf.status === 'idle' ? 'Idle' : mf.status === 'online' ? 'Online' : 'Offline'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Equipped Cosmetics */}
           <div>
@@ -3711,11 +3908,21 @@ function FriendProfileInspector({
             </div>
           </div>
 
-          {/* Alliance info footer */}
-          <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
-            <span className="text-[10px] text-slate-500 font-sans flex items-center gap-1.5">
-              <Users className="w-3 h-3" /> Allied operative • Profile data is simulated for demo
-            </span>
+          {/* Footer */}
+          <div className="flex items-center justify-between pt-3 border-t border-slate-800/60">
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] text-slate-500 font-sans flex items-center gap-1.5">
+                <Shield className="w-3 h-3" /> Allied operative
+              </span>
+              <span className="text-[10px] text-slate-600">•</span>
+              <span className="text-[10px] text-slate-600 font-sans flex items-center gap-1">
+                <Calendar className="w-3 h-3" /> {memberSince}
+              </span>
+              <span className="text-[10px] text-slate-600">•</span>
+              <span className="text-[10px] text-slate-600 font-sans flex items-center gap-1">
+                <Flag className="w-3 h-3" /> {countryName}
+              </span>
+            </div>
             <button
               type="button"
               onClick={onClose}
