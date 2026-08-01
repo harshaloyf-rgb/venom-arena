@@ -708,3 +708,29 @@ Stage Summary:
 - Backend API already existed (POST /api/player/referral)
 - Users can: generate code, copy code, share link, AND NOW enter/redeem a received code
 - ?ref= URL param auto-populates the input for invite link recipients
+---
+Task ID: friend-inspector-overhaul
+Agent: main
+Task: Overhaul Friend Profile Inspector with social graph, followers, social links, mutual allies
+
+Work Log:
+- Added country field to Friend interface and all 6 INITIAL_FRIENDS (IN, US, JP, BR, GB, KR)
+- Added lucide icons: BadgeCheck, ExternalLink, Flag, Heart, MessageCircle, Star, UserCheck, UserMinus
+- Completely rewrote FriendProfileInspector component (~250 lines new)
+- Added social stats bar: Friends count, Followers, Following (all deterministic via friendHash)
+- Added Follow/Unfollow button with localStorage persistence (venom_following key)
+- Added Mutual Allies section showing 3 friends shared between viewer and inspected player
+- Added Social & Streaming section with YouTube, Instagram, Twitch, Discord (deterministic handles, platform-colored)
+- Added playstyle tag derived from K/D ratio (Aggressive Predator >2.5, Balanced Striker >1.5, Stealth Extractor)
+- Added verified badge (BadgeCheck) for level 50+ players
+- Added country flag + name display from COUNTRIES config
+- Added Member Since date and Favorite Arena to combat stats header
+- Replaced Total Matches stat with Win Rate
+- Widened modal from max-w-lg to max-w-2xl
+- Improved footer with Shield/Calendar/Flag metadata row
+- Passed allFriends prop to FriendProfileInspector for mutual friend computation
+
+Stage Summary:
+- Friend Profile Inspector now has 7 sections: Header+Social Stats, Combat Stats, Social Links, Mutual Allies, Loadout, Matches, Footer
+- Follow system works with localStorage persistence
+- All data deterministic from friend ID for consistency
