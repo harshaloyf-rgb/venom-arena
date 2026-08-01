@@ -559,7 +559,7 @@ export default function Home() {
               {activeTab === 'clips' && <ClipShowcase onInspectPlayer={handleInspectPlayer} onToast={toastFn} />}
               {activeTab === 'rewards' && <DailyRewards onToast={toastFn} />}
               {activeTab === 'store' && <ChipStore onToast={toastFn} />}
-              {activeTab === 'social' && <SocialPanel onToast={toastFn} />}
+              {activeTab === 'social' && <SocialPanel onToast={toastFn} onInspectPlayer={handleInspectPlayer} />}
               {activeTab === 'admin' && player.role === 'admin' && <AdminPanel onToast={toastFn} />}
             </div>
           </div>

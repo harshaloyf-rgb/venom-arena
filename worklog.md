@@ -937,3 +937,26 @@ Stage Summary:
 - 4 bugs found and fixed, 1 UX improvement added
 - Files changed: game-config.ts, players/search/route.ts, friends/gift/route.ts, social-panel.tsx
 - Total dead code removed: ~64 lines from game-config.ts
+---
+Task ID: 4
+Agent: main
+Task: Fix two user-reported issues: (1) cannot find Block button, (2) cannot inspect searched players
+
+Work Log:
+- Investigated: Block button only exists on friend cards in Friends tab — invisible if user has 0 friends
+- Investigated: No way to open Player Inspector from search results or friend cards
+- Investigated: Inspector modal's handleBlock() and handleAddFriend() were 100% fake — no API calls
+- Added onInspectPlayer prop to SocialPanelProps
+- Wired SocialPanel from page.tsx with handleInspectPlayer
+- Added inspect() helper that converts SearchPlayer/FriendItem to InspectedPlayer
+- Made search result player names clickable buttons with ExternalLink icon → opens inspector
+- Made friend card player names clickable buttons with ExternalLink icon → opens inspector
+- Fixed handleBlock() in inspector to call real POST /api/friends/block
+- Fixed handleAddFriend() in inspector to call real POST /api/friends/request
+- Lint clean, browser verified: clicking search result name opens inspector modal with Add Friend + Block Player buttons, zero console errors
+
+Stage Summary:
+- Files changed: social-panel.tsx, page.tsx, player-inspector-modal.tsx
+- 3 fake functions replaced with real API calls
+- Block accessible from: (1) Friend card Block button (2) Inspector modal Block Player button
+- Profile inspect accessible from: (1) Search result name click (2) Friend card name click

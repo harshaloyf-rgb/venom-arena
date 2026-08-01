@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
-import { countryFlag } from '@/lib/game-config';
+import { countryFlag, type InspectedPlayer } from '@/lib/game-config';
 import {
   GlowBlob,
   NotSignedIn,
@@ -12,7 +12,7 @@ import {
 } from './_panel-primitives';
 import {
   Users, Globe, UserPlus, Gift, Send, X, Check, Search, Loader2,
-  Ban, ArrowUpDown, Clock, Activity,
+  Ban, ArrowUpDown, Clock, Activity, ExternalLink,
 } from 'lucide-react';
 
 /* ------------------------------------------------------------------ */
@@ -21,6 +21,7 @@ import {
 
 interface SocialPanelProps {
   onToast?: ToastFn;
+  onInspectPlayer?: (p: InspectedPlayer) => void;
 }
 
 type SubTab = 'friends' | 'search' | 'gifts';
@@ -125,7 +126,7 @@ function SubTabBtn({ active, onClick, icon: Icon, label }: { active: boolean; on
 /*  Main Component                                                     */
 /* ------------------------------------------------------------------ */
 
-export function SocialPanel({ onToast }: SocialPanelProps) {
+export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
   const { player, refresh } = useAuth();
   const [sub, setSub] = useState<SubTab>('friends');
 
@@ -426,6 +427,19 @@ export function SocialPanel({ onToast }: SocialPanelProps) {
     fetchSearch(searchQuery, searchCountry, searchOffset, true);
   }
 
+  function inspect(tag: string, name: string, country: string, level: number, chips: number, clanTag: string | null) {
+    if (!onInspectPlayer) return;
+    onInspectPlayer({
+      userTag: tag,
+      name,
+      country,
+      flag: countryFlag(country),
+      level,
+      bankedChips: chips,
+      clanTag: clanTag || undefined,
+    });
+  }
+
   /* ================================================================ */
   /*  JSX                                                               */
   /* ================================================================ */
@@ -532,7 +546,17 @@ export function SocialPanel({ onToast }: SocialPanelProps) {
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="w-10 h-10 rounded-lg flex items-center justify-center text-base shrink-0" style={{ background: `${f.skinColor}20`, border: `1px solid ${f.skinColor}40` }} aria-hidden>🐍</div>
                       <div className="min-w-0">
-                        <div className="font-bold text-white truncate">{f.name}</div>
+                        <div className="font-bold text-white truncate flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => inspect(f.userTag, f.name, f.country, f.level, f.bankedChips, f.clanTag)}
+                            className="hover:text-violet-300 transition-colors flex items-center gap-1"
+                            title="Inspect profile"
+                          >
+                            {f.name}
+                            <ExternalLink className="w-2.5 h-2.5 text-slate-500 hover:text-violet-400" />
+                          </button>
+                        </div>
                         <div className="text-[10px] font-mono text-slate-500 truncate">
                           #{f.userTag}{f.clanTag ? ` · [${f.clanTag}]` : ''}
                         </div>
@@ -656,7 +680,15 @@ export function SocialPanel({ onToast }: SocialPanelProps) {
                           </div>
                           <div className="min-w-0">
                             <div className="font-bold text-white truncate flex items-center gap-1.5">
-                              {p.name}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); inspect(p.userTag, p.name, p.country, p.level, p.bankedChips, p.clanTag); }}
+                                className="hover:text-violet-300 transition-colors flex items-center gap-1"
+                                title="Inspect profile"
+                              >
+                                {p.name}
+                                <ExternalLink className="w-2.5 h-2.5 text-slate-500 hover:text-violet-400" />
+                              </button>
                               {p.online && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
                               <span className="text-[10px] font-mono text-slate-500">#{p.userTag}</span>
                               {p.clanTag && <span className="text-[9px] font-bold text-violet-300 bg-violet-500/10 border border-violet-500/30 px-1.5 py-0 rounded-full">[{p.clanTag}]</span>}
