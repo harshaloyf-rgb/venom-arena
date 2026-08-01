@@ -35,10 +35,12 @@ import {
   Wifi,
   X,
   AlertTriangle,
+  Gift,
   Zap,
+  Share2,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
-import { ARENA_TIERS, COUNTRIES, getCosmeticById } from '@/lib/game-config';
+import { ARENA_TIERS, COUNTRIES, getCosmeticById, REFERRAL_REWARD, REFERRAL_MATCH_THRESHOLD } from '@/lib/game-config';
 import type { PlayerProfile } from '@/lib/types';
 import {
   PanelSkeleton,
@@ -129,6 +131,19 @@ interface IdentityLogEntry {
   deviceFingerprint?: string;
   verificationHash?: string;
   tamperFlag?: boolean;
+}
+
+interface ReferralEntry {
+  id: string;
+  referredName: string;
+  status: 'pending' | 'active' | 'claimed';
+  matchesPlayed: number;
+  createdAt: string;
+}
+
+interface ReferralData {
+  referralCode: string;
+  referrals: ReferralEntry[];
 }
 
 interface SpectateSession {
@@ -422,6 +437,12 @@ function ProfileContent({
   const [spectatingFriend, setSpectatingFriend] = useState<SpectateSession | null>(null);
   const [spectateTimer, setSpectateTimer] = useState(0);
 
+  // -- NEW: Referral data
+  const [referralData, setReferralData] = useState<ReferralData | null>(null);
+  const [referralLoading, setReferralLoading] = useState(false);
+  const [copiedReferralCode, setCopiedReferralCode] = useState(false);
+  const [copiedReferralLink, setCopiedReferralLink] = useState(false);
+
   // Ref to track mounted state for async ops
   const mountedRef = useRef(true);
 
@@ -446,6 +467,24 @@ function ProfileContent({
       // silently fall back to defaults
     } finally {
       if (mountedRef.current) setTournamentLoading(false);
+    }
+  }, []);
+
+  // -- Fetch referral data
+  const fetchReferralData = useCallback(async () => {
+    setReferralLoading(true);
+    try {
+      const res = await fetch('/api/player/referral');
+      if (res.ok) {
+        const data = await res.json();
+        if (mountedRef.current) {
+          setReferralData(data);
+        }
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      if (mountedRef.current) setReferralLoading(false);
     }
   }, []);
 
@@ -544,6 +583,13 @@ function ProfileContent({
       fetchDbMatches(matchFilter);
     }
   }, [activeTab, matchFilter, fetchDbMatches]);
+
+  // Fetch referral data when switching to friends tab
+  useEffect(() => {
+    if (activeTab === 'friends') {
+      fetchReferralData();
+    }
+  }, [activeTab, fetchReferralData]);
 
   // -- derived values
   const xpNeeded = player.level * 200;
@@ -1507,6 +1553,24 @@ function ProfileContent({
               or invite allies to high-stakes co-op matches.
             </p>
           </div>
+
+          {/* ── INVITE FRIEND & GET 2,500 CHIPS BANNER ── */}
+          <ReferralBanner
+            player={player}
+            referralData={referralData}
+            referralLoading={referralLoading}
+            copiedReferralCode={copiedReferralCode}
+            copiedReferralLink={copiedReferralLink}
+            onToast={onToast}
+            onCopyCode={() => {
+              const code = referralData?.referralCode || player.referralCode || '';
+              if (code) copyToClipboard(code, setCopiedReferralCode);
+            }}
+            onCopyLink={() => {
+              const code = referralData?.referralCode || player.referralCode || '';
+              if (code) copyToClipboard(`${typeof window !== 'undefined' ? window.location.origin : ''}/?ref=${code}`, setCopiedReferralLink);
+            }}
+          />
 
           {/* Online stats bar */}
           <div className="grid grid-cols-3 gap-3">
@@ -3264,6 +3328,225 @@ function GuestUpgradeBanner({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/* ========================================================================== */
+/* Referral Banner — Invite Friend & Get 2,500 Chips                             */
+/* ========================================================================== */
+
+function ReferralBanner({
+  player,
+  referralData,
+  referralLoading,
+  copiedReferralCode,
+  copiedReferralLink,
+  onToast,
+  onCopyCode,
+  onCopyLink,
+}: {
+  player: PlayerProfile;
+  referralData: ReferralData | null;
+  referralLoading: boolean;
+  copiedReferralCode: boolean;
+  copiedReferralLink: boolean;
+  onToast?: ToastFn;
+  onCopyCode: () => void;
+  onCopyLink: () => void;
+}) {
+  const code = referralData?.referralCode || player.referralCode || '';
+  const referrals = referralData?.referrals || [];
+  const totalInvited = referrals.length;
+  const claimedCount = referrals.filter(r => r.status === 'claimed').length;
+  const pendingCount = referrals.filter(r => r.status === 'pending' || r.status === 'active').length;
+  const totalChipsEarned = claimedCount * REFERRAL_REWARD;
+
+  return (
+    <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-950/30 via-slate-950/60 to-emerald-950/20 overflow-hidden relative">
+      {/* Decorative glow blobs */}
+      <div className="absolute -top-12 -right-12 w-40 h-40 bg-amber-500/8 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-emerald-500/6 rounded-full blur-3xl pointer-events-none" />
+
+      {/* HERO SECTION */}
+      <div className="relative p-5 pb-4 border-b border-amber-500/15">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-amber-500/20 shrink-0 relative">
+              <Gift className="w-7 h-7 text-white" />
+              <div className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[8px] font-bold font-mono px-1.5 py-0.5 rounded-full shadow animate-pulse">
+                +{REFERRAL_REWARD.toLocaleString()}
+              </div>
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-base sm:text-lg font-bold text-white font-sans flex items-center gap-2">
+                Invite a Friend & Get
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-emerald-400">
+                  {REFERRAL_REWARD.toLocaleString()} Chips
+                </span>
+                <span className="text-xl">🎁</span>
+              </h3>
+              <p className="text-xs text-slate-300 mt-1 font-sans leading-relaxed">
+                Share your unique invite code. When your friend joins and plays <strong className="text-amber-400">{REFERRAL_MATCH_THRESHOLD} matches</strong>, both of you receive <strong className="text-emerald-400">{REFERRAL_REWARD.toLocaleString()} chips</strong> instantly!
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* REFERRAL CODE + ACTIONS ROW */}
+      <div className="relative p-4 sm:p-5 border-b border-amber-500/10">
+        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+          {/* Code display */}
+          <div className="flex-1 bg-slate-950/70 border border-amber-500/20 rounded-xl px-4 py-3 flex items-center justify-between gap-3 min-w-0">
+            <div className="min-w-0">
+              <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block font-sans">Your Invite Code</span>
+              {referralLoading && !code ? (
+                <span className="text-sm font-mono text-slate-600">Loading...</span>
+              ) : (
+                <span className="text-lg sm:text-xl font-bold font-mono text-amber-400 tracking-wider block truncate">
+                  {code || 'VIPER-XXXX'}
+                </span>
+              )}
+            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={onCopyCode}
+                  disabled={!code}
+                  className="shrink-0 p-2.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 rounded-xl transition cursor-pointer text-amber-400 hover:text-amber-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Copy referral code"
+                >
+                  {copiedReferralCode ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="bg-slate-800 text-white border-slate-700 text-xs">
+                {copiedReferralCode ? 'Copied!' : 'Copy code'}
+              </TooltipContent>
+            </Tooltip>
+          </div>
+
+          {/* Share link button */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={onCopyLink}
+                disabled={!code}
+                className="shrink-0 px-5 py-3 bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 text-white rounded-xl text-xs font-bold font-sans transition shadow-lg shadow-amber-500/15 flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {copiedReferralLink ? (
+                  <><Check className="w-4 h-4" /> Link Copied!</>
+                ) : (
+                  <><Share2 className="w-4 h-4" /> Share Invite Link</>
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="bg-slate-800 text-white border-slate-700 text-xs">
+              {copiedReferralLink ? 'Link copied to clipboard!' : 'Copy invite link to share'}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
+
+      {/* STATS ROW */}
+      <div className="relative px-4 sm:px-5 py-3 border-b border-amber-500/10">
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-slate-950/50 border border-slate-800/60 rounded-xl p-3 text-center">
+            <div className="flex items-center justify-center gap-1.5 mb-1">
+              <Users className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="text-xl font-bold font-mono text-indigo-400">{totalInvited}</span>
+            </div>
+            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Friends Invited</span>
+          </div>
+          <div className="bg-slate-950/50 border border-slate-800/60 rounded-xl p-3 text-center">
+            <div className="flex items-center justify-center gap-1.5 mb-1">
+              <Timer className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-xl font-bold font-mono text-amber-400">{pendingCount}</span>
+            </div>
+            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Pending ({REFERRAL_MATCH_THRESHOLD} matches left)</span>
+          </div>
+          <div className="bg-slate-950/50 border border-emerald-500/15 rounded-xl p-3 text-center">
+            <div className="flex items-center justify-center gap-1.5 mb-1">
+              <Landmark className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-xl font-bold font-mono text-emerald-400">{totalChipsEarned.toLocaleString()}</span>
+            </div>
+            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Chips Earned</span>
+          </div>
+        </div>
+      </div>
+
+      {/* HOW IT WORKS */}
+      <div className="relative px-4 sm:px-5 py-4 border-b border-amber-500/10">
+        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-widest block mb-3 font-sans">How It Works</span>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="flex items-start gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-indigo-500/15 border border-indigo-500/25 flex items-center justify-center shrink-0 mt-0.5">
+              <span className="text-xs font-bold text-indigo-400 font-mono">1</span>
+            </div>
+            <div>
+              <span className="text-xs font-bold text-slate-200 block font-sans">Share Your Code</span>
+              <span className="text-[10px] text-slate-400 font-sans leading-relaxed">Send your unique invite code or link to a friend.</span>
+            </div>
+          </div>
+          <div className="flex items-start gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0 mt-0.5">
+              <span className="text-xs font-bold text-amber-400 font-mono">2</span>
+            </div>
+            <div>
+              <span className="text-xs font-bold text-slate-200 block font-sans">Friend Plays {REFERRAL_MATCH_THRESHOLD} Matches</span>
+              <span className="text-[10px] text-slate-400 font-sans leading-relaxed">They register using your code and complete {REFERRAL_MATCH_THRESHOLD} arena matches.</span>
+            </div>
+          </div>
+          <div className="flex items-start gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center shrink-0 mt-0.5">
+              <span className="text-xs font-bold text-emerald-400 font-mono">3</span>
+            </div>
+            <div>
+              <span className="text-xs font-bold text-slate-200 block font-sans">Both Get {REFERRAL_REWARD.toLocaleString()} Chips!</span>
+              <span className="text-[10px] text-slate-400 font-sans leading-relaxed">Rewards are deposited automatically to both accounts.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* REFERRED FRIENDS LIST (if any) */}
+      {referrals.length > 0 && (
+        <div className="relative px-4 sm:px-5 py-4">
+          <span className="text-[10px] uppercase font-bold text-slate-500 tracking-widest block mb-3 font-sans">Your Referred Friends</span>
+          <div className="max-h-40 overflow-y-auto va-scroll space-y-2">
+            {referrals.map((r) => (
+              <div key={r.id} className="flex items-center justify-between bg-slate-950/40 border border-slate-900/60 rounded-xl px-3 py-2.5">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0">
+                    <span className="text-sm">🐍</span>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-slate-200 block font-sans truncate">{r.referredName}</span>
+                    <span className="text-[10px] text-slate-500 font-mono">{timeAgo(r.createdAt)}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {r.status === 'pending' || r.status === 'active' ? (
+                    <>
+                      <div className="text-right">
+                        <span className="text-[10px] font-mono text-slate-400 block">{r.matchesPlayed}/{REFERRAL_MATCH_THRESHOLD} matches</span>
+                        <div className="w-20 h-1 bg-slate-800 rounded-full mt-1 overflow-hidden">
+                          <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${Math.min(100, (r.matchesPlayed / REFERRAL_MATCH_THRESHOLD) * 100)}%` }} />
+                        </div>
+                      </div>
+                      <Badge className="bg-amber-500/10 border border-amber-500/25 text-amber-400 text-[9px] font-bold">PENDING</Badge>
+                    </>
+                  ) : (
+                    <Badge className="bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[9px] font-bold">CLAIMED +{REFERRAL_REWARD.toLocaleString()}c</Badge>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

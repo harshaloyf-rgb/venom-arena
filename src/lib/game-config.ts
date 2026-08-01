@@ -339,7 +339,7 @@ export const SPIN_FREE_PER_DAY = 1; // free daily spin
 export const SPIN_COST = 200; // chips for extra spins
 
 // Referral
-export const REFERRAL_REWARD = 2_000; // chips both players get when referred player completes 5 matches
+export const REFERRAL_REWARD = 2_500; // chips both players get when referred player completes 5 matches
 export const REFERRAL_MATCH_THRESHOLD = 5; // matches the referred player must play
 
 // Seasonal bonus days (UTC date strings → multiplier)
