@@ -39,6 +39,10 @@ import {
   Globe,
   Medal,
   Award,
+  Swords,
+  MessageSquare,
+  TrendingUp,
+  ScrollText,
 } from 'lucide-react';
 import { ARENA_TIERS, PRACTICE_TIERS, MILESTONE_TIERS } from '@/lib/game-config';
 
@@ -71,7 +75,7 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                 VENOM ARENA — OFFICIAL GUIDE &amp; RULES
               </DialogTitle>
               <DialogDescription className="text-xs text-slate-400">
-                Accounts, controls, modes, arena tiers, HUD, extraction, challenges, death, replay, leaderboards, championships, hall of fame &amp; FAQ
+                Accounts, controls, modes, arena tiers, HUD, extraction, challenges, death, replay, leaderboards, championships, hall of fame, syndicates &amp; FAQ
               </DialogDescription>
             </div>
           </div>
@@ -1060,9 +1064,115 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
           </Section>
 
           {/* ================================================================= */}
-          {/* 15. FAQ */}
+          {/* 15. SYNDICATES (CLAN SYSTEM) */}
           {/* ================================================================= */}
-          <Section icon={<AlertTriangle className="w-4 h-4" />} title="15. FAQ" accent="text-purple-400">
+          <Section icon={<Shield className="w-4 h-4" />} title="15. SYNDICATES (CLAN SYSTEM)" accent="text-amber-400">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <InfoCard title="🛡️ What Are Syndicates?" accent="text-amber-300">
+                <p className="mb-1.5">Syndicates (clans) are player-formed teams. Team up with allies, pool chips into a shared Treasury, complete weekly challenges together, and climb the clan level system.</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Create your own syndicate or browse and join existing ones</li>
+                  <li>Each syndicate has a unique <strong>3-4 letter tag</strong> (e.g. VNM, APEX)</li>
+                  <li>Clan level unlocks powerful perks for all members</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="⚔️ Clan Roles" accent="text-amber-300">
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong className="text-amber-300">Leader</strong> — Full control: promote, demote, kick, edit settings, disband, claim challenges</li>
+                  <li><strong className="text-purple-300">Co-Leader</strong> — Can kick Vipers, claim challenges. Max 2 per clan</li>
+                  <li><strong className="text-indigo-300">Viper</strong> — Standard member. Can deposit, chat, leave freely</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="💰 Clan Treasury" accent="text-emerald-300">
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Members deposit chips from their personal bank into the Treasury</li>
+                  <li>Quick-deposit buttons: 10%, 25%, 50%, or MAX of your chips</li>
+                  <li>Max 1,000,000c per transaction</li>
+                  <li>Treasury grows via deposits and challenge reward claims</li>
+                  <li>Deposits also grant <strong>5% XP</strong> to your clan (10% at Level 3+)</li>
+                </ul>
+              </InfoCard>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+              <InfoCard title="⭐ Clan XP &amp; Leveling" accent="text-emerald-300">
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Clans start at <strong>Level 1</strong> (0 XP)</li>
+                  <li>Level-up requires <strong>Level × 1,000 XP</strong> (e.g. Lv2 = 2,000 XP)</li>
+                  <li>XP sources: deposits (5%), challenge claims (10% of reward)</li>
+                  <li>Level-ups are logged in the Activity Log</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="🏆 Weekly Challenges" accent="text-amber-300">
+                <p className="mb-1.5">Three challenges reset every <strong>Monday UTC</strong>. Scaled by clan level:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>Treasury Target</strong> — Deposit a total of X chips</li>
+                  <li><strong>Recruitment Drive</strong> — Recruit X new members</li>
+                  <li><strong>Syndicate Comms</strong> — Send X chat messages</li>
+                  <li>Leader/Co-Leader can <strong>Claim</strong> completed challenges for bonus chips + XP</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="📊 Clan Management" accent="text-cyan-300">
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>Settings</strong> — Leader can edit name, description, emblem</li>
+                  <li><strong>Transfer Leadership</strong> — Pass leadership to a Co-Leader</li>
+                  <li><strong>Disband</strong> — Permanently dissolve the syndicate (Leader only)</li>
+                  <li><strong>Activity Log</strong> — Full history of joins, leaves, deposits, promotions, kicks, challenges, level-ups</li>
+                  <li><strong>Stats</strong> — Aggregate combat stats across all members</li>
+                </ul>
+              </InfoCard>
+            </div>
+
+            <div className="mt-3">
+              <InfoCard title="🗺️ Perks Roadmap" accent="text-amber-300">
+                <p className="mb-1.5">Your syndicate unlocks powerful bonuses as it levels up:</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+                  <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-center">
+                    <div className="text-[10px] font-mono text-amber-400 font-bold">LVL 1</div>
+                    <div className="text-[10px] text-slate-400">Up to 10 members</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-center">
+                    <div className="text-[10px] font-mono text-slate-400 font-bold">LVL 2</div>
+                    <div className="text-[10px] text-slate-500">Up to 15 members</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-center">
+                    <div className="text-[10px] font-mono text-slate-400 font-bold">LVL 3</div>
+                    <div className="text-[10px] text-slate-500">10% XP bonus on deposits</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-center">
+                    <div className="text-[10px] font-mono text-slate-400 font-bold">LVL 5</div>
+                    <div className="text-[10px] text-slate-500">20 members, +20% challenge rewards</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-center">
+                    <div className="text-[10px] font-mono text-slate-400 font-bold">LVL 10</div>
+                    <div className="text-[10px] text-slate-500">30 members, custom emblems</div>
+                  </div>
+                </div>
+              </InfoCard>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+              <InfoCard title="💬 Syndicate Chat" accent="text-emerald-300">
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Real-time chat feed for all clan members</li>
+                  <li>Chat messages count toward the <strong>Syndicate Comms</strong> weekly challenge</li>
+                  <li>Use it to coordinate strategies and build team spirit</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="🔍 Top Depositors" accent="text-amber-300">
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Overview shows the <strong>top 3 contributors</strong> by total deposits</li>
+                  <li>Members have <strong>online/offline status</strong> indicators (green/gray dot)</li>
+                  <li>Full member roster with rank badges and management actions</li>
+                </ul>
+              </InfoCard>
+            </div>
+          </Section>
+
+          {/* ================================================================= */}
+          {/* 16. FAQ */}
+          {/* ================================================================= */}
+          <Section icon={<AlertTriangle className="w-4 h-4" />} title="16. FAQ" accent="text-purple-400">
             <div className="flex flex-col gap-2.5">
               <FaqItem q="Do I lose my banked vault chips if I crash?" a="No! Your banked vault chips are 100% safe. You only lose the buy-in chips carried in that specific match." />
               <FaqItem q="What is the graduated commission?" a="If ≤3 real players are in the arena, extraction is FREE (0%). If ≥4 real players, 35% commission applies (you keep 65%)." />
@@ -1095,6 +1205,15 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
               <FaqItem q="What are the HOF badges?" a="Milestone badges: 🥉 Bronze Elite (100K+), 🥈 Silver Commander (500K+), 🥇 Gold Apex Vanguard (1M+), 💎 Platinum Sovereign (2.5M+), 🔮 Diamond Warlord (5M+), 👑 Omega Immortal God (10M+). Championship badges: 👑 Crown (#1), 🥈 Silver (#2-10), 🥉 Bronze (#11-50), 🛡️ Contender (#51-100). Your highest badge is displayed on the leaderboard and player inspector." />
               <FaqItem q="Can I be inducted into both milestone and championship HOF?" a="Absolutely! They are separate tracks. A player can hold multiple milestone inductions (one per tier) plus championship inductions (one per year). All appear in your HOF profile on the Hall of Fame tab." />
               <FaqItem q="Are HOF records permanent?" a="Yes. HOF entries are immutable once created. Even if your banked chips drop below a milestone threshold later, your HOF induction for that tier remains. Championship entries are finalized when the year ends and locked forever." />
+              <FaqItem q="How do I create a syndicate?" a="Go to the Syndicates tab → click &quot;Form Syndicate&quot; → enter a Name (3+ chars), Tag (2-4 uppercase letters), Description, and pick an Emblem. You become the Leader automatically. You must not already be in a clan." />
+              <FaqItem q="Can I be in multiple syndicates?" a="No. You can only be a member of one syndicate at a time. To join another, you must leave your current syndicate first." />
+              <FaqItem q="What happens to my deposited chips if I leave a syndicate?" a="Deposited chips go into the clan Treasury and cannot be withdrawn. They belong to the syndicate, not individual members. Think of it as a team contribution." />
+              <FaqItem q="What happens if the Leader leaves?" a="If the Leader leaves, the oldest Co-Leader is automatically promoted to Leader. If there are no Co-Leaders, the oldest member becomes Leader. If you&apos;re the last member, the syndicate is automatically disbanded." />
+              <FaqItem q="How do weekly challenges work?" a="Three challenges are generated every Monday UTC: Treasury Target, Recruitment Drive, and Syndicate Comms. They scale with your clan level. When a challenge is complete, any Leader or Co-Leader can click Claim to add the reward chips to the Treasury and grant clan XP. Unclaimed challenges reset on the next Monday." />
+              <FaqItem q="How does clan XP work?" a="Clan XP is earned two ways: (1) Deposits grant 5% of the deposited amount as XP (10% at Level 3+). (2) Claiming a challenge grants 10% of the reward as XP. The XP needed to level up is Level × 1,000 (e.g. Level 2 needs 2,000 total XP, Level 3 needs 3,000 total XP)." />
+              <FaqItem q="What can a Co-Leader do?" a="Co-Leaders can: claim weekly challenges, kick Viper-ranked members, and participate in all clan activities. They cannot: edit clan settings, disband the clan, promote/demote other members, or kick other Co-Leaders. Max 2 Co-Leaders per clan." />
+              <FaqItem q="Can the Leader transfer leadership?" a="Yes. The Leader can transfer leadership to any Co-Leader via the crown icon on the member roster. The current Leader becomes a Co-Leader, and the selected Co-Leader becomes the new Leader. This is irreversible for that session." />
+              <FaqItem q="What happens when a syndicate is disbanded?" a="All members are removed from the clan, all activity logs and challenge records are deleted, and the Treasury chips are lost. Disbanding is permanent and can only be done by the Leader." />
             </div>
           </Section>
 
