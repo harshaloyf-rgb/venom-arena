@@ -734,3 +734,24 @@ Stage Summary:
 - Friend Profile Inspector now has 7 sections: Header+Social Stats, Combat Stats, Social Links, Mutual Allies, Loadout, Matches, Footer
 - Follow system works with localStorage persistence
 - All data deterministic from friend ID for consistency
+
+---
+Task ID: 1
+Agent: main
+Task: Add achievements to all inspection screens + public profile API
+
+Work Log:
+- Pushed previous referral redeem UI commit to origin
+- Read and analyzed both inspection screens: PlayerInspectorModal (leaderboard/HOF/clan) and FriendProfileInspector (friends tab)
+- Read Prisma schema — social links (instagram, youtube, twitch) already exist on Player model
+- Created /api/player/public-profile endpoint (GET by userTag) returning: social links, career stats, cosmetics, friends count, milestones, HOF entries
+- Rewrote PlayerInspectorModal with: social stats bar (Friends/Followers/Badges), Achievements & Milestones section (current tier, HOF inductions, badge grid), real social links (Instagram/YouTube/Twitch) opening in new tab, member-since date, enriched career stats from API
+- Added Achievements & Milestones section to FriendProfileInspector with: current tier card, simulated HOF for high-chip friends, earned badge grid
+- Added Crown icon import, MILESTONE_TIERS and milestoneTierForChips imports to player-profile.tsx
+- Lint clean, committed and pushed
+
+Stage Summary:
+- New API: /api/player/public-profile (no auth, public data)
+- PlayerInspectorModal now fetches real data and shows achievements, social stats, real social links
+- FriendProfileInspector now shows achievements/milestones/badges section
+- Both inspection screens are now consistent with achievements
