@@ -155,8 +155,28 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Fetch HOF player IDs for badge display (S5)
+  const hofPlayerIds = new Set<string>();
+  try {
+    const hofEntries = await db.hallOfFameEntry.findMany({
+      select: { playerId: true },
+      distinct: ['playerId'],
+    });
+    for (const e of hofEntries) hofPlayerIds.add(e.playerId);
+  } catch {
+    // Best-effort
+  }
+
+  // Map userTags to player IDs for HOF lookup
+  const playerIds = await db.player.findMany({
+    where: { userTag: { in: players.map(p => p.userTag) } },
+    select: { userTag: true, id: true },
+  });
+  const userTagToId = new Map(playerIds.map(p => [p.userTag, p.id]));
+
   const entries = players.map((p, i) => {
     const tier = milestoneTierForChips(p.bankedChips);
+    const pid = userTagToId.get(p.userTag) ?? '';
     return {
       userTag: p.userTag,
       name: p.name,
@@ -165,6 +185,7 @@ export async function GET(req: NextRequest) {
       level: p.level,
       rank: i + 1,
       isPlayer: session?.userTag === p.userTag,
+      isHOF: hofPlayerIds.has(pid),
       clanTag: p.clanTag,
       region: regionOf(p.country || ''),
       milestoneBadge: tier.badge,

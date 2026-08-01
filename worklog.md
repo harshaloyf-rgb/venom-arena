@@ -401,3 +401,76 @@ Stage Summary:
 - Used existing Trophy icon from lucide-react imports (no new imports needed)
 - All JSX entities properly escaped (&amp;, &apos;, &quot;)
 - Lint passed with zero errors
+
+---
+Task ID: 2 (S6)
+Agent: subagent (S6)
+Task: Add dedicated Hall of Fame section to the game rules modal
+
+Work Log:
+- Added `Award` to lucide-react imports in game-rules-modal.tsx
+- Updated DialogDescription to include "hall of fame" in the section list
+- Inserted new Section 14 "HALL OF FAME" between Section 13 (Annual Championships) and Section 15 (FAQ)
+  - 6 InfoCards in a 2-column grid: What is HOF, Milestone Induction Path (with full badge table), Championship Induction Path, HOF Permanence Rules, Checking Your HOF Status, HOF Statistics
+- Renumbered FAQ from Section 14 to Section 15 (title + comment header)
+- Added 5 HOF-related FAQ items at end of FAQ section: What is HOF, How to get inducted, HOF badges, Dual induction tracks, HOF permanence
+- All JSX entities properly escaped (&apos;, &amp;)
+- Lint passed clean
+
+Stage Summary:
+- Hall of Fame is now Section 14 in the game rules modal
+- FAQ renumbered to Section 15
+- 6 HOF InfoCards + 5 HOF FAQ items added
+- Total sections: 15 (was 14)
+
+---
+Task ID: 5 (S4)
+Agent: subagent (S4)
+Task: Rewrite hall-of-fame.tsx to be API-driven with real DB-backed data
+
+Work Log:
+- Completely rewrote src/components/panels/hall-of-fame.tsx (~580 lines)
+- Replaced 3-tab static layout with 4 API-driven tabs: My HOF Profile, Champions Wing, Milestones Wing, Live Ticker
+- My HOF tab: fetches from /api/hof/my-entries, shows total entries, current chips, milestone/championship induction lists, next milestone card, motivational empty state, loading/error states
+- Champions tab: fetches from /api/hof/inductees?type=championship, year filter buttons (from /api/hof/stats championshipYears or default [2026,2025,2024]), player search, demo fallback with 7 DEMO_CHAMPIONS entries, DEMO badge on fallback rows, clickable rows call onInspectPlayer
+- Milestones tab: fetches from /api/hof/inductees?type=milestone, tier filter buttons (All + 6 HALL_OF_FAME_TIERS), real table view when data exists, fallback to static HALL_OF_FAME_TIERS with firstAchiever data when no real data, real first achievers from /api/hof/stats override hardcoded ones when available, total inducted players count from stats
+- Ticker tab: preserved existing Live Esports Ticker exactly as-is (random commentary, channel filters, 5-second interval)
+- Updated header description to: 'Permanent shrine for milestone achievers and championship legends. DB-backed, immutable, and forever.'
+- Added stats bar below header: Total Inducted Players, Total Entries, Milestone Inductees, Championship Inductees — fetched from /api/hof/stats, hidden silently on error
+- Added badge icon mapping: crown=👑, silver=🥈, bronze=🥉, contender=🛡️
+- Used useCallback for all fetch functions, queueMicrotask for all setState in effects
+- Kept existing HoFTabBtn sub-component, va-scroll class, NotSignedIn guard, GlowBlob, MicroLabel
+- Preserved live broadcast marquee at top (unchanged)
+- Both named and default exports maintained
+- Lint passed clean with zero errors
+
+Stage Summary:
+- Hall of Fame panel fully API-driven with 3 real API endpoints + 1 fallback to static config
+- 4 tabs: My HOF (default), Champions, Milestones, Ticker
+- Stats bar with aggregate counts from /api/hof/stats
+- Demo data with DEMO badges when no real inductees exist
+- Zero lint errors, no TODOs or placeholders
+
+---
+Task ID: main-hof-system
+Agent: main
+Task: Implement complete Hall of Fame system (S1-S6)
+
+Work Log:
+- **S1a**: Added `HallOfFameEntry` Prisma model with fields: id, playerId, inductionType, milestoneTierId, championshipYear, championshipRank, hofBadge, title, chipsAtInduction, inductedAt. Unique on [playerId, inductionType, milestoneTierId, championshipYear]. Pushed to DB with `bun run db:push`.
+- **S1b**: Created 4 HOF API routes:
+  - `GET /api/hof/inductees` — filter by type/year/milestoneTier/badge/search/playerTag, paginated
+  - `GET /api/hof/my-entries` — player's own inductions + next milestone hint
+  - `GET /api/hof/stats` — aggregate stats, first achievers, championship years
+  - `POST /api/hof/induct` — create induction entries (session auth or INTERNAL_SECRET)
+- **S6**: Added Section 14 (HALL OF FAME) to rules modal with 6 InfoCards, 5 FAQ items, renumbered FAQ to Section 15
+- **S3**: Updated `/api/leaderboard/check-milestone` to auto-induct into HOF when player crosses a milestone threshold for the first time. Maps PlayerMilestone tier IDs to HOF tier IDs (bronze→t-1lakh, etc.). Best-effort HOF creation.
+- **S2**: Created `POST /api/championship/finalize` (admin-only) that locks a championship year, creates HOF entries for top 100 finishers with auto-resolved badges (crown/silver/bronze/contender) and titles, upserts ChampionshipArchive, deactivates registrations.
+- **S4**: Complete rewrite of `hall-of-fame.tsx` (~580 lines) with 4 API-driven tabs: My HOF Profile, Champions Wing, Milestones Wing, Live Ticker. Stats bar, demo fallbacks, year/tier filters, player search.
+- **S5**: Added HOF badge display to Player Inspector: fetches player's HOF entries via `/api/hof/inductees?playerTag=...`, shows HOF entries list with badges/dates in overview tab, yellow Award icon next to player name when inducted. Updated leaderboard API to populate `isHOF` field from DB.
+
+Stage Summary:
+- Hall of Fame is now a fully DB-backed, API-driven system with 6 model fields, 5 API routes, auto-induction bridges from milestones and championships, 4-tab UI panel, rules documentation, and badge visibility across the app.
+- `isHOF` field on leaderboard rows now populated from real DB data (was always false).
+- Player Inspector shows HOF induction records and yellow Award badge.
+- All changes browser-verified, lint-clean, zero errors.

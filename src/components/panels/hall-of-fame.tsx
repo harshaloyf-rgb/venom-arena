@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
 import {
   HALL_OF_FAME_TIERS,
@@ -28,120 +28,309 @@ import {
   Award,
   X,
   Search,
+  Users,
+  Loader2,
+  Star,
+  Shield,
+  ChevronDown,
+  ChevronUp,
+  Target,
+  Zap,
+  Clock,
 } from 'lucide-react';
+
+// ── Types ───────────────────────────────────────────────────────────────────
 
 interface HallOfFameProps {
   onToast?: ToastFn;
   onInspectPlayer?: (p: InspectedPlayer) => void;
 }
 
-type Tab = 'milestones' | 'archives' | 'ticker';
+type Tab = 'my-hof' | 'champions' | 'milestones' | 'ticker';
 type CommentaryFilter = 'all' | 'extractions' | 'eliminations' | 'milestones';
 
-const YEARS = [2026, 2025, 2024, 2023, 2022];
-
-// National top 100 seed data (H.10)
-const COUNTRY_SEEDS: Record<string, { name: string; userTag: string; chips: number; level: number }[]> = {
-  IN: [
-    { name: 'Hari', userTag: '#IND-001', chips: 10_000_000, level: 50 },
-    { name: 'Arjun_Viper', userTag: '#IND-002', chips: 8_400_000, level: 48 },
-    { name: 'Delhi_King', userTag: '#IND-003', chips: 6_200_000, level: 45 },
-  ],
-  US: [
-    { name: 'Apex_Viper', userTag: '#USA-882', chips: 9_400_000, level: 49 },
-    { name: 'Cyber_Wolf', userTag: '#USA-102', chips: 7_800_000, level: 46 },
-  ],
-  KR: [
-    { name: 'K-Snake_Master', userTag: '#KOR-114', chips: 8_900_000, level: 49 },
-  ],
-};
-
-function generateNationalTop100(countryCode: string) {
-  const country = COUNTRIES.find((c) => c.code === countryCode);
-  const countryDisplayName = country?.name || countryCode;
-  const seeds = COUNTRY_SEEDS[countryCode] || [];
-  const out: { rank: number; name: string; userTag: string; bankedChips: number; level: number }[] = [];
-  seeds.forEach((s, i) => out.push({ rank: i + 1, name: s.name, userTag: s.userTag, bankedChips: s.chips, level: s.level }));
-  while (out.length < 100) {
-    const i = out.length;
-    out.push({
-      rank: i + 1,
-      name: `${countryDisplayName}_Challenger_${i + 1}`,
-      userTag: `#${countryCode}-${100 + i}`,
-      bankedChips: Math.max(50_000, 5_000_000 - i * 47_000),
-      level: Math.max(5, 45 - Math.floor(i / 2.5)),
-    });
-  }
-  return out;
+interface InducteeEntry {
+  id: string;
+  playerId: string;
+  playerTag: string;
+  playerName: string;
+  country: string;
+  level: number;
+  clanTag: string;
+  inductionType: string;
+  milestoneTierId: string | null;
+  championshipYear: number | null;
+  championshipRank: number | null;
+  hofBadge: string | null;
+  title: string | null;
+  chipsAtInduction: number;
+  inductedAt: string;
 }
 
-// Tier top 100 seed (H.11)
-function generateTierTop100(tierId: string) {
-  const tier = HALL_OF_FAME_TIERS.find((t) => t.id === tierId);
-  if (!tier) return [];
-  const out: { rank: number; name: string; userTag: string; country: string; chips: number; level: number; dateStr: string }[] = [];
-  // Rank 1 = firstAchiever
-  out.push({
-    rank: 1,
-    name: tier.firstAchiever.name,
-    userTag: tier.firstAchiever.userTag,
-    country: tier.firstAchiever.country,
-    chips: tier.chips,
-    level: 45 + (out.length % 5),
-    dateStr: tier.firstAchiever.dateStr,
-  });
-
-  if (tierId === 't-1crore') {
-    // Special: only 3 achievers
-    out.push({ rank: 2, name: 'Apex_Viper', userTag: '#USA-882', country: 'US', chips: 10_000_000, level: 49, dateStr: '24 Jan 2026, 09:11 AM UTC' });
-    out.push({ rank: 3, name: 'K-Snake_Master', userTag: '#KOR-114', country: 'KR', chips: 10_000_000, level: 49, dateStr: '25 Jan 2026, 04:30 PM SGT' });
-    return out;
-  }
-
-  while (out.length < 100) {
-    const i = out.length;
-    const c = COUNTRIES[i % COUNTRIES.length];
-    out.push({
-      rank: i + 1,
-      name: `${c.name.split(' ')[0]}_Achiever_${i + 1}`,
-      userTag: `#${c.code}-${100 + i}`,
-      country: c.code,
-      chips: tier.chips,
-      level: Math.max(5, 45 - Math.floor(i / 2.5)),
-      dateStr: `${10 + (i % 18)} Jan 2026, ${String(i % 24).padStart(2, '0')}:${String(i % 60).padStart(2, '0')} ${i % 2 ? 'PM' : 'AM'} UTC`,
-    });
-  }
-  return out;
+interface MyEntry {
+  id: string;
+  inductionType: string;
+  milestoneTierId: string | null;
+  championshipYear: number | null;
+  championshipRank: number | null;
+  hofBadge: string | null;
+  title: string | null;
+  chipsAtInduction: number;
+  inductedAt: string;
 }
 
-const COUNTRY_OPTIONS = [
-  { code: 'GLOBAL', name: 'Global', flag: '🌐' },
-  { code: 'IN', name: 'India', flag: '🇮🇳' },
-  { code: 'US', name: 'United States', flag: '🇺🇸' },
-  { code: 'JP', name: 'Japan', flag: '🇯🇵' },
-  { code: 'KR', name: 'South Korea', flag: '🇰🇷' },
-  { code: 'DE', name: 'Germany', flag: '🇩🇪' },
-  { code: 'BR', name: 'Brazil', flag: '🇧🇷' },
-  { code: 'GB', name: 'United Kingdom', flag: '🇬🇧' },
-  { code: 'FR', name: 'France', flag: '🇫🇷' },
-  { code: 'AU', name: 'Australia', flag: '🇦🇺' },
+interface NextMilestone {
+  name: string;
+  badge: string;
+  chips: number;
+  chipsNeeded: number;
+}
+
+interface HofStats {
+  totalInductedPlayers: number;
+  totalEntries: number;
+  byType: { milestone?: number; championship?: number };
+  milestoneFirstAchievers: Record<string, { playerName: string; userTag: string; country: string; inductedAt: string } | null>;
+  championshipYears: { year: number; inducteeCount: number }[];
+}
+
+// ── Demo data ───────────────────────────────────────────────────────────────
+
+const DEMO_CHAMPIONS = [
+  { rank: 1, name: 'Hari', userTag: '#IND-001', country: 'IN', badge: 'crown', title: '👑 2026 WORLD VENOM CHAMPION', chips: 10_000_000, date: '01 Jan 2026' },
+  { rank: 2, name: 'Apex_Viper', userTag: '#USA-882', country: 'US', badge: 'silver', title: '🥈 2026 VENOM ARENA OVERLORD', chips: 9_400_000, date: '01 Jan 2026' },
+  { rank: 3, name: 'K-Snake_Master', userTag: '#KOR-114', country: 'KR', badge: 'bronze', title: '🥉 2026 ARENA ELITE MASTER', chips: 8_900_000, date: '01 Jan 2026' },
+  { rank: 4, name: 'Shadow_Ninja', userTag: '#JPN-309', country: 'JP', badge: 'silver', title: '🥈 VENOM ARENA OVERLORD', chips: 8_200_000, date: '01 Jan 2026' },
+  { rank: 5, name: 'Elysium_God', userTag: '#DEU-901', country: 'DE', badge: 'silver', title: '🥈 VENOM ARENA OVERLORD', chips: 6_900_000, date: '01 Jan 2026' },
+  { rank: 11, name: 'Delhi_King', userTag: '#IND-003', country: 'IN', badge: 'bronze', title: '🥉 ARENA ELITE MASTER', chips: 4_500_000, date: '01 Jan 2026' },
+  { rank: 52, name: 'Challenger_Viper', userTag: '#IND-902', country: 'IN', badge: 'contender', title: '🛡️ CHAMPIONSHIP CONTENDER', chips: 1_200_000, date: '01 Jan 2026' },
 ];
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 function fmtChips(n: number) {
   return n.toLocaleString('en-IN');
 }
 
+function fmtDate(iso: string) {
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch {
+    return iso;
+  }
+}
+
+function badgeIcon(badge: string | null | undefined) {
+  if (!badge) return '🏅';
+  switch (badge) {
+    case 'crown': return '👑';
+    case 'silver': return '🥈';
+    case 'bronze': return '🥉';
+    case 'contender': return '🛡️';
+    default: return badge;
+  }
+}
+
+// ── Tab button ──────────────────────────────────────────────────────────────
+
+interface HoFTabBtnProps {
+  active: boolean;
+  onClick: () => void;
+  icon: typeof Crown;
+  label: string;
+}
+
+function HoFTabBtn({ active, onClick, icon: Icon, label }: HoFTabBtnProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition border ${
+        active
+          ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300'
+          : 'text-slate-500 hover:text-slate-300 border-transparent'
+      }`}
+    >
+      <Icon className="w-3.5 h-3.5" /> {label}
+    </button>
+  );
+}
+
+// ── Main component ──────────────────────────────────────────────────────────
+
 export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
   const { player } = useAuth();
-  const [tab, setTab] = useState<Tab>('milestones');
-  const [milestoneYear, setMilestoneYear] = useState(2026);
-  const [archiveYear, setArchiveYear] = useState(2026);
-  const [archiveCountry, setArchiveCountry] = useState('GLOBAL');
+
+  // ── Shared state ──
+  const [tab, setTab] = useState<Tab>('my-hof');
   const [commentary, setCommentary] = useState(INITIAL_COMMENTARY);
   const [tickerFilter, setTickerFilter] = useState<CommentaryFilter>('all');
-  const [inspectedTierId, setInspectedTierId] = useState<string | null>(null);
 
-  // Live commentary ticker (every 5 seconds)
+  // ── Stats bar state ──
+  const [stats, setStats] = useState<HofStats | null>(null);
+
+  // ── My HOF state ──
+  const [myLoading, setMyLoading] = useState(false);
+  const [myError, setMyError] = useState(false);
+  const [myTotalEntries, setMyTotalEntries] = useState(0);
+  const [myCurrentChips, setMyCurrentChips] = useState(0);
+  const [myMilestoneEntries, setMyMilestoneEntries] = useState<MyEntry[]>([]);
+  const [myChampionshipEntries, setMyChampionshipEntries] = useState<MyEntry[]>([]);
+  const [myNextMilestone, setMyNextMilestone] = useState<NextMilestone | null>(null);
+
+  // ── Champions state ──
+  const [champLoading, setChampLoading] = useState(false);
+  const [champYear, setChampYear] = useState<number | null>(null);
+  const [champSearch, setChampSearch] = useState('');
+  const [champEntries, setChampEntries] = useState<InducteeEntry[]>([]);
+  const [champTotal, setChampTotal] = useState(0);
+
+  // ── Milestones state ──
+  const [mileLoading, setMileLoading] = useState(false);
+  const [mileTierFilter, setMileTierFilter] = useState<string>('all');
+  const [mileEntries, setMileEntries] = useState<InducteeEntry[]>([]);
+  const [mileTotal, setMileTotal] = useState(0);
+  const [mileFirstAchievers, setMileFirstAchievers] = useState<Record<string, { playerName: string; userTag: string; country: string; inductedAt: string } | null>>({});
+
+  // ── Fetch stats ──
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await fetch('/api/hof/stats');
+      if (res.ok) {
+        const data = await res.json();
+        queueMicrotask(() => setStats(data));
+      }
+    } catch {
+      // stats bar is optional, fail silently
+    }
+  }, []);
+
+  // ── Fetch my-entries ──
+  const fetchMyEntries = useCallback(async () => {
+    queueMicrotask(() => setMyLoading(true));
+    queueMicrotask(() => setMyError(false));
+    try {
+      const res = await fetch('/api/hof/my-entries');
+      if (res.ok) {
+        const data = await res.json();
+        queueMicrotask(() => {
+          setMyTotalEntries(data.totalEntries ?? 0);
+          setMyCurrentChips(data.currentChips ?? 0);
+          setMyMilestoneEntries(data.milestoneEntries ?? []);
+          setMyChampionshipEntries(data.championshipEntries ?? []);
+          setMyNextMilestone(data.nextMilestone ?? null);
+          setMyError(false);
+        });
+      } else {
+        queueMicrotask(() => setMyError(true));
+      }
+    } catch {
+      queueMicrotask(() => setMyError(true));
+    } finally {
+      queueMicrotask(() => setMyLoading(false));
+    }
+  }, []);
+
+  // ── Fetch champions ──
+  const fetchChampions = useCallback(async (year: number | null, search: string) => {
+    queueMicrotask(() => setChampLoading(true));
+    try {
+      const params = new URLSearchParams({ type: 'championship', limit: '100' });
+      if (year) params.set('year', String(year));
+      if (search) params.set('search', search);
+      const res = await fetch(`/api/hof/inductees?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        queueMicrotask(() => {
+          setChampEntries(data.entries ?? []);
+          setChampTotal(data.total ?? 0);
+        });
+      } else {
+        queueMicrotask(() => {
+          setChampEntries([]);
+          setChampTotal(0);
+        });
+      }
+    } catch {
+      queueMicrotask(() => {
+        setChampEntries([]);
+        setChampTotal(0);
+      });
+    } finally {
+      queueMicrotask(() => setChampLoading(false));
+    }
+  }, []);
+
+  // ── Fetch milestones ──
+  const fetchMilestones = useCallback(async (tierFilter: string) => {
+    queueMicrotask(() => setMileLoading(true));
+    try {
+      const params = new URLSearchParams({ type: 'milestone', limit: '100' });
+      if (tierFilter !== 'all') params.set('milestoneTier', tierFilter);
+      const res = await fetch(`/api/hof/inductees?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        queueMicrotask(() => {
+          setMileEntries(data.entries ?? []);
+          setMileTotal(data.total ?? 0);
+        });
+      } else {
+        queueMicrotask(() => {
+          setMileEntries([]);
+          setMileTotal(0);
+        });
+      }
+    } catch {
+      queueMicrotask(() => {
+        setMileEntries([]);
+        setMileTotal(0);
+      });
+    } finally {
+      queueMicrotask(() => setMileLoading(false));
+    }
+  }, []);
+
+  // ── Effects ──
+
+  // Fetch stats on mount
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  // Fetch my-entries when tab is my-hof and player exists
+  useEffect(() => {
+    if (tab === 'my-hof' && player) {
+      fetchMyEntries();
+    }
+  }, [tab, player, fetchMyEntries]);
+
+  // Fetch champions when tab changes or filters change
+  useEffect(() => {
+    if (tab === 'champions') {
+      fetchChampions(champYear, champSearch);
+    }
+  }, [tab, champYear, champSearch, fetchChampions]);
+
+  // Fetch milestones when tab changes or filter changes
+  useEffect(() => {
+    if (tab === 'milestones') {
+      fetchMilestones(mileTierFilter);
+    }
+  }, [tab, mileTierFilter, fetchMilestones]);
+
+  // Populate milestoneFirstAchievers from stats
+  useEffect(() => {
+    if (stats?.milestoneFirstAchievers) {
+      const hasReal = Object.values(stats.milestoneFirstAchievers).some(Boolean);
+      if (hasReal) {
+        queueMicrotask(() => setMileFirstAchievers(stats.milestoneFirstAchievers));
+      }
+    }
+  }, [stats]);
+
+  // Live commentary ticker
   useEffect(() => {
     if (tab !== 'ticker') return;
     const id = setInterval(() => {
@@ -161,6 +350,8 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
     return () => clearInterval(id);
   }, [tab]);
 
+  // ── Derived ──
+
   const filteredCommentary = useMemo(() => {
     if (tickerFilter === 'all') return commentary;
     const filters: Record<Exclude<CommentaryFilter, 'all'>, RegExp> = {
@@ -168,16 +359,46 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
       eliminations: /ELIMINATION/i,
       milestones: /MILESTONE/i,
     };
-    return commentary.filter((c) => filters[tickerFilter as Exclude<CommentaryFilter, 'all'>].test(c.text));
+    return commentary.filter((c) =>
+      filters[tickerFilter as Exclude<CommentaryFilter, 'all'>].test(c.text),
+    );
   }, [commentary, tickerFilter]);
 
-  if (!player) return <NotSignedIn />;
+  const champYears = useMemo(() => {
+    if (stats?.championshipYears && stats.championshipYears.length > 0) {
+      return stats.championshipYears.map((y) => y.year).sort((a, b) => b - a);
+    }
+    return [2026, 2025, 2024];
+  }, [stats]);
 
-  const nationalTop100 = generateNationalTop100(archiveCountry === 'GLOBAL' ? 'IN' : archiveCountry);
-  const inspectedTier = inspectedTierId ? HALL_OF_FAME_TIERS.find((t) => t.id === inspectedTierId) : null;
-  const inspectedTierRanks = inspectedTierId ? generateTierTop100(inspectedTierId) : [];
+  const champDisplayEntries = useMemo(() => {
+    if (champEntries.length > 0) return champEntries;
+    // Fallback to demo data
+    let demo = [...DEMO_CHAMPIONS];
+    if (champYear) demo = demo.filter((d) => d.date.includes(String(champYear)));
+    return demo;
+  }, [champEntries, champYear]);
 
-  function inspectFromName(name: string, userTag: string, country: string, chips: number, level: number) {
+  const champIsDemo = champEntries.length === 0;
+
+  const mileIsDemo = mileEntries.length === 0;
+
+  // ── Inspect helper ──
+  function inspectEntry(entry: InducteeEntry) {
+    if (!onInspectPlayer) return;
+    onInspectPlayer({
+      name: entry.playerName,
+      userTag: entry.playerTag,
+      country: entry.country,
+      flag: countryFlag(entry.country),
+      bankedChips: entry.chipsAtInduction,
+      level: entry.level,
+      clanTag: entry.clanTag || undefined,
+      achievedAt: fmtDate(entry.inductedAt),
+    });
+  }
+
+  function inspectDemo(name: string, userTag: string, country: string, chips: number, level: number) {
     if (!onInspectPlayer) return;
     onInspectPlayer({
       name,
@@ -188,34 +409,58 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
       level,
       clanTag: 'APEX',
       clanName: 'Viper Apex Syndicate',
-      achievedAt: '26 Jul 2026, 05:42 PM UTC',
+      achievedAt: '01 Jan 2026',
     });
   }
+
+  if (!player) return <NotSignedIn />;
 
   return (
     <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 overflow-hidden">
       <GlowBlob color="bg-yellow-500/10" className="-top-12 -right-12 w-56 h-56" />
 
       {/* Header */}
-      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-5 border-b border-slate-800">
+      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-4 border-b border-slate-800">
         <div>
           <h2 className="text-xl sm:text-2xl font-sans font-black text-white tracking-tight flex items-center gap-2.5">
             <Crown className="w-5.5 h-5.5 text-yellow-400" />
             Project Venom Hall of Fame &amp; Esports Shrine
           </h2>
           <p className="text-xs text-slate-400 mt-1 max-w-3xl">
-            Immortalizing milestone achievers (1 Lakh to 1 Crore), annual World Cup champions,
-            and live 1–100 national &amp; global tier rankings!
+            Permanent shrine for milestone achievers and championship legends. DB-backed, immutable, and forever.
           </p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="relative flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800/60 mb-5">
-        <HoFTabBtn active={tab === 'milestones'} onClick={() => setTab('milestones')} icon={Sparkles} label="Milestone Tiers (1L - 1Cr)" />
-        <HoFTabBtn active={tab === 'archives'} onClick={() => setTab('archives')} icon={Trophy} label="Tournament Archives (Ranks 1-100)" />
-        <HoFTabBtn active={tab === 'ticker'} onClick={() => setTab('ticker')} icon={Radio} label="Live Esports Ticker" />
+      <div className="relative flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800/60 mb-4">
+        <HoFTabBtn active={tab === 'my-hof'} onClick={() => setTab('my-hof')} icon={Star} label="My HOF Profile" />
+        <HoFTabBtn active={tab === 'champions'} onClick={() => setTab('champions')} icon={Trophy} label="Champions Wing" />
+        <HoFTabBtn active={tab === 'milestones'} onClick={() => setTab('milestones')} icon={Sparkles} label="Milestones Wing" />
+        <HoFTabBtn active={tab === 'ticker'} onClick={() => setTab('ticker')} icon={Radio} label="Live Ticker" />
       </div>
+
+      {/* Stats bar */}
+      {stats && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 p-4 rounded-xl border border-slate-800/60 bg-slate-950/80">
+          <div className="text-center">
+            <MicroLabel>Total Inducted Players</MicroLabel>
+            <div className="text-lg font-mono font-black text-yellow-400 mt-1">{stats.totalInductedPlayers}</div>
+          </div>
+          <div className="text-center">
+            <MicroLabel>Total Entries</MicroLabel>
+            <div className="text-lg font-mono font-black text-white mt-1">{stats.totalEntries}</div>
+          </div>
+          <div className="text-center">
+            <MicroLabel>Milestone Inductees</MicroLabel>
+            <div className="text-lg font-mono font-black text-emerald-400 mt-1">{stats.byType.milestone ?? 0}</div>
+          </div>
+          <div className="text-center">
+            <MicroLabel>Championship Inductees</MicroLabel>
+            <div className="text-lg font-mono font-black text-amber-400 mt-1">{stats.byType.championship ?? 0}</div>
+          </div>
+        </div>
+      )}
 
       {/* Live broadcast marquee */}
       <div className="relative mb-5 rounded-xl border border-rose-500/30 bg-rose-950/20 p-3 flex items-center gap-3 overflow-hidden">
@@ -227,179 +472,448 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
         </div>
       </div>
 
-      {/* Tab 1: Milestone Tiers */}
-      {tab === 'milestones' && (
+      {/* ═══════════════════ TAB: My HOF Profile ═══════════════════ */}
+      {tab === 'my-hof' && (
         <div className="space-y-4">
-          <div className="rounded-xl border border-yellow-500/30 bg-yellow-950/10 p-3 text-[11px] text-yellow-200 leading-relaxed">
-            <strong>PERMANENT MILESTONE IMMORTALITY</strong>
+          {myLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="w-6 h-6 text-yellow-400 animate-spin" />
+              <span className="ml-2 text-xs text-slate-400">Loading your HOF profile…</span>
+            </div>
+          ) : myError ? (
+            <div className="text-center py-16">
+              <p className="text-sm text-slate-500">Could not load your HOF profile.</p>
+            </div>
+          ) : (
+            <>
+              {/* Summary card */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl border border-yellow-500/20 bg-yellow-950/10">
+                  <MicroLabel>Your HOF Inductions</MicroLabel>
+                  <div className="text-2xl font-mono font-black text-yellow-400 mt-1">{myTotalEntries}</div>
+                </div>
+                <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-950/10">
+                  <MicroLabel>Current Banked Chips</MicroLabel>
+                  <div className="text-2xl font-mono font-black text-emerald-400 mt-1">{fmtChips(myCurrentChips)}c</div>
+                </div>
+              </div>
+
+              {/* Next milestone card */}
+              {myNextMilestone && (
+                <div className="p-4 rounded-xl border border-cyan-500/30 bg-cyan-950/10 flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-2xl shrink-0">
+                    <Target className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <MicroLabel>Next Milestone Target</MicroLabel>
+                    <div className="text-sm font-bold text-white mt-0.5 truncate">{myNextMilestone.name}</div>
+                    <div className="text-[11px] font-mono text-cyan-300 mt-0.5">{myNextMilestone.badge}</div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <MicroLabel>Chips Needed</MicroLabel>
+                    <div className="text-lg font-mono font-black text-cyan-400 mt-1">{fmtChips(myNextMilestone.chipsNeeded)}c</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Milestone entries */}
+              {myMilestoneEntries.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-yellow-400" /> Milestone Inductions
+                  </h3>
+                  <div className="space-y-2 max-h-48 overflow-y-auto va-scroll">
+                    {myMilestoneEntries.map((e) => {
+                      const tier = HALL_OF_FAME_TIERS.find((t) => t.id === e.milestoneTierId);
+                      return (
+                        <div
+                          key={e.id}
+                          className="flex items-center gap-3 p-3 rounded-xl border border-slate-800 bg-slate-950/80"
+                        >
+                          <span className="text-xl shrink-0" aria-hidden>{tier?.badge.split(' ')[0] || '🏅'}</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-bold text-white truncate">{e.title || tier?.name || 'Milestone'}</div>
+                            <div className="text-[10px] font-mono text-slate-400 mt-0.5">
+                              {fmtChips(e.chipsAtInduction)}c · {fmtDate(e.inductedAt)}
+                            </div>
+                          </div>
+                          <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/30 shrink-0">
+                            <Check className="w-2.5 h-2.5 inline" /> Inducted
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Championship entries */}
+              {myChampionshipEntries.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
+                    <Trophy className="w-4 h-4 text-amber-400" /> Championship Inductions
+                  </h3>
+                  <div className="space-y-2 max-h-48 overflow-y-auto va-scroll">
+                    {myChampionshipEntries.map((e) => (
+                      <div
+                        key={e.id}
+                        className="flex items-center gap-3 p-3 rounded-xl border border-slate-800 bg-slate-950/80"
+                      >
+                        <span className="text-xl shrink-0" aria-hidden>{badgeIcon(e.hofBadge)}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-bold text-white truncate">{e.title || `Championship ${e.championshipYear || ''}`}</div>
+                          <div className="text-[10px] font-mono text-slate-400 mt-0.5">
+                            Rank #{e.championshipRank ?? '?'} · {e.championshipYear || '?'} · {fmtChips(e.chipsAtInduction)}c
+                          </div>
+                        </div>
+                        <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/30 shrink-0">
+                          <Check className="w-2.5 h-2.5 inline" /> Inducted
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* No entries yet */}
+              {myMilestoneEntries.length === 0 && myChampionshipEntries.length === 0 && !myNextMilestone && (
+                <div className="text-center py-12 px-4">
+                  <Award className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+                  <p className="text-sm text-slate-400 max-w-md mx-auto leading-relaxed">
+                    You haven&apos;t been inducted yet. Keep playing and banking chips to reach milestone thresholds or finish in the top 100 of the Annual Championship!
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ═══════════════════ TAB: Champions Wing ═══════════════════ */}
+      {tab === 'champions' && (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-amber-500/30 bg-amber-950/10 p-3 text-[11px] text-amber-200 leading-relaxed">
+            <strong>CHAMPIONSHIPS WING</strong>
             <br />
-            Whenever a player reaches a milestone target (from 1 Lakh to 1 Crore Chips),
-            their record is permanently inscribed in the Hall of Fame for that tournament year!
-            Live ranks update every 30 mins.
+            Players inducted for finishing in the Top 100 of the Annual Venom Arena Championship. Ranks 1–100 earn permanent HOF status with unique badges.
           </div>
 
+          {/* Year filter */}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-mono uppercase tracking-widest text-slate-500">Milestone Year:</span>
-            {YEARS.map((y) => (
+            <span className="text-[10px] font-mono uppercase tracking-widest text-slate-500">Year:</span>
+            <button
+              type="button"
+              onClick={() => setChampYear(null)}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono transition border ${champYear === null ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
+            >
+              All Years
+            </button>
+            {champYears.map((y) => (
               <button
                 key={y}
                 type="button"
-                onClick={() => setMilestoneYear(y)}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono transition border ${milestoneYear === y ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
+                onClick={() => setChampYear(y)}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono transition border ${champYear === y ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
               >
                 {y}{y === 2026 ? ' (Current)' : ''}
               </button>
             ))}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {HALL_OF_FAME_TIERS.map((tier) => (
-              <div
-                key={tier.id}
-                className="relative p-5 rounded-2xl border border-slate-800 bg-slate-950/80 shadow-md flex flex-col gap-3 overflow-hidden"
+          {/* Search */}
+          <div className="flex items-center gap-2">
+            <Search className="w-4 h-4 text-slate-500 shrink-0" />
+            <input
+              type="text"
+              placeholder="Search by player name…"
+              value={champSearch}
+              onChange={(e) => setChampSearch(e.target.value)}
+              className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white font-mono placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50"
+            />
+            {champSearch && (
+              <button
+                type="button"
+                onClick={() => setChampSearch('')}
+                className="p-1 rounded text-slate-500 hover:text-white transition"
+                aria-label="Clear search"
               >
-                <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/5 rounded-full blur-3xl pointer-events-none" aria-hidden />
-                <div className="flex items-start justify-between gap-2 relative">
-                  <div className="min-w-0">
-                    <span className="text-[10px] font-mono uppercase tracking-widest text-yellow-400 inline-block">{tier.badge}</span>
-                    <h3 className="text-sm font-bold text-white mt-1">{tier.name}</h3>
-                  </div>
-                  <span className="text-[9px] font-mono text-slate-500 px-2 py-0.5 bg-slate-900 border border-slate-800 rounded-full shrink-0">
-                    Season {milestoneYear}
-                  </span>
-                </div>
-
-                <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500">
-                  FIRST ACHIEVER ({milestoneYear})
-                </div>
-                <div className="flex items-center gap-3 p-3 bg-slate-900/60 rounded-xl border border-slate-800">
-                  <div className="w-10 h-10 rounded-lg bg-gradient-to-tr from-yellow-500 to-amber-700 flex items-center justify-center text-lg shrink-0" aria-hidden>
-                    {countryFlag(tier.firstAchiever.country)}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-bold text-white truncate flex items-center gap-1.5">
-                      {tier.firstAchiever.name}
-                      <span className="inline-flex items-center gap-0.5 text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/30">
-                        <Check className="w-2.5 h-2.5" /> Achieved!
-                      </span>
-                    </div>
-                    <div className="text-[10px] font-mono text-slate-400 mt-0.5">
-                      {tier.firstAchiever.userTag} · 🕒 {tier.firstAchiever.dateStr}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-[11px] text-slate-400">
-                  <div>
-                    <MicroLabel>Total Qualifiers This Year:</MicroLabel>
-                    <div className="font-mono font-bold text-yellow-400 mt-0.5">
-                      {tier.totalAchieversCount.toLocaleString()} Players
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <MicroLabel>Threshold</MicroLabel>
-                    <div className="font-mono font-bold text-emerald-400 mt-0.5">{fmtChips(tier.chips)}c</div>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setInspectedTierId(tier.id)}
-                  className="mt-1 px-3 py-2 rounded-lg bg-slate-900 hover:bg-yellow-500/10 text-yellow-300 border border-yellow-500/20 text-xs font-bold flex items-center justify-center gap-1.5 transition"
-                >
-                  <Trophy className="w-3.5 h-3.5" /> View Ranks #1 to #100 for {milestoneYear}
-                </button>
-              </div>
-            ))}
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
+
+          {/* Loading */}
+          {champLoading && (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="w-5 h-5 text-amber-400 animate-spin" />
+              <span className="ml-2 text-xs text-slate-400">Loading champions…</span>
+            </div>
+          )}
+
+          {/* Table */}
+          {!champLoading && (
+            <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
+              {champIsDemo && (
+                <div className="px-4 py-2 bg-slate-900 border-b border-slate-800 flex items-center gap-2">
+                  <span className="text-[9px] font-mono font-bold text-slate-400 px-2 py-0.5 bg-slate-800 rounded-full border border-slate-700">
+                    DEMO
+                  </span>
+                  <span className="text-[10px] text-slate-500">No real championship inductees yet. Showing sample data.</span>
+                </div>
+              )}
+              <div className="grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+                <div className="col-span-1">Rank</div>
+                <div className="col-span-4">Player</div>
+                <div className="col-span-2">Badge</div>
+                <div className="col-span-3">Title</div>
+                <div className="col-span-1 text-right">Chips</div>
+                <div className="col-span-1 text-right">Date</div>
+              </div>
+              <ol className="divide-y divide-slate-900 max-h-96 overflow-y-auto va-scroll">
+                {champDisplayEntries.map((entry, idx) => {
+                  const isDemo = champIsDemo;
+                  const rank = isDemo
+                    ? (entry as unknown as { rank: number }).rank
+                    : (entry as InducteeEntry).championshipRank ?? idx + 1;
+                  const name = isDemo
+                    ? (entry as unknown as { name: string }).name
+                    : (entry as InducteeEntry).playerName;
+                  const tag = isDemo
+                    ? (entry as unknown as { userTag: string }).userTag
+                    : (entry as InducteeEntry).playerTag;
+                  const country = isDemo
+                    ? (entry as unknown as { country: string }).country
+                    : (entry as InducteeEntry).country;
+                  const badge = isDemo
+                    ? (entry as unknown as { badge: string }).badge
+                    : (entry as InducteeEntry).hofBadge;
+                  const title = isDemo
+                    ? (entry as unknown as { title: string }).title
+                    : (entry as InducteeEntry).title;
+                  const chips = isDemo
+                    ? (entry as unknown as { chips: number }).chips
+                    : (entry as InducteeEntry).chipsAtInduction;
+                  const date = isDemo
+                    ? (entry as unknown as { date: string }).date
+                    : fmtDate((entry as InducteeEntry).inductedAt);
+
+                  return (
+                    <li
+                      key={isDemo ? `${(entry as unknown as { name: string }).name}-${rank}` : (entry as InducteeEntry).id}
+                      className={`grid grid-cols-12 gap-2 items-center px-4 py-3 text-sm hover:bg-slate-900/40 transition-colors cursor-pointer ${isDemo ? 'opacity-60' : ''}`}
+                      onClick={() => {
+                        if (isDemo) {
+                          inspectDemo(name, tag, country, chips, 45);
+                        } else {
+                          inspectEntry(entry as InducteeEntry);
+                        }
+                      }}
+                    >
+                      <div className="col-span-1 font-mono">
+                        {rank === 1 ? (
+                          <span className="text-yellow-400 font-bold">👑 #1</span>
+                        ) : rank <= 3 ? (
+                          <span className="text-lg">{['', '🥇', '🥈', '🥉'][rank]}</span>
+                        ) : (
+                          <span className="text-slate-400 font-bold">#{rank}</span>
+                        )}
+                      </div>
+                      <div className="col-span-4 min-w-0">
+                        <div className="font-bold text-white truncate flex items-center gap-1.5">
+                          <span aria-hidden>{countryFlag(country)}</span>
+                          {name}
+                          {isDemo && (
+                            <span className="text-[9px] font-mono font-bold text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">
+                              DEMO
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] font-mono text-slate-500 truncate">{tag}</div>
+                      </div>
+                      <div className="col-span-2 text-lg" aria-label={badge || 'badge'}>{badgeIcon(badge)}</div>
+                      <div className="col-span-3 min-w-0">
+                        <div className="text-[11px] text-slate-300 truncate">{title}</div>
+                      </div>
+                      <div className="col-span-1 text-right font-mono font-bold text-emerald-400 tabular-nums text-[11px]">
+                        {fmtChips(chips)}c
+                      </div>
+                      <div className="col-span-1 text-right text-[10px] font-mono text-slate-500">{date}</div>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Tab 2: Tournament Archives */}
-      {tab === 'archives' && (
+      {/* ═══════════════════ TAB: Milestones Wing ═══════════════════ */}
+      {tab === 'milestones' && (
         <div className="space-y-4">
+          <div className="rounded-xl border border-yellow-500/30 bg-yellow-950/10 p-3 text-[11px] text-yellow-200 leading-relaxed">
+            <strong>PERMANENT MILESTONE IMMORTALITY</strong>
+            <br />
+            Whenever a player reaches a milestone target (from 1 Lakh to 1 Crore Chips),
+            their record is permanently inscribed in the Hall of Fame.
+          </div>
+
+          {/* Total inducted count */}
+          {stats && (
+            <div className="flex items-center gap-3 p-3 rounded-xl border border-slate-800 bg-slate-950/80">
+              <Users className="w-4 h-4 text-yellow-400 shrink-0" />
+              <span className="text-[11px] text-slate-400">
+                <span className="font-bold text-yellow-400">{stats.totalInductedPlayers}</span> unique players inducted across all milestones
+              </span>
+            </div>
+          )}
+
+          {/* Tier filter */}
           <div className="flex flex-wrap items-center gap-2">
-            {YEARS.map((y) => (
+            <span className="text-[10px] font-mono uppercase tracking-widest text-slate-500">Tier:</span>
+            <button
+              type="button"
+              onClick={() => setMileTierFilter('all')}
+              className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono transition border ${mileTierFilter === 'all' ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
+            >
+              All Tiers
+            </button>
+            {HALL_OF_FAME_TIERS.map((t) => (
               <button
-                key={y}
+                key={t.id}
                 type="button"
-                onClick={() => setArchiveYear(y)}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono transition border ${archiveYear === y ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
+                onClick={() => setMileTierFilter(t.id)}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono transition border ${mileTierFilter === t.id ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
               >
-                {y}{y === 2026 ? ' (Current Live)' : ' (Archive)'}
+                {t.badge.split(' ')[0]} {t.name.split(' ')[0]}
               </button>
             ))}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Globe className="w-4 h-4 text-cyan-400" />
-            <span className="text-xs font-bold text-white">Country Leaderboard:</span>
-            <select
-              value={archiveCountry}
-              onChange={(e) => setArchiveCountry(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-cyan-500/50"
-            >
-              {COUNTRY_OPTIONS.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.flag} {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <h3 className="text-sm font-bold text-white">
-              {archiveYear} {archiveCountry === 'GLOBAL' ? 'Global' : countryName(archiveCountry)} Top 100 Ranking
-            </h3>
-            <span className="text-[9px] font-mono text-amber-300 px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 rounded-full">
-              #1 Country Champion Wins National Gold Medal
-            </span>
-          </div>
-
-          <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-            <div className="grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-              <div className="col-span-1">Rank</div>
-              <div className="col-span-4">Challenger</div>
-              <div className="col-span-2">User Tag</div>
-              <div className="col-span-2 text-right">Banked Chips</div>
-              <div className="col-span-1 text-right">Level</div>
-              <div className="col-span-2 text-right">Action</div>
+          {/* Loading */}
+          {mileLoading && (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="w-5 h-5 text-yellow-400 animate-spin" />
+              <span className="ml-2 text-xs text-slate-400">Loading milestones…</span>
             </div>
-            <ol className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll">
-              {nationalTop100.map((e) => (
-                <li key={e.userTag + e.rank} className="grid grid-cols-12 gap-2 items-center px-4 py-3 text-sm hover:bg-slate-900/40 transition-colors">
-                  <div className="col-span-1 font-mono">
-                    {e.rank <= 3 ? ['🥇', '🥈', '🥉'][e.rank - 1] : <span className="text-slate-400 font-bold">#{e.rank}</span>}
-                    {e.rank === 1 && <span className="ml-1 text-[9px] font-mono font-bold text-yellow-400">NATIONAL CHAMP</span>}
+          )}
+
+          {/* Milestone tiers grid (with real first achievers or fallback) */}
+          {!mileLoading && (
+            <>
+              {mileIsDemo ? (
+                /* Fallback: show HALL_OF_FAME_TIERS with their firstAchiever data */
+                <>
+                  <div className="px-4 py-2 bg-slate-900 rounded-xl border border-slate-800 flex items-center gap-2">
+                    <span className="text-[9px] font-mono font-bold text-slate-400 px-2 py-0.5 bg-slate-800 rounded-full border border-slate-700">
+                      DEMO
+                    </span>
+                    <span className="text-[10px] text-slate-500">No real milestone inductees yet. Showing tier definitions with seed first-achievers.</span>
                   </div>
-                  <div className="col-span-4 min-w-0">
-                    <div className="font-bold text-white truncate flex items-center gap-1.5">
-                      <span aria-hidden>{countryFlag(archiveCountry === 'GLOBAL' ? 'IN' : archiveCountry)}</span>
-                      {e.name}
-                    </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {HALL_OF_FAME_TIERS.map((tier) => {
+                      const realFirst = mileFirstAchievers[tier.id];
+                      const fa = realFirst
+                        ? { name: realFirst.playerName, userTag: realFirst.userTag, country: realFirst.country, dateStr: fmtDate(realFirst.inductedAt) }
+                        : tier.firstAchiever;
+                      return (
+                        <div
+                          key={tier.id}
+                          className="relative p-5 rounded-2xl border border-slate-800 bg-slate-950/80 shadow-md flex flex-col gap-3 overflow-hidden opacity-70"
+                        >
+                          <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/5 rounded-full blur-3xl pointer-events-none" aria-hidden />
+                          <div className="flex items-start justify-between gap-2 relative">
+                            <div className="min-w-0">
+                              <span className="text-[10px] font-mono uppercase tracking-widest text-yellow-400 inline-block">{tier.badge}</span>
+                              <h3 className="text-sm font-bold text-white mt-1">{tier.name}</h3>
+                            </div>
+                            <span className="text-[9px] font-mono font-bold text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700 shrink-0">
+                              DEMO
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-3 p-3 bg-slate-900/60 rounded-xl border border-slate-800">
+                            <div className="w-10 h-10 rounded-lg bg-gradient-to-tr from-yellow-500 to-amber-700 flex items-center justify-center text-lg shrink-0" aria-hidden>
+                              {countryFlag(fa.country)}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-sm font-bold text-white truncate flex items-center gap-1.5">
+                                {fa.name}
+                                <span className="inline-flex items-center gap-0.5 text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/30">
+                                  <Check className="w-2.5 h-2.5" /> First!
+                                </span>
+                              </div>
+                              <div className="text-[10px] font-mono text-slate-400 mt-0.5">
+                                {fa.userTag} · 🕒 {fa.dateStr}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px] text-slate-400">
+                            <div>
+                              <MicroLabel>Chips Threshold</MicroLabel>
+                              <div className="font-mono font-bold text-emerald-400 mt-0.5">{fmtChips(tier.chips)}c</div>
+                            </div>
+                            <div className="text-right">
+                              <MicroLabel>Seed Achievers</MicroLabel>
+                              <div className="font-mono font-bold text-yellow-400 mt-0.5">{tier.totalAchieversCount.toLocaleString()}</div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="col-span-2 text-[10px] font-mono text-slate-500 truncate">{e.userTag}</div>
-                  <div className="col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">
-                    {fmtChips(e.bankedChips)}c
+                </>
+              ) : (
+                /* Real data: table view */
+                <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
+                  <div className="grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+                    <div className="col-span-2">Tier</div>
+                    <div className="col-span-3">First Achiever</div>
+                    <div className="col-span-2">Badge</div>
+                    <div className="col-span-2 text-right">Chips Threshold</div>
+                    <div className="col-span-2">Date</div>
+                    <div className="col-span-1 text-right">Count</div>
                   </div>
-                  <div className="col-span-1 text-right text-xs text-amber-400 font-mono">{e.level}</div>
-                  <div className="col-span-2 text-right">
-                    <button
-                      type="button"
-                      onClick={() => inspectFromName(e.name, e.userTag, archiveCountry === 'GLOBAL' ? 'IN' : archiveCountry, e.bankedChips, e.level)}
-                      className="px-2 py-1 rounded text-[10px] font-bold bg-slate-900 hover:bg-yellow-500/10 text-yellow-300 border border-yellow-500/20 transition"
-                    >
-                      Inspect
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </div>
+                  <ol className="divide-y divide-slate-900 max-h-96 overflow-y-auto va-scroll">
+                    {mileEntries.map((entry) => {
+                      const tier = HALL_OF_FAME_TIERS.find((t) => t.id === entry.milestoneTierId);
+                      return (
+                        <li
+                          key={entry.id}
+                          className="grid grid-cols-12 gap-2 items-center px-4 py-3 text-sm hover:bg-slate-900/40 transition-colors"
+                        >
+                          <div className="col-span-2 min-w-0">
+                            <div className="text-[11px] font-bold text-white truncate">{tier?.name.split(' ')[0] || entry.milestoneTierId}</div>
+                          </div>
+                          <div className="col-span-3 min-w-0">
+                            <div className="font-bold text-white truncate flex items-center gap-1.5">
+                              <span aria-hidden>{countryFlag(entry.country)}</span>
+                              {entry.playerName}
+                            </div>
+                            <div className="text-[10px] font-mono text-slate-500 truncate">{entry.playerTag}</div>
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-[11px] text-yellow-300 truncate block">{tier?.badge || entry.hofBadge || '🏅'}</span>
+                          </div>
+                          <div className="col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums text-[11px]">
+                            {fmtChips(tier?.chips || entry.chipsAtInduction)}c
+                          </div>
+                          <div className="col-span-2 text-[10px] font-mono text-slate-400">{fmtDate(entry.inductedAt)}</div>
+                          <div className="col-span-1 text-right text-[10px] font-mono text-slate-500">
+                            <span className="text-[9px] font-bold text-yellow-400 bg-yellow-500/10 px-1.5 py-0.5 rounded-full border border-yellow-500/30">{tier?.totalAchieversCount.toLocaleString() || '—'}</span>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
-      {/* Tab 3: Live Esports Ticker */}
+      {/* ═══════════════════ TAB: Live Esports Ticker ═══════════════════ */}
       {tab === 'ticker' && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -423,7 +937,7 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
           </div>
 
           <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-            <ol className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll">
+            <ol className="divide-y divide-slate-900 max-h-96 overflow-y-auto va-scroll">
               {filteredCommentary.length === 0 ? (
                 <li className="p-6 text-center text-xs text-slate-500">No events in this channel yet…</li>
               ) : (
@@ -438,104 +952,7 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
           </div>
         </div>
       )}
-
-      {/* Tier Top 100 Modal */}
-      {inspectedTier && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="relative w-full max-w-4xl max-h-[85vh] rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-slate-800">
-              <div>
-                <h3 className="text-lg font-black text-white flex items-center gap-2">
-                  <Award className="w-5 h-5 text-yellow-400" /> {inspectedTier.name}
-                </h3>
-                <p className="text-[10px] font-mono text-slate-400 mt-1">
-                  Target Threshold: {fmtChips(inspectedTier.chips)}c
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono text-yellow-300 px-2 py-0.5 bg-yellow-500/10 border border-yellow-500/30 rounded-full">
-                  Ranks 1–100
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setInspectedTierId(null)}
-                  className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition"
-                  aria-label="Close"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            <div className="overflow-auto va-scroll flex-1">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-slate-950 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-                  <tr>
-                    <th className="text-left px-4 py-2.5">Tier Rank</th>
-                    <th className="text-left px-4 py-2.5">Immortal Achiever</th>
-                    <th className="text-left px-4 py-2.5">User Tag</th>
-                    <th className="text-left px-4 py-2.5">Achieved On</th>
-                    <th className="text-right px-4 py-2.5">Qualifying Chips</th>
-                    <th className="text-right px-4 py-2.5">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-900">
-                  {inspectedTierRanks.map((r) => (
-                    <tr key={r.userTag + r.rank} className="hover:bg-slate-900/40 transition">
-                      <td className="px-4 py-3 font-mono">
-                        {r.rank === 1 ? (
-                          <span className="text-yellow-400 font-bold">👑 #1 First</span>
-                        ) : r.rank <= 3 ? (
-                          <span className="text-lg">{['', '🥇', '🥈', '🥉'][r.rank]}</span>
-                        ) : (
-                          <span className="text-slate-400 font-bold">#{r.rank}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 font-bold text-white flex items-center gap-1.5">
-                        <span aria-hidden>{countryFlag(r.country)}</span> {r.name}
-                      </td>
-                      <td className="px-4 py-3 text-[10px] font-mono text-slate-500">{r.userTag}</td>
-                      <td className="px-4 py-3 text-[10px] font-mono text-slate-400">{r.dateStr}</td>
-                      <td className="px-4 py-3 text-right font-mono font-bold text-emerald-400 tabular-nums">
-                        {fmtChips(r.chips)}c
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => inspectFromName(r.name, r.userTag, r.country, r.chips, r.level)}
-                          className="px-2 py-1 rounded text-[10px] font-bold bg-slate-900 hover:bg-yellow-500/10 text-yellow-300 border border-yellow-500/20 transition"
-                        >
-                          Inspect
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
-  );
-}
-
-interface HoFTabBtnProps {
-  active: boolean;
-  onClick: () => void;
-  icon: typeof Crown;
-  label: string;
-}
-
-function HoFTabBtn({ active, onClick, icon: Icon, label }: HoFTabBtnProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition border ${active ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300' : 'text-slate-500 hover:text-slate-300 border-transparent'}`}
-    >
-      <Icon className="w-3.5 h-3.5" /> {label}
-    </button>
   );
 }
 

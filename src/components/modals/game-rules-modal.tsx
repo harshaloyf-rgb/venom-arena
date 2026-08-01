@@ -38,6 +38,7 @@ import {
   Crown,
   Globe,
   Medal,
+  Award,
 } from 'lucide-react';
 import { ARENA_TIERS, PRACTICE_TIERS, MILESTONE_TIERS } from '@/lib/game-config';
 
@@ -70,7 +71,7 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                 VENOM ARENA — OFFICIAL GUIDE &amp; RULES
               </DialogTitle>
               <DialogDescription className="text-xs text-slate-400">
-                Accounts, controls, modes, arena tiers, HUD, extraction, challenges, death, replay, leaderboards, championships &amp; FAQ
+                Accounts, controls, modes, arena tiers, HUD, extraction, challenges, death, replay, leaderboards, championships, hall of fame &amp; FAQ
               </DialogDescription>
             </div>
           </div>
@@ -978,9 +979,90 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
           </Section>
 
           {/* ================================================================= */}
-          {/* 14. FAQ */}
+          {/* 14. HALL OF FAME */}
           {/* ================================================================= */}
-          <Section icon={<AlertTriangle className="w-4 h-4" />} title="14. FAQ" accent="text-purple-400">
+          <Section icon={<Award className="w-4 h-4" />} title="14. HALL OF FAME" accent="text-yellow-400">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <InfoCard title="🏆 What is the Hall of Fame?" accent="text-yellow-300">
+                <p className="mb-1">The <strong>Hall of Fame (HOF)</strong> is Venom Arena&apos;s <strong>permanent shrine</strong> celebrating legendary players. Every inductee&apos;s record is stored in the database and can <strong>never be removed</strong> — it is truly immortal.</p>
+                <p>There are <strong>two induction paths</strong>:</p>
+                <ul className="list-disc pl-4 space-y-0.5 mt-1">
+                  <li><strong>Milestone Induction:</strong> Reach lifetime banked chip thresholds (1 Lakh to 1 Crore)</li>
+                  <li><strong>Championship Induction:</strong> Finish in the top 100 of any Annual Championship</li>
+                </ul>
+              </InfoCard>
+
+              <InfoCard title="⭐ Milestone Induction Path" accent="text-amber-300">
+                <p className="mb-1.5">When your <strong>total banked chips</strong> cross a milestone threshold for the <strong>first time</strong>, you&apos;re automatically inducted into the HOF:</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[11px] mt-1">
+                    <thead>
+                      <tr className="text-left border-b border-slate-700">
+                        <th className="py-1 pr-2 text-slate-300">Threshold</th>
+                        <th className="py-1 pr-2 text-slate-300">Badge</th>
+                        <th className="py-1 text-slate-300">Details</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-slate-900"><td className="py-1 pr-2 font-mono text-amber-400">1,00,000c</td><td className="py-1 pr-2">🥉 Bronze Elite</td><td className="py-1 text-slate-400">First step to immortality</td></tr>
+                      <tr className="border-b border-slate-900"><td className="py-1 pr-2 font-mono text-slate-300">5,00,000c</td><td className="py-1 pr-2">🥈 Silver Commander</td><td className="py-1 text-slate-400">Half a million club</td></tr>
+                      <tr className="border-b border-slate-900"><td className="py-1 pr-2 font-mono text-yellow-400">10,00,000c</td><td className="py-1 pr-2">🥇 Gold Apex Vanguard</td><td className="py-1 text-slate-400">Millionaire status</td></tr>
+                      <tr className="border-b border-slate-900"><td className="py-1 pr-2 font-mono text-cyan-400">25,00,000c</td><td className="py-1 pr-2">💎 Platinum Sovereign</td><td className="py-1 text-slate-400">Elite tier</td></tr>
+                      <tr className="border-b border-slate-900"><td className="py-1 pr-2 font-mono text-violet-400">50,00,000c</td><td className="py-1 pr-2">🔮 Diamond Warlord</td><td className="py-1 text-slate-400">Top 0.1% of players</td></tr>
+                      <tr><td className="py-1 pr-2 font-mono text-yellow-300">1,00,00,000c</td><td className="py-1 pr-2">👑 Omega Immortal God</td><td className="py-1 text-slate-400">Legendary — 1 Crore+</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </InfoCard>
+
+              <InfoCard title="🏆 Championship Induction Path" accent="text-yellow-300">
+                <p className="mb-1">When an Annual Championship year ends (Dec 31), the <strong>top 100 finishers</strong> are automatically inducted with rank-based badges:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>#1 (Crown):</strong> 👑 Permanent crown badge + World Champion title</li>
+                  <li><strong>#2-10 (Silver):</strong> 🥈 Silver HOF badge + Overlord title</li>
+                  <li><strong>#11-50 (Bronze):</strong> 🥉 Bronze HOF badge + Elite Master title</li>
+                  <li><strong>#51-100 (Contender):</strong> 🛡️ Contender badge + priority for next year</li>
+                </ul>
+                <p className="mt-1">Each championship year creates a <strong>separate induction record</strong> — a player can be inducted multiple times across different years.</p>
+              </InfoCard>
+
+              <InfoCard title="🛡️ HOF Permanence Rules" accent="text-emerald-300">
+                <p className="mb-1">HOF records are <strong>immutable</strong>:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Milestone inductions are based on the <strong>first time</strong> you reach a tier — even if your chips later drop below, the HOF entry stays</li>
+                  <li>Championship inductions are <strong>finalized on Jan 1st</strong> and locked permanently</li>
+                  <li>There is no appeal, removal, or expiration of HOF records</li>
+                  <li>Your highest HOF badge is shown on the <strong>leaderboard</strong> and <strong>player inspector</strong></li>
+                </ul>
+              </InfoCard>
+
+              <InfoCard title="👤 Checking Your HOF Status" accent="text-cyan-300">
+                <p className="mb-1">View your HOF profile in several places:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>Hall of Fame tab</strong> — Full profile with all inductions, next milestone goal, and live stats</li>
+                  <li><strong>Player Inspector</strong> — HOF badge shown at the top of the overview tab</li>
+                  <li><strong>Leaderboard rows</strong> — Small HOF icon (🏆) next to your name if inducted</li>
+                  <li><strong>Championship podium</strong> — HOF badge visible on top-3 contenders</li>
+                </ul>
+              </InfoCard>
+
+              <InfoCard title="📊 HOF Statistics" accent="text-violet-300">
+                <p className="mb-1">The HOF tab shows aggregate stats for the entire server:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>Total Inducted Players:</strong> Count of unique players with at least one HOF entry</li>
+                  <li><strong>Total Entries:</strong> Sum of all inductions (one player can have multiple)</li>
+                  <li><strong>Per-Tier Counts:</strong> How many players hold each milestone/championship badge</li>
+                  <li><strong>First Achievers:</strong> The very first player to reach each milestone tier, with date and time</li>
+                  <li><strong>Championship Years:</strong> Which years have finalized championship inductees</li>
+                </ul>
+              </InfoCard>
+            </div>
+          </Section>
+
+          {/* ================================================================= */}
+          {/* 15. FAQ */}
+          {/* ================================================================= */}
+          <Section icon={<AlertTriangle className="w-4 h-4" />} title="15. FAQ" accent="text-purple-400">
             <div className="flex flex-col gap-2.5">
               <FaqItem q="Do I lose my banked vault chips if I crash?" a="No! Your banked vault chips are 100% safe. You only lose the buy-in chips carried in that specific match." />
               <FaqItem q="What is the graduated commission?" a="If ≤3 real players are in the arena, extraction is FREE (0%). If ≥4 real players, 35% commission applies (you keep 65%)." />
@@ -1008,6 +1090,11 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
               <FaqItem q="What happens when the championship year ends?" a="On December 31st at 23:59 UTC, all scoring stops and standings are frozen. On January 1st, prizes are distributed based on final ranks (see HOF tiers: #1 gets 5M chips + crown, #2-10 get 500K each, etc.). The previous year is archived and viewable via the year selector. A new championship year begins immediately with everyone&apos;s scores reset to zero." />
               <FaqItem q="What do the green pulsing dots on championship contenders mean?" a="A green pulsing dot next to a player&apos;s name in the championship standings means they are currently online and in an active match. It updates in real-time via the server&apos;s presence system. No dot means the player is offline. It&apos;s a great way to see if your rivals are actively grinding!" />
               <FaqItem q="How do clan rankings work in the championship?" a="Clan rankings aggregate the championship scores of all clan members. To prevent single-player exploits, only the top 10 members&apos; scores are summed. The clan with the highest total across its top 10 members ranks #1. The CLAN tab on the championship standings page shows each clan&apos;s total score, member count, and average score per member." />
+              <FaqItem q="What is the Hall of Fame?" a="The Hall of Fame is Venom Arena&apos;s permanent record of legendary players. There are two induction paths: (1) Milestone Induction — reach lifetime chip thresholds (1 Lakh to 1 Crore). (2) Championship Induction — finish in the top 100 of an Annual Championship. Once inducted, your record is permanent and can never be removed." />
+              <FaqItem q="How do I get into the Hall of Fame?" a="For milestones: simply play and bank chips. When your total banked chips cross a milestone threshold (100K, 500K, 1M, 2.5M, 5M, 10M), you&apos;re automatically inducted if it&apos;s your first time reaching that tier. For championships: finish in the top 100 of any Annual Championship year. Inductions are automatic and DB-backed." />
+              <FaqItem q="What are the HOF badges?" a="Milestone badges: 🥉 Bronze Elite (100K+), 🥈 Silver Commander (500K+), 🥇 Gold Apex Vanguard (1M+), 💎 Platinum Sovereign (2.5M+), 🔮 Diamond Warlord (5M+), 👑 Omega Immortal God (10M+). Championship badges: 👑 Crown (#1), 🥈 Silver (#2-10), 🥉 Bronze (#11-50), 🛡️ Contender (#51-100). Your highest badge is displayed on the leaderboard and player inspector." />
+              <FaqItem q="Can I be inducted into both milestone and championship HOF?" a="Absolutely! They are separate tracks. A player can hold multiple milestone inductions (one per tier) plus championship inductions (one per year). All appear in your HOF profile on the Hall of Fame tab." />
+              <FaqItem q="Are HOF records permanent?" a="Yes. HOF entries are immutable once created. Even if your banked chips drop below a milestone threshold later, your HOF induction for that tier remains. Championship entries are finalized when the year ends and locked forever." />
             </div>
           </Section>
 
