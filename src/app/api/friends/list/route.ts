@@ -19,12 +19,15 @@ export async function GET() {
   const friends = [];
   const pendingReceived = [];
   const pendingSent = [];
+  const blocked = [];
 
   for (const f of me.friendsFrom) {
     if (f.status === 'accepted') {
       friends.push(toFriend(f.recipient, 'accepted'));
     } else if (f.status === 'pending') {
       pendingSent.push(toFriend(f.recipient, 'pending_sent'));
+    } else if (f.status === 'blocked') {
+      blocked.push(toFriend(f.recipient, 'blocked'));
     }
   }
   for (const f of me.friendsTo) {
@@ -32,10 +35,12 @@ export async function GET() {
       friends.push(toFriend(f.initiator, 'accepted'));
     } else if (f.status === 'pending') {
       pendingReceived.push(toFriend(f.initiator, 'pending_received'));
+    } else if (f.status === 'blocked') {
+      blocked.push(toFriend(f.initiator, 'blocked'));
     }
   }
 
-  return NextResponse.json({ friends, pendingReceived, pendingSent });
+  return NextResponse.json({ friends, pendingReceived, pendingSent, blocked });
 }
 
 function toFriend(p: any, status: string) {

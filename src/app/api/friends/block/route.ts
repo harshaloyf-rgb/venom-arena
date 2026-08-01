@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
-// DELETE /api/friends/block?userTag=X (unblock)
+// DELETE /api/friends/block?userTag=X (unblock) — removes the blocked relationship entirely
 export async function DELETE(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -73,8 +73,6 @@ export async function DELETE(req: NextRequest) {
 
   const target = await db.player.findUnique({ where: { userTag: tag } });
   if (!target) return NextResponse.json({ error: 'Player not found.' }, { status: 404 });
-
-  let appError: string | null = null;
 
   try {
     const friendship = await db.friendship.findFirst({
@@ -90,27 +88,10 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'No blocked relationship found.' }, { status: 404 });
     }
 
-    await db.$transaction(async (tx) => {
-      await tx.friendship.update({
-        where: { id: friendship.id },
-        data: { status: 'accepted' },
-      });
-    });
+    await db.friendship.delete({ where: { id: friendship.id } });
+    return NextResponse.json({ ok: true });
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    const appErrors: Record<string, string> = {
-      not_accepted: 'Cannot unblock this relationship.',
-    };
-    if (msg in appErrors) {
-      appError = appErrors[msg];
-    } else {
-      console.error('[friends/block] unblock error', e);
-      return NextResponse.json({ error: 'Unblock failed.' }, { status: 500 });
-    }
+    console.error('[friends/block] unblock error', e);
+    return NextResponse.json({ error: 'Unblock failed.' }, { status: 500 });
   }
-
-  if (appError) {
-    return NextResponse.json({ error: appError }, { status: 400 });
-  }
-  return NextResponse.json({ ok: true });
 }
