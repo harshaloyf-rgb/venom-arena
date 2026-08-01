@@ -630,3 +630,29 @@ Stage Summary:
 - Bottom tab bar correctly hidden on desktop (`md:hidden`), footer correctly visible on desktop
 - Desktop layout fully preserved with bento grid and natural scrolling
 - Lint clean, no runtime errors
+
+---
+Task ID: Dossier-Improvements
+Agent: Main Agent
+Task: Implement all suggested improvements to the Player Profile (Dossier) panel
+
+Work Log:
+- Analyzed the 2361-line player-profile.tsx to identify all improvement opportunities
+- Added MatchHistory model to Prisma schema (arenaId, arenaName, isOnline, status, chipsEarned, chipsLost, kills, snakeLength, durationSec) + db push
+- Added instagram, youtube, twitch social fields to Player model in Prisma + db push
+- Updated PlayerProfile type and toProfile() helper to include new social fields
+- Created GET/POST /api/player/match-history API routes (with pagination, filtering by status)
+- Created GET /api/player/tournament-stats API route (real matchesPlayed, totalBought, adsToday from DB)
+- Updated PUT /api/player to persist social links in DB (previously localStorage only)
+- Updated DELETE /api/player to clear social fields on account deletion
+- Rewrote player-profile.tsx (2899 lines) with 10 major improvements
+- Fixed API response field name mismatch (data.matches → data.entries)
+- Added graceful fallback responses for new APIs when queries fail
+- Verified with browser automation: all panels render, zero JS errors, all features accessible
+
+Stage Summary:
+- 10 improvements implemented across 8 files
+- Backend: 3 new files (match-history/route.ts, tournament-stats/route.ts), 3 modified files (schema.prisma, player/route.ts, player-helpers.ts, types.ts)
+- Frontend: Complete rewrite of player-profile.tsx with all improvements
+- All improvements verified in browser: profile header, cosmetics showcase, copy tag, referral code, account age, last seen, DB-backed guardrails, DB-backed match history, mobile cards, confirmation dialogs, delete account
+- Lint clean, zero runtime errors

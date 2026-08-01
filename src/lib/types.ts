@@ -40,6 +40,10 @@ export interface PlayerProfile {
   securityPin: boolean;       // true if PIN is set
   oauthProvider: string | null; // "google" | "facebook" | "apple" | null
 
+  instagram: string | null;
+  youtube: string | null;
+  twitch: string | null;
+
   createdAt: string;
   lastSeenAt: string;
 }

@@ -1,40 +1,21 @@
 'use client';
 
-/**
- * BUILD-11 — `PlayerProfilePanel` panel.
- *
- * Faithful replica of `/upload/extracted/src/components/PlayerProfile.tsx`
- * (1429 lines). Adapted to the BUILD-2 server-authoritative stack:
- *
- *  - Reads `player` and `refresh`/`logout` from `useAuth()`.
- *  - Identity changes persist via `PUT /api/player` with
- *    `{ name, country, avatar, instagram, youtube, twitch }` (server
- *    whitelists name/country/avatar; socials persist via localStorage).
- *  - Friends, match history, and identity logs persist to the same
- *    `localStorage` keys the original used (`venom_friends`,
- *    `venom_match_history`, `venom_identity_history_log`).
- *  - Co-Op Lobby Invite modal matches the original 1-to-1: arena-stakes
- *    list, eligibility pills (`"You can't afford" / "They can't afford"
- *    / "Eligible 🤝"`), counter-proposal speech bubble, and the
- *    `localStorage['venom_active_match_invite']` handshake consumed by
- *    `ArenaSelector`.
- *
- * Every text string (4 tabs, 8 stat cards, 3 tournament caps, FAQ, social
- * badges, ALL button labels and toast messages) is preserved verbatim from
- * AUDIT-C section D.
- */
-
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Award,
+  Calendar,
   Check,
   Clock,
   Compass,
+  Copy,
   Edit2,
   Eye,
+  Filter,
+  Gamepad2,
   Globe,
   History,
   Landmark,
+  Link,
   Lock,
   LogOut,
   RefreshCw,
@@ -43,12 +24,14 @@ import {
   Sparkles,
   Swords,
   Target,
+  Timer,
   Trash2,
   Trophy,
   Upload,
   UserPlus,
   Users,
   X,
+  AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
 import { ARENA_TIERS, COUNTRIES, getCosmeticById } from '@/lib/game-config';
@@ -59,18 +42,36 @@ import {
   notify,
   type ToastFn,
 } from './_panel-primitives';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { Badge } from '@/components/ui/badge';
 
 interface PlayerProfilePanelProps {
   onToast?: ToastFn;
 }
 
 // ---------------------------------------------------------------------------
-// FACTION_COUNTRIES — exact from original (AUDIT-C G)
+// FACTION_COUNTRIES
 // ---------------------------------------------------------------------------
 const FACTION_COUNTRIES = COUNTRIES;
 
 // ---------------------------------------------------------------------------
-// PRESET_AVATARS — exact from original (AUDIT-C D.14)
+// PRESET_AVATARS
 // ---------------------------------------------------------------------------
 const PRESET_AVATARS = [
   { id: 'av-viper', label: 'Venomous Viper', emoji: '🐍' },
@@ -123,7 +124,19 @@ interface IdentityLogEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Default seed data — exact from original (AUDIT-C D.12, D.13)
+// Tournament stats type (from API)
+// ---------------------------------------------------------------------------
+interface TournamentStats {
+  matchesPlayed: number;
+  matchesMax: number;
+  totalBought: number;
+  annualBuyCap: number;
+  adsToday: number;
+  adsMax: number;
+}
+
+// ---------------------------------------------------------------------------
+// Default seed data
 // ---------------------------------------------------------------------------
 const INITIAL_FRIENDS: Friend[] = [
   {
@@ -208,7 +221,7 @@ const SAMPLE_MATCHES: MatchHistoryEntry[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Local-storage helpers — never crash on parse error
+// Local-storage helpers
 // ---------------------------------------------------------------------------
 function readJSON<T>(key: string, fallback: T): T {
   try {
@@ -228,16 +241,36 @@ function writeJSON(key: string, value: unknown) {
   }
 }
 
-// Mocked friend balance — original SocialPanel had `getFriendSimulatedChips`.
-// We hardcode a friendly number for the co-op modal's eligibility math.
 function getFriendSimulatedChips(friend: Friend): number {
-  // Stable pseudo-random based on the friend id so each friend has a
-  // believable bankroll that doesn't change on re-render.
   let h = 0;
   for (let i = 0; i < friend.id.length; i++) {
     h = (h * 31 + friend.id.charCodeAt(i)) & 0xffffffff;
   }
   return 750 + (Math.abs(h) % 9000);
+}
+
+// ---------------------------------------------------------------------------
+// timeAgo helper
+// ---------------------------------------------------------------------------
+function timeAgo(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diff = now - then;
+  if (diff < 60_000) return 'just now';
+  if (diff < 3_600_000) {
+    const mins = Math.floor(diff / 60_000);
+    return `${mins}m ago`;
+  }
+  if (diff < 86_400_000) {
+    const hrs = Math.floor(diff / 3_600_000);
+    return `${hrs}h ago`;
+  }
+  const days = Math.floor(diff / 86_400_000);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  const years = Math.floor(months / 12);
+  return `${years}y ago`;
 }
 
 // ---------------------------------------------------------------------------
@@ -310,9 +343,9 @@ function ProfileContent({
     player.country || 'US',
   );
   const [selectedAvatar, setSelectedAvatar] = useState(player.avatar || '');
-  const [instagram, setInstagram] = useState('');
-  const [youtube, setYoutube] = useState('');
-  const [twitch, setTwitch] = useState('');
+  const [instagram, setInstagram] = useState(player.instagram || '');
+  const [youtube, setYoutube] = useState(player.youtube || '');
+  const [twitch, setTwitch] = useState(player.twitch || '');
   const [isDragging, setIsDragging] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -323,7 +356,87 @@ function ProfileContent({
   const [identityLogs, setIdentityLogs] = useState<IdentityLogEntry[]>([]);
   const [newFriendName, setNewFriendName] = useState('');
 
-  // Load from localStorage + socials from player profile
+  // -- NEW: DB-backed match history
+  const [dbMatches, setDbMatches] = useState<MatchHistoryEntry[]>([]);
+  const [matchFilter, setMatchFilter] = useState<'all' | 'EXTRACTED' | 'COLLIDED'>('all');
+  const [matchLoading, setMatchLoading] = useState(false);
+  const [matchTotal, setMatchTotal] = useState(0);
+
+  // -- NEW: Tournament stats from DB
+  const [tournamentStats, setTournamentStats] = useState<TournamentStats | null>(null);
+  const [tournamentLoading, setTournamentLoading] = useState(true);
+
+  // -- NEW: Copy tooltip state
+  const [copiedTag, setCopiedTag] = useState(false);
+  const [copiedReferral, setCopiedReferral] = useState(false);
+
+  // -- NEW: Friend removal confirmation
+  const [friendToRemove, setFriendToRemove] = useState<Friend | null>(null);
+
+  // -- NEW: Delete account
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
+  // Ref to track mounted state for async ops
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // -- Fetch tournament stats from DB
+  const fetchTournamentStats = useCallback(async () => {
+    setTournamentLoading(true);
+    try {
+      const res = await fetch('/api/player/tournament-stats');
+      if (res.ok) {
+        const data = await res.json();
+        if (mountedRef.current) {
+          setTournamentStats(data);
+        }
+      }
+    } catch {
+      // silently fall back to defaults
+    } finally {
+      if (mountedRef.current) setTournamentLoading(false);
+    }
+  }, []);
+
+  // -- Fetch DB match history
+  const fetchDbMatches = useCallback(async (filter: 'all' | 'EXTRACTED' | 'COLLIDED') => {
+    setMatchLoading(true);
+    try {
+      const params = new URLSearchParams({ limit: '25', offset: '0' });
+      if (filter !== 'all') params.set('status', filter);
+      const res = await fetch(`/api/player/match-history?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (mountedRef.current) {
+          const entries: MatchHistoryEntry[] = (data.entries || []).map((m: Record<string, unknown>) => ({
+            id: m.id as string,
+            arenaName: (m.arenaName || m.arena_id || 'Unknown') as string,
+            isOnline: (m.isOnline ?? true) as boolean,
+            status: (m.status || 'EXTRACTED') as 'EXTRACTED' | 'COLLIDED',
+            chipsEarned: Number(m.chipsEarned ?? m.chips_extracted ?? 0),
+            chipsLost: Number(m.chipsLost ?? m.chips_lost ?? 0),
+            kills: Number(m.kills ?? 0),
+            snakeLength: Number(m.snakeLength ?? m.score ?? 0),
+            timestamp: (m.timestamp || m.created_at || new Date().toISOString()) as string,
+            durationSec: Number(m.durationSec ?? m.duration_seconds ?? 0),
+          }));
+          setDbMatches(entries);
+          setMatchTotal(Number(data.total ?? entries.length));
+        }
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      if (mountedRef.current) setMatchLoading(false);
+    }
+  }, []);
+
+  // Load from localStorage + socials from DB player object
   useEffect(() => {
     const storedFriends = readJSON<Friend[] | null>('venom_friends', null);
     if (storedFriends && Array.isArray(storedFriends)) {
@@ -366,18 +479,23 @@ function ProfileContent({
       writeJSON('venom_identity_history_log', seed);
     }
 
-    // Socials persisted in localStorage
-    const socials = readJSON<{
-      instagram?: string;
-      youtube?: string;
-      twitch?: string;
-    }>('venom_social_channels', {});
-    setInstagram(socials.instagram || '');
-    setYoutube(socials.youtube || '');
-    setTwitch(socials.twitch || '');
-  }, [player.name, player.country]);
+    // Socials loaded from player object (DB-backed) instead of localStorage
+    setInstagram(player.instagram || '');
+    setYoutube(player.youtube || '');
+    setTwitch(player.twitch || '');
 
-  // -- derived values -------------------------------------------------------
+    // Fetch tournament stats from DB
+    fetchTournamentStats();
+  }, [player.name, player.country, player.instagram, player.youtube, player.twitch, fetchTournamentStats]);
+
+  // Fetch DB matches when switching to history tab or changing filter
+  useEffect(() => {
+    if (activeTab === 'history') {
+      fetchDbMatches(matchFilter);
+    }
+  }, [activeTab, matchFilter, fetchDbMatches]);
+
+  // -- derived values
   const xpNeeded = player.level * 200;
   const xpPercent = Math.min(100, Math.floor((player.xp / xpNeeded) * 100));
   const deathsCount = player.lifetimeDeaths || 1;
@@ -390,11 +508,24 @@ function ProfileContent({
       : '0%';
 
   const activeSkin = getCosmeticById(player.currentSkin);
+  const activeTrail = getCosmeticById(player.currentTrail);
+  const activeDeath = getCosmeticById(player.currentDeath);
+  const activeFlagCosmetic = getCosmeticById(player.currentFlag || '');
+  const activeBanner = getCosmeticById(player.currentBanner || '');
   const activeFlag = FACTION_COUNTRIES.find(
     (c) => c.code === (player.country || 'US'),
   );
 
-  // -- avatar drag & drop handlers -----------------------------------------
+  // Account age in days
+  const accountAgeDays = Math.floor(
+    (Date.now() - new Date(player.createdAt).getTime()) / 86_400_000,
+  );
+  const createdAtFormatted = new Date(player.createdAt).toLocaleDateString(
+    'en-US',
+    { year: 'numeric', month: 'long', day: 'numeric' },
+  );
+
+  // -- avatar drag & drop handlers
   function processAvatarFile(file: File) {
     if (!file.type.startsWith('image/')) {
       notify('Please select a valid image file.', 'error', onToast);
@@ -434,11 +565,25 @@ function ProfileContent({
     if (files && files.length > 0) processAvatarFile(files[0]);
   }
 
-  // -- identity save --------------------------------------------------------
+  // -- copy to clipboard helper
+  async function copyToClipboard(text: string, setCopied: (v: boolean) => void) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      notify('Failed to copy.', 'error', onToast);
+    }
+  }
+
+  // -- identity save
   function handleStartEditing() {
     setNewName(player.name);
     setSelectedCountry(player.country || 'US');
     setSelectedAvatar(player.avatar || '');
+    setInstagram(player.instagram || '');
+    setYoutube(player.youtube || '');
+    setTwitch(player.twitch || '');
     setIsEditing(true);
   }
 
@@ -476,14 +621,8 @@ function ProfileContent({
         return;
       }
 
-      // Persist socials client-side (server whitelist doesn't include them)
-      writeJSON('venom_social_channels', {
-        instagram: instagram.trim(),
-        youtube: youtube.trim(),
-        twitch: twitch.trim(),
-      });
+      // No longer persist socials to localStorage — they are now DB-backed
 
-      // Identity change log
       const nameChanged = trimmed !== player.name;
       const countryChanged = selectedCountry !== (player.country || 'US');
       if (nameChanged || countryChanged) {
@@ -515,7 +654,7 @@ function ProfileContent({
     }
   }
 
-  // -- friend handlers ------------------------------------------------------
+  // -- friend handlers
   function handleAddFriend(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = newFriendName.trim();
@@ -548,11 +687,13 @@ function ProfileContent({
     notify(`${trimmed} has been synced into your ally list! 🔗`, 'success', onToast);
   }
 
-  function handleRemoveFriend(id: string, name: string) {
-    const updated = friends.filter((f) => f.id !== id);
+  function confirmRemoveFriend() {
+    if (!friendToRemove) return;
+    const updated = friends.filter((f) => f.id !== friendToRemove.id);
     setFriends(updated);
     writeJSON('venom_friends', updated);
-    notify(`Alliance with ${name} dismantled.`, 'info', onToast);
+    notify(`Alliance with ${friendToRemove.name} dismantled.`, 'info', onToast);
+    setFriendToRemove(null);
   }
 
   function handleSendGift(id: string, name: string) {
@@ -564,7 +705,7 @@ function ProfileContent({
     notify(`Deposited 25 tactical bonus Chips to ${name}! 🎁`, 'success', onToast);
   }
 
-  // -- co-op invite handlers ------------------------------------------------
+  // -- co-op invite handlers
   function openInviteModal(friend: Friend) {
     setActiveInviteFriend(friend);
     setInviteSelectedArenaId('tier-1');
@@ -626,7 +767,7 @@ function ProfileContent({
     setActiveInviteFriend(null);
   }
 
-  // -- logout ---------------------------------------------------------------
+  // -- logout with confirmation
   async function handleLogout() {
     setLoggingOut(true);
     try {
@@ -637,10 +778,33 @@ function ProfileContent({
     }
   }
 
+  // -- delete account
+  async function handleDeleteAccount() {
+    setDeletingAccount(true);
+    try {
+      const res = await fetch('/api/player', { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        notify(data?.error || 'Failed to delete account.', 'error', onToast);
+        return;
+      }
+      notify('Account deleted permanently.', 'info', onToast);
+      await onLogout();
+    } catch {
+      notify('Network error. Please try again.', 'error', onToast);
+    } finally {
+      setDeletingAccount(false);
+    }
+  }
+
+  // -- Determine which matches to display
+  const displayMatches = dbMatches.length > 0 ? dbMatches : matches;
+
   // =========================================================================
   // RENDER
   // =========================================================================
   return (
+    <TooltipProvider>
     <div className="w-full max-w-6xl mx-auto p-4 sm:p-6 bg-slate-950/60 border border-slate-900 rounded-2xl shadow-xl relative overflow-hidden backdrop-blur-md">
       {/* Glow */}
       <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -666,7 +830,7 @@ function ProfileContent({
             ) : (
               <span
                 className="text-3xl select-none"
-                title="EQuipped DNA Skin"
+                title="Equipped DNA Skin"
               >
                 {activeSkin?.emoji || '🐍'}
               </span>
@@ -677,8 +841,8 @@ function ProfileContent({
           </div>
 
           {/* Name + tag + socials */}
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-xl font-bold text-white font-sans tracking-tight flex items-center gap-2">
                 <span className="text-xl" title="Region flag">
                   {activeFlag?.flag || '🇺🇸'}
@@ -687,6 +851,11 @@ function ProfileContent({
                 <span className="text-[10px] font-mono font-bold bg-slate-950 border border-slate-800 text-indigo-400 px-1.5 py-0.5 rounded uppercase">
                   {player.country || 'US'}
                 </span>
+                {player.clanTag && (
+                  <Badge className="bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-[10px] font-mono font-bold px-2 py-0.5">
+                    [{player.clanTag}]{player.clanRank ? ` ${player.clanRank}` : ''}
+                  </Badge>
+                )}
               </h2>
               <button
                 type="button"
@@ -698,16 +867,77 @@ function ProfileContent({
                 <Edit2 className="w-4 h-4" />
               </button>
             </div>
-            <p className="text-xs text-slate-400 font-sans mt-1">
-              Ledger Tag:{' '}
-              <span className="font-mono text-slate-300 font-bold">
-                #{player.userTag || 'STRK-8291'}
-              </span>{' '}
-              • Global Standing:{' '}
-              <span className="text-amber-400 font-bold font-mono">
-                #999
+            <p className="text-xs text-slate-400 font-sans mt-1 flex items-center gap-1.5 flex-wrap">
+              <span>
+                Ledger Tag:{' '}
+                <span className="font-mono text-slate-300 font-bold">
+                  #{player.userTag || 'STRK-8291'}
+                </span>
+              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(`#${player.userTag || 'STRK-8291'}`, setCopiedTag)}
+                    className="text-slate-500 hover:text-indigo-400 transition cursor-pointer"
+                    aria-label="Copy user tag"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-slate-800 text-white border-slate-700 text-xs">
+                  {copiedTag ? 'Copied!' : 'Copy tag'}
+                </TooltipContent>
+              </Tooltip>
+              <span>•</span>
+              <span>
+                Global Standing:{' '}
+                <span className="text-amber-400 font-bold font-mono">
+                  #999
+                </span>
               </span>
             </p>
+
+            {/* Referral code */}
+            {player.referralCode && (
+              <div className="flex items-center gap-1.5 mt-1.5">
+                <Link className="w-3 h-3 text-emerald-400" />
+                <span className="text-[11px] text-slate-400 font-sans">
+                  Referral:{' '}
+                  <span className="font-mono text-emerald-400 font-bold">
+                    {player.referralCode}
+                  </span>
+                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(player.referralCode!, setCopiedReferral)}
+                      className="text-slate-500 hover:text-emerald-400 transition cursor-pointer"
+                      aria-label="Copy referral code"
+                    >
+                      <Copy className="w-3 h-3" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="bg-slate-800 text-white border-slate-700 text-xs">
+                    {copiedReferral ? 'Copied!' : 'Copy referral code'}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            )}
+
+            {/* Account age + last seen */}
+            <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-500 font-sans">
+              <span className="flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                Member since {createdAtFormatted}
+              </span>
+              <span>•</span>
+              <span className="flex items-center gap-1">
+                <Timer className="w-3 h-3" />
+                Last active: {timeAgo(player.lastSeenAt)}
+              </span>
+            </div>
 
             {/* Socials */}
             <div className="flex flex-wrap items-center gap-2 mt-2">
@@ -769,19 +999,48 @@ function ProfileContent({
             </div>
           </div>
 
-          {/* Logout */}
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={loggingOut}
-            className="px-4 py-3 bg-red-950/20 hover:bg-red-950/40 border border-red-500/20 text-red-400 hover:text-red-300 rounded-xl text-xs font-bold transition duration-200 cursor-pointer flex items-center justify-center gap-1.5 shadow h-[52px] disabled:opacity-50"
-            title="Logout Session"
-          >
-            <LogOut className="w-4 h-4" />
-            <span className="whitespace-nowrap">Sign Out</span>
-          </button>
+          {/* Logout with confirmation */}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <button
+                type="button"
+                disabled={loggingOut}
+                className="px-4 py-3 bg-red-950/20 hover:bg-red-950/40 border border-red-500/20 text-red-400 hover:text-red-300 rounded-xl text-xs font-bold transition duration-200 cursor-pointer flex items-center justify-center gap-1.5 shadow h-[52px] disabled:opacity-50"
+                title="Logout Session"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="whitespace-nowrap">Sign Out</span>
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="bg-slate-900 border-slate-800">
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-white">Sign Out</AlertDialogTitle>
+                <AlertDialogDescription className="text-slate-400">
+                  Are you sure you want to sign out? You can sign back in at any time.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleLogout}
+                  className="bg-red-600 hover:bg-red-500 text-white"
+                >
+                  Sign Out
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
+
+      {/* Cosmetics Showcase Row */}
+      <CosmeticsShowcase
+        activeSkin={activeSkin}
+        activeTrail={activeTrail}
+        activeDeath={activeDeath}
+        activeFlagCosmetic={activeFlagCosmetic}
+        activeBanner={activeBanner}
+      />
 
       {/* TAB NAV */}
       <div className="flex flex-wrap gap-2 mb-6 border-b border-slate-900 pb-3">
@@ -854,8 +1113,8 @@ function ProfileContent({
             />
           )}
 
-          {/* Statistics grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {/* Statistics grid — now 10 cards (8 original + Total Matches + Account Age) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             <StatCard
               label="Banked Wallet"
               subLabel="Deposited Chips"
@@ -912,61 +1171,36 @@ function ProfileContent({
               icon={<RefreshCw className="w-4 h-4 text-red-400" />}
               valueClass="text-red-400"
             />
+            <StatCard
+              label="Total Matches"
+              subLabel="All Arena Runs"
+              value={String(totalRuns)}
+              icon={<Gamepad2 className="w-4 h-4 text-indigo-400" />}
+              valueClass="text-indigo-300"
+            />
+            <StatCard
+              label="Account Age"
+              subLabel="Days Since Join"
+              value={String(accountAgeDays)}
+              icon={<Calendar className="w-4 h-4 text-emerald-400" />}
+              valueClass="text-emerald-300"
+            />
           </div>
 
-          {/* Annual Tournament Guardrails */}
-          <div className="bg-slate-950 border border-amber-500/30 rounded-2xl p-5 shadow-xl space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-900 pb-3">
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-amber-400" />
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">
-                  Annual Tournament Guardrails &amp; Limit Allowances
-                </h3>
-              </div>
-              <span className="text-[11px] font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
-                1-YEAR UTC TOURNAMENT CYCLE ACTIVE
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* 1. Matches cap */}
-              <CapCard
-                icon={<Swords className="w-3.5 h-3.5 text-indigo-400" />}
-                label="Matches Allowed"
-                value={`${(18).toLocaleString()} / 10,000`}
-                barClass="from-indigo-500 to-purple-500"
-                pct={Math.min(100, (18 / 10000) * 100)}
-                leftLabel={`Completed: ${(18).toLocaleString()}`}
-                rightLabel={`Remaining: ${(10000 - 18).toLocaleString()} matches`}
-                rightClass="text-emerald-400 font-bold"
-              />
-              {/* 2. Annual buy cap */}
-              <CapCard
-                icon={<Landmark className="w-3.5 h-3.5 text-emerald-400" />}
-                label="Annual Buy Cap (25L)"
-                value={`${(0).toLocaleString()} / 25,00,000 c`}
-                barClass="from-emerald-500 to-teal-400"
-                pct={0}
-                leftLabel="Bought: 0 c"
-                rightLabel="Cap Remaining: 25,00,000 c"
-                rightClass="text-emerald-400 font-bold"
-              />
-              {/* 3. Daily ad cap */}
-              <CapCard
-                icon={<Trophy className="w-3.5 h-3.5 text-amber-400" />}
-                label="Rewarded Ads Today"
-                value={`${0} / 12 Ads`}
-                barClass="from-amber-500 to-yellow-400"
-                pct={0}
-                leftLabel="Watched: 0"
-                rightLabel="Resets at 00:00 UTC"
-                rightClass="text-amber-400 font-bold"
-              />
-            </div>
-          </div>
+          {/* Tournament Guardrails — DB-backed */}
+          <TournamentGuardrailsSection
+            tournamentStats={tournamentStats}
+            tournamentLoading={tournamentLoading}
+          />
 
           {/* Security Settings — Change Password & PIN */}
           <SecuritySettingsCard player={player} onToast={onToast} />
+
+          {/* Delete Account Section */}
+          <DeleteAccountSection
+            onConfirm={handleDeleteAccount}
+            deleting={deletingAccount}
+          />
 
           {/* Challenger Standing Rating banner */}
           <div className="p-4 rounded-xl border border-slate-900 bg-slate-900/10 flex items-center gap-4">
@@ -984,20 +1218,41 @@ function ProfileContent({
         </div>
       )}
 
-      {/* TAB: HISTORY */}
+      {/* TAB: HISTORY — DB-backed with filters and mobile-responsive */}
       {activeTab === 'history' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-900 pb-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-900 pb-3">
             <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
               <History className="w-4 h-4 text-indigo-400" /> Match Run Records
               Ledger
             </h3>
             <span className="text-xs text-slate-500 font-mono">
-              Showing last 25 operations
+              Showing {displayMatches.length} of {matchTotal || displayMatches.length} operations
             </span>
           </div>
 
-          {matches.length === 0 ? (
+          {/* Filter buttons */}
+          <div className="flex items-center gap-2">
+            <Filter className="w-3.5 h-3.5 text-slate-500" />
+            {(['all', 'EXTRACTED', 'COLLIDED'] as const).map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setMatchFilter(f)}
+                className={`px-3 py-1.5 rounded-lg text-[11px] font-bold font-sans transition cursor-pointer border ${
+                  matchFilter === f
+                    ? 'bg-indigo-600/15 border-indigo-500/30 text-indigo-400'
+                    : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                }`}
+              >
+                {f === 'all' ? 'All' : f === 'EXTRACTED' ? 'Extracted' : 'Collided'}
+              </button>
+            ))}
+          </div>
+
+          {matchLoading ? (
+            <PanelSkeleton count={3} height="h-16" />
+          ) : displayMatches.length === 0 ? (
             <div className="text-center py-12 border border-dashed border-slate-900 rounded-2xl">
               <History className="w-8 h-8 text-slate-600 mx-auto mb-2" />
               <p className="text-sm text-slate-400">
@@ -1006,85 +1261,157 @@ function ProfileContent({
               <p className="text-xs text-slate-600 mt-1">
                 Jump into any arena to log your first run data!
               </p>
+              <button
+                type="button"
+                onClick={() => notify('Head to the Arena to log your first match!', 'info', onToast)}
+                className="mt-4 px-4 py-2 bg-indigo-600/15 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-600/25 rounded-xl text-xs font-bold transition cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <Gamepad2 className="w-3.5 h-3.5" />
+                Go to Arena
+              </button>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-900 text-[10px] uppercase font-bold text-slate-500 tracking-wider">
-                    <th className="py-3 px-4">Arena Sector</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Chips Outcome</th>
-                    <th className="py-3 px-4 text-center">Kills</th>
-                    <th className="py-3 px-4 text-center">Tail Score</th>
-                    <th className="py-3 px-4">Time Elapsed</th>
-                    <th className="py-3 px-4">Timestamp</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-900/60 text-xs">
-                  {matches.map((match) => (
-                    <tr key={match.id} className="hover:bg-slate-900/20 transition">
-                      <td className="py-3.5 px-4 font-bold text-slate-300">
-                        <div className="flex items-center gap-1.5">
-                          <Compass className="w-3.5 h-3.5 text-indigo-400" />
-                          <span>{match.arenaName}</span>
-                          <span
-                            className={`text-[8px] font-mono px-1 rounded ${
-                              match.isOnline
-                                ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-300'
-                                : 'bg-slate-800 text-slate-400'
+            <>
+              {/* Desktop table (md+) */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-900 text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                      <th className="py-3 px-4">Arena Sector</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">Chips Outcome</th>
+                      <th className="py-3 px-4 text-center">Kills</th>
+                      <th className="py-3 px-4 text-center">Tail Score</th>
+                      <th className="py-3 px-4">Time Elapsed</th>
+                      <th className="py-3 px-4">Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-900/60 text-xs">
+                    {displayMatches.map((match) => (
+                      <tr key={match.id} className="hover:bg-slate-900/20 transition">
+                        <td className="py-3.5 px-4 font-bold text-slate-300">
+                          <div className="flex items-center gap-1.5">
+                            <Compass className="w-3.5 h-3.5 text-indigo-400" />
+                            <span>{match.arenaName}</span>
+                            <span
+                              className={`text-[8px] font-mono px-1 rounded ${
+                                match.isOnline
+                                  ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-300'
+                                  : 'bg-slate-800 text-slate-400'
+                              }`}
+                            >
+                              {match.isOnline ? 'ONLINE' : 'PRACTICE'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Badge
+                            className={`text-[10px] font-mono font-bold border ${
+                              match.status === 'EXTRACTED'
+                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
                             }`}
                           >
-                            {match.isOnline ? 'ONLINE' : 'PRACTICE'}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                            {match.status}
+                          </Badge>
+                        </td>
+                        <td
+                          className={`py-3.5 px-4 text-right font-mono font-bold ${
                             match.status === 'EXTRACTED'
-                              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                              : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                              ? 'text-emerald-400'
+                              : 'text-rose-400'
                           }`}
                         >
-                          {match.status}
+                          {match.status === 'EXTRACTED'
+                            ? `+${match.chipsEarned.toLocaleString()} c`
+                            : `-${match.chipsLost.toLocaleString()} c`}
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-mono font-semibold text-slate-300">
+                          {match.kills}
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-mono font-medium text-indigo-300">
+                          {match.snakeLength || 10}
+                        </td>
+                        <td className="py-3.5 px-4 font-mono text-slate-400">
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-slate-500" />
+                            <span>{match.durationSec}s</span>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 font-mono text-slate-500 text-[11px]">
+                          {new Date(match.timestamp).toLocaleDateString()}{' '}
+                          {new Date(match.timestamp).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile card layout (below md) */}
+              <div className="md:hidden space-y-3">
+                {displayMatches.map((match) => (
+                  <div
+                    key={match.id}
+                    className="bg-slate-950/40 border border-slate-900 rounded-xl p-4 space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Compass className="w-3.5 h-3.5 text-indigo-400" />
+                        <span className="text-xs font-bold text-slate-300 font-sans">{match.arenaName}</span>
+                        <span
+                          className={`text-[7px] font-mono px-1 rounded ${
+                            match.isOnline
+                              ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-300'
+                              : 'bg-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {match.isOnline ? 'ONLINE' : 'PRACTICE'}
                         </span>
-                      </td>
-                      <td
-                        className={`py-3.5 px-4 text-right font-mono font-bold ${
+                      </div>
+                      <Badge
+                        className={`text-[9px] font-mono font-bold border ${
                           match.status === 'EXTRACTED'
-                            ? 'text-emerald-400'
-                            : 'text-rose-400'
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                            : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
                         }`}
                       >
-                        {match.status === 'EXTRACTED'
-                          ? `+${match.chipsEarned.toLocaleString()} c`
-                          : `-${match.chipsLost.toLocaleString()} c`}
-                      </td>
-                      <td className="py-3.5 px-4 text-center font-mono font-semibold text-slate-300">
-                        {match.kills}
-                      </td>
-                      <td className="py-3.5 px-4 text-center font-mono font-medium text-indigo-300">
-                        {match.snakeLength || 10}
-                      </td>
-                      <td className="py-3.5 px-4 font-mono text-slate-400">
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-slate-500" />
-                          <span>{match.durationSec}s</span>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 font-mono text-slate-500 text-[11px]">
-                        {new Date(match.timestamp).toLocaleDateString()}{' '}
-                        {new Date(match.timestamp).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        {match.status}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-[11px]">
+                      <div>
+                        <span className="text-slate-500 block text-[9px] font-mono uppercase">Chips</span>
+                        <span className={`font-mono font-bold ${match.status === 'EXTRACTED' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {match.status === 'EXTRACTED'
+                            ? `+${match.chipsEarned.toLocaleString()}`
+                            : `-${match.chipsLost.toLocaleString()}`} c
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[9px] font-mono uppercase">Kills</span>
+                        <span className="font-mono font-semibold text-slate-300">{match.kills}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[9px] font-mono uppercase">Duration</span>
+                        <span className="font-mono text-slate-400">{match.durationSec}s</span>
+                      </div>
+                    </div>
+                    <div className="text-[10px] font-mono text-slate-500 flex items-center gap-1">
+                      <Clock className="w-2.5 h-2.5" />
+                      {new Date(match.timestamp).toLocaleDateString()}{' '}
+                      {new Date(match.timestamp).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       )}
@@ -1234,15 +1561,42 @@ function ProfileContent({
                       <span>{friend.giftSentToday ? 'Gifted' : 'Gift'}</span>
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveFriend(friend.id, friend.name)}
-                      className="p-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-xl border border-transparent hover:border-rose-500/20 transition cursor-pointer"
-                      title="Dismantle Alliance"
-                      aria-label="Dismantle alliance"
+                    {/* Friend removal with AlertDialog confirmation */}
+                    <AlertDialog
+                      open={friendToRemove?.id === friend.id}
+                      onOpenChange={(open) => {
+                        if (!open) setFriendToRemove(null);
+                      }}
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                      <AlertDialogTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => setFriendToRemove(friend)}
+                          className="p-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-xl border border-transparent hover:border-rose-500/20 transition cursor-pointer"
+                          title="Dismantle Alliance"
+                          aria-label="Dismantle alliance"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent className="bg-slate-900 border-slate-800">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle className="text-white">Dismantle Alliance</AlertDialogTitle>
+                          <AlertDialogDescription className="text-slate-400">
+                            Are you sure you want to remove <span className="text-white font-bold">{friend.name}</span> from your allied squad? This action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white">Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={confirmRemoveFriend}
+                            className="bg-rose-600 hover:bg-rose-500 text-white"
+                          >
+                            Remove
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </div>
               );
@@ -1312,9 +1666,9 @@ function ProfileContent({
                           {new Date(log.timestamp).toLocaleTimeString()}
                         </span>
                       </div>
-                      <span className="px-2 py-1 rounded text-[9px] font-bold tracking-widest bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 uppercase">
+                      <Badge className="px-2 py-1 text-[9px] font-bold tracking-widest bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 uppercase">
                         {log.status}
-                      </span>
+                      </Badge>
                     </div>
                   </div>
                 ))}
@@ -1339,6 +1693,7 @@ function ProfileContent({
         />
       )}
     </div>
+    </TooltipProvider>
   );
 }
 
@@ -1419,6 +1774,196 @@ function CapCard({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Cosmetics Showcase Row
+// ---------------------------------------------------------------------------
+function CosmeticsShowcase({
+  activeSkin,
+  activeTrail,
+  activeDeath,
+  activeFlagCosmetic,
+  activeBanner,
+}: {
+  activeSkin: ReturnType<typeof getCosmeticById>;
+  activeTrail: ReturnType<typeof getCosmeticById>;
+  activeDeath: ReturnType<typeof getCosmeticById>;
+  activeFlagCosmetic: ReturnType<typeof getCosmeticById>;
+  activeBanner: ReturnType<typeof getCosmeticById>;
+}) {
+  const items = [
+    { label: 'Skin', cosmetic: activeSkin, fallbackEmoji: '🐍', fallbackName: 'Default' },
+    { label: 'Trail', cosmetic: activeTrail, fallbackEmoji: '✨', fallbackName: 'Sparks' },
+    { label: 'Death FX', cosmetic: activeDeath, fallbackEmoji: '💥', fallbackName: 'Splash' },
+    { label: 'Flag', cosmetic: activeFlagCosmetic, fallbackEmoji: '🏴', fallbackName: 'None' },
+    { label: 'Banner', cosmetic: activeBanner, fallbackEmoji: '🌅', fallbackName: 'None' },
+  ];
+
+  return (
+    <div className="flex flex-wrap gap-3 mb-5 pb-5 border-b border-slate-900/60">
+      {items.map((item) => (
+        <div
+          key={item.label}
+          className="flex items-center gap-1.5 bg-slate-950/40 border border-slate-900 rounded-lg px-2.5 py-1.5 hover:border-slate-800 transition"
+        >
+          <span className="text-sm">{item.cosmetic?.emoji || item.fallbackEmoji}</span>
+          <div className="flex flex-col">
+            <span className="text-[9px] font-mono uppercase text-slate-500 leading-none">{item.label}</span>
+            <span className="text-[11px] font-sans font-bold text-slate-300 leading-tight">
+              {item.cosmetic?.name || item.fallbackName}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tournament Guardrails Section (DB-backed)
+// ---------------------------------------------------------------------------
+function TournamentGuardrailsSection({
+  tournamentStats,
+  tournamentLoading,
+}: {
+  tournamentStats: TournamentStats | null;
+  tournamentLoading: boolean;
+}) {
+  if (tournamentLoading) {
+    return (
+      <div className="bg-slate-950 border border-amber-500/30 rounded-2xl p-5 shadow-xl space-y-4">
+        <PanelSkeleton count={3} height="h-24" />
+      </div>
+    );
+  }
+
+  const matchesPlayed = tournamentStats?.matchesPlayed ?? 0;
+  const matchesMax = tournamentStats?.matchesMax ?? 10000;
+  const totalBought = tournamentStats?.totalBought ?? 0;
+  const annualBuyCap = tournamentStats?.annualBuyCap ?? 2500000;
+  const adsToday = tournamentStats?.adsToday ?? 0;
+  const adsMax = tournamentStats?.adsMax ?? 12;
+
+  const matchPct = matchesMax > 0 ? (matchesPlayed / matchesMax) * 100 : 0;
+  const buyPct = annualBuyCap > 0 ? (totalBought / annualBuyCap) * 100 : 0;
+  const adsPct = adsMax > 0 ? (adsToday / adsMax) * 100 : 0;
+
+  return (
+    <div className="bg-slate-950 border border-amber-500/30 rounded-2xl p-5 shadow-xl space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-900 pb-3">
+        <div className="flex items-center gap-2">
+          <Shield className="w-5 h-5 text-amber-400" />
+          <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">
+            Annual Tournament Guardrails &amp; Limit Allowances
+          </h3>
+        </div>
+        <span className="text-[11px] font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+          1-YEAR UTC TOURNAMENT CYCLE ACTIVE
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <CapCard
+          icon={<Swords className="w-3.5 h-3.5 text-indigo-400" />}
+          label="Matches Allowed"
+          value={`${matchesPlayed.toLocaleString()} / ${matchesMax.toLocaleString()}`}
+          barClass="from-indigo-500 to-purple-500"
+          pct={matchPct}
+          leftLabel={`Completed: ${matchesPlayed.toLocaleString()}`}
+          rightLabel={`Remaining: ${(matchesMax - matchesPlayed).toLocaleString()} matches`}
+          rightClass="text-emerald-400 font-bold"
+        />
+        <CapCard
+          icon={<Landmark className="w-3.5 h-3.5 text-emerald-400" />}
+          label="Annual Buy Cap (25L)"
+          value={`${totalBought.toLocaleString()} / ${annualBuyCap.toLocaleString()} c`}
+          barClass="from-emerald-500 to-teal-400"
+          pct={buyPct}
+          leftLabel={`Bought: ${totalBought.toLocaleString()} c`}
+          rightLabel={`Cap Remaining: ${(annualBuyCap - totalBought).toLocaleString()} c`}
+          rightClass="text-emerald-400 font-bold"
+        />
+        <CapCard
+          icon={<Trophy className="w-3.5 h-3.5 text-amber-400" />}
+          label="Rewarded Ads Today"
+          value={`${adsToday} / ${adsMax} Ads`}
+          barClass="from-amber-500 to-yellow-400"
+          pct={adsPct}
+          leftLabel={`Watched: ${adsToday}`}
+          rightLabel="Resets at 00:00 UTC"
+          rightClass="text-amber-400 font-bold"
+        />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Delete Account Section
+// ---------------------------------------------------------------------------
+function DeleteAccountSection({
+  onConfirm,
+  deleting,
+}: {
+  onConfirm: () => void;
+  deleting: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-rose-500/30 bg-rose-950/20 p-5">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center shrink-0">
+          <AlertTriangle className="w-5 h-5 text-rose-400" />
+        </div>
+        <div>
+          <h3 className="text-sm font-bold text-rose-300 font-sans uppercase tracking-wider">
+            Danger Zone
+          </h3>
+          <p className="text-xs text-slate-400 font-sans mt-0.5">
+            Permanently delete your account and all associated data.
+          </p>
+        </div>
+      </div>
+      <div className="p-3 rounded-xl bg-rose-950/30 border border-rose-500/15 text-xs text-rose-300/80 leading-relaxed mb-4">
+        <strong className="text-rose-300 block mb-0.5">
+          ⚠ This action is irreversible.
+        </strong>
+        Deleting your account will permanently remove all your chips, stats, cosmetics, friends, match history, and clan memberships. This cannot be undone.
+      </div>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <button
+            type="button"
+            disabled={deleting}
+            className="px-4 py-2.5 bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/30 text-rose-400 hover:text-rose-300 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+          >
+            <Trash2 className="w-4 h-4" />
+            {deleting ? 'Deleting...' : 'Delete Account'}
+          </button>
+        </AlertDialogTrigger>
+        <AlertDialogContent className="bg-slate-900 border-rose-500/30">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-rose-400">Delete Account Permanently</AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">
+              This will permanently delete your account, all chips, stats, cosmetics, friends, and match history. This action is irreversible and cannot be recovered.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={onConfirm}
+              className="bg-rose-600 hover:bg-rose-500 text-white"
+            >
+              Yes, Delete My Account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Identity Editor
+// ---------------------------------------------------------------------------
 interface IdentityEditorProps {
   newName: string;
   setNewName: (v: string) => void;
@@ -1655,7 +2200,7 @@ function IdentityEditor(props: IdentityEditorProps) {
           </div>
         </div>
 
-        {/* Social channels */}
+        {/* Social channels — now DB-backed */}
         <div className="md:col-span-2 flex flex-col gap-3 border-t border-slate-900/60 pt-5">
           <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-sans flex items-center gap-2">
             <Globe className="w-4 h-4 text-purple-400" /> Creator Social
@@ -1955,13 +2500,11 @@ function SecuritySettingsCard({
   player: PlayerProfile;
   onToast?: ToastFn;
 }) {
-  // Change Password
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [cpCurrent, setCpCurrent] = useState('');
   const [cpNew, setCpNew] = useState('');
   const [cpBusy, setCpBusy] = useState(false);
 
-  // Change PIN
   const [showChangePin, setShowChangePin] = useState(false);
   const [pinCurrent, setPinCurrent] = useState('');
   const [pinNew, setPinNew] = useState('');
@@ -2017,17 +2560,14 @@ function SecuritySettingsCard({
     }
   }
 
-  // Only show security settings for registered accounts (guests have no password/PIN)
   const isRegistered = !!player.email;
   const canChangePassword = isRegistered;
   const canManagePin = isRegistered;
 
-  // Guest accounts have no password or PIN to manage — hide entire section
   if (!isRegistered) return null;
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/30 overflow-hidden">
-      {/* Header */}
       <div className="p-3 flex items-center justify-between border-b border-slate-800/60">
         <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
           <Lock className="w-3.5 h-3.5 text-amber-400" />
@@ -2038,7 +2578,6 @@ function SecuritySettingsCard({
         </span>
       </div>
 
-      {/* Password row */}
       {canChangePassword && (
         <div className="p-3 border-b border-slate-800/40">
           {!showChangePassword ? (
@@ -2097,7 +2636,6 @@ function SecuritySettingsCard({
         </div>
       )}
 
-      {/* PIN row — only for registered accounts (guests have no password to recover) */}
       {canManagePin && (
       <div className="p-3">
         {!showChangePin ? (

@@ -66,9 +66,15 @@ model Player {
   clan            Clan?    @relation(fields: [clanTag], references: [tag], onDelete: SetNull)
   clanRank        String?  // Leader | Co-Leader | Viper
 
+  // Social links (creator channels)
+  instagram       String?
+  youtube         String?
+  twitch          String?
+
   // Relations
   dailyClaims     DailyClaim[]
   hourlyClaims    HourlyClaim[]
+  matchHistory    MatchHistory[]
   streakMilestones StreakMilestoneClaim[]
   luckySpins      LuckySpin[]
   promoRewards    PromoReward[]
@@ -327,6 +333,25 @@ model ChampionshipArchive {
   finalizedAt       DateTime?
 
   @@index([year])
+}
+
+// Match History — records every game result for the player profile
+model MatchHistory {
+  id              String   @id @default(cuid())
+  player          Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId        String
+  arenaId         String   // tier-1, tier-2, etc.
+  arenaName       String   // e.g. "Slum Alley"
+  isOnline        Boolean  @default(false)
+  status          String   // "EXTRACTED" | "COLLIDED"
+  chipsEarned     Int      @default(0)
+  chipsLost       Int      @default(0)
+  kills           Int      @default(0)
+  snakeLength     Int      @default(0)
+  durationSec     Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  @@index([playerId, createdAt(sort: Desc)])
 }
 
 // Hall of Fame — permanent record of milestone achievements & championship inductees
