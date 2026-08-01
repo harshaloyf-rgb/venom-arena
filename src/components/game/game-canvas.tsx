@@ -71,6 +71,11 @@ import {
   Zap,
   ZoomIn,
   ZoomOut,
+  Check,
+  Copy,
+  Download,
+  Film,
+  Share2,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -118,6 +123,7 @@ import {
 } from './render-helpers';
 import { OfflineGameEngine, type OfflineExitResult, type OfflineState } from './offline-engine';
 import { OnlineReplayPlayer, type OnlineReplayData } from './online-replay-player';
+import { renderMatchCard, downloadBlob, shareBlob, copyBlobToClipboard, type MatchCardData } from '@/lib/share-card';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -2390,6 +2396,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
           isOffline={isOffline}
           previousLevel={player.level}
           previousBankedChips={player.bankedChips}
+          player={{ name: player.name, userTag: player.userTag, country: player.country, level: player.level, clanTag: player.clanTag }}
           onPlayAgain={playAgain}
           onExit={exitNow}
           onAddRival={() => {
@@ -2827,6 +2834,7 @@ interface EndOverlayProps {
   isOffline: boolean;
   previousLevel: number;
   previousBankedChips: number;
+  player: { name: string; userTag: string; country: string; level: number; clanTag?: string | null };
   onPlayAgain: () => void;
   onExit: () => void;
   onAddRival: () => void;
@@ -2840,12 +2848,88 @@ function EndOverlay({
   isOffline,
   previousLevel,
   previousBankedChips,
+  player,
   onPlayAgain,
   onExit,
   onAddRival,
   onAddFriend,
   onViewProfile,
 }: EndOverlayProps) {
+
+  // Share card state
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [sharePreview, setSharePreview] = useState<string | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const shareBlobRef = useRef<Blob | null>(null);
+
+  async function handleGenerateShareCard() {
+    setShareLoading(true);
+    try {
+      const data: MatchCardData = {
+        playerName: player.name,
+        userTag: player.userTag,
+        country: player.country,
+        level: player.level,
+        clanTag: player.clanTag || null,
+        arenaName: arena.name,
+        outcome: isExtract ? 'extract' : 'death',
+        chipsEarned: isExtract ? (result?.bankedAmount ?? carriedChips) : 0,
+        chipsLost: isExtract ? 0 : carriedChips,
+        kills: result?.kills ?? 0,
+        snakeLength: score,
+        durationSec: durationSeconds,
+        isOnline: !isOffline,
+      };
+      const blob = await renderMatchCard(data);
+      shareBlobRef.current = blob;
+      const url = URL.createObjectURL(blob);
+      setSharePreview(url);
+      setShareModalOpen(true);
+    } catch (e) {
+      console.error('[share-card] render error', e);
+      toast({ title: 'Share Card Error', description: 'Failed to generate highlight card.', variant: 'destructive' });
+    } finally {
+      setShareLoading(false);
+    }
+  }
+
+  async function handleDownload() {
+    if (!shareBlobRef.current) return;
+    const outcome = isExtract ? 'extraction' : 'elimination';
+    downloadBlob(shareBlobRef.current, `venom-arena-${outcome}-${Date.now()}.png`);
+  }
+
+  async function handleShare() {
+    if (!shareBlobRef.current) return;
+    const result = await shareBlob(shareBlobRef.current, `Venom Arena ${isExtract ? 'Extraction' : 'Match'} Highlight`);
+    if (result.method === 'cancelled') return;
+    if (result.method === 'not-supported') {
+      // Fallback: copy to clipboard
+      const ok = await copyBlobToClipboard(shareBlobRef.current);
+      if (ok) {
+        setShareCopied(true);
+        toast({ title: 'Copied to Clipboard!', description: 'Image copied. Paste it anywhere to share.' });
+        setTimeout(() => setShareCopied(false), 3000);
+      } else {
+        toast({ title: 'Share not available', description: 'Use the Download button to save the image.', variant: 'destructive' });
+      }
+    } else {
+      toast({ title: 'Shared!', description: 'Highlight shared successfully! 🎬' });
+    }
+  }
+
+  async function handleCopy() {
+    if (!shareBlobRef.current) return;
+    const ok = await copyBlobToClipboard(shareBlobRef.current);
+    if (ok) {
+      setShareCopied(true);
+      toast({ title: 'Copied!', description: 'Image copied to clipboard. Paste it anywhere! 📋' });
+      setTimeout(() => setShareCopied(false), 3000);
+    } else {
+      toast({ title: 'Copy failed', description: 'Your browser does not support clipboard image copy. Try Download instead.', variant: 'destructive' });
+    }
+  }
   const { outcome, killer, result, durationSeconds, carriedChips, score, replayFrames, replayMyId, replayDeathFrameIdx } = endScreen;
   const isExtract = outcome === 'extract';
   const mins = Math.floor(durationSeconds / 60);
@@ -3139,6 +3223,17 @@ function EndOverlay({
             </p>
           )}
 
+          {/* Share Highlight button — MARKETING: every match = potential social post */}
+          <button
+            type="button"
+            onClick={handleGenerateShareCard}
+            disabled={shareLoading}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 py-2.5 text-xs font-bold text-red-300 hover:bg-red-500/20 transition disabled:opacity-50"
+          >
+            {shareLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Film className="h-3.5 w-3.5" />}
+            {shareLoading ? 'Generating Card…' : '🎬 Share Highlight Card'}
+          </button>
+
           {/* Action buttons — AUDIT-A Sections B+C */}
           <div className="mt-5 flex flex-col gap-2">
             <button
@@ -3176,6 +3271,53 @@ function EndOverlay({
           </p>
         </div>
       </div>
+
+      {/* Share Card Modal */}
+      {shareModalOpen && sharePreview && (
+        <div className="absolute inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm">
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-5">
+            <button
+              type="button"
+              onClick={() => { setShareModalOpen(false); if (sharePreview) URL.revokeObjectURL(sharePreview); setSharePreview(null); }}
+              className="absolute top-3 right-3 p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <h3 className="text-base font-bold text-white mb-1 flex items-center gap-2">
+              <Film className="h-5 w-5 text-red-400" /> Your Match Highlight Card
+            </h3>
+            <p className="text-[11px] text-slate-400 mb-3">Share on Instagram, WhatsApp, Twitter, or anywhere to flex your gameplay!</p>
+            <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950">
+              <img src={sharePreview} alt="Match Highlight Card" className="w-full h-auto" />
+            </div>
+            <div className="grid grid-cols-3 gap-2 mt-4">
+              <button
+                type="button"
+                onClick={handleShare}
+                className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 py-2.5 text-xs font-bold text-white transition"
+              >
+                <Share2 className="h-3.5 w-3.5" /> Share
+              </button>
+              <button
+                type="button"
+                onClick={handleDownload}
+                className="flex items-center justify-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 py-2.5 text-xs font-bold text-white transition"
+              >
+                <Download className="h-3.5 w-3.5" /> Download
+              </button>
+              <button
+                type="button"
+                onClick={handleCopy}
+                disabled={shareCopied}
+                className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold transition ${shareCopied ? 'bg-emerald-900 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'}`}
+              >
+                {shareCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                {shareCopied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

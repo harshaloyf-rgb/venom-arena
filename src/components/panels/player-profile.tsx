@@ -44,7 +44,9 @@ import {
   Wifi,
   X,
   AlertTriangle,
+  Download,
   Gift,
+  UserCircle,
   Zap,
   Share2,
 } from 'lucide-react';
@@ -81,6 +83,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
+import { renderProfileCard, renderMilestoneCard, downloadBlob, shareBlob, copyBlobToClipboard, type MilestoneCardData } from '@/lib/share-card';
 
 interface PlayerProfilePanelProps {
   onToast?: ToastFn;
@@ -477,6 +480,27 @@ function ProfileContent({
   const [redeemResult, setRedeemResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [alreadyReferred, setAlreadyReferred] = useState(false);
 
+  // -- Profile Card generation
+  const [profileCardLoading, setProfileCardLoading] = useState(false);
+  const [profileCardPreview, setProfileCardPreview] = useState<string | null>(null);
+  const [profileCardCopied, setProfileCardCopied] = useState(false);
+  const profileCardBlobRef = useRef<Blob | null>(null);
+
+  // -- Milestone Card generation
+  const [milestoneCardPreview, setMilestoneCardPreview] = useState<string | null>(null);
+  const [milestoneCardCopied, setMilestoneCardCopied] = useState(false);
+  const [milestoneCardLoading, setMilestoneCardLoading] = useState(false);
+  const milestoneCardBlobRef = useRef<Blob | null>(null);
+
+  // -- Milestones data
+  const [milestones, setMilestones] = useState<Array<{
+    id: string;
+    tierId: string;
+    chipsAtMilestone: number;
+    createdAt: string;
+  }>>([]);
+  const [milestonesLoading, setMilestonesLoading] = useState(false);
+
   // Ref to track mounted state for async ops
   const mountedRef = useRef(true);
 
@@ -520,6 +544,24 @@ function ProfileContent({
       // silently ignore
     } finally {
       if (mountedRef.current) setReferralLoading(false);
+    }
+  }, []);
+
+  // -- Fetch player milestones
+  const fetchMilestones = useCallback(async () => {
+    setMilestonesLoading(true);
+    try {
+      const res = await fetch('/api/player/milestones');
+      if (res.ok) {
+        const data = await res.json();
+        if (mountedRef.current) {
+          setMilestones(data.milestones || []);
+        }
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      if (mountedRef.current) setMilestonesLoading(false);
     }
   }, []);
 
@@ -660,7 +702,9 @@ function ProfileContent({
 
     // Fetch tournament stats from DB
     fetchTournamentStats();
-  }, [player.name, player.country, player.instagram, player.youtube, player.twitch, fetchTournamentStats]);
+    // Fetch milestones
+    fetchMilestones();
+  }, [player.name, player.country, player.instagram, player.youtube, player.twitch, fetchTournamentStats, fetchMilestones]);
 
   // Fetch DB matches when switching to history tab or changing filter
   useEffect(() => {
@@ -985,6 +1029,148 @@ function ProfileContent({
   // -- Determine which matches to display
   const displayMatches = dbMatches.length > 0 ? dbMatches : matches;
 
+  // -- Profile Card handlers
+  async function handleGenerateProfileCard() {
+    setProfileCardLoading(true);
+    try {
+      const blob = await renderProfileCard({
+        playerName: player.name,
+        userTag: player.userTag,
+        country: player.country || 'US',
+        level: player.level,
+        bankedChips: player.bankedChips,
+        clanTag: player.clanTag || null,
+        lifetimeKills: player.lifetimeKills,
+        lifetimeExtracts: player.lifetimeExtracts,
+        lifetimeDeaths: player.lifetimeDeaths,
+        biggestExtract: player.biggestExtract,
+        bestStreak: player.bestStreak,
+        totalEarned: player.totalEarned,
+        totalLost: player.totalLost,
+      });
+      profileCardBlobRef.current = blob;
+      const url = URL.createObjectURL(blob);
+      setProfileCardPreview(url);
+    } catch (e) {
+      console.error('[profile-card] render error', e);
+      notify('Failed to generate profile card.', 'error', onToast);
+    } finally {
+      setProfileCardLoading(false);
+    }
+  }
+
+  function closeProfileCardModal() {
+    if (profileCardPreview) URL.revokeObjectURL(profileCardPreview);
+    setProfileCardPreview(null);
+    setProfileCardCopied(false);
+  }
+
+  async function handleProfileCardDownload() {
+    if (!profileCardBlobRef.current) return;
+    downloadBlob(profileCardBlobRef.current, `venom-arena-profile-${player.userTag}-${Date.now()}.png`);
+  }
+
+  async function handleProfileCardShare() {
+    if (!profileCardBlobRef.current) return;
+    const result = await shareBlob(profileCardBlobRef.current, `Venom Arena — ${player.name}'s Profile Card`);
+    if (result.method === 'cancelled') return;
+    if (result.method === 'not-supported') {
+      const ok = await copyBlobToClipboard(profileCardBlobRef.current);
+      if (ok) {
+        setProfileCardCopied(true);
+        notify('Copied to clipboard! Paste it anywhere to share.', 'success', onToast);
+        setTimeout(() => setProfileCardCopied(false), 3000);
+      } else {
+        notify('Share not available. Use Download instead.', 'error', onToast);
+      }
+    } else {
+      notify('Profile card shared successfully! 🎬', 'success', onToast);
+    }
+  }
+
+  async function handleProfileCardCopy() {
+    if (!profileCardBlobRef.current) return;
+    const ok = await copyBlobToClipboard(profileCardBlobRef.current);
+    if (ok) {
+      setProfileCardCopied(true);
+      notify('Copied to clipboard! 📋', 'success', onToast);
+      setTimeout(() => setProfileCardCopied(false), 3000);
+    } else {
+      notify('Clipboard copy failed. Try Download instead.', 'error', onToast);
+    }
+  }
+
+  // -- Milestone Card handlers
+  async function handleGenerateMilestoneCard(ms: { tierId: string; chipsAtMilestone: number }) {
+    setMilestoneCardLoading(true);
+    try {
+      const tier = MILESTONE_TIERS.find(t => t.id === ms.tierId);
+      if (!tier) {
+        notify('Unknown milestone tier.', 'error', onToast);
+        return;
+      }
+      const data: MilestoneCardData = {
+        playerName: player.name,
+        userTag: player.userTag,
+        country: player.country || 'US',
+        tierName: tier.name,
+        tierBadge: tier.badge,
+        chipsMilestone: ms.chipsAtMilestone,
+        currentChips: player.bankedChips,
+      };
+      const blob = await renderMilestoneCard(data);
+      milestoneCardBlobRef.current = blob;
+      const url = URL.createObjectURL(blob);
+      setMilestoneCardPreview(url);
+    } catch (e) {
+      console.error('[milestone-card] render error', e);
+      notify('Failed to generate milestone card.', 'error', onToast);
+    } finally {
+      setMilestoneCardLoading(false);
+    }
+  }
+
+  function closeMilestoneCardModal() {
+    if (milestoneCardPreview) URL.revokeObjectURL(milestoneCardPreview);
+    setMilestoneCardPreview(null);
+    setMilestoneCardCopied(false);
+  }
+
+  async function handleMilestoneCardDownload() {
+    if (!milestoneCardBlobRef.current) return;
+    downloadBlob(milestoneCardBlobRef.current, `venom-arena-milestone-${Date.now()}.png`);
+  }
+
+  async function handleMilestoneCardShare() {
+    if (!milestoneCardBlobRef.current) return;
+    const result = await shareBlob(milestoneCardBlobRef.current, 'Venom Arena — Milestone Unlocked!');
+    if (result.method === 'cancelled') return;
+    if (result.method === 'not-supported') {
+      const ok = await copyBlobToClipboard(milestoneCardBlobRef.current);
+      if (ok) {
+        setMilestoneCardCopied(true);
+        notify('Copied to clipboard! Paste it anywhere to share.', 'success', onToast);
+        setTimeout(() => setMilestoneCardCopied(false), 3000);
+      } else {
+        notify('Share not available. Use Download instead.', 'error', onToast);
+      }
+    } else {
+      notify('Milestone card shared! 🏆', 'success', onToast);
+    }
+  }
+
+  async function handleMilestoneCardCopy() {
+    if (!milestoneCardBlobRef.current) return;
+    const ok = await copyBlobToClipboard(milestoneCardBlobRef.current);
+    if (ok) {
+      setMilestoneCardCopied(true);
+      notify('Copied to clipboard! 📋', 'success', onToast);
+      setTimeout(() => setMilestoneCardCopied(false), 3000);
+    } else {
+      notify('Clipboard copy failed. Try Download instead.', 'error', onToast);
+    }
+  }
+
   // =========================================================================
   // RENDER
   // =========================================================================
@@ -1243,6 +1429,17 @@ function ProfileContent({
         activeBanner={activeBanner}
       />
 
+      {/* Generate Profile Card Button */}
+      <button
+        type="button"
+        onClick={handleGenerateProfileCard}
+        disabled={profileCardLoading}
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-violet-500/30 bg-violet-500/10 py-2.5 text-xs font-bold text-violet-300 hover:bg-violet-500/20 transition disabled:opacity-50 cursor-pointer"
+      >
+        <UserCircle className="w-4 h-4" />
+        {profileCardLoading ? 'Generating Profile Card…' : '🪪 Generate Profile Card'}
+      </button>
+
       {/* TAB NAV */}
       <div className="flex flex-wrap gap-2 mb-6 border-b border-slate-900 pb-3">
         {(
@@ -1415,6 +1612,56 @@ function ProfileContent({
               leaderboard feeds dynamically. Data verification handshakes run
               periodically to check metrics validity.
             </div>
+          </div>
+
+          {/* Milestones Section */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+              <Award className="w-4 h-4 text-amber-400" /> Chip Milestones
+            </h3>
+            {milestonesLoading ? (
+              <PanelSkeleton count={2} height="h-16" />
+            ) : milestones.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-800 p-6 text-center">
+                <Trophy className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                <p className="text-xs text-slate-400">No chip milestones achieved yet.</p>
+                <p className="text-[10px] text-slate-600 mt-1">
+                  Keep extracting to unlock Bronze (100K), Silver (500K), Gold (1M), and beyond!
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                {milestones.map((ms) => {
+                  const tier = MILESTONE_TIERS.find(t => t.id === ms.tierId);
+                  if (!tier || tier.id === 'all') return null;
+                  return (
+                    <div
+                      key={ms.id}
+                      className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl" title={tier.name}>{tier.badge.split(' ')[0]}</span>
+                        <div>
+                          <div className="text-xs font-bold text-white">{tier.name}</div>
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            {ms.chipsAtMilestone.toLocaleString('en-IN')} chips • {new Date(ms.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateMilestoneCard(ms)}
+                        disabled={milestoneCardLoading}
+                        className="flex items-center gap-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 text-[11px] font-bold text-amber-300 hover:bg-amber-500/20 transition disabled:opacity-50 cursor-pointer"
+                      >
+                        <Share2 className="w-3 h-3" />
+                        Share
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2038,6 +2285,100 @@ function ProfileContent({
           onSend={handleSendCoOpInvite}
           onToast={onToast}
         />
+      )}
+
+      {/* PROFILE CARD MODAL */}
+      {profileCardPreview && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm">
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-5">
+            <button
+              type="button"
+              onClick={closeProfileCardModal}
+              className="absolute top-3 right-3 p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <h3 className="text-base font-bold text-white mb-1 flex items-center gap-2">
+              <UserCircle className="h-5 w-5 text-violet-400" /> Your Profile Card
+            </h3>
+            <p className="text-[11px] text-slate-400 mb-3">Share on Instagram, WhatsApp, Twitter, or anywhere to flex your stats!</p>
+            <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950">
+              <img src={profileCardPreview} alt="Profile Card" className="w-full h-auto" />
+            </div>
+            <div className="grid grid-cols-3 gap-2 mt-4">
+              <button
+                type="button"
+                onClick={handleProfileCardShare}
+                className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 py-2.5 text-xs font-bold text-white transition cursor-pointer"
+              >
+                <Share2 className="h-3.5 w-3.5" /> Share
+              </button>
+              <button
+                type="button"
+                onClick={handleProfileCardDownload}
+                className="flex items-center justify-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 py-2.5 text-xs font-bold text-white transition cursor-pointer"
+              >
+                <Download className="h-3.5 w-3.5" /> Download
+              </button>
+              <button
+                type="button"
+                onClick={handleProfileCardCopy}
+                disabled={profileCardCopied}
+                className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold transition cursor-pointer ${profileCardCopied ? 'bg-emerald-900 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'}`}
+              >
+                {profileCardCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                {profileCardCopied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MILESTONE CARD MODAL */}
+      {milestoneCardPreview && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm">
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-5">
+            <button
+              type="button"
+              onClick={closeMilestoneCardModal}
+              className="absolute top-3 right-3 p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <h3 className="text-base font-bold text-white mb-1 flex items-center gap-2">
+              <Trophy className="h-5 w-5 text-amber-400" /> Milestone Card
+            </h3>
+            <p className="text-[11px] text-slate-400 mb-3">Share your achievement with the world!</p>
+            <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950">
+              <img src={milestoneCardPreview} alt="Milestone Card" className="w-full h-auto" />
+            </div>
+            <div className="grid grid-cols-3 gap-2 mt-4">
+              <button
+                type="button"
+                onClick={handleMilestoneCardShare}
+                className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 py-2.5 text-xs font-bold text-white transition cursor-pointer"
+              >
+                <Share2 className="h-3.5 w-3.5" /> Share
+              </button>
+              <button
+                type="button"
+                onClick={handleMilestoneCardDownload}
+                className="flex items-center justify-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 py-2.5 text-xs font-bold text-white transition cursor-pointer"
+              >
+                <Download className="h-3.5 w-3.5" /> Download
+              </button>
+              <button
+                type="button"
+                onClick={handleMilestoneCardCopy}
+                disabled={milestoneCardCopied}
+                className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold transition cursor-pointer ${milestoneCardCopied ? 'bg-emerald-900 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'}`}
+              >
+                {milestoneCardCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                {milestoneCardCopied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
     </TooltipProvider>
