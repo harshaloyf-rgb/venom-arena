@@ -606,3 +606,27 @@ Stage Summary:
 - Both promo and video reward APIs are now fully DB-backed — state survives server restarts
 - PromoReward has a unique constraint on (playerId, code) as a safety net
 - VideoReward cooldown is derived from the most recent record's createdAt timestamp
+---
+Task ID: 1
+Agent: Main Agent
+Task: Mobile-first scroll-free layout refactor
+
+Work Log:
+- Analyzed current layout: 6.5× viewport scrolling on iPhone SE mobile portrait
+- Created `/src/components/layout/bottom-tab-bar.tsx` — 5-icon bottom nav (Home, Play, Claims, Ranks, More) with active state indicator, z-30 to prevent panel overlap
+- Created `/src/components/layout/more-menu.tsx` — 3-column grid overlay for 9 secondary stations (Shop, Dossier, Championships, HOF, Clans, Season Pass, Highlights, Chip Vault, Social + Admin)
+- Rewrote `/src/app/page.tsx` (BUILD-7) with dual layout:
+  - Mobile: `h-dvh overflow-hidden` → slim 48px header + flex-1 content + 56px bottom tab bar. ZERO page scroll.
+  - Desktop: `md:h-auto md:min-h-screen md:overflow-visible` → full header + bento grid + footer. Natural scroll.
+- Mobile dashboard: compact player bar (avatar + name + XP) + 4-stat grid + Quick Play CTA + scrollable challenges
+- Mobile sub-pages: compact back-button header + panel in `flex-1 overflow-y-auto` container
+- Desktop preserved: full header, bento grid, tab strip navigation, footer
+- Extracted `DashboardChallenges` and `ChallengeCard` as shared local components
+- Added mobile menu dropdown (Rules & Guide, Sign Out) via shadcn DropdownMenu
+- Added `overflow-hidden` to sub-page container to prevent panel content leaking over bottom bar
+
+Stage Summary:
+- **Zero scroll confirmed** on iPhone SE (375×667) for ALL panels: Home, Arena, Claims, Ranks, Shop, Championships, and all More menu items
+- Bottom tab bar correctly hidden on desktop (`md:hidden`), footer correctly visible on desktop
+- Desktop layout fully preserved with bento grid and natural scrolling
+- Lint clean, no runtime errors
