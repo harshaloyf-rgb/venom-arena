@@ -15,6 +15,8 @@ export async function GET() {
       emblem: c.emblem,
       description: c.description,
       level: c.level,
+      xp: c.xp,
+      totalDeposited: c.totalDeposited,
       bankedChips: c.bankedChips,
       memberCount: c._count.members,
     })),

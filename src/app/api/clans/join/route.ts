@@ -20,6 +20,31 @@ export async function POST(req: NextRequest) {
       if (me.clanTag) throw new Error('ALREADY_IN_CLAN');
 
       await tx.player.update({ where: { id: me.id }, data: { clanTag: tag, clanRank: 'Viper' } });
+
+      // Log activity
+      await tx.clanActivity.create({
+        data: {
+          clanTag: tag,
+          type: 'join',
+          actorTag: me.userTag,
+          actorName: me.name,
+          detail: 'joined the syndicate',
+        },
+      });
+
+      // Update recruitment challenge progress for current week
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - diff);
+      monday.setHours(0, 0, 0, 0);
+      const weekStart = monday.toISOString().split('T')[0];
+
+      await tx.clanChallenge.updateMany({
+        where: { clanTag: tag, type: 'recruitment_drive', weekStart, claimed: false },
+        data: { progress: { increment: 1 } },
+      });
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

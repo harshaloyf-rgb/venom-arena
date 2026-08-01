@@ -31,21 +31,73 @@ export async function POST(req: NextRequest) {
       const clan = await tx.clan.findUnique({ where: { tag } });
       if (!clan) throw new Error('CLAN_NOT_FOUND');
 
-      // Atomic: deduct from player, add to clan treasury
+      // Atomic: deduct from player (no totalLost increment), add to clan treasury
       await tx.player.update({
         where: { id: me.id },
-        data: { bankedChips: { decrement: amount }, totalLost: { increment: amount } },
+        data: { bankedChips: { decrement: amount } },
       });
       await tx.clan.update({
         where: { tag },
-        data: { bankedChips: { increment: amount } },
+        data: { 
+          bankedChips: { increment: amount },
+          totalDeposited: { increment: amount },
+          xp: { increment: Math.floor(amount * 0.05) }, // 5% XP per deposit
+        },
       });
 
-      const updated = await tx.clan.findUnique({ where: { tag }, select: { bankedChips: true } });
-      return updated?.bankedChips || 0;
+      // Log activity
+      await tx.clanActivity.create({
+        data: {
+          clanTag: tag,
+          type: 'deposit',
+          actorTag: me.userTag,
+          actorName: me.name,
+          detail: `deposited ${amount.toLocaleString()}c`,
+        },
+      });
+
+      // Update treasury challenge progress for current week
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - diff);
+      monday.setHours(0, 0, 0, 0);
+      const weekStart = monday.toISOString().split('T')[0];
+
+      await tx.clanChallenge.updateMany({
+        where: { clanTag: tag, type: 'treasury_target', weekStart, claimed: false },
+        data: { progress: { increment: amount } },
+      });
+
+      // Check level up
+      const updatedClan = await tx.clan.findUnique({ where: { tag }, select: { xp: true, level: true } });
+      let newLevel = updatedClan?.level || 1;
+      let currentXp = updatedClan?.xp || 0;
+      const xpNeeded = newLevel * 1000;
+      if (currentXp >= xpNeeded) {
+        newLevel++;
+        currentXp = currentXp - xpNeeded;
+        await tx.clan.update({
+          where: { tag },
+          data: { level: newLevel, xp: currentXp },
+        });
+        await tx.clanActivity.create({
+          data: {
+            clanTag: tag,
+            type: 'level_up',
+            actorTag: me.userTag,
+            actorName: me.name,
+            detail: `Clan reached Level ${newLevel}!`,
+          },
+        });
+      }
+
+      const treasury = await tx.clan.findUnique({ where: { tag }, select: { bankedChips: true, level: true, xp: true } });
+      return { bankedChips: treasury?.bankedChips || 0, level: treasury?.level || 1, xp: treasury?.xp || 0 };
     });
 
-    return NextResponse.json({ ok: true, newTreasury: result });
+    return NextResponse.json({ ok: true, newTreasury: result.bankedChips, level: result.level, xp: result.xp });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     const errorMap: Record<string, { error: string; status: number }> = {

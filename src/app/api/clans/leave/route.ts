@@ -15,22 +15,45 @@ export async function POST() {
       const clanTag = me.clanTag;
       const wasLeader = me.clanRank === 'Leader';
 
+      // Log activity before removing
+      await tx.clanActivity.create({
+        data: {
+          clanTag,
+          type: 'leave',
+          actorTag: me.userTag,
+          actorName: me.name,
+          detail: 'left the syndicate',
+        },
+      });
+
       // Remove player from clan
       await tx.player.update({ where: { id: me.id }, data: { clanTag: null, clanRank: null } });
 
       // Check remaining members and handle cleanup
       const remaining = await tx.player.count({ where: { clanTag } });
       if (remaining === 0) {
-        // Don't swallow errors — let them propagate so transaction rolls back
         await tx.clan.delete({ where: { tag: clanTag } });
       } else if (wasLeader) {
-        // Promote oldest member to Leader
-        const oldest = await tx.player.findFirst({
+        // Promote oldest Co-Leader first, then oldest member
+        const coLeader = await tx.player.findFirst({
+          where: { clanTag, clanRank: 'Co-Leader' },
+          orderBy: { createdAt: 'asc' },
+        });
+        const promotee = coLeader || await tx.player.findFirst({
           where: { clanTag },
           orderBy: { createdAt: 'asc' },
         });
-        if (oldest) {
-          await tx.player.update({ where: { id: oldest.id }, data: { clanRank: 'Leader' } });
+        if (promotee) {
+          await tx.player.update({ where: { id: promotee.id }, data: { clanRank: 'Leader' } });
+          await tx.clanActivity.create({
+            data: {
+              clanTag,
+              type: 'promote',
+              actorTag: 'SYSTEM',
+              actorName: 'System',
+              detail: `promoted ${promotee.name} to Leader`,
+            },
+          });
         }
       }
     });

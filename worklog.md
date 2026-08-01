@@ -1,3 +1,39 @@
+
+---
+Task ID: 1
+Agent: main
+Task: Syndicate Tab - Full feature overhaul with challenges, activity log, role management, proper members API
+
+Work Log:
+- Examined entire Syndicate/Clan codebase: schema, 7 API routes, ClanSystem frontend, SocialPanel mock
+- Updated Prisma schema: added ClanActivity model (8 types), ClanChallenge model (weekly tracking), added xp/totalDeposited to Clan
+- Created /api/clans/members endpoint (proper DB query, rank-ordered, replaces leaderboard filtering hack)
+- Created /api/clans/activity endpoint (last 30 events with membership check)
+- Created /api/clans/role endpoint (promote/demote with max 2 Co-Leaders, Leader-only)
+- Created /api/clans/challenges endpoint (GET auto-creates weekly challenges scaled by clan level, POST claims rewards with XP + level-up logic)
+- Fixed deposit route: removed totalLost increment, added activity logging, 5% XP per deposit, auto-challenge progress tracking
+- Updated join route: added activity logging + recruitment challenge progress
+- Updated leave route: added activity logging, smart promotion (Co-Leader > oldest member)
+- Updated create route: added activity logging
+- Updated chat POST route: added chat_activity challenge progress tracking
+- Updated clan list endpoint: includes xp and totalDeposited fields
+- Rewrote ClanSystem frontend (785 -> 650+ lines):
+  - 3 sub-tabs in My Clan: Overview, Challenges, Activity Log
+  - Clan XP bar with level progress visualization
+  - Total Deposited stat card
+  - Proper member list via /api/clans/members with rank badges
+  - Role management buttons (promote/demote) for Leader
+  - Weekly Challenge cards with progress bars, Claim buttons, completion states
+  - Activity Log with type icons and relative timestamps
+  - Challenge preview on Overview tab
+- Verified all features via browser: create clan, deposit chips, challenge tracking, activity logging, browse clans
+
+Stage Summary:
+- 3 new DB models (ClanActivity, ClanChallenge, Clan fields xp/totalDeposited)
+- 4 new API endpoints (members, activity, role, challenges)
+- 5 existing API routes updated (deposit, join, leave, create, chat)
+- Full ClanSystem frontend rewrite with 3 sub-sections
+- All features verified working in browser
 # Venom Arena — Worklog
 
 ---
