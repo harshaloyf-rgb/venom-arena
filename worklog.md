@@ -960,3 +960,25 @@ Stage Summary:
 - 3 fake functions replaced with real API calls
 - Block accessible from: (1) Friend card Block button (2) Inspector modal Block Player button
 - Profile inspect accessible from: (1) Search result name click (2) Friend card name click
+
+---
+Task ID: 8
+Agent: Main
+Task: Add unblock functionality (user asked "how to unblock?")
+
+Work Log:
+- Read block API: found DELETE /api/friends/block?userTag=X already existed but had bug (set status to 'accepted' instead of deleting)
+- Fixed unblock API: changed from `update({status:'accepted'})` to `delete()` — unblocking now removes the record entirely
+- Extended /api/friends/list to return `blocked` array alongside friends/pendingSent/pendingReceived
+- Added `BlockedPlayerItem` type, `blockedPlayers` state, and `handleUnblock()` handler to social-panel.tsx
+- Added collapsible "Blocked Players (N) — click to expand" section in Friends tab with Unblock buttons (using `<details>` element)
+- Added `Unlock` icon import from lucide-react
+- Updated player-inspector-modal.tsx: replaced static `handleBlock` with toggle `handleBlockToggle` that handles both block and unblock
+- Inspector now checks initial blocked/friend status via /api/friends/list when player changes
+- Inspector block button toggles between "Block {name}" (red) and "Unblock {name}" (green) with loading state
+
+Stage Summary:
+- Files changed: block/route.ts, friends/list/route.ts, social-panel.tsx, player-inspector-modal.tsx
+- Unblock API bug fixed: was setting status='accepted', now deletes record
+- 3 places to unblock: (1) Friends tab Blocked Players section, (2) Inspector modal Unblock toggle button, (3) Inspector detects already-blocked players on open
+- Verified full Block→Unblock cycle works in agent browser with toasts

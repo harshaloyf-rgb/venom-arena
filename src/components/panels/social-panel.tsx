@@ -12,7 +12,7 @@ import {
 } from './_panel-primitives';
 import {
   Users, Globe, UserPlus, Gift, Send, X, Check, Search, Loader2,
-  Ban, ArrowUpDown, Clock, Activity, ExternalLink,
+  Ban, ArrowUpDown, Clock, Activity, ExternalLink, Unlock,
 } from 'lucide-react';
 
 /* ------------------------------------------------------------------ */
@@ -59,6 +59,15 @@ interface SearchPlayer {
   online: boolean;
   avatar: string | null;
   relation: 'none' | 'friend' | 'pending_sent' | 'pending_received';
+}
+
+interface BlockedPlayerItem {
+  id: string;
+  userTag: string;
+  name: string;
+  country: string;
+  level: number;
+  skinColor: string;
 }
 
 interface GiftEntry {
@@ -134,6 +143,7 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
   const [friends, setFriends] = useState<FriendItem[]>([]);
   const [pendingReceived, setPendingReceived] = useState<PendingRequestItem[]>([]);
   const [pendingSent, setPendingSent] = useState<PendingRequestItem[]>([]);
+  const [blockedPlayers, setBlockedPlayers] = useState<BlockedPlayerItem[]>([]);
   const [friendsLoading, setFriendsLoading] = useState(false);
   const [addFriendInput, setAddFriendInput] = useState('');
   const [addFriendLoading, setAddFriendLoading] = useState(false);
@@ -196,6 +206,14 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
         level: f.level as number,
         bankedChips: (f.bankedChips as number) ?? 0,
         online: f.online as boolean,
+        skinColor: deriveSkinColor(f.userTag as string),
+      })));
+      setBlockedPlayers((data.blocked ?? []).map((f: Record<string, unknown>) => ({
+        id: f.id as string,
+        userTag: f.userTag as string,
+        name: f.name as string,
+        country: (f.country as string) || '',
+        level: f.level as number,
         skinColor: deriveSkinColor(f.userTag as string),
       })));
     } catch {
@@ -423,6 +441,23 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
     }
   }
 
+  async function handleUnblock(b: BlockedPlayerItem) {
+    try {
+      const res = await fetch(`/api/friends/block?userTag=${encodeURIComponent(b.userTag)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        notify((data as Record<string, string>).error || 'Failed to unblock.', 'error', onToast);
+        return;
+      }
+      setBlockedPlayers((prev) => prev.filter((x) => x.id !== b.id));
+      notify(`Unblocked ${b.name}. They can send you requests again.`, 'success', onToast);
+    } catch {
+      notify('Network error. Please try again.', 'error', onToast);
+    }
+  }
+
   function handleLoadMoreSearch() {
     fetchSearch(searchQuery, searchCountry, searchOffset, true);
   }
@@ -525,6 +560,38 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
                 ))}
               </ul>
             </div>
+          )}
+
+          {/* Blocked players */}
+          {blockedPlayers.length > 0 && (
+            <details className="group">
+              <summary className="cursor-pointer flex items-center gap-1.5 text-xs font-bold text-rose-400 uppercase tracking-wider hover:text-rose-300 transition select-none">
+                <Ban className="w-3.5 h-3.5" /> Blocked Players ({blockedPlayers.length})
+                <span className="text-[10px] text-slate-500 font-normal normal-case ml-1">— click to expand</span>
+              </summary>
+              <ul className="mt-2 space-y-1.5">
+                {blockedPlayers.map((b) => (
+                  <li key={b.id} className="flex items-center justify-between gap-3 p-2.5 rounded-xl border border-rose-500/15 bg-rose-500/5">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs shrink-0" style={{ background: `${b.skinColor}20`, border: `1px solid ${b.skinColor}40` }} aria-hidden>
+                        🚫
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-rose-300 text-xs truncate">{b.name}</div>
+                        <div className="text-[10px] font-mono text-slate-500">#{b.userTag} · Lvl {b.level}</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleUnblock(b)}
+                      className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-600 hover:text-white transition flex items-center gap-1 shrink-0"
+                    >
+                      <Unlock className="w-3 h-3" /> Unblock
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
 
           {/* Friends list */}

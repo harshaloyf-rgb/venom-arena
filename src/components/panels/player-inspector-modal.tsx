@@ -19,6 +19,7 @@ import {
   Loader2,
   Heart,
   UserCheck,
+  Unlock,
 } from 'lucide-react';
 import {
   countryFlag,
@@ -86,6 +87,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   const [tab, setTab] = useState<Tab>('overview');
   const [friendRequested, setFriendRequested] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  const [blockLoading, setBlockLoading] = useState(false);
 
   // Real public profile data
   const [profile, setProfile] = useState<PublicProfile | null>(null);
@@ -103,6 +105,23 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
     if (blocked) setBlocked(false);
     if (tab !== 'overview') setTab('overview');
     setProfile(null);
+    // Check if player is already blocked
+    if (player) {
+      fetch('/api/friends/list')
+        .then((r) => r.json())
+        .then((data) => {
+          const isBlocked = (data.blocked ?? []).some(
+            (b: { userTag: string }) => b.userTag === player.userTag,
+          );
+          if (isBlocked) setBlocked(true);
+          // Also check if already a friend
+          const isFriend = (data.friends ?? []).some(
+            (f: { userTag: string }) => f.userTag === player.userTag,
+          );
+          if (isFriend) setFriendRequested(true);
+        })
+        .catch(() => {/* ignore */});
+    }
   }
 
   // Fetch public profile for real data
@@ -259,23 +278,41 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
     notify(`Arena challenge dispatch sent to ${p.name}! \u2694\uFE0F`, 'info', onToast);
   }
 
-  function handleBlock() {
-    if (blocked) return;
-    fetch('/api/friends/block', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userTag: p.userTag }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
+  async function handleBlockToggle() {
+    setBlockLoading(true);
+    try {
+      if (blocked) {
+        // Unblock
+        const res = await fetch(`/api/friends/block?userTag=${encodeURIComponent(p.userTag)}`, {
+          method: 'DELETE',
+        });
+        const data = await res.json();
+        if (data.ok) {
+          setBlocked(false);
+          notify(`${p.name} has been unblocked. ✓`, 'success', onToast);
+        } else {
+          notify(data.error || 'Failed to unblock.', 'error', onToast);
+        }
+      } else {
+        // Block
+        const res = await fetch('/api/friends/block', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userTag: p.userTag }),
+        });
+        const data = await res.json();
         if (data.ok) {
           setBlocked(true);
-          notify(`Player ${p.name} has been blocked. 🚫`, 'error', onToast);
+          notify(`${p.name} has been blocked. 🚫`, 'error', onToast);
         } else {
           notify(data.error || 'Failed to block player.', 'error', onToast);
         }
-      })
-      .catch(() => notify('Network error.', 'error', onToast));
+      }
+    } catch {
+      notify('Network error.', 'error', onToast);
+    } finally {
+      setBlockLoading(false);
+    }
   }
 
   return (
@@ -723,11 +760,12 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
           </button>
           <button
             type="button"
-            onClick={handleBlock}
-            disabled={blocked}
-            className={`col-span-2 py-2 border rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${blocked ? 'bg-rose-950/60 text-slate-400 border-slate-800 cursor-default' : 'bg-rose-950/20 hover:bg-rose-950/40 text-rose-400 border-rose-500/20'}`}
+            onClick={handleBlockToggle}
+            disabled={blockLoading}
+            className={`col-span-2 py-2 border rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${blocked ? 'bg-emerald-950/30 hover:bg-emerald-950/50 text-emerald-400 border-emerald-500/30' : 'bg-rose-950/20 hover:bg-rose-950/40 text-rose-400 border-rose-500/20'} ${blockLoading ? 'opacity-50 cursor-wait' : ''}`}
           >
-            <Ban className="w-3.5 h-3.5" /> {blocked ? 'Player Blocked' : 'Block Player'}
+            {blockLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : blocked ? <Unlock className="w-3.5 h-3.5" /> : <Ban className="w-3.5 h-3.5" />}
+            {blockLoading ? 'Processing…' : blocked ? `Unblock ${p.name}` : `Block ${p.name}`}
           </button>
         </div>
       </div>
