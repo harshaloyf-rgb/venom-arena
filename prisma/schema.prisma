@@ -102,11 +102,47 @@ model Clan {
   emblem          String   @default("🐍")
   description     String   @default("")
   level           Int      @default(1)
+  xp              Int      @default(0)
+  totalDeposited  Int      @default(0)
   bankedChips     Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   members         Player[]
   messages        ClanMessage[]
+  activities      ClanActivity[]
+  challenges      ClanChallenge[]
+}
+
+model ClanActivity {
+  id        String   @id @default(cuid())
+  clanTag   String
+  clan      Clan     @relation(fields: [clanTag], references: [tag], onDelete: Cascade)
+  type      String   // "join" | "leave" | "deposit" | "create" | "promote" | "demote" | "challenge_claim" | "level_up"
+  actorTag  String
+  actorName String
+  detail    String?  // e.g. "deposited 500c" or "promoted USER to Co-Leader"
+  createdAt DateTime @default(now())
+
+  @@index([clanTag, createdAt(sort: Desc)])
+}
+
+model ClanChallenge {
+  id          String   @id @default(cuid())
+  clanTag     String
+  clan        Clan     @relation(fields: [clanTag], references: [tag], onDelete: Cascade)
+  type        String   // "treasury_target" | "recruitment_drive" | "chat_activity" | "deposit_streak"
+  title       String
+  description String
+  target      Int
+  progress    Int      @default(0)
+  reward      Int      // chips reward to treasury on claim
+  claimed     Boolean  @default(false)
+  claimedBy   String?
+  weekStart   String   // ISO date of challenge week start (YYYY-MM-DD)
+  createdAt   DateTime @default(now())
+
+  @@unique([clanTag, type, weekStart])
+  @@index([clanTag, weekStart])
 }
 
 model ClanMessage {

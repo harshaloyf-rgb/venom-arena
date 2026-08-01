@@ -60,6 +60,20 @@ export async function POST(req: NextRequest) {
         message: sanitized,
       },
     });
+
+    // Update chat_activity challenge progress for current week
+    const dayOfWeek = now.getDay ? new Date().getDay() : new Date().getDay();
+    const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date();
+    monday.setDate(new Date().getDate() - diff);
+    monday.setHours(0, 0, 0, 0);
+    const weekStart = monday.toISOString().split('T')[0];
+
+    await db.clanChallenge.updateMany({
+      where: { clanTag: tag, type: 'chat_activity', weekStart, claimed: false },
+      data: { progress: { increment: 1 } },
+    });
+
     return NextResponse.json({ ok: true, message: created });
   } catch (e) {
     console.error('[clans/chat] error', e);
