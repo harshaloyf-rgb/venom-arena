@@ -834,3 +834,63 @@ Work Log:
 - Added 4 new Lucide icon imports: Crown, Lock, Star, AlertTriangle
 - All changes pass `bun run lint` with zero errors
 - File grew from 968 to 1066 lines (+98 lines)
+"
+---
+Task ID: 3a
+Agent: backend
+Task: Create player search API and countries API
+
+Work Log:
+- Created /api/players/search with query, country filter, pagination
+- Created /api/players/countries for dynamic country filter
+
+Stage Summary:
+- Two new API routes for real player search
+---
+Task ID: 3b-3c
+Agent: backend
+Task: Create gift history API, block/unblock API, fix gift totalLost bug
+
+Work Log:
+- Created /api/friends/history with sent/received/all filter
+- Created /api/friends/block with POST (block) and DELETE (unblock)
+- Fixed /api/friends/gift: removed totalLost increment on gift send
+
+Stage Summary:
+- Gift history and block APIs ready
+- Gift bug fixed
+---
+Task ID: 1-4
+Agent: frontend
+Task: Complete rewrite of social-panel.tsx — remove all fake features, add real search, gifts, block, gift history
+
+Work Log:
+- Removed fake Syndicate tab (~310 lines), Rivals tab, CoOpInviteModal, all mock data
+- Connected gifts to real /api/friends/gift API with 30s cooldown
+- Added real player search via /api/players/search with dynamic country filter from /api/players/countries
+- Added Gift History sub-tab via /api/friends/history with all/sent/received toggle
+- Added Block via /api/friends/block on each friend card
+- Show friend's clan tag (e.g. VENOM-6537 · [APEX]) and online status dot
+- Updated search to use new /api/players/search API with debounced input, country dropdown, pagination (Load More)
+- Added pending friend request notification badge on dashboard card in page.tsx
+- SocialPanel props simplified to just `onToast` (removed onSpectateFriend, onJoinArena)
+- Removed unused imports: SOCIAL_COUNTRY_FILTER, PUBLIC_CLANS, PRESET_EMBLEMS, BOT_REPLIES, ARENA_TIERS, LeaderboardEntry, Shield, Swords, Eye, Award, LogOut, Plus, Coins, MessageSquare
+
+Stage Summary:
+- social-panel.tsx rewritten from 1322 to 692 lines
+- 100% of features now backed by real APIs
+- page.tsx updated with pending friend count badge on Friends card
+- 3 sub-tabs: My Friends, Search Players, Gift History
+- Lint clean, zero errors
+---
+Task ID: 4b-4c
+Agent: p4-features
+Task: Add recent matches API and activity section to social panel
+
+Work Log:
+- Created /api/players/recent for player's match history
+- Added Recent Activity section to Friends sub-tab
+- Shows last 5 matches with arena, result, chips, kills, time
+
+Stage Summary:
+- P4 features complete

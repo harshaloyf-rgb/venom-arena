@@ -116,6 +116,7 @@ export default function Home() {
   const [challengeTier, setChallengeTier] = useState('');
   const [lastResult, setLastResult] = useState<MatchResult | undefined>(undefined);
   const [inspectedPlayer, setInspectedPlayer] = useState<InspectedPlayer | null>(null);
+  const [pendingFriendCount, setPendingFriendCount] = useState(0);
   const [toastFn] = useState<(msg: string, type?: 'success' | 'error' | 'info') => void>(() => (msg: string, type?: 'success' | 'error' | 'info') => {
     if (type === 'error') toast.error(msg);
     else if (type === 'info') toast.info(msg);
@@ -147,7 +148,18 @@ export default function Home() {
     } catch { /* non-critical */ } finally { setChallengesLoading(false); }
   }, []);
 
+  const fetchPendingFriends = useCallback(async () => {
+    try {
+      const res = await fetch('/api/friends/list');
+      if (res.ok) {
+        const data = await res.json();
+        setPendingFriendCount((data.pendingReceived ?? []).length);
+      }
+    } catch { /* non-critical */ }
+  }, []);
+
   useEffect(() => { if (player) void fetchChallenges(); }, [player, fetchChallenges]);
+  useEffect(() => { if (player) void fetchPendingFriends(); }, [player, fetchPendingFriends]);
 
   const handleExitGame = useCallback(
     (result?: MatchResult) => {
@@ -475,7 +487,12 @@ export default function Home() {
                     <BentoGate onClick={() => setActiveTab('clans')} icon={Shield} accent="violet" badge="Team Ops" title="Syndicates" desc="Create or join a syndicate. Team up with allies, pool resources, and dominate arenas together." footLeft="CLAN WARFARE" footRight="Assemble" />
                     <BentoGate onClick={() => setActiveTab('seasonpass')} icon={Sparkles} accent="pink" badge="Season XP" title="Season Pass" desc="Track your seasonal progression. Unlock exclusive rewards, cosmetics, and bonus chip multipliers as you level up." footLeft="FREE TIER REWARDS" footRight="Progress" />
                     <BentoGate onClick={() => setActiveTab('clips')} icon={Film} accent="red" badge="Replays" title="Highlights" desc="Watch and share your greatest moments. Review match replays, clutch extractions, and legendary eliminations." footLeft="MATCH HIGHLIGHTS" footRight="Watch" />
-                    <BentoGate onClick={() => setActiveTab('social')} icon={Users} accent="violet" badge="Friends & Global Search" title="Friends, Global Search & Syndicate Hub" desc="Search and connect with players globally by tag or country flag (🇮🇳, 🇺🇸, 🇯🇵, etc.), send daily chip gifts (+25c), spectate matches, and create co-op team codes!" footLeft="GLOBAL PLAYER NETWORK READY" footRight="Search & Connect" wide />
+                    <div className="relative">
+                      <BentoGate onClick={() => setActiveTab('social')} icon={Users} accent="violet" badge="Friends & Search" title="Friends & Global Player Search" desc="Search players by name or tag, send chip gifts, block players, and manage your friend network!" footLeft="SOCIAL HUB" footRight="Connect" wide />
+                      {pendingFriendCount > 0 && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center">{pendingFriendCount}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
