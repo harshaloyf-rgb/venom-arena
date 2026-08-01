@@ -2,14 +2,15 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { toProfile } from '@/lib/player-helpers';
-import { DAILY_REWARDS } from '@/lib/game-config';
+import { utcToday } from '@/lib/date-utils';
+import { DAILY_REWARDS, levelRewardMultiplier, STREAK_MILESTONES, SEASONAL_BONUS_DAYS } from '@/lib/game-config';
 
 // POST /api/player/daily  — claim today's daily reward (idempotent per day)
 export async function POST() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const today = utcToday();
 
   try {
     const result = await db.$transaction(async (tx) => {
@@ -30,9 +31,20 @@ export async function POST() {
         if (diffDays === 1) newStreak = player.dailyStreak + 1;
         else newStreak = 0; // missed a day
       }
-      // Cycle is 7 days
+
+      // Base reward from 7-day cycle
       const cycleDay = newStreak % 7;
-      const reward = DAILY_REWARDS[cycleDay];
+      const baseReward = DAILY_REWARDS[cycleDay];
+
+      // Level-scaled multiplier
+      const lvlMult = levelRewardMultiplier(player.level);
+
+      // Seasonal bonus check
+      const seasonal = SEASONAL_BONUS_DAYS[today] ?? null;
+      const seasonalMult = seasonal ? seasonal.multiplier : 1;
+
+      // Final reward = base × level × seasonal
+      const reward = Math.floor(baseReward * lvlMult * seasonalMult);
 
       // Update player + record claim atomically inside the same tx
       const updated = await tx.player.update({
@@ -53,10 +65,66 @@ export async function POST() {
         },
       });
 
-      return { updated, reward, newStreak };
+      // ── Streak milestone auto-check (30 / 60 / 90) ──
+      let milestoneResult: { milestone: number; reward: number; title: string; emoji: string } | null = null;
+      const milestoneDef = STREAK_MILESTONES[newStreak];
+      if (milestoneDef) {
+        const alreadyClaimed = await tx.streakMilestoneClaim.findUnique({
+          where: { playerId_milestone: { playerId: player.id, milestone: newStreak } },
+        });
+        if (!alreadyClaimed) {
+          // Award bonus chips and record the milestone claim
+          const [milestonePlayer] = await Promise.all([
+            tx.player.update({
+              where: { id: player.id },
+              data: {
+                bankedChips: { increment: milestoneDef.reward },
+                totalEarned: { increment: milestoneDef.reward },
+              },
+            }),
+            tx.streakMilestoneClaim.create({
+              data: {
+                playerId: player.id,
+                milestone: newStreak,
+                reward: milestoneDef.reward,
+              },
+            }),
+          ]);
+          // Use the latest player data (with milestone bonus applied)
+          return {
+            updated: milestonePlayer,
+            reward,
+            baseReward,
+            newStreak,
+            lvlMult,
+            seasonal,
+            milestoneResult: { milestone: newStreak, ...milestoneDef },
+          };
+        }
+      }
+
+      return {
+        updated,
+        reward,
+        baseReward,
+        newStreak,
+        lvlMult,
+        seasonal,
+        milestoneResult: null,
+      };
     });
 
-    return NextResponse.json({ player: toProfile(result.updated), reward: result.reward, streak: result.newStreak });
+    return NextResponse.json({
+      player: toProfile(result.updated),
+      reward: result.reward,
+      baseReward: result.baseReward,
+      streak: result.newStreak,
+      levelMultiplier: result.lvlMult,
+      seasonalBonus: result.seasonal
+        ? { multiplier: result.seasonal.multiplier, label: result.seasonal.label }
+        : null,
+      streakMilestone: result.milestoneResult,
+    });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg === 'PLAYER_NOT_FOUND') {

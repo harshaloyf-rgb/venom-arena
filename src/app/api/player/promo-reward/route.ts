@@ -1,15 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { toProfile } from '@/lib/player-helpers';
 import { PROMO_CODES } from '@/lib/game-config';
 
-// In-memory tracking: playerId -> Set<code> to prevent double-claim
-// NOTE: Redemption state is lost on server restart. Acceptable for now —
-// TODO: store redemption records in the database for durability.
-const redeemedPromos = new Map<string, Set<string>>();
-
 // POST /api/player/promo-reward  body: { code }
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
@@ -30,32 +26,32 @@ export async function POST(req: NextRequest) {
 
   const playerId = session.playerId;
 
-  // Check if already claimed
-  const playerClaimed = redeemedPromos.get(playerId);
-  if (playerClaimed?.has(code)) {
+  // Check if already claimed (DB-backed)
+  const existing = await db.promoReward.findFirst({
+    where: { playerId, code },
+  });
+  if (existing) {
     return NextResponse.json({ error: 'You already redeemed this promo code.' }, { status: 400 });
   }
 
-  // Credit chips atomically
-  const updated = await db.player.update({
-    where: { id: playerId },
-    data: {
-      bankedChips: { increment: reward },
-      totalEarned: { increment: reward },
-    },
-    select: { bankedChips: true },
+  // Credit chips and record redemption in a transaction
+  const updated = await db.$transaction(async (tx) => {
+    const player = await tx.player.update({
+      where: { id: playerId },
+      data: {
+        bankedChips: { increment: reward },
+        totalEarned: { increment: reward },
+      },
+    });
+    await tx.promoReward.create({
+      data: { playerId, code, reward },
+    });
+    return player;
   });
 
-  // Record redemption
-  if (!playerClaimed) {
-    redeemedPromos.set(playerId, new Set([code]));
-  } else {
-    playerClaimed.add(code);
-  }
-
   return NextResponse.json({
-    success: true,
+    player: toProfile(updated),
     reward,
-    newBankedChips: updated.bankedChips,
+    label: `${code} promo code`,
   });
 }

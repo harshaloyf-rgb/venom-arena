@@ -308,6 +308,59 @@ export const MAX_YEARLY_BUY_CHIPS = 2500000; // 25 Lakh
 export const MAX_DAILY_ADS = 12;
 export const AD_REWARD_CHIPS = 100;
 
+// Hourly micro-claims
+export const HOURLY_REWARD_MIN = 5;
+export const HOURLY_REWARD_MAX = 15;
+export const HOURLY_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+
+// Streak milestones
+export const STREAK_MILESTONES: Record<number, { reward: number; title: string; emoji: string }> = {
+  30:  { reward: 5_000, title: 'Iron Veteran', emoji: '🛡️' },
+  60:  { reward: 15_000, title: 'Steel Sentinel', emoji: '⚔️' },
+ 90:  { reward: 50_000, title: 'Diamond Immortal', emoji: '👑' },
+};
+
+// Streak freeze
+export const STREAK_FREEZE_COST = 500; // chips to buy one freeze
+export const STREAK_FREEZE_MAX = 3; // max freezes a player can hold
+
+// Lucky spin wheel
+export const SPIN_PRIZES = [
+  { min: 5, max: 20, weight: 50, tier: 'common' as const, label: '5–20c', color: 'from-slate-600 to-slate-700' },
+  { min: 20, max: 50, weight: 25, tier: 'common' as const, label: '20–50c', color: 'from-emerald-700 to-emerald-800' },
+  { min: 50, max: 100, weight: 12, tier: 'rare' as const, label: '50–100c', color: 'from-sky-600 to-sky-700' },
+  { min: 100, max: 250, weight: 7, tier: 'rare' as const, label: '100–250c', color: 'from-violet-600 to-violet-700' },
+  { min: 250, max: 500, weight: 3, tier: 'epic' as const, label: '250–500c', color: 'from-amber-500 to-amber-600' },
+  { min: 500, max: 1000, weight: 2, tier: 'epic' as const, label: '500–1,000c', color: 'from-rose-500 to-rose-600' },
+  { min: 1000, max: 2500, weight: 0.8, tier: 'legendary' as const, label: '1,000–2,500c', color: 'from-yellow-400 to-amber-500' },
+  { min: 5000, max: 5000, weight: 0.2, tier: 'legendary' as const, label: '5,000c JACKPOT', color: 'from-yellow-300 to-yellow-400' },
+];
+export const SPIN_FREE_PER_DAY = 1; // free daily spin
+export const SPIN_COST = 200; // chips for extra spins
+
+// Referral
+export const REFERRAL_REWARD = 2_000; // chips both players get when referred player completes 5 matches
+export const REFERRAL_MATCH_THRESHOLD = 5; // matches the referred player must play
+
+// Seasonal bonus days (UTC date strings → multiplier)
+// In production, this would come from admin/game-config DB. Hardcoded for now.
+export const SEASONAL_BONUS_DAYS: Record<string, { multiplier: number; label: string }> = {
+  '2026-01-01': { multiplier: 2, label: '🎆 New Year Double Rewards!' },
+  '2026-01-26': { multiplier: 2, label: '🇮🇳 Republic Day 2× Bonus!' },
+  '2026-02-14': { multiplier: 1.5, label: '💝 Valentine\'s 1.5× Love Bonus!' },
+  '2026-08-15': { multiplier: 2, label: '🇮🇳 Independence Day 2× Bonus!' },
+  '2026-10-02': { multiplier: 2, label: '🇮🇳 Gandhi Jayanti 2× Bonus!' },
+  '2026-12-25': { multiplier: 2, label: '🎄 Christmas 2× Rewards!' },
+};
+
+// Level-based reward multiplier (same tiers as challenges)
+export function levelRewardMultiplier(level: number): number {
+  if (level <= 5) return 1.0;
+  if (level <= 15) return 1.5;
+  if (level <= 30) return 2.5;
+  return 4.0;
+}
+
 export const CHIP_PACKS: ChipPack[] = [
   { id: 'pack-10', name: 'Starter Pack', chips: 1000, priceINR: 10, priceUSD: '$0.12', bonus: 'Base Rate', desc: '1,000 Chips at 100 Chips/₹1.', emoji: '🪙' },
   { id: 'pack-50', name: 'Scout Bundle', chips: 5100, priceINR: 50, priceUSD: '$0.60', bonus: '+2% Bonus', desc: '5,100 Chips with early stakes bonus.', emoji: '💰' },

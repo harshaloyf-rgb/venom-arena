@@ -499,7 +499,7 @@ export default function Home() {
                     accent="emerald"
                     badge="Complimentary"
                     title="Daily Free Claims"
-                    desc="Secure your complimentary login chips. Claim hourly or daily packages to rebuild your wallet!"
+                    desc="Secure your complimentary login chips. Claim daily streaks, hourly micro-rewards, and spin the lucky wheel!"
                     footLeft={`STREAK: ${player.dailyStreak || 1} Days`}
                     footRight="Claim"
                   />
