@@ -97,6 +97,25 @@ interface HofStats {
 
 // ── Demo data ───────────────────────────────────────────────────────────────
 
+const DEMO_MILESTONES: InducteeEntry[] = [
+  // 1 Lakh tier
+  { id: 'dm-1', playerId: 'dm-1', playerTag: '#IND-104', playerName: 'Rookie_Striker', country: 'IN', level: 12, clanTag: 'VIPER', inductionType: 'milestone', milestoneTierId: 't-1lakh', championshipYear: null, championshipRank: null, hofBadge: 'bronze_elite', title: '🥉 Bronze Elite', chipsAtInduction: 1_12_500, inductedAt: '2026-01-02T09:15:00Z' },
+  { id: 'dm-2', playerId: 'dm-2', playerTag: '#BRA-217', playerName: 'Cobra_Brasil', country: 'BR', level: 10, clanTag: 'FANG', inductionType: 'milestone', milestoneTierId: 't-1lakh', championshipYear: null, championshipRank: null, hofBadge: 'bronze_elite', title: '🥉 Bronze Elite', chipsAtInduction: 1_05_200, inductedAt: '2026-01-02T14:30:00Z' },
+  { id: 'dm-3', playerId: 'dm-3', playerTag: '#JPN-456', playerName: 'Sakura_Viper', country: 'JP', level: 9, clanTag: '', inductionType: 'milestone', milestoneTierId: 't-1lakh', championshipYear: null, championshipRank: null, hofBadge: 'bronze_elite', title: '🥉 Bronze Elite', chipsAtInduction: 1_01_800, inductedAt: '2026-01-03T08:00:00Z' },
+  // 5 Lakh tier
+  { id: 'dm-4', playerId: 'dm-4', playerTag: '#USA-402', playerName: 'Viper_Zero', country: 'US', level: 22, clanTag: 'APEX', inductionType: 'milestone', milestoneTierId: 't-5lakh', championshipYear: null, championshipRank: null, hofBadge: 'silver_commander', title: '🥈 Silver Commander', chipsAtInduction: 5_25_000, inductedAt: '2026-01-07T14:40:00Z' },
+  { id: 'dm-5', playerId: 'dm-5', playerTag: '#IND-055', playerName: 'Delhi_King', country: 'IN', level: 19, clanTag: 'NAGA', inductionType: 'milestone', milestoneTierId: 't-5lakh', championshipYear: null, championshipRank: null, hofBadge: 'silver_commander', title: '🥈 Silver Commander', chipsAtInduction: 5_10_300, inductedAt: '2026-01-08T11:20:00Z' },
+  // 10 Lakh tier
+  { id: 'dm-6', playerId: 'dm-6', playerTag: '#KOR-114', playerName: 'K-Snake_Master', country: 'KR', level: 28, clanTag: 'DRAGON', inductionType: 'milestone', milestoneTierId: 't-10lakh', championshipYear: null, championshipRank: null, hofBadge: 'gold_apex_vanguard', title: '🥇 Gold Apex Vanguard', chipsAtInduction: 10_50_000, inductedAt: '2026-01-11T06:30:00Z' },
+  { id: 'dm-7', playerId: 'dm-7', playerTag: '#GB-387', playerName: 'SidewinderAlpha', country: 'GB', level: 25, clanTag: 'COBRA', inductionType: 'milestone', milestoneTierId: 't-10lakh', championshipYear: null, championshipRank: null, hofBadge: 'gold_apex_vanguard', title: '🥇 Gold Apex Vanguard', chipsAtInduction: 10_12_000, inductedAt: '2026-01-12T16:45:00Z' },
+  // 25 Lakh tier
+  { id: 'dm-8', playerId: 'dm-8', playerTag: '#USA-882', playerName: 'Apex_Viper', country: 'US', level: 35, clanTag: 'VIPER', inductionType: 'milestone', milestoneTierId: 't-25lakh', championshipYear: null, championshipRank: null, hofBadge: 'platinum_sovereign', title: '💎 Platinum Sovereign', chipsAtInduction: 25_80_000, inductedAt: '2026-01-16T23:10:00Z' },
+  // 50 Lakh tier
+  { id: 'dm-9', playerId: 'dm-9', playerTag: '#JPN-309', playerName: 'Shadow_Ninja', country: 'JP', level: 42, clanTag: '', inductionType: 'milestone', milestoneTierId: 't-50lakh', championshipYear: null, championshipRank: null, hofBadge: 'diamond_warlord', title: '🔮 Diamond Warlord', chipsAtInduction: 52_00_000, inductedAt: '2026-01-19T11:22:00Z' },
+  // 1 Crore tier
+  { id: 'dm-10', playerId: 'dm-10', playerTag: '#IND-001', playerName: 'Hari', country: 'IN', level: 55, clanTag: 'OMEGA', inductionType: 'milestone', milestoneTierId: 't-1crore', championshipYear: null, championshipRank: null, hofBadge: 'omega_immortal_god', title: '👑 OMEGA IMMORTAL GOD', chipsAtInduction: 10_200_000, inductedAt: '2026-01-23T17:00:00Z' },
+];
+
 const DEMO_CHAMPIONS = [
   { rank: 1, name: 'Hari', userTag: '#IND-001', country: 'IN', badge: 'crown', title: '👑 2026 WORLD VENOM CHAMPION', chips: 10_000_000, date: '01 Jan 2026' },
   { rank: 2, name: 'Apex_Viper', userTag: '#USA-882', country: 'US', badge: 'silver', title: '🥈 2026 VENOM ARENA OVERLORD', chips: 9_400_000, date: '01 Jan 2026' },
@@ -264,6 +283,9 @@ function MilestoneTierCard({ tier, entries, realCount, firstAchiever, defaultOpe
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm font-bold text-white truncate">{entry.playerName}</span>
+                        {entry.id.startsWith('dm-') && (
+                          <span className="text-[9px] font-mono font-bold text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 shrink-0">DEMO</span>
+                        )}
                         {isFirst && (
                           <span className="inline-flex items-center gap-0.5 text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/30 shrink-0">
                             <Check className="w-2.5 h-2.5" /> First!
@@ -282,12 +304,14 @@ function MilestoneTierCard({ tier, entries, realCount, firstAchiever, defaultOpe
                         onClick={(e) => {
                           e.stopPropagation();
                           onInspectPlayer({
-                            id: entry.playerId,
                             name: entry.playerName,
                             userTag: entry.playerTag,
                             country: entry.country,
+                            flag: countryFlag(entry.country),
+                            bankedChips: entry.chipsAtInduction,
                             level: entry.level,
-                            clanTag: entry.clanTag,
+                            clanTag: entry.clanTag || undefined,
+                            achievedAt: fmtDate(entry.inductedAt),
                           });
                         }}
                         className="text-[9px] font-mono text-slate-500 hover:text-yellow-300 px-1.5 py-0.5 rounded border border-slate-800 hover:border-yellow-500/40 transition shrink-0"
@@ -945,39 +969,31 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
             </div>
           )}
 
-          {/* No real data → show tier preview cards */}
+          {/* No real data → show tier cards with DEMO data so users understand the format */}
           {!mileLoading && mileIsDemo && (
             <>
               <div className="px-4 py-2 bg-slate-900 rounded-xl border border-slate-800 flex items-center gap-2">
                 <span className="text-[9px] font-mono font-bold text-slate-400 px-2 py-0.5 bg-slate-800 rounded-full border border-slate-700">
-                  AWAITING INDUCTEES
+                  DEMO
                 </span>
-                <span className="text-[10px] text-slate-500">No milestone inductees yet. Below are the 6 milestone tiers — be the first to break through!</span>
+                <span className="text-[10px] text-slate-500">No milestone inductees yet. Showing sample data so you can see how it looks when populated.</span>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {HALL_OF_FAME_TIERS.map((tier) => (
-                  <div
-                    key={tier.id}
-                    className="relative p-4 rounded-2xl border border-slate-800 bg-slate-950/80 shadow-md overflow-hidden"
-                  >
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-yellow-500/5 rounded-full blur-3xl pointer-events-none" aria-hidden />
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <span className="text-[10px] font-mono uppercase tracking-widest text-yellow-400">{tier.badge}</span>
-                        <h3 className="text-sm font-bold text-white mt-0.5">{tier.name}</h3>
-                      </div>
-                      <div className="text-right">
-                        <MicroLabel>Threshold</MicroLabel>
-                        <div className="font-mono font-bold text-emerald-400 text-sm mt-0.5">{fmtChips(tier.chips)}c</div>
-                      </div>
-                    </div>
-                    <div className="mt-3 flex items-center gap-2 text-[10px] text-slate-500">
-                      <Users className="w-3 h-3" />
-                      <span>0 inductees — be the first!</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <MilestonesTierList
+                entries={DEMO_MILESTONES}
+                tierFilter={mileTierFilter}
+                stats={stats}
+                firstAchievers={
+                  Object.fromEntries(
+                    HALL_OF_FAME_TIERS.map((t) => [t.id, {
+                      playerName: t.firstAchiever.name,
+                      userTag: t.firstAchiever.userTag,
+                      country: t.firstAchiever.country,
+                      inductedAt: t.firstAchiever.dateStr,
+                    }])
+                  )
+                }
+                onInspectPlayer={onInspectPlayer}
+              />
             </>
           )}
 
