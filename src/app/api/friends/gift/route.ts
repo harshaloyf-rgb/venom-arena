@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
 
       const updatedSender = await tx.player.update({
         where: { id: sender.id },
-        data: { bankedChips: { decrement: amount }, totalLost: { increment: amount } },
+        data: { bankedChips: { decrement: amount } },
       });
       await tx.player.update({
         where: { id: recipient.id },
