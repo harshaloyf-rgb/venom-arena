@@ -474,3 +474,23 @@ Stage Summary:
 - `isHOF` field on leaderboard rows now populated from real DB data (was always false).
 - Player Inspector shows HOF induction records and yellow Award badge.
 - All changes browser-verified, lint-clean, zero errors.
+---
+Task ID: S4-demo-fix
+Agent: main
+Task: Fix Milestones Wing — non-working buttons + add demo data for user understanding
+
+Work Log:
+- Identified that Milestones Wing demo mode used static non-interactive div cards showing "0 inductees — be the first!"
+- Created DEMO_MILESTONES array with 10 sample InducteeEntry objects across 6 tiers (3 players in 1L, 2 in 5L, 2 in 10L, 1 in 25L, 1 in 50L, 1 in 1Cr)
+- Replaced static div cards with interactive MilestoneTierList component using demo data
+- Added DEMO banner (matching Champions Wing pattern)
+- Added DEMO badge on each demo inductee row (entry.id.startsWith('dm-'))
+- Fixed MilestoneTierCard Inspect button: was passing wrong shape (missing flag/bankedChips, extra id field)
+- Fixed number literal syntax error (1,02,00,000 → 10_200_000)
+- Verified in browser: expand/collapse, Inspect, filter buttons, DEMO/First badges all working
+
+Stage Summary:
+- Milestones Wing now shows fully interactive demo data when no real inductees exist
+- Users can click expand/collapse, Inspect, and filter buttons to understand the feature
+- DEMO_MILESTONES has 10 entries showing multiple players per tier (addressing user's earlier feedback about N players per tier)
+- Inspect button now passes correct InspectedPlayer shape with flag, bankedChips, achievedAt
