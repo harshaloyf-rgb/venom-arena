@@ -969,16 +969,23 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
             >
               All Tiers
             </button>
-            {HALL_OF_FAME_TIERS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setMileTierFilter(t.id)}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono transition border ${mileTierFilter === t.id ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
-              >
-                {t.badge.split(' ')[0]} {t.name.split(' ')[0]}
-              </button>
-            ))}
+            {HALL_OF_FAME_TIERS.map((t) => {
+              // Build a short label: "🥉 1 Lakh", "👑 1 Crore"
+              const shortLabel = t.name
+                .replace(' (10,000,000) LEGENDARY', '')
+                .replace(' (1 MILLION)', '')
+                .replace(' CHIPS MILESTONE', '');
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setMileTierFilter(t.id)}
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono transition border whitespace-nowrap ${mileTierFilter === t.id ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
+                >
+                  {t.badge.split(' ')[0]} {shortLabel}
+                </button>
+              );
+            })}
           </div>
 
           {/* Loading */}
