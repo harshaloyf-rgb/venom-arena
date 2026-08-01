@@ -31,12 +31,7 @@ import {
   Users,
   Loader2,
   Star,
-  Shield,
-  ChevronDown,
-  ChevronUp,
   Target,
-  Zap,
-  Clock,
 } from 'lucide-react';
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -178,154 +173,194 @@ function HoFTabBtn({ active, onClick, icon: Icon, label }: HoFTabBtnProps) {
   );
 }
 
-// ── Milestones Tier List (groups entries by tier) ───────────────────
-
-interface MilestonesTierListProps {
-  entries: InducteeEntry[];
-  tierFilter: string;
-  stats: HofStats | null;
-  firstAchievers: Record<string, { playerName: string; userTag: string; country: string; inductedAt: string } | null>;
-  onInspectPlayer?: (p: InspectedPlayer) => void;
-}
-
-function MilestonesTierList({ entries, tierFilter, stats, firstAchievers, onInspectPlayer }: MilestonesTierListProps) {
-  const grouped = useMemo(() => {
-    const map: Record<string, InducteeEntry[]> = {};
-    for (const e of entries) {
-      const tid = e.milestoneTierId || 'unknown';
-      if (!map[tid]) map[tid] = [];
-      map[tid].push(e);
-    }
-    return map;
-  }, [entries]);
-
-  const displayedTiers = tierFilter === 'all'
-    ? HALL_OF_FAME_TIERS
-    : HALL_OF_FAME_TIERS.filter((t) => t.id === tierFilter);
-
-  return (
-    <div className="space-y-4">
-      {displayedTiers.map((tier) => {
-        const tierEntries = grouped[tier.id] || [];
-        const isFirstOpen = tierFilter !== 'all' || tier.id === HALL_OF_FAME_TIERS[0]?.id;
-        return (
-          <MilestoneTierCard
-            key={tier.id}
-            tier={tier}
-            entries={tierEntries}
-            realCount={stats?.milestoneCounts?.[tier.id]}
-            firstAchiever={firstAchievers[tier.id] ?? null}
-            defaultOpen={isFirstOpen || tierEntries.length > 0}
-            onInspectPlayer={onInspectPlayer}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-// ── Milestone Tier Card (collapsible, shows ALL inductees) ─────────────
+// ── Milestone Tier Card (non-collapsible, rank-based table) ─────────
 
 interface MilestoneTierCardProps {
   tier: (typeof HALL_OF_FAME_TIERS)[number];
   entries: InducteeEntry[];
   realCount?: number;
   firstAchiever: { playerName: string; userTag: string; country: string; inductedAt: string } | null;
-  defaultOpen: boolean;
+  isDemo?: boolean;
   onInspectPlayer?: (p: InspectedPlayer) => void;
 }
 
-function MilestoneTierCard({ tier, entries, realCount, firstAchiever, defaultOpen, onInspectPlayer }: MilestoneTierCardProps) {
-  const [open, setOpen] = useState(defaultOpen);
+function MilestoneTierCard({ tier, entries, realCount, firstAchiever, isDemo, onInspectPlayer }: MilestoneTierCardProps) {
   const displayCount = realCount ?? entries.length;
+  if (entries.length === 0) return null;
 
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-950/80 overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between gap-3 p-4 hover:bg-slate-900/40 transition text-left"
-      >
+      {/* Tier header */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-800 bg-slate-900/40">
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-xl shrink-0" aria-hidden>{tier.badge.split(' ')[0]}</span>
           <div className="min-w-0">
-            <div className="text-sm font-bold text-white truncate">{tier.name}</div>
+            <div className="text-sm font-bold text-white truncate flex items-center gap-2">
+              {tier.name}
+              {isDemo && (
+                <span className="text-[9px] font-mono font-bold text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 shrink-0">DEMO</span>
+              )}
+            </div>
             <div className="text-[10px] font-mono text-slate-400">{fmtChips(tier.chips)}c threshold</div>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-[10px] font-mono font-bold text-yellow-400 bg-yellow-500/10 px-2 py-0.5 rounded-full border border-yellow-500/30">
-            {displayCount} {displayCount === 1 ? 'inductee' : 'inductees'}
-          </span>
-          {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-        </div>
-      </button>
+        <span className="text-[10px] font-mono font-bold text-yellow-400 bg-yellow-500/10 px-2 py-0.5 rounded-full border border-yellow-500/30 shrink-0">
+          {displayCount} {displayCount === 1 ? 'inductee' : 'inductees'}
+        </span>
+      </div>
 
-      {open && (
-        <div className="border-t border-slate-800">
-          {entries.length === 0 ? (
-            <div className="px-4 py-6 text-center text-xs text-slate-500">
-              No inductees yet for this tier. Be the first!
-            </div>
-          ) : (
-            <ol className="divide-y divide-slate-900 max-h-64 overflow-y-auto va-scroll">
-              {entries.map((entry, idx) => {
-                const isFirst = firstAchiever && entry.playerTag === firstAchiever.userTag;
-                return (
-                  <li
-                    key={entry.id}
-                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-900/40 transition-colors"
-                  >
-                    <span className="w-6 text-center text-[10px] font-mono font-bold text-slate-500 shrink-0">
-                      {idx + 1}
+      {/* Table header */}
+      <div className="grid grid-cols-12 gap-2 px-4 py-2 border-b border-slate-800/60 bg-slate-950 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+        <div className="col-span-1">Rank</div>
+        <div className="col-span-4">Player</div>
+        <div className="col-span-2">Badge</div>
+        <div className="col-span-2 text-right">Chips</div>
+        <div className="col-span-2 text-right">Date</div>
+        <div className="col-span-1 text-right">Action</div>
+      </div>
+
+      {/* Player rows */}
+      <ol className="divide-y divide-slate-900 max-h-64 overflow-y-auto va-scroll">
+        {entries.map((entry, idx) => {
+          const rank = idx + 1;
+          const isFirst = firstAchiever && entry.playerTag === firstAchiever.userTag;
+          return (
+            <li
+              key={entry.id}
+              className={`grid grid-cols-12 gap-2 items-center px-4 py-2.5 text-sm hover:bg-slate-900/40 transition-colors ${isDemo ? 'opacity-60' : ''}`}
+            >
+              {/* Rank */}
+              <div className="col-span-1 font-mono">
+                {rank === 1 ? (
+                  <span className="text-yellow-400 font-bold">👑 #1</span>
+                ) : rank <= 3 ? (
+                  <span className="text-lg">{['', '🥇', '🥈', '🥉'][rank]}</span>
+                ) : (
+                  <span className="text-slate-400 font-bold">#{rank}</span>
+                )}
+              </div>
+              {/* Player */}
+              <div className="col-span-4 min-w-0">
+                <div className="font-bold text-white truncate flex items-center gap-1.5">
+                  <span aria-hidden>{countryFlag(entry.country)}</span>
+                  {entry.playerName}
+                  {isFirst && (
+                    <span className="inline-flex items-center gap-0.5 text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/30 shrink-0">
+                      <Check className="w-2.5 h-2.5" /> First!
                     </span>
-                    <span className="text-base shrink-0" aria-hidden>{countryFlag(entry.country)}</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-bold text-white truncate">{entry.playerName}</span>
-                        {entry.id.startsWith('dm-') && (
-                          <span className="text-[9px] font-mono font-bold text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 shrink-0">DEMO</span>
-                        )}
-                        {isFirst && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/30 shrink-0">
-                            <Check className="w-2.5 h-2.5" /> First!
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[10px] font-mono text-slate-500 truncate">{entry.playerTag}{entry.clanTag ? ` [${entry.clanTag}]` : ''}</div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-[11px] font-mono font-bold text-emerald-400">{fmtChips(entry.chipsAtInduction)}c</div>
-                      <div className="text-[9px] font-mono text-slate-500">{fmtDate(entry.inductedAt)}</div>
-                    </div>
-                    {onInspectPlayer && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onInspectPlayer({
-                            name: entry.playerName,
-                            userTag: entry.playerTag,
-                            country: entry.country,
-                            flag: countryFlag(entry.country),
-                            bankedChips: entry.chipsAtInduction,
-                            level: entry.level,
-                            clanTag: entry.clanTag || undefined,
-                            achievedAt: fmtDate(entry.inductedAt),
-                          });
-                        }}
-                        className="text-[9px] font-mono text-slate-500 hover:text-yellow-300 px-1.5 py-0.5 rounded border border-slate-800 hover:border-yellow-500/40 transition shrink-0"
-                      >
-                        Inspect
-                      </button>
-                    )}
-                  </li>
-                );
-              })}
-            </ol>
-          )}
-        </div>
-      )}
+                  )}
+                </div>
+                <div className="text-[10px] font-mono text-slate-500 truncate">
+                  {entry.playerTag}{entry.clanTag ? ` [${entry.clanTag}]` : ''}
+                </div>
+              </div>
+              {/* Badge */}
+              <div className="col-span-2 text-lg" aria-label={entry.hofBadge || 'badge'}>{tier.badge.split(' ')[0]}</div>
+              {/* Chips */}
+              <div className="col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums text-[11px]">
+                {fmtChips(entry.chipsAtInduction)}c
+              </div>
+              {/* Date */}
+              <div className="col-span-2 text-right text-[10px] font-mono text-slate-500">
+                {fmtDate(entry.inductedAt)}
+              </div>
+              {/* Inspect */}
+              <div className="col-span-1 text-right">
+                {onInspectPlayer && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onInspectPlayer({
+                        name: entry.playerName,
+                        userTag: entry.playerTag,
+                        country: entry.country,
+                        flag: countryFlag(entry.country),
+                        bankedChips: entry.chipsAtInduction,
+                        level: entry.level,
+                        clanTag: entry.clanTag || undefined,
+                        achievedAt: fmtDate(entry.inductedAt),
+                      });
+                    }}
+                    className="text-[9px] font-mono text-slate-500 hover:text-yellow-300 px-1.5 py-0.5 rounded border border-slate-800 hover:border-yellow-500/40 transition"
+                  >
+                    Inspect
+                  </button>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+// ── Milestones Tier List (groups entries by tier, non-collapsible) ──
+
+interface MilestonesTierListProps {
+  entries: InducteeEntry[];
+  tierFilter: string;
+  search: string;
+  stats: HofStats | null;
+  firstAchievers: Record<string, { playerName: string; userTag: string; country: string; inductedAt: string } | null>;
+  isDemo?: boolean;
+  onInspectPlayer?: (p: InspectedPlayer) => void;
+}
+
+function MilestonesTierList({ entries, tierFilter, search, stats, firstAchievers, isDemo, onInspectPlayer }: MilestonesTierListProps) {
+  // Filter by search
+  const searched = useMemo(() => {
+    if (!search.trim()) return entries;
+    const q = search.toLowerCase();
+    return entries.filter((e) =>
+      e.playerName.toLowerCase().includes(q) ||
+      e.playerTag.toLowerCase().includes(q) ||
+      (e.clanTag && e.clanTag.toLowerCase().includes(q))
+    );
+  }, [entries, search]);
+
+  // Group by tier
+  const grouped = useMemo(() => {
+    const map: Record<string, InducteeEntry[]> = {};
+    for (const e of searched) {
+      const tid = e.milestoneTierId || 'unknown';
+      if (!map[tid]) map[tid] = [];
+      map[tid].push(e);
+    }
+    return map;
+  }, [searched]);
+
+  const displayedTiers = tierFilter === 'all'
+    ? HALL_OF_FAME_TIERS
+    : HALL_OF_FAME_TIERS.filter((t) => t.id === tierFilter);
+
+  // When searching, only show tiers that have matches
+  const tiersWithData = search.trim()
+    ? displayedTiers.filter((t) => (grouped[t.id] || []).length > 0)
+    : displayedTiers;
+
+  if (searched.length === 0 && search.trim()) {
+    return (
+      <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-8 text-center text-xs text-slate-500">
+        No players found matching &quot;{search}&quot;
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {tiersWithData.map((tier) => (
+        <MilestoneTierCard
+          key={tier.id}
+          tier={tier}
+          entries={grouped[tier.id] || []}
+          realCount={stats?.milestoneCounts?.[tier.id]}
+          firstAchiever={firstAchievers[tier.id] ?? null}
+          isDemo={isDemo}
+          onInspectPlayer={onInspectPlayer}
+        />
+      ))}
     </div>
   );
 }
@@ -362,6 +397,7 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
   // ── Milestones state ──
   const [mileLoading, setMileLoading] = useState(false);
   const [mileTierFilter, setMileTierFilter] = useState<string>('all');
+  const [mileSearch, setMileSearch] = useState('');
   const [mileEntries, setMileEntries] = useState<InducteeEntry[]>([]);
   const [mileTotal, setMileTotal] = useState(0);
   const [mileFirstAchievers, setMileFirstAchievers] = useState<Record<string, { playerName: string; userTag: string; country: string; inductedAt: string } | null>>({});
@@ -926,18 +962,30 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
             <strong>PERMANENT MILESTONE IMMORTALITY</strong>
             <br />
             Every player who crosses a milestone threshold gets permanently inducted.
-            Filter by tier to see <strong>all inductees</strong> — not just the first.
+            Players are ranked by <strong>induction order</strong> — #1 is the first to achieve that tier.
           </div>
 
-          {/* Total inducted count */}
-          {stats && (
-            <div className="flex items-center gap-3 p-3 rounded-xl border border-slate-800 bg-slate-950/80">
-              <Users className="w-4 h-4 text-yellow-400 shrink-0" />
-              <span className="text-[11px] text-slate-400">
-                <span className="font-bold text-yellow-400">{stats.totalInductedPlayers}</span> unique players inducted across all milestones
-              </span>
-            </div>
-          )}
+          {/* Search */}
+          <div className="flex items-center gap-2 p-1.5 rounded-xl border border-slate-800 bg-slate-950/80">
+            <Search className="w-4 h-4 text-slate-500 shrink-0" />
+            <input
+              type="text"
+              placeholder="Search by player name, tag, or clan…"
+              value={mileSearch}
+              onChange={(e) => setMileSearch(e.target.value)}
+              className="flex-1 bg-transparent border-none text-xs text-white font-mono placeholder:text-slate-600 focus:outline-none"
+            />
+            {mileSearch && (
+              <button
+                type="button"
+                onClick={() => setMileSearch('')}
+                className="p-1 rounded text-slate-500 hover:text-white transition"
+                aria-label="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
 
           {/* Tier filter */}
           <div className="flex flex-wrap items-center gap-2">
@@ -969,7 +1017,7 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
             </div>
           )}
 
-          {/* No real data → show tier cards with DEMO data so users understand the format */}
+          {/* No real data → show tier cards with DEMO data */}
           {!mileLoading && mileIsDemo && (
             <>
               <div className="px-4 py-2 bg-slate-900 rounded-xl border border-slate-800 flex items-center gap-2">
@@ -981,6 +1029,7 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
               <MilestonesTierList
                 entries={DEMO_MILESTONES}
                 tierFilter={mileTierFilter}
+                search={mileSearch}
                 stats={stats}
                 firstAchievers={
                   Object.fromEntries(
@@ -992,6 +1041,7 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
                     }])
                   )
                 }
+                isDemo
                 onInspectPlayer={onInspectPlayer}
               />
             </>
@@ -1002,6 +1052,7 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
             <MilestonesTierList
               entries={mileEntries}
               tierFilter={mileTierFilter}
+              search={mileSearch}
               stats={stats}
               firstAchievers={mileFirstAchievers}
               onInspectPlayer={onInspectPlayer}
