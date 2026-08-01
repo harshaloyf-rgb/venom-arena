@@ -15,7 +15,7 @@ import {
   Globe,
   History,
   Landmark,
-  Link,
+  Link as LinkIcon,
   Lock,
   LogOut,
   Monitor,
@@ -149,6 +149,9 @@ interface ReferralEntry {
 
 interface ReferralData {
   referralCode: string;
+  hasReferrer: boolean;
+  referrerName: string | null;
+  referrerCode: string | null;
   referrals: ReferralEntry[];
 }
 
@@ -452,6 +455,12 @@ function ProfileContent({
   const [copiedReferralCode, setCopiedReferralCode] = useState(false);
   const [copiedReferralLink, setCopiedReferralLink] = useState(false);
 
+  // -- NEW: Redeem referral code
+  const [redeemCode, setRedeemCode] = useState('');
+  const [redeemLoading, setRedeemLoading] = useState(false);
+  const [redeemResult, setRedeemResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [alreadyReferred, setAlreadyReferred] = useState(false);
+
   // Ref to track mounted state for async ops
   const mountedRef = useRef(true);
 
@@ -488,12 +497,63 @@ function ProfileContent({
         const data = await res.json();
         if (mountedRef.current) {
           setReferralData(data);
+          if (data.hasReferrer) setAlreadyReferred(true);
         }
       }
     } catch {
       // silently ignore
     } finally {
       if (mountedRef.current) setReferralLoading(false);
+    }
+  }, []);
+
+  // -- Handle redeem referral code
+  const redeemRef = useRef(false);
+  const handleRedeemCode = useCallback(async () => {
+    const code = redeemCode.trim().toUpperCase();
+    if (!code || redeemRef.current) return;
+    redeemRef.current = true;
+    setRedeemLoading(true);
+    setRedeemResult(null);
+    try {
+      const res = await fetch('/api/player/referral', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setRedeemResult({ ok: true, message: data.message || 'Invite code linked successfully!' });
+        setRedeemCode('');
+        setAlreadyReferred(true);
+        fetchReferralData(); // refresh to show updated state
+        onToast?.('success', 'Invite code applied! Complete ' + REFERRAL_MATCH_THRESHOLD + ' matches to claim your reward.');
+      } else {
+        const msg = data.error || 'Failed to apply invite code.';
+        setRedeemResult({ ok: false, message: msg });
+        if (msg.toLowerCase().includes('already')) {
+          setAlreadyReferred(true);
+        }
+      }
+    } catch {
+      setRedeemResult({ ok: false, message: 'Network error. Please try again.' });
+    } finally {
+      setRedeemLoading(false);
+      redeemRef.current = false;
+    }
+  }, [redeemCode, fetchReferralData, onToast]);
+
+  // -- Auto-populate redeem code from ?ref= URL param
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const refCode = params.get('ref');
+    if (refCode) {
+      setRedeemCode(refCode.trim().toUpperCase());
+      // Clean the URL so it doesn't persist
+      const url = new URL(window.location.href);
+      url.searchParams.delete('ref');
+      window.history.replaceState({}, '', url.toString());
     }
   }, []);
 
@@ -1010,7 +1070,7 @@ function ProfileContent({
             {/* Referral code */}
             {player.referralCode && (
               <div className="flex items-center gap-1.5 mt-1.5">
-                <Link className="w-3 h-3 text-emerald-400" />
+                <LinkIcon className="w-3 h-3 text-emerald-400" />
                 <span className="text-[11px] text-slate-400 font-sans">
                   Referral:{' '}
                   <span className="font-mono text-emerald-400 font-bold">
@@ -1580,6 +1640,78 @@ function ProfileContent({
               if (code) copyToClipboard(`${typeof window !== 'undefined' ? window.location.origin : ''}/?ref=${code}`, setCopiedReferralLink);
             }}
           />
+
+          {/* ── ENTER / REDEEM AN INVITE CODE ── */}
+          {!alreadyReferred ? (
+            <div className="rounded-2xl border border-slate-800/80 bg-slate-950/40 overflow-hidden relative">
+              <div className="absolute -top-8 -right-8 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl pointer-events-none" />
+              <div className="relative p-5">
+                <div className="flex items-center gap-2.5 mb-3">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
+                    <LinkIcon className="w-4.5 h-4.5 text-indigo-400" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white font-sans">Got an Invite Code?</h4>
+                    <p className="text-[11px] text-slate-400 font-sans">Enter a friend's code below to link your accounts and both earn <strong className="text-emerald-400">{REFERRAL_REWARD.toLocaleString()} chips</strong>!</p>
+                  </div>
+                </div>
+
+                <form
+                  onSubmit={(e) => { e.preventDefault(); handleRedeemCode(); }}
+                  className="flex gap-2"
+                >
+                  <div className="relative flex-1">
+                    <Gift className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-500" />
+                    <input
+                      type="text"
+                      placeholder="e.g. VIPER-A7X2"
+                      value={redeemCode}
+                      onChange={(e) => {
+                        setRedeemCode(e.target.value.toUpperCase());
+                        if (redeemResult) setRedeemResult(null);
+                      }}
+                      maxLength={10}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm font-mono text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 transition-all"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={!redeemCode.trim() || redeemLoading}
+                    className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-bold font-sans transition shadow-lg shadow-indigo-500/15 flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                  >
+                    {redeemLoading ? (
+                      <><RefreshCw className="w-4 h-4 animate-spin" /> Applying...</>
+                    ) : (
+                      <><Zap className="w-4 h-4" /> Apply Code</>
+                    )}
+                  </button>
+                </form>
+
+                {redeemResult && (
+                  <div className={`mt-3 px-4 py-2.5 rounded-xl text-xs font-sans flex items-center gap-2 border ${redeemResult.ok
+                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                    : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+                    }`}>
+                    {redeemResult.ok ? <Check className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+                    {redeemResult.message}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-5 py-3.5 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                <Check className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-emerald-400 font-sans">Invite Code Linked{referralData?.referrerName ? ` by ${referralData.referrerName}` : ''}</p>
+                <p className="text-[10px] text-slate-400 font-sans">Play <strong className="text-amber-400">{REFERRAL_MATCH_THRESHOLD} matches</strong> to claim your <strong className="text-emerald-400">{REFERRAL_REWARD.toLocaleString()} chip</strong> bonus!</p>
+              </div>
+              {referralData?.referrerCode && (
+                <span className="text-[10px] font-mono text-slate-500 bg-slate-900 px-2 py-1 rounded-lg border border-slate-800 shrink-0">{referralData.referrerCode}</span>
+              )}
+            </div>
+          )}
 
           {/* Online stats bar */}
           <div className="grid grid-cols-3 gap-3">
