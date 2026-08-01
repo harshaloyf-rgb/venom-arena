@@ -89,27 +89,27 @@ const TAB_DESCRIPTIONS: Record<TopTab, { title: string; desc: string; scope: str
   summit: {
     title: 'World Cup Summit',
     desc: 'Only the #1 ranked player from each country competes here. Think of it as the Olympics — one champion per nation, battling for the World Championship title.',
-    scope: '1 player per country → ranked by banked chips',
+    scope: '1 player per country → top 100 ranked by banked chips',
   },
   global: {
     title: 'Global Rankings',
     desc: 'Every single player in the world, ranked #1 to N by total banked chips. This is the main leaderboard — all players, one unified ranking.',
-    scope: 'All players worldwide → ranked by banked chips',
+    scope: 'All players worldwide → ranked #1 to N by banked chips',
   },
   national: {
     title: 'National Rankings',
     desc: 'Players from your selected country only, ranked against each other. See who dominates your home turf.',
-    scope: 'Players from 1 country → ranked by banked chips',
+    scope: 'Players from 1 country → top 100 by banked chips',
   },
   regional: {
     title: 'Regional Rankings',
     desc: 'Players grouped by world region (APAC, NA, EU, LATAM). See how you stack up against your geographic neighbors.',
-    scope: 'Players from 1 region → ranked by banked chips',
+    scope: 'Players from 1 region → top 100 by banked chips',
   },
   tiers: {
     title: 'Milestone Tiers',
     desc: 'Players who reached specific chip milestones. Select a tier to see who achieved it. Think of it as a "hall of achievers" grouped by how much they have banked.',
-    scope: 'Filtered by chip milestone threshold',
+    scope: 'Filtered by chip milestone threshold → top 100',
   },
 };
 
@@ -132,6 +132,14 @@ interface EnrichedEntry extends LeaderboardEntry {
   isDemo?: boolean;
 }
 
+interface MilestoneRecord {
+  tier: string;
+  badge: string;
+  color: string;
+  chips: number;
+  achievedAt: string;
+}
+
 interface MyRankData {
   globalRank: number;
   nationalRank: number;
@@ -147,6 +155,7 @@ interface MyRankData {
   totalGlobal: number;
   totalNational: number;
   totalRegional: number;
+  milestones: MilestoneRecord[];
 }
 
 // ── Sub-components ─────────────────────────────────────────────────
@@ -263,8 +272,32 @@ function LiveTicker({ messages }: { messages: { id: string; ts: string; text: st
   );
 }
 
-// Find Me rank card (shown as a floating card when player not in visible list)
-function FindMeCard({ myRank, onClose }: { myRank: MyRankData; onClose: () => void }) {
+// Find Me rank card (shown as a floating card — highlights contextual rank for current tab)
+function FindMeCard({ myRank, activeTab, selectedCountry, selectedRegion, onClose }: {
+  myRank: MyRankData;
+  activeTab: TopTab;
+  selectedCountry: string;
+  selectedRegion: string;
+  onClose: () => void;
+}) {
+  // Determine the highlighted rank based on active tab
+  const contextualRank = (() => {
+    switch (activeTab) {
+      case 'summit': return { label: 'National (your country)', rank: myRank.nationalRank, total: myRank.totalNational, color: 'text-amber-400' };
+      case 'global': return { label: 'Global', rank: myRank.globalRank, total: myRank.totalGlobal, color: 'text-amber-400' };
+      case 'national': return { label: `National (${selectedCountry})`, rank: myRank.nationalRank, total: myRank.totalNational, color: 'text-violet-400' };
+      case 'regional': return { label: `Regional (${myRank.regionName})`, rank: myRank.regionalRank, total: myRank.totalRegional, color: 'text-pink-400' };
+      case 'tiers': return { label: 'Global (by tier)', rank: myRank.globalRank, total: myRank.totalGlobal, color: 'text-yellow-400' };
+    }
+  })();
+
+  const cr = contextualRank;
+  const fmtDate = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) + ', ' +
+      d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' }) + ' UTC';
+  };
+
   return (
     <div className="relative rounded-xl p-4 mb-4 border border-amber-500/40 bg-amber-950/20 animate-in fade-in slide-in-from-top-2 duration-300">
       <button type="button" onClick={onClose} className="absolute top-2 right-2 text-slate-500 hover:text-white transition"><X className="w-4 h-4" /></button>
@@ -272,31 +305,52 @@ function FindMeCard({ myRank, onClose }: { myRank: MyRankData; onClose: () => vo
         <Crosshair className="w-4 h-4 text-amber-400" />
         <span className="text-xs font-bold text-amber-300 uppercase tracking-widest font-mono">Your Rank Summary</span>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+
+      {/* Highlighted contextual rank for current tab */}
+      <div className="rounded-lg bg-slate-950/60 p-3 mb-3 border border-slate-800">
+        <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">Your rank in this view</div>
+        <div className={`text-2xl font-black tabular-nums ${cr.color}`}>#{cr.rank}<span className="text-[10px] text-slate-500 font-normal ml-1">/ {cr.total}</span></div>
+        <div className="text-[10px] text-slate-400">{cr.label}</div>
+      </div>
+
+      {/* Other ranks */}
+      <div className="grid grid-cols-3 gap-3 mb-3">
         <div>
           <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">Global</div>
-          <div className="text-lg font-black text-amber-400 tabular-nums">#{myRank.globalRank}<span className="text-[10px] text-slate-500 font-normal ml-1">/ {myRank.totalGlobal}</span></div>
+          <div className="text-sm font-black text-amber-400 tabular-nums">#{myRank.globalRank}<span className="text-[9px] text-slate-500 font-normal ml-1">/ {myRank.totalGlobal}</span></div>
         </div>
         <div>
-          <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">National ({myRank.country})</div>
-          <div className="text-lg font-black text-emerald-400 tabular-nums">#{myRank.nationalRank}<span className="text-[10px] text-slate-500 font-normal ml-1">/ {myRank.totalNational}</span></div>
+          <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">National</div>
+          <div className="text-sm font-black text-emerald-400 tabular-nums">#{myRank.nationalRank}<span className="text-[9px] text-slate-500 font-normal ml-1">/ {myRank.totalNational}</span></div>
         </div>
         <div>
-          <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">Regional ({myRank.regionName})</div>
-          <div className="text-lg font-black text-pink-400 tabular-nums">#{myRank.regionalRank}<span className="text-[10px] text-slate-500 font-normal ml-1">/ {myRank.totalRegional}</span></div>
-        </div>
-        <div>
-          <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">Milestone</div>
-          <div className="text-sm font-bold" style={{ color: milestoneTierForChips(myRank.bankedChips).color }}>{myRank.tier}</div>
-          <div className="text-[10px] text-slate-500 truncate max-w-[140px]">{myRank.tierName}</div>
+          <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">Regional</div>
+          <div className="text-sm font-black text-pink-400 tabular-nums">#{myRank.regionalRank}<span className="text-[9px] text-slate-500 font-normal ml-1">/ {myRank.totalRegional}</span></div>
         </div>
       </div>
-      <div className="mt-2 flex items-center gap-3 text-[10px] font-mono text-slate-400">
+
+      <div className="flex items-center gap-3 text-[10px] font-mono text-slate-400 mb-3">
         <span>Chips: <span className="text-emerald-400 font-bold">{myRank.bankedChips.toLocaleString()}c</span></span>
         <span>·</span>
         <span>Level: <span className="text-white font-bold">{myRank.level}</span></span>
         {myRank.clanTag && <><span>·</span><span>Clan: <span className="text-cyan-300 font-bold">[{myRank.clanTag}]</span></span></>}
       </div>
+
+      {/* Milestone timestamps */}
+      {myRank.milestones.length > 0 && (
+        <div className="border-t border-slate-800 pt-2 mt-2">
+          <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-1.5">Milestone History</div>
+          <div className="flex flex-wrap gap-2">
+            {myRank.milestones.map((m) => (
+              <div key={m.tier} className="rounded-md bg-slate-900 border border-slate-800 px-2 py-1 flex flex-col">
+                <span className="text-[10px] font-bold" style={{ color: m.color }}>{m.badge}</span>
+                <span className="text-[9px] font-mono text-slate-400">{m.chips.toLocaleString()}c</span>
+                <span className="text-[8px] font-mono text-slate-500">{fmtDate(m.achievedAt)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -344,25 +398,31 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
   const fetchBoard = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ type: 'chips', limit: '1000' });
+      const params = new URLSearchParams({ type: 'chips' });
 
+      // Global (no milestone) = 1-to-N (up to 1000). All others = top 100.
       switch (activeTab) {
         case 'summit':
           params.set('view', 'world_summit');
+          params.set('limit', '100');
           break;
         case 'global':
           params.set('view', 'global');
+          // No limit param = server defaults to 1000 (1-to-N)
           break;
         case 'national':
           params.set('view', 'national');
           params.set('country', selectedCountry);
+          params.set('limit', '100');
           break;
         case 'regional':
           params.set('view', 'regional');
           params.set('region', selectedRegion);
+          params.set('limit', '100');
           break;
         case 'tiers':
           params.set('view', 'global');
+          params.set('limit', '100');
           if (selectedTierId !== 'all') {
             params.set('milestone', selectedTierId);
           }
@@ -508,7 +568,6 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
         setTimeout(() => myRow.classList.remove('ring-2', 'ring-amber-400/60'), 2000);
         notify('Found you on the leaderboard!', 'success', onToast);
       } else {
-        // Player not in visible list — show rank summary card
         setShowFindMe(true);
         notify(`You are #${data.globalRank} globally. See your rank summary below!`, 'info', onToast);
       }
@@ -578,7 +637,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
       {tickerMessages.length > 0 && <LiveTicker messages={tickerMessages} />}
 
       {/* Find Me Card (shown when player not in visible list) */}
-      {showFindMe && myRankData && <FindMeCard myRank={myRankData} onClose={() => setShowFindMe(false)} />}
+      {showFindMe && myRankData && <FindMeCard myRank={myRankData} activeTab={activeTab} selectedCountry={selectedCountry} selectedRegion={selectedRegion} onClose={() => setShowFindMe(false)} />}
 
       {/* Tab Description */}
       <TabDescription tab={activeTab} />
@@ -672,6 +731,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
             <span className="text-[10px] font-mono text-slate-500">
               {isRealData ? `Total Players: ${filteredEntries.length}` : 'Demo data — real rankings appear when players compete'}
             </span>
+            <span className="text-[9px] font-mono text-slate-600">Tie-break: chips → level → join date</span>
           </div>
 
           {/* Top 3 Podium (only for real data with 3+ entries) */}

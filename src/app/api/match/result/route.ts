@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { toProfile } from '@/lib/player-helpers';
-import { getArenaById, levelFromXp } from '@/lib/game-config';
+import { getArenaById, levelFromXp, MILESTONE_TIERS } from '@/lib/game-config';
 import { utcToday, utcMonday } from '@/lib/date-utils';
+
+const TRACKABLE_TIERS = ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'omega'] as const;
 
 // ---------------------------------------------------------------------------
 // Challenge progress updater (runs inside the caller's Prisma transaction)
@@ -198,6 +200,21 @@ export async function POST(req: NextRequest) {
       starsCollected,
       durationSeconds,
     });
+
+    // --- Milestone tracking (first time reaching each tier) ---
+    if (outcome === 'extract') {
+      const newChips = p.bankedChips + (chipsEarned || 0);
+      for (const tierId of TRACKABLE_TIERS) {
+        const tier = MILESTONE_TIERS.find(t => t.id === tierId);
+        if (tier && newChips >= tier.minChips) {
+          await tx.playerMilestone.upsert({
+            where: { playerId_tierId: { playerId: player.id, tierId } },
+            create: { playerId: player.id, tierId, chipsAtMilestone: newChips },
+            update: {},
+          });
+        }
+      }
+    }
 
     return updatedPlayer;
     });
