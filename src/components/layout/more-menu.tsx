@@ -19,7 +19,7 @@ interface MenuItem {
 
 const ITEMS: MenuItem[] = [
   { tabId: 'shop', Icon: ShoppingBag, label: 'Shop & Lab', color: 'text-purple-400 bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20' },
-  { tabId: 'profile', Icon: User, label: 'Dossier', color: 'text-blue-400 bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20' },
+  { tabId: 'profile', Icon: User, label: 'Agent Profile', color: 'text-blue-400 bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20' },
   { tabId: 'championships', Icon: Crown, label: 'Championships', color: 'text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20' },
   { tabId: 'halloffame', Icon: Award, label: 'Hall of Fame', color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20 hover:bg-yellow-500/20' },
   { tabId: 'clans', Icon: Shield, label: 'Syndicates', color: 'text-violet-400 bg-violet-500/10 border-violet-500/20 hover:bg-violet-500/20' },

@@ -77,7 +77,7 @@ interface TabDef {
 const TABS: TabDef[] = [
   { id: 'arena', label: 'Play', icon: Compass, activeColor: 'text-indigo-400 bg-indigo-600/10 border-indigo-500/30' },
   { id: 'shop', label: 'Shop & Lab', icon: ShoppingBag, activeColor: 'text-purple-400 bg-purple-600/10 border-purple-500/30' },
-  { id: 'profile', label: 'Dossier', icon: User, activeColor: 'text-blue-400 bg-blue-600/10 border-blue-500/30' },
+  { id: 'profile', label: 'Agent Profile', icon: User, activeColor: 'text-blue-400 bg-blue-600/10 border-blue-500/30' },
   { id: 'leaderboard', label: 'Leaderboard', icon: Trophy, activeColor: 'text-amber-400 bg-amber-500/10 border-amber-500/30' },
   { id: 'championships', label: 'Championships', icon: Crown, activeColor: 'text-amber-400 bg-amber-500/10 border-amber-500/30' },
   { id: 'halloffame', label: 'Hall of Fame', icon: Award, activeColor: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30' },
@@ -91,7 +91,7 @@ const TABS: TabDef[] = [
 ];
 
 const PANEL_TITLES: Record<string, string> = {
-  arena: 'Play Arena', shop: 'Shop & Lab', profile: 'Challenger Dossier',
+  arena: 'Play Arena', shop: 'Shop & Lab', profile: 'Agent Profile',
   leaderboard: 'Global Standings', championships: 'Championships',
   halloffame: 'Hall of Fame', clans: 'Syndicates', seasonpass: 'Season Pass',
   clips: 'Highlights', rewards: 'Daily Claims', store: 'Chip Vault',
@@ -466,7 +466,7 @@ export default function Home() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <BentoGate onClick={() => setActiveTab('arena')} icon={Compass} accent="indigo" badge="Battle Gate" title="Play Endless Arenas" desc="Risk chips to compete in simulated multiplayer shards. Harvest dropping stars and escape safely." footLeft="STAKES FROM: 10 chips" footRight="Enter" />
                     <BentoGate onClick={() => setActiveTab('shop')} icon={ShoppingBag} accent="purple" badge="Customize Lab" title="Identity Workshop & Shop" desc="Unlock glowing skins, trials, death burst novas, or design a custom repeating body segment sequence." footLeft={`EQUIPPED: ${player.currentSkin ? 'Custom DNA' : 'Gallery Skin'}`} footRight="Modify" />
-                    <BentoGate onClick={() => setActiveTab('profile')} icon={User} accent="blue" badge="My Record" title="Challenger Dossier" desc="Examine your records, high scores, total banked wealth, and change your operative callsign." footLeft={`HIGH SCORE: ${(player.biggestExtract || 0).toLocaleString()}`} footRight="Inspect" />
+                    <BentoGate onClick={() => setActiveTab('profile')} icon={User} accent="blue" badge="My Record" title="Agent Profile" desc="Examine your records, high scores, total banked wealth, and change your operative callsign." footLeft={`HIGH SCORE: ${(player.biggestExtract || 0).toLocaleString()}`} footRight="Inspect" />
                     <BentoGate onClick={() => setActiveTab('leaderboard')} icon={Trophy} accent="amber" badge="Elite Standings" title="Global Standings" desc="Track rank placements and compare your banked chip balance against other elite venom snake operators." footLeft="LEADERBOARD RANK: Tier 1" footRight="View" />
                     <BentoGate onClick={() => setActiveTab('rewards')} icon={Gift} accent="emerald" badge="Complimentary" title="Daily Free Claims" desc="Secure your complimentary login chips. Claim daily streaks, hourly micro-rewards, and spin the lucky wheel!" footLeft={`STREAK: ${player.dailyStreak || 1} Days`} footRight="Claim" />
                     <BentoGate onClick={() => setActiveTab('store')} icon={Coins} accent="cyan" badge="Secure Vault" title="Virtual Chip Store" desc="Acquire secure safe-guarded chip packs immediately to compete in high-stakes premium arena tables." footLeft={`WALLET: ${player.bankedChips.toLocaleString()} c`} footRight="Shop" />
