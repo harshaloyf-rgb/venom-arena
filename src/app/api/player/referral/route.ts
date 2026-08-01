@@ -14,16 +14,27 @@ export async function GET() {
     const player = await db.player.findUnique({ where: { id: session.playerId } });
     if (!player) return NextResponse.json({ error: 'Player not found.' }, { status: 404 });
 
-    const referrals = await db.referral.findMany({
-      where: { referrerId: player.id },
-      include: {
-        referred: { select: { id: true, name: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const [referrals, myReferral] = await Promise.all([
+      db.referral.findMany({
+        where: { referrerId: player.id },
+        include: {
+          referred: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      db.referral.findUnique({
+        where: { referredId: player.id },
+        include: {
+          referrer: { select: { id: true, name: true, referralCode: true } },
+        },
+      }),
+    ]);
 
     return NextResponse.json({
       referralCode: player.referralCode,
+      hasReferrer: !!myReferral,
+      referrerName: myReferral?.referrer.name ?? null,
+      referrerCode: myReferral?.referrer.referralCode ?? null,
       referrals: referrals.map((r) => ({
         id: r.id,
         referredName: r.referred.name,
