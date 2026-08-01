@@ -1114,3 +1114,28 @@ Stage Summary:
 - Every impressive match auto-becomes content (5K+ chips or 3+ kills)
 - Users record from their own device and share YouTube/Instagram/Twitch links
 - No video storage, no recording costs — just URL strings + auto-rendered stat cards
+---
+Task ID: 8
+Agent: main
+Task: Content moderation system — clip approval, word filter, upload guidelines, rich empty state
+
+Work Log:
+- Added status/reviewedBy/reviewedAt fields to Clip schema
+- Created /api/clips/admin: GET lists pending/approved/rejected with counts, POST approves/rejects single, PUT bulk approve/reject
+- Updated /api/clips GET: public only sees approved clips, own player + ?pending=true sees their pending
+- Updated /api/clips POST: user clips start as pending, match-cards auto-approved
+- Updated /api/clips/featured: only returns approved clips
+- Updated match-history auto-publish: explicitly sets status='approved'
+- Added word filter (English + Hindi/Hinglish profanity, URL patterns) with regex word boundary matching
+- Added title length limits (5-120 chars), description limit (300 chars)
+- Complete upload modal redesign: 4-step how-it-works, ✅/🚫 guidelines with examples, character counter, review notice, Submit for Review button
+- Rich empty state: 3 step cards, content rules summary, Share Your First Clip CTA
+- Committed and pushed: 9369f3b
+
+Stage Summary:
+- User-submitted clips require admin approval before public visibility
+- System-generated match-cards are auto-approved
+- Word filter blocks English + Hindi profanity in titles/descriptions
+- Admin API at /api/clips/admin for reviewing pending clips
+- Upload modal guides users with clear rules, examples, and review notice
+- Empty state is now informative instead of a blank page
