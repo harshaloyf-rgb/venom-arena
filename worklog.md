@@ -319,3 +319,38 @@ Stage Summary:
 - All ranking is 1-to-N (real players only, no artificial caps)
 - Find Me always works — shows rank card when player not in current view
 - Demo data: 3 entries with DEMO badge only when board is empty, never confused with real data
+
+---
+Task ID: leaderboard-v3
+Agent: main
+Task: Tie-break visibility, Milestone History section, per-tab Find Me
+
+Work Log:
+- **Tie-breaking visibility**: Added `TieBreakBadge` component showing WHY one player ranks above another when chips are equal. Two reasons displayed:
+  - `Lower Lv` (Swords icon, amber) — player has lower level than the tied player above
+  - `Joined Later` (Clock icon, slate) — same level but joined the game later (veteran advantage)
+  - Full explanation text added to ALL tabs: "Tie-break: chips → level → join date"
+  - Client-side tie detection compares consecutive sorted entries' chips and levels
+  - Demo data includes a tie (Alpha 500K Lv25 vs Beta 500K Lv22) to demonstrate the badge
+- **Milestone History section**: New `MilestoneHistorySection` component placed prominently in the leaderboard:
+  - Collapsible card showing player's milestone achievement timeline
+  - Progress bar showing 6 tiers (Bronze → Silver → Gold → Platinum → Diamond → Omega)
+  - Each achieved milestone shows: badge, name, chips banked, exact timestamp (date + time UTC)
+  - "Current" badge on latest achieved tier, fire emoji
+  - "Next milestone" hint showing what tier to aim for and chip threshold
+  - Shows DEMO milestones (3 entries) when player has no real milestones, with DEMO badge
+  - Fetches from existing `/api/leaderboard/my-rank` API (already returns milestones from PlayerMilestone table)
+- **Per-tab Find Me**: Moved Find Me from the global header to inside each tab's toolbar:
+  - Each tab has its own Find Me button, color-matched to the tab's theme
+  - Removed the single global Find Me button from the header
+  - Reusable `TabToolbar` component provides count label + tie-break text + Find Me button per tab
+- **1-to-100 for non-Global**: Verified already implemented (limit=100 for Summit/National/Regional/Tiers, no limit for Global)
+- **API update**: Added `createdAt` (ISO string) to leaderboard API response entries for full tie-break transparency
+- Demo entries updated: Alpha and Beta both have 500K chips to demonstrate tie-break badge
+
+Stage Summary:
+- Tie-break is now visible: players see "Lower Lv" or "Joined Later" badges explaining rank ordering
+- Milestone History section always visible with demo data, shows achievement timeline with timestamps
+- Find Me is per-tab, color-matched to each tab's accent color
+- All 5 tabs verified in browser: Summit, Global, National, Regional, Tiers
+- Lint clean, zero console errors
