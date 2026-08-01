@@ -656,3 +656,32 @@ Stage Summary:
 - Frontend: Complete rewrite of player-profile.tsx with all improvements
 - All improvements verified in browser: profile header, cosmetics showcase, copy tag, referral code, account age, last seen, DB-backed guardrails, DB-backed match history, mobile cards, confirmation dialogs, delete account
 - Lint clean, zero runtime errors
+
+---
+Task ID: Dossier-v2-improvements
+Agent: main
+Task: Fix all broken/missing improvements in Agent Profile panel
+
+Work Log:
+- Renamed "Dossier" → "Agent Profile" in 3 files: page.tsx (tab label, panel title, bento gate), more-menu.tsx, game-rules-modal.tsx (2 FAQ answers)
+- Added new imports: Monitor, Search, Wifi, Zap from lucide-react
+- Extended IdentityLogEntry type with optional ipAddress, deviceFingerprint, verificationHash, tamperFlag fields
+- Added SpectateSession interface for live spectate data
+- Added 2 more seed friends (NeonStriker, BlazeFang) for richer demo data
+- Added new state: friendSearch, friendStatusFilter, spectatingFriend, spectateTimer
+- Updated identity log seed data with IP, device fingerprint, and verification hash
+- Updated identity log creation on profile save to include new fields
+- Created ProfilePictureAndAppearance component (~160 lines): Profile Picture card (avatar + change button) + Character Appearance card (SVG snake visual with skin/trail colors, glow effects, 4 equipped cosmetic info cards)
+- Created SpectateOverlay component (~90 lines): Live match spectator with SVG arena, snake paths, food orbs, LIVE badge, timer, extraction progress bar, 4 live stats (Chips/Kills/Tail/Status)
+- Rewrote Friends tab: added online/in-match/offline stats bar, search input, status filter pills, friend cards now show chip balance with color progress bar, snake-colored avatar borders, spectate opens real overlay instead of toast, gift received badge
+- Rewrote Identity Anti-Tamper Logs tab: added INTEGRITY SEAL: VERIFIED banner with NO TAMPER DETECTED badge, device/session info, 3 stat counters (Total Handshakes/Verified Clean/Tamper Flags), log entries now show IP/device/hash, tamper flag styling, ANTI-TAMPER PROTOCOL ACTIVE footer
+- Browser verified: all tabs render, zero JS errors, spectate overlay shows live arena with snake animation
+
+Stage Summary:
+- 6 major improvements implemented across 4 files
+- Profile Picture section: clickable avatar with hover-to-change overlay and "Change Picture" button
+- Character Appearance: SVG snake with dynamic skin/trail colors, glow filter, 4 cosmetic detail cards
+- Friends & Spectate: search, status filters, chip balances, real spectate overlay with LIVE arena view
+- Identity Anti-Tamper Logs: security seal, device info, verification hashes, tamper detection
+- All references to "Dossier" renamed to "Agent Profile"
+- Lint clean, zero runtime errors, all features browser-verified

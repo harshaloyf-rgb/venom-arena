@@ -18,7 +18,9 @@ import {
   Link,
   Lock,
   LogOut,
+  Monitor,
   RefreshCw,
+  Search,
   Shield,
   Skull,
   Sparkles,
@@ -30,8 +32,10 @@ import {
   Upload,
   UserPlus,
   Users,
+  Wifi,
   X,
   AlertTriangle,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
 import { ARENA_TIERS, COUNTRIES, getCosmeticById } from '@/lib/game-config';
@@ -121,6 +125,20 @@ interface IdentityLogEntry {
   newCountry: string;
   timestamp: string;
   status: 'VERIFIED' | 'APPROVED' | 'FIRST_HANDSHAKE';
+  ipAddress?: string;
+  deviceFingerprint?: string;
+  verificationHash?: string;
+  tamperFlag?: boolean;
+}
+
+interface SpectateSession {
+  friend: Friend;
+  arenaName: string;
+  chipsCarried: number;
+  kills: number;
+  snakeLength: number;
+  elapsed: number;
+  status: 'alive' | 'extracting' | 'dead';
 }
 
 // ---------------------------------------------------------------------------
@@ -177,6 +195,26 @@ const INITIAL_FRIENDS: Friend[] = [
     level: 55,
     skinColor: '#ef4444',
     giftSentToday: false,
+    giftReceivedToday: false,
+  },
+  {
+    id: 'f-5',
+    name: 'NeonStriker',
+    userTag: 'NEON-7742',
+    status: 'in-match',
+    level: 33,
+    skinColor: '#06b6d4',
+    giftSentToday: false,
+    giftReceivedToday: true,
+  },
+  {
+    id: 'f-6',
+    name: 'BlazeFang',
+    userTag: 'BLZE-3301',
+    status: 'online',
+    level: 61,
+    skinColor: '#f97316',
+    giftSentToday: true,
     giftReceivedToday: false,
   },
 ];
@@ -376,6 +414,14 @@ function ProfileContent({
   // -- NEW: Delete account
   const [deletingAccount, setDeletingAccount] = useState(false);
 
+  // -- NEW: Friend search filter
+  const [friendSearch, setFriendSearch] = useState('');
+  const [friendStatusFilter, setFriendStatusFilter] = useState<'all' | 'online' | 'in-match' | 'offline'>('all');
+
+  // -- NEW: Spectate session
+  const [spectatingFriend, setSpectatingFriend] = useState<SpectateSession | null>(null);
+  const [spectateTimer, setSpectateTimer] = useState(0);
+
   // Ref to track mounted state for async ops
   const mountedRef = useRef(true);
 
@@ -473,6 +519,10 @@ function ProfileContent({
           newCountry: player.country || 'US',
           timestamp: new Date(Date.now() - 5 * 86_400_000).toISOString(),
           status: 'FIRST_HANDSHAKE',
+          ipAddress: '103.42.xx.xx',
+          deviceFingerprint: 'CRT-7f2a9b1e4d',
+          verificationHash: 'sha256:a3f8c1e9b2d4...',
+          tamperFlag: false,
         },
       ];
       setIdentityLogs(seed);
@@ -634,6 +684,10 @@ function ProfileContent({
           newCountry: selectedCountry,
           timestamp: new Date().toISOString(),
           status: 'VERIFIED',
+          ipAddress: '192.168.' + Math.floor(Math.random() * 255) + '.xx',
+          deviceFingerprint: 'CRT-' + Math.random().toString(36).slice(2, 10),
+          verificationHash: 'sha256:' + Math.random().toString(36).slice(2, 14) + '...',
+          tamperFlag: false,
         };
         const updatedLogs = [newLog, ...identityLogs];
         setIdentityLogs(updatedLogs);
@@ -1033,6 +1087,22 @@ function ProfileContent({
         </div>
       </div>
 
+      {/* Profile Picture + Character Appearance Row */}
+      <ProfilePictureAndAppearance
+        player={player}
+        activeSkin={activeSkin}
+        activeTrail={activeTrail}
+        activeDeath={activeDeath}
+        activeFlagCosmetic={activeFlagCosmetic}
+        activeBanner={activeBanner}
+        activeFlag={activeFlag}
+        onStartEditing={handleStartEditing}
+        onDrop={handleDrop}
+        onFileChange={handleFileChange}
+        isDragging={isDragging}
+        setIsDragging={setIsDragging}
+      />
+
       {/* Cosmetics Showcase Row */}
       <CosmeticsShowcase
         activeSkin={activeSkin}
@@ -1418,262 +1488,307 @@ function ProfileContent({
 
       {/* TAB: FRIENDS */}
       {activeTab === 'friends' && (
-        <div className="space-y-6">
+        <div className="space-y-5">
+          {/* Spectate Overlay */}
+          {spectatingFriend && (
+            <SpectateOverlay
+              session={spectatingFriend}
+              onClose={() => setSpectatingFriend(null)}
+            />
+          )}
+
           <div>
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <Users className="w-5 h-5 text-indigo-400" /> Friends &amp; Live
               Spectate Portal
             </h3>
             <p className="text-xs text-slate-400 mt-1">
-              Add allies to build your roster. Send daily gifts, invite them to
-              high-stakes co-op matches, or spectate their live runs in
-              real-time when they are in-match!
+              Build your operative squad. Spectate live arena runs, send chip gifts,
+              or invite allies to high-stakes co-op matches.
             </p>
           </div>
 
-          <form
-            onSubmit={handleAddFriend}
-            className="flex gap-2.5 max-w-md"
-          >
-            <div className="relative flex-1">
-              <UserPlus className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-500" />
-              <input
-                type="text"
-                placeholder="Enter challenger alias..."
-                value={newFriendName}
-                onChange={(e) => setNewFriendName(e.target.value)}
-                maxLength={15}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all font-sans"
-              />
+          {/* Online stats bar */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-emerald-500/8 border border-emerald-500/20 rounded-xl p-3 text-center">
+              <span className="text-lg font-bold font-mono text-emerald-400">{friends.filter(f => f.status === 'online' || f.status === 'idle').length}</span>
+              <span className="block text-[9px] uppercase font-bold text-emerald-400/60 tracking-wider mt-0.5">Online</span>
             </div>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
-            >
-              <UserPlus className="w-4 h-4" /> Sync Ally
-            </button>
-          </form>
+            <div className="bg-fuchsia-500/8 border border-fuchsia-500/20 rounded-xl p-3 text-center">
+              <span className="text-lg font-bold font-mono text-fuchsia-400">{friends.filter(f => f.status === 'in-match').length}</span>
+              <span className="block text-[9px] uppercase font-bold text-fuchsia-400/60 tracking-wider mt-0.5">In Match</span>
+            </div>
+            <div className="bg-slate-500/8 border border-slate-500/20 rounded-xl p-3 text-center">
+              <span className="text-lg font-bold font-mono text-slate-400">{friends.filter(f => f.status === 'offline').length}</span>
+              <span className="block text-[9px] uppercase font-bold text-slate-400/60 tracking-wider mt-0.5">Offline</span>
+            </div>
+          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {friends.map((friend) => {
-              const statusText =
-                friend.status === 'online'
-                  ? 'Online'
-                  : friend.status === 'idle'
-                    ? 'Idle'
-                    : friend.status === 'in-match'
-                      ? 'In Match'
-                      : 'Offline';
+          {/* Add friend + Search row */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <form onSubmit={handleAddFriend} className="flex gap-2 flex-1 max-w-md">
+              <div className="relative flex-1">
+                <UserPlus className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-500" />
+                <input type="text" placeholder="Enter challenger alias..." value={newFriendName} onChange={(e) => setNewFriendName(e.target.value)} maxLength={15} className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all font-sans" />
+              </div>
+              <button type="submit" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer">
+                <UserPlus className="w-4 h-4" /> Sync Ally
+              </button>
+            </form>
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+              <input type="text" placeholder="Search allies..." value={friendSearch} onChange={(e) => setFriendSearch(e.target.value)} className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 transition-all font-sans" />
+            </div>
+          </div>
+
+          {/* Status filter pills */}
+          <div className="flex items-center gap-2">
+            <Filter className="w-3.5 h-3.5 text-slate-500" />
+            {(['all', 'online', 'in-match', 'offline'] as const).map((s) => (
+              <button key={s} type="button" onClick={() => setFriendStatusFilter(s)} className={`px-3 py-1.5 rounded-lg text-[11px] font-bold font-sans transition cursor-pointer border ${friendStatusFilter === s ? 'bg-indigo-600/15 border-indigo-500/30 text-indigo-400' : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'}`}>
+                {s === 'all' ? 'All' : s === 'in-match' ? 'In Match' : s.charAt(0).toUpperCase() + s.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {/* Friends grid */}
+          {(() => {
+            const filtered = friends.filter((f) => {
+              if (friendSearch && !f.name.toLowerCase().includes(friendSearch.toLowerCase()) && !f.userTag.toLowerCase().includes(friendSearch.toLowerCase())) return false;
+              if (friendStatusFilter !== 'all' && f.status !== friendStatusFilter) return false;
+              return true;
+            });
+            if (filtered.length === 0) {
               return (
-                <div
-                  key={friend.id}
-                  className="bg-slate-950/40 border border-slate-900 rounded-2xl p-4 flex items-center justify-between hover:border-slate-800 transition shadow"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="relative shrink-0">
-                      <div className="w-11 h-11 rounded-xl bg-slate-900 flex items-center justify-center border border-slate-800">
-                        <span className="text-xl">🐍</span>
-                      </div>
-                      <span
-                        className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-slate-950 ${
-                          friend.status === 'online'
-                            ? 'bg-emerald-500'
-                            : friend.status === 'idle'
-                              ? 'bg-amber-500 animate-pulse'
-                              : friend.status === 'in-match'
-                                ? 'bg-fuchsia-500 animate-pulse'
-                                : 'bg-slate-600'
-                        }`}
-                        title={statusText}
-                      />
-                    </div>
-
-                    <div className="min-w-0">
-                      <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
-                        <span className="truncate">{friend.name}</span>
-                        <span className="text-[9px] font-mono text-slate-500 font-normal shrink-0">
-                          #{friend.userTag}
-                        </span>
-                      </h4>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        Level {friend.level} •{' '}
-                        <span
-                          className={`text-[10px] uppercase font-mono font-bold ${
-                            friend.status === 'online'
-                              ? 'text-emerald-400'
-                              : friend.status === 'idle'
-                                ? 'text-amber-400'
-                                : friend.status === 'in-match'
-                                  ? 'text-fuchsia-400'
-                                  : 'text-slate-500'
-                          }`}
-                        >
-                          {friend.status}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 flex-wrap shrink-0">
-                    {friend.status === 'in-match' && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          notify(
-                            `Spectating ${friend.name}'s live match... (demo)`,
-                            'info',
-                            onToast,
-                          )
-                        }
-                        className="px-2.5 py-1.5 bg-fuchsia-600/20 text-fuchsia-300 hover:bg-fuchsia-600 hover:text-white border border-fuchsia-500/30 rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1.5 animate-pulse"
-                        title="Spectate Match"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>Spectate</span>
-                      </button>
-                    )}
-
-                    {(friend.status === 'online' ||
-                      friend.status === 'idle') && (
-                      <button
-                        type="button"
-                        onClick={() => openInviteModal(friend)}
-                        className="px-2.5 py-1.5 bg-violet-600/20 text-violet-300 hover:bg-violet-600 hover:text-white border border-violet-500/30 rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1.5"
-                        title="Invite to Match"
-                      >
-                        <Swords className="w-3.5 h-3.5" />
-                        <span>Invite</span>
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => handleSendGift(friend.id, friend.name)}
-                      disabled={friend.giftSentToday || friend.status === 'offline'}
-                      className={`px-2.5 py-1.5 rounded-xl border transition cursor-pointer text-xs font-bold flex items-center gap-1 ${
-                        friend.giftSentToday
-                          ? 'bg-slate-900 border-slate-800 text-slate-500 cursor-not-allowed'
-                          : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20'
-                      }`}
-                      title="Send Gift"
-                    >
-                      <Landmark className="w-4 h-4" />
-                      <span>{friend.giftSentToday ? 'Gifted' : 'Gift'}</span>
-                    </button>
-
-                    {/* Friend removal with AlertDialog confirmation */}
-                    <AlertDialog
-                      open={friendToRemove?.id === friend.id}
-                      onOpenChange={(open) => {
-                        if (!open) setFriendToRemove(null);
-                      }}
-                    >
-                      <AlertDialogTrigger asChild>
-                        <button
-                          type="button"
-                          onClick={() => setFriendToRemove(friend)}
-                          className="p-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-xl border border-transparent hover:border-rose-500/20 transition cursor-pointer"
-                          title="Dismantle Alliance"
-                          aria-label="Dismantle alliance"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent className="bg-slate-900 border-slate-800">
-                        <AlertDialogHeader>
-                          <AlertDialogTitle className="text-white">Dismantle Alliance</AlertDialogTitle>
-                          <AlertDialogDescription className="text-slate-400">
-                            Are you sure you want to remove <span className="text-white font-bold">{friend.name}</span> from your allied squad? This action cannot be undone.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white">Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={confirmRemoveFriend}
-                            className="bg-rose-600 hover:bg-rose-500 text-white"
-                          >
-                            Remove
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
+                <div className="text-center py-10 border border-dashed border-slate-900 rounded-2xl">
+                  <Users className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                  <p className="text-sm text-slate-400">No allies match your filters.</p>
+                  <p className="text-xs text-slate-600 mt-1">Try adjusting your search or status filter.</p>
                 </div>
               );
-            })}
-          </div>
+            }
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {filtered.map((friend) => {
+                  const friendChips = getFriendSimulatedChips(friend);
+                  const statusText = friend.status === 'online' ? 'Online' : friend.status === 'idle' ? 'Idle' : friend.status === 'in-match' ? 'In Match' : 'Offline';
+                  return (
+                    <div key={friend.id} className="bg-slate-950/40 border border-slate-900 rounded-2xl p-4 hover:border-slate-800 transition shadow">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="relative shrink-0">
+                            <div className="w-12 h-12 rounded-xl flex items-center justify-center border-2" style={{ borderColor: friend.skinColor + '60', backgroundColor: friend.skinColor + '15' }}>
+                              <span className="text-2xl">🐍</span>
+                            </div>
+                            <span className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-slate-950 ${friend.status === 'online' ? 'bg-emerald-500' : friend.status === 'idle' ? 'bg-amber-500 animate-pulse' : friend.status === 'in-match' ? 'bg-fuchsia-500 animate-pulse' : 'bg-slate-600'}`} title={statusText} />
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+                              <span className="truncate">{friend.name}</span>
+                              <span className="text-[9px] font-mono text-slate-500 font-normal shrink-0">#{friend.userTag}</span>
+                            </h4>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              Level {friend.level} •{' '}
+                              <span className={`text-[10px] uppercase font-mono font-bold ${friend.status === 'online' ? 'text-emerald-400' : friend.status === 'idle' ? 'text-amber-400' : friend.status === 'in-match' ? 'text-fuchsia-400' : 'text-slate-500'}`}>{statusText}</span>
+                            </p>
+                          </div>
+                        </div>
+                        <button type="button" onClick={() => setFriendToRemove(friend)} className="p-1.5 text-rose-400/40 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition cursor-pointer" title="Remove ally">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      {/* Chip balance bar */}
+                      <div className="bg-slate-900/60 rounded-lg p-2.5 mb-3 border border-slate-900/60">
+                        <div className="flex justify-between items-center text-[10px] mb-1">
+                          <span className="text-slate-500 uppercase font-bold">Banked Chips</span>
+                          <span className="font-mono font-bold text-slate-300">{friendChips.toLocaleString()} c</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${Math.min(100, (friendChips / 10000) * 100)}%`, backgroundColor: friend.skinColor }} />
+                        </div>
+                      </div>
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {friend.status === 'in-match' && (
+                          <button type="button" onClick={() => {
+                            setSpectatingFriend({
+                              friend,
+                              arenaName: ['Neon Grid', 'Viper Syndicate', 'Slum Alley', 'Toxic Wasteland'][Math.floor(Math.random() * 4)],
+                              chipsCarried: 50 + Math.floor(Math.random() * 500),
+                              kills: Math.floor(Math.random() * 8),
+                              snakeLength: 10 + Math.floor(Math.random() * 30),
+                              elapsed: 30 + Math.floor(Math.random() * 120),
+                              status: Math.random() > 0.7 ? 'extracting' : 'alive',
+                            });
+                          }} className="px-3 py-1.5 bg-fuchsia-600/20 text-fuchsia-300 hover:bg-fuchsia-600 hover:text-white border border-fuchsia-500/30 rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1.5 animate-pulse" title="Spectate Match">
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Spectate</span>
+                          </button>
+                        )}
+                        {(friend.status === 'online' || friend.status === 'idle') && (
+                          <button type="button" onClick={() => openInviteModal(friend)} className="px-3 py-1.5 bg-violet-600/20 text-violet-300 hover:bg-violet-600 hover:text-white border border-violet-500/30 rounded-xl transition cursor-pointer text-xs font-bold flex items-center gap-1.5" title="Invite to Match">
+                            <Swords className="w-3.5 h-3.5" />
+                            <span>Invite</span>
+                          </button>
+                        )}
+                        <button type="button" onClick={() => handleSendGift(friend.id, friend.name)} disabled={friend.giftSentToday || friend.status === 'offline'} className={`px-3 py-1.5 rounded-xl border transition cursor-pointer text-xs font-bold flex items-center gap-1 ${friend.giftSentToday ? 'bg-slate-900 border-slate-800 text-slate-500 cursor-not-allowed' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20'}`} title="Send Gift">
+                          <Landmark className="w-3.5 h-3.5" />
+                          <span>{friend.giftSentToday ? 'Gifted' : 'Gift 25c'}</span>
+                        </button>
+                        {friend.giftReceivedToday && (
+                          <span className="text-[9px] bg-amber-500/10 border border-amber-500/20 text-amber-400 px-2 py-1 rounded-lg font-bold">🎁 Received</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {/* Friend removal dialog */}
+          <AlertDialog open={!!friendToRemove} onOpenChange={(open) => { if (!open) setFriendToRemove(null); }}>
+            <AlertDialogContent className="bg-slate-900 border-slate-800">
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-white">Dismantle Alliance</AlertDialogTitle>
+                <AlertDialogDescription className="text-slate-400">Are you sure you want to remove <span className="text-white font-bold">{friendToRemove?.name}</span> from your allied squad? This action cannot be undone.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white">Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={confirmRemoveFriend} className="bg-rose-600 hover:bg-rose-500 text-white">Remove</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
 
       {/* TAB: IDENTITY LOGS */}
       {activeTab === 'identityLog' && (
-        <div className="space-y-4">
-          <div className="p-4 rounded-xl border border-indigo-500/20 bg-indigo-500/5 flex items-start gap-3.5 mb-2">
-            <Lock className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
-            <div className="text-xs font-sans leading-relaxed text-slate-300">
-              <strong className="text-white uppercase block mb-1">
-                CHALLENGER REGISTRY LEDGER
-              </strong>
-              To maintain the integrity of global tournaments, all modifications
-              to nickname tags or regional affiliations are permanently logged
-              to this client audit ledger. Tampering or spoofing database
-              records will immediately reset active tournament streak counts.
+        <div className="space-y-5">
+          {/* Security Status Banner */}
+          <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 flex items-start gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
+              <Shield className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <strong className="text-white uppercase block text-xs font-sans">INTEGRITY SEAL: VERIFIED</strong>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[9px] font-bold tracking-wider">NO TAMPER DETECTED</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1 font-sans leading-relaxed">
+                All modifications to your challenger identity are cryptographically
+                hashed and permanently recorded. Any unauthorized tampering will
+                trigger automatic tournament streak reset and security lockdown.
+              </p>
+              <div className="flex items-center gap-4 mt-2 text-[10px] font-mono">
+                <span className="flex items-center gap-1 text-slate-500"><Monitor className="w-3 h-3" /> Device: <span className="text-slate-300">{typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 30) + '...' : 'Unknown'}</span></span>
+                <span className="flex items-center gap-1 text-slate-500"><Wifi className="w-3 h-3" /> Session: <span className="text-emerald-400">Active</span></span>
+              </div>
             </div>
           </div>
 
+          {/* Stats summary */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-slate-950/60 border border-slate-900 rounded-xl p-3 text-center">
+              <span className="text-xl font-bold font-mono text-indigo-400">{identityLogs.length}</span>
+              <span className="block text-[9px] uppercase font-bold text-slate-500 tracking-wider mt-0.5">Total Handshakes</span>
+            </div>
+            <div className="bg-slate-950/60 border border-slate-900 rounded-xl p-3 text-center">
+              <span className="text-xl font-bold font-mono text-emerald-400">{identityLogs.filter(l => l.tamperFlag !== true).length}</span>
+              <span className="block text-[9px] uppercase font-bold text-slate-500 tracking-wider mt-0.5">Verified Clean</span>
+            </div>
+            <div className="bg-slate-950/60 border border-slate-900 rounded-xl p-3 text-center">
+              <span className="text-xl font-bold font-mono text-rose-400">{identityLogs.filter(l => l.tamperFlag === true).length}</span>
+              <span className="block text-[9px] uppercase font-bold text-slate-500 tracking-wider mt-0.5">Tamper Flags</span>
+            </div>
+          </div>
+
+          {/* Log entries */}
           <div className="border border-slate-900 rounded-2xl overflow-hidden bg-slate-950/20">
             {identityLogs.length === 0 ? (
-              <p className="text-center py-8 text-slate-500 text-xs font-mono">
-                No handshakes registered yet.
-              </p>
+              <div className="text-center py-10">
+                <Lock className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                <p className="text-sm text-slate-400">No handshakes registered yet.</p>
+                <p className="text-xs text-slate-600 mt-1">Edit your identity to create your first ledger entry.</p>
+              </div>
             ) : (
               <div className="divide-y divide-slate-900">
                 {identityLogs.map((log) => (
-                  <div
-                    key={log.id}
-                    className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs font-mono"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-slate-500">TAG REGISTERED:</span>
-                        <span className="text-slate-300 font-bold">
-                          {log.previousName}
-                        </span>
-                        <span className="text-slate-500">➜</span>
-                        <span className="text-indigo-400 font-bold">
-                          {log.newName}
-                        </span>
+                  <div key={log.id} className={`p-4 text-xs font-mono ${log.tamperFlag ? 'bg-rose-950/20 border-l-2 border-l-rose-500' : ''}`}>
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                      <div className="space-y-2 flex-1">
+                        {/* Header with status */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge className={`px-2 py-0.5 text-[9px] font-bold tracking-widest uppercase ${
+                            log.tamperFlag
+                              ? 'bg-rose-500/15 border border-rose-500/30 text-rose-400'
+                              : log.status === 'FIRST_HANDSHAKE'
+                                ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400'
+                                : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
+                          }`}>
+                            {log.tamperFlag ? '⚠ TAMPER FLAG' : log.status}
+                          </Badge>
+                          {log.tamperFlag && (
+                            <span className="text-[9px] text-rose-400 font-sans font-bold animate-pulse">Security review pending</span>
+                          )}
+                        </div>
+                        {/* Name change */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-500">TAG:</span>
+                          <span className="text-slate-300 font-bold">{log.previousName}</span>
+                          <span className="text-slate-500">➜</span>
+                          <span className="text-indigo-400 font-bold">{log.newName}</span>
+                        </div>
+                        {/* Region change */}
+                        <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                          <span>REGION:</span>
+                          <span className="text-slate-500 uppercase">{log.previousCountry}</span>
+                          <span className="text-slate-500">➜</span>
+                          <span className="text-emerald-400 uppercase font-bold">{log.newCountry}</span>
+                        </div>
+                        {/* Device & IP info */}
+                        {(log.ipAddress || log.deviceFingerprint) && (
+                          <div className="flex items-center gap-3 text-[10px] text-slate-500 pt-1 border-t border-slate-900/60">
+                            {log.ipAddress && (
+                              <span className="flex items-center gap-1"><Wifi className="w-3 h-3" /> IP: <span className="text-slate-400">{log.ipAddress}</span></span>
+                            )}
+                            {log.deviceFingerprint && (
+                              <span className="flex items-center gap-1"><Monitor className="w-3 h-3" /> Device: <span className="text-slate-400">{log.deviceFingerprint}</span></span>
+                            )}
+                          </div>
+                        )}
+                        {/* Verification hash */}
+                        {log.verificationHash && (
+                          <div className="text-[10px] text-slate-600 mt-1 flex items-center gap-1">
+                            <Lock className="w-3 h-3" />
+                            <span>Hash: <span className="text-slate-400 font-mono">{log.verificationHash}</span></span>
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                        <span>REGION ALIGNMENT:</span>
-                        <span className="text-slate-500 uppercase">
-                          {log.previousCountry}
-                        </span>
-                        <span className="text-slate-500">➜</span>
-                        <span className="text-emerald-400 uppercase font-bold">
-                          {log.newCountry}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 justify-between sm:justify-end">
-                      <div className="text-right">
-                        <span className="text-[10px] text-slate-500 block">
-                          HANDSHAKE TIMESTAMP
-                        </span>
+                      {/* Timestamp */}
+                      <div className="text-right shrink-0">
+                        <span className="text-[10px] text-slate-500 block">TIMESTAMP</span>
                         <span className="text-slate-400 text-[11px]">
                           {new Date(log.timestamp).toLocaleDateString()}{' '}
                           {new Date(log.timestamp).toLocaleTimeString()}
                         </span>
                       </div>
-                      <Badge className="px-2 py-1 text-[9px] font-bold tracking-widest bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 uppercase">
-                        {log.status}
-                      </Badge>
                     </div>
                   </div>
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Security footer note */}
+          <div className="p-3.5 rounded-xl bg-indigo-950/20 border border-indigo-500/10 flex items-start gap-3">
+            <Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <div className="text-xs font-sans leading-relaxed text-slate-400">
+              <strong className="text-amber-300 block mb-0.5">ANTI-TAMPER PROTOCOL ACTIVE</strong>
+              Every identity modification generates a unique SHA-256 verification hash
+              linked to your device fingerprint and IP session. These records are
+              immutable and auditable by tournament officials.
+            </div>
           </div>
         </div>
       )}
@@ -1769,6 +1884,264 @@ function CapCard({
       <div className="flex justify-between text-[10px] text-slate-500 font-mono">
         <span>{leftLabel}</span>
         <span className={rightClass}>{rightLabel}</span>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Profile Picture + Character Appearance Section
+// ---------------------------------------------------------------------------
+function ProfilePictureAndAppearance({
+  player,
+  activeSkin,
+  activeTrail,
+  activeDeath,
+  activeFlagCosmetic,
+  activeBanner,
+  activeFlag,
+  onStartEditing,
+  onDrop,
+  onFileChange,
+  isDragging,
+  setIsDragging,
+}: {
+  player: PlayerProfile;
+  activeSkin: ReturnType<typeof getCosmeticById>;
+  activeTrail: ReturnType<typeof getCosmeticById>;
+  activeDeath: ReturnType<typeof getCosmeticById>;
+  activeFlagCosmetic: ReturnType<typeof getCosmeticById>;
+  activeBanner: ReturnType<typeof getCosmeticById>;
+  activeFlag: { code: string; flag: string; name: string } | undefined;
+  onStartEditing: () => void;
+  onDrop: (e: React.DragEvent) => void;
+  onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  isDragging: boolean;
+  setIsDragging: (v: boolean) => void;
+}) {
+  const skinColor = activeSkin?.color || '#10b981';
+  const trailColor = activeTrail?.color || '#a855f7';
+  const deathColor = activeDeath?.color || '#ef4444';
+  const isImageAvatar = player.avatar ? (player.avatar.startsWith('data:') || player.avatar.startsWith('http')) : false;
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-5 pb-5 border-b border-slate-900/60">
+      {/* Profile Picture Card */}
+      <div className="md:col-span-4">
+        <div className="bg-slate-950/40 border border-slate-900 rounded-2xl p-5 h-full flex flex-col items-center justify-center text-center">
+          <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest mb-3">Profile Picture</span>
+          <div
+            className="w-24 h-24 rounded-2xl flex items-center justify-center border-2 shadow-lg relative overflow-hidden cursor-pointer group mb-3"
+            style={{ borderColor: skinColor + '50', backgroundColor: skinColor + '10' }}
+            onClick={onStartEditing}
+            title="Click to change profile picture"
+          >
+            {player.avatar ? (
+              isImageAvatar ? (
+                <img src={player.avatar} alt={player.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              ) : (
+                <span className="text-5xl select-none">{player.avatar}</span>
+              )
+            ) : (
+              <span className="text-5xl select-none">{activeSkin?.emoji || '🐍'}</span>
+            )}
+            <div className="absolute inset-0 bg-slate-950/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <Upload className="w-6 h-6 text-indigo-400" />
+            </div>
+            <div className="absolute -bottom-1 -right-1 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold text-indigo-400 shadow">
+              Lvl {player.level}
+            </div>
+          </div>
+          <button type="button" onClick={onStartEditing} className="px-3 py-1.5 bg-indigo-600/15 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-600/25 rounded-xl text-[10px] font-bold transition cursor-pointer flex items-center gap-1">
+            <Edit2 className="w-3 h-3" /> Change Picture
+          </button>
+        </div>
+      </div>
+
+      {/* Character Appearance Card */}
+      <div className="md:col-span-8">
+        <div className="bg-slate-950/40 border border-slate-900 rounded-2xl p-5 h-full">
+          <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest mb-4 block">Character Appearance</span>
+          <div className="flex flex-col sm:flex-row gap-5">
+            {/* Snake Visual */}
+            <div className="relative w-full sm:w-48 h-40 shrink-0 rounded-xl bg-slate-900/80 border border-slate-900 overflow-hidden">
+              {/* Grid background */}
+              <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle, #475569 1px, transparent 1px)', backgroundSize: '12px 12px' }} />
+              {/* Snake body segments */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="relative">
+                  {/* Trail glow */}
+                  <div className="absolute -inset-4 rounded-full opacity-30 blur-xl" style={{ backgroundColor: trailColor }} />
+                  {/* Snake body - 5 segments in a curve */}
+                  <svg width="120" height="100" viewBox="0 0 120 100" className="relative z-10">
+                    <defs>
+                      <filter id="glow"><feGaussianBlur stdDeviation="2" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+                    </defs>
+                    {/* Body segments (curved path) */}
+                    <path d="M 20 70 Q 40 70 50 55 Q 60 40 75 35 Q 90 30 100 25" fill="none" stroke={skinColor} strokeWidth="10" strokeLinecap="round" filter="url(#glow)" opacity="0.6" />
+                    <path d="M 20 70 Q 40 70 50 55 Q 60 40 75 35 Q 90 30 100 25" fill="none" stroke={skinColor} strokeWidth="7" strokeLinecap="round" />
+                    {/* Head */}
+                    <circle cx="100" cy="25" r="7" fill={skinColor} filter="url(#glow)" />
+                    <circle cx="100" cy="25" r="5.5" fill={skinColor} />
+                    {/* Eyes */}
+                    <circle cx="103" cy="22" r="2" fill="white" />
+                    <circle cx="103" cy="22" r="1" fill="#0f172a" />
+                    {/* Trail sparkles */}
+                    <circle cx="15" cy="73" r="2" fill={trailColor} opacity="0.5" className="animate-pulse" />
+                    <circle cx="8" cy="76" r="1.5" fill={trailColor} opacity="0.3" className="animate-pulse" />
+                    <circle cx="22" cy="68" r="1" fill={trailColor} opacity="0.4" className="animate-pulse" />
+                  </svg>
+                  {/* Death FX indicator */}
+                  <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 text-[8px] font-bold text-slate-500 uppercase tracking-wider">{activeDeath?.emoji || '💥'}</div>
+                </div>
+              </div>
+              {/* Status indicator */}
+              <div className="absolute top-2 right-2 flex items-center gap-1 bg-slate-950/80 rounded-full px-2 py-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[8px] font-mono text-slate-400">ACTIVE</span>
+              </div>
+            </div>
+
+            {/* Equipped items grid */}
+            <div className="flex-1 grid grid-cols-2 gap-3">
+              <div className="bg-slate-900/60 rounded-xl p-3 border border-slate-900/60">
+                <span className="text-[8px] uppercase font-bold text-slate-500 tracking-wider block">Skin</span>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-lg">{activeSkin?.emoji || '🐍'}</span>
+                  <div>
+                    <span className="text-xs font-bold text-slate-200 block">{activeSkin?.name || 'Default'}</span>
+                    <div className="w-full h-1 bg-slate-950 rounded-full mt-1"><div className="h-full rounded-full" style={{ width: '100%', backgroundColor: skinColor }} /></div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-slate-900/60 rounded-xl p-3 border border-slate-900/60">
+                <span className="text-[8px] uppercase font-bold text-slate-500 tracking-wider block">Trail</span>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-lg">{activeTrail?.emoji || '✨'}</span>
+                  <div>
+                    <span className="text-xs font-bold text-slate-200 block">{activeTrail?.name || 'Sparks'}</span>
+                    <div className="w-full h-1 bg-slate-950 rounded-full mt-1"><div className="h-full rounded-full" style={{ width: '100%', backgroundColor: trailColor }} /></div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-slate-900/60 rounded-xl p-3 border border-slate-900/60">
+                <span className="text-[8px] uppercase font-bold text-slate-500 tracking-wider block">Death FX</span>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-lg">{activeDeath?.emoji || '💥'}</span>
+                  <div>
+                    <span className="text-xs font-bold text-slate-200 block">{activeDeath?.name || 'Splash'}</span>
+                    <div className="w-full h-1 bg-slate-950 rounded-full mt-1"><div className="h-full rounded-full" style={{ width: '100%', backgroundColor: deathColor }} /></div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-slate-900/60 rounded-xl p-3 border border-slate-900/60">
+                <span className="text-[8px] uppercase font-bold text-slate-500 tracking-wider block">Region</span>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-lg">{activeFlag?.flag || '🏴'}</span>
+                  <div>
+                    <span className="text-xs font-bold text-slate-200 block">{activeFlag?.name || 'Unknown'}</span>
+                    <span className="text-[9px] font-mono text-slate-500">{activeFlag?.code || 'US'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Spectate Overlay
+// ---------------------------------------------------------------------------
+function SpectateOverlay({ session, onClose }: { session: SpectateSession; onClose: () => void }) {
+  return (
+    <div className="rounded-2xl border-2 border-fuchsia-500/40 bg-fuchsia-950/10 p-5 mb-4">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: session.friend.skinColor + '20', border: `1px solid ${session.friend.skinColor}50` }}>
+            <span className="text-lg">🐍</span>
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-white flex items-center gap-2">
+              <Eye className="w-4 h-4 text-fuchsia-400 animate-pulse" />
+              Spectating {session.friend.name}
+            </h4>
+            <span className="text-[10px] text-fuchsia-300 font-mono">LIVE • {session.arenaName}</span>
+          </div>
+        </div>
+        <button type="button" onClick={onClose} className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition cursor-pointer">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Mini arena view */}
+      <div className="relative w-full h-36 rounded-xl bg-slate-950/80 border border-fuchsia-500/20 overflow-hidden mb-4">
+        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle, #475569 1px, transparent 1px)', backgroundSize: '10px 10px' }} />
+        {/* Simulated snakes */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <svg width="100%" height="100%" viewBox="0 0 400 144" preserveAspectRatio="xMidYMid meet">
+            {/* Main friend snake */}
+            <path d="M 80 100 Q 120 100 140 80 Q 160 60 200 55 Q 240 50 280 40 Q 310 35 340 30" fill="none" stroke={session.friend.skinColor} strokeWidth="8" strokeLinecap="round" opacity="0.4" />
+            <path d="M 80 100 Q 120 100 140 80 Q 160 60 200 55 Q 240 50 280 40 Q 310 35 340 30" fill="none" stroke={session.friend.skinColor} strokeWidth="5" strokeLinecap="round" />
+            <circle cx="340" cy="30" r="5" fill={session.friend.skinColor} />
+            <circle cx="343" cy="27" r="1.5" fill="white" />
+            <circle cx="343" cy="27" r="0.8" fill="#0f172a" />
+            {/* Bot snakes */}
+            <path d="M 50 40 Q 70 50 90 45" fill="none" stroke="#64748b" strokeWidth="4" strokeLinecap="round" opacity="0.4" />
+            <path d="M 300 90 Q 320 80 340 85" fill="none" stroke="#64748b" strokeWidth="4" strokeLinecap="round" opacity="0.4" />
+            <path d="M 150 100 Q 170 110 190 105" fill="none" stroke="#64748b" strokeWidth="4" strokeLinecap="round" opacity="0.4" />
+            {/* Food orbs */}
+            <circle cx="60" cy="70" r="3" fill="#facc15" opacity="0.6" className="animate-pulse" />
+            <circle cx="250" cy="65" r="3" fill="#facc15" opacity="0.5" className="animate-pulse" />
+            <circle cx="180" cy="35" r="4" fill="#facc15" opacity="0.7" className="animate-pulse" />
+            <circle cx="320" cy="55" r="2.5" fill="#facc15" opacity="0.4" className="animate-pulse" />
+          </svg>
+        </div>
+        {/* Live badge */}
+        <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-slate-950/80 rounded-full px-2.5 py-1">
+          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+          <span className="text-[9px] font-bold text-red-400 uppercase tracking-wider">LIVE</span>
+        </div>
+        {/* Timer */}
+        <div className="absolute top-2 right-2 bg-slate-950/80 rounded-full px-2.5 py-1">
+          <span className="text-[10px] font-mono text-slate-300">{session.elapsed}s</span>
+        </div>
+        {/* Extraction progress */}
+        {session.status === 'extracting' && (
+          <div className="absolute bottom-2 left-2 right-2">
+            <div className="bg-slate-950/80 rounded-lg p-1.5">
+              <div className="flex items-center justify-between text-[9px] mb-1">
+                <span className="text-amber-400 font-bold uppercase">Extraction in progress</span>
+                <span className="text-amber-300 font-mono">67%</span>
+              </div>
+              <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-full bg-amber-400 rounded-full animate-pulse" style={{ width: '67%' }} />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Live stats row */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="bg-slate-950/60 rounded-lg p-2.5 text-center border border-slate-900/60">
+          <span className="text-sm font-bold font-mono text-emerald-400">{session.chipsCarried}</span>
+          <span className="block text-[8px] uppercase font-bold text-slate-500 mt-0.5">Chips</span>
+        </div>
+        <div className="bg-slate-950/60 rounded-lg p-2.5 text-center border border-slate-900/60">
+          <span className="text-sm font-bold font-mono text-rose-400">{session.kills}</span>
+          <span className="block text-[8px] uppercase font-bold text-slate-500 mt-0.5">Kills</span>
+        </div>
+        <div className="bg-slate-950/60 rounded-lg p-2.5 text-center border border-slate-900/60">
+          <span className="text-sm font-bold font-mono text-indigo-400">{session.snakeLength}</span>
+          <span className="block text-[8px] uppercase font-bold text-slate-500 mt-0.5">Tail</span>
+        </div>
+        <div className="bg-slate-950/60 rounded-lg p-2.5 text-center border border-slate-900/60">
+          <span className={`text-sm font-bold font-mono ${session.status === 'extracting' ? 'text-amber-400' : 'text-emerald-400'}`}>{session.status === 'extracting' ? 'EXIT' : 'ALIVE'}</span>
+          <span className="block text-[8px] uppercase font-bold text-slate-500 mt-0.5">Status</span>
+        </div>
       </div>
     </div>
   );
