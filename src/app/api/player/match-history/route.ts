@@ -142,6 +142,7 @@ export async function POST(req: NextRequest) {
               tags: JSON.stringify(['auto', isExtract ? 'extraction' : 'combat']),
               cardType: 'match-card',
               matchData,
+              status: 'approved', // system-generated, auto-approved
             },
           });
         }
