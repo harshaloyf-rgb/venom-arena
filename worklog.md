@@ -389,3 +389,15 @@ Stage Summary:
 - Rules & Guide Section 12 fully rewritten to match current leaderboard implementation
 - 8 outdated items fixed, 7 missing topics added, 3 new FAQ items
 - Lint clean, browser-verified
+
+## [Championship Rules Section] Added Section 13 (ANNUAL CHAMPIONSHIPS) to game-rules-modal.tsx
+
+### Changes:
+- Updated DialogDescription (line 73): added "championships" after "leaderboards"
+- Inserted new Section 13 "ANNUAL CHAMPIONSHIPS" before the FAQ section
+  - 10 InfoCards in a 2-column grid covering: What is the Annual Championship, DB-Backed Registration, Jan 1st Payout & HOF Tiers (with prize table), My Championship Summary, Match Cap Warnings (9K/9.5K/9.9K), Standings Scopes & Clan Rankings (4 tabs), Live Activity Indicators (green pulsing dots), Find Me in Championship, Demo Data & Real Standings, Past Archives & Championship vs. Lobby Leaderboard
+- Renumbered FAQ from Section 13 to Section 14
+- Added 4 new FaqItem entries about championships: registration, year-end process, green pulsing dots, clan rankings
+- Used existing Trophy icon from lucide-react imports (no new imports needed)
+- All JSX entities properly escaped (&amp;, &apos;, &quot;)
+- Lint passed with zero errors
