@@ -2,6 +2,36 @@ import { db } from './db';
 import type { Player } from '@prisma/client';
 import type { PlayerProfile } from './types';
 
+/** Generate a unique VIPER-XXXX referral code */
+export function generateReferralCode(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code = '';
+  for (let i = 0; i < 4; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return `VIPER-${code}`;
+}
+
+/** Ensure a player has a referral code, generating one if missing (with retry on collision) */
+export async function ensureReferralCode(playerId: string): Promise<string> {
+  const player = await db.player.findUnique({ where: { id: playerId }, select: { referralCode: true } });
+  if (player?.referralCode) return player.referralCode;
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = generateReferralCode();
+    try {
+      const updated = await db.player.update({
+        where: { id: playerId },
+        data: { referralCode: code },
+      });
+      return updated.referralCode!;
+    } catch {
+      // unique constraint collision — retry
+    }
+  }
+  throw new Error('Failed to generate unique referral code after multiple attempts');
+}
+
 export function toProfile(p: Player): PlayerProfile {
   let unlocked: string[] = [];
   try {
