@@ -816,3 +816,21 @@ Stage Summary:
 - 4 new frontend features (settings modal, stats tab, kick, quick deposit)
 - 3 UX improvements (online status, rank-colored chat, 5-column stats)
 - All verified in browser, committed and pushed
+
+---
+Task ID: 3
+Agent: general-purpose
+Task: Add 5 New Syndicate Features (Perks Roadmap, Disband, Transfer, Online Status, Top Depositors)
+
+Work Log:
+- Read worklog and full clan-system.tsx (968 lines), kick route pattern, Prisma schema
+- Created /api/clans/disband/route.ts: POST, Leader only, db.$transaction that deletes ClanActivity, ClanChallenge, ClanMessages, nullifies all player clanTag/clanRank, then deletes Clan
+- Created /api/clans/transfer/route.ts: POST, Leader only, body {targetTag}, verifies target is Co-Leader in same clan, swaps Leader→Co-Leader and target→Leader, creates ClanActivity entry
+- Feature 1 (Perks Roadmap): Added PERK_ROADMAP constant with 5 levels (1/2/3/5/10), rendered as vertical timeline in Overview sub-tab between sub-tabs bar and Treasury section, unlocked levels highlighted amber, locked levels grayed out with Lock icon
+- Feature 2 (Disband UI): Added handleDisbandClan() with confirm() dialog, added red "Disband Syndicate" button with AlertTriangle icon at bottom of Settings modal, separated by rose border-t
+- Feature 3 (Transfer UI): Added handleTransferLeadership() with confirm() dialog, added Crown icon button next to Co-Leader members in roster (only visible to Leader), amber accent styling
+- Feature 4 (Online Status): Changed member avatar dot from conditional green-only to ternary green/gray, added "· offline" text label alongside existing "· online" for all members
+- Feature 5 (Top Depositors): Added IIFE block in Overview that sorts members by bankedChips desc, shows top 3 with 🥇🥈🥉 medals, emerald accent styling, placed between Perks Roadmap and Treasury
+- Added 4 new Lucide icon imports: Crown, Lock, Star, AlertTriangle
+- All changes pass `bun run lint` with zero errors
+- File grew from 968 to 1066 lines (+98 lines)
