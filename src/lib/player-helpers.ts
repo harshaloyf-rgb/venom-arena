@@ -43,6 +43,9 @@ export function toProfile(p: Player): PlayerProfile {
     clanRank: p.clanRank,
     securityPin: !!p.securityPin,
     oauthProvider: p.oauthProvider,
+    instagram: p.instagram,
+    youtube: p.youtube,
+    twitch: p.twitch,
     createdAt: p.createdAt.toISOString(),
     lastSeenAt: p.lastSeenAt.toISOString(),
   };

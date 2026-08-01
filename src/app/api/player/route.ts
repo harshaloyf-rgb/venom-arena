@@ -41,6 +41,16 @@ export async function PUT(req: NextRequest) {
     if (typeof body.avatar === 'string' && body.avatar.length <= 8) {
       data.avatar = body.avatar;
     }
+    // Social links
+    if (typeof body.instagram === 'string') {
+      data.instagram = body.instagram.trim().slice(0, 60) || null;
+    }
+    if (typeof body.youtube === 'string') {
+      data.youtube = body.youtube.trim().slice(0, 100) || null;
+    }
+    if (typeof body.twitch === 'string') {
+      data.twitch = body.twitch.trim().slice(0, 60) || null;
+    }
     // Equip cosmetics — must be in unlockedSkins
     const unlocked = (() => {
       try { return JSON.parse(player.unlockedSkins || '[]') as string[]; } catch { return []; }
@@ -120,6 +130,9 @@ export async function DELETE() {
         currentBanner: null,
         clanTag: null,
         clanRank: null,
+        instagram: null,
+        youtube: null,
+        twitch: null,
         tokenVersion: { increment: 1 },
       },
     });
