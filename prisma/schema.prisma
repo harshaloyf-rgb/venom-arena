@@ -73,6 +73,7 @@ model Player {
   challenges      Challenge[]
   milestones      PlayerMilestone[]
   championshipRegs ChampionshipRegistration[]
+  hofEntries     HallOfFameEntry[]
 
   @@index([bankedChips(sort: Desc)])
   @@index([level(sort: Desc)])
@@ -247,4 +248,25 @@ model ChampionshipArchive {
   finalizedAt       DateTime?
 
   @@index([year])
+}
+
+// Hall of Fame — permanent record of milestone achievements & championship inductees
+model HallOfFameEntry {
+  id               String   @id @default(cuid())
+  playerId         String
+  player           Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  inductionType    String   // "milestone" | "championship"
+  milestoneTierId  String?  // "t-1lakh", "t-5lakh", "t-10lakh", "t-25lakh", "t-50lakh", "t-1crore"
+  championshipYear Int?
+  championshipRank Int?
+  hofBadge         String?  // "crown" | "silver" | "bronze" | "contender" (championship) or milestone badge name
+  title            String?  // e.g. "2026 WORLD VENOM CHAMPION" or "🥉 Bronze Elite"
+  chipsAtInduction Int      @default(0)
+  inductedAt       DateTime @default(now())
+
+  @@unique([playerId, inductionType, milestoneTierId, championshipYear])
+  @@index([inductionType])
+  @@index([championshipYear])
+  @@index([milestoneTierId, inductedAt])
+  @@index([playerId])
 }

@@ -9,6 +9,7 @@ import {
   Shield,
   Trophy,
   Award,
+  Crown,
   Zap,
   Sparkles,
   Check,
@@ -73,6 +74,10 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
     if (tab !== 'overview') setTab('overview');
   }
 
+  // HOF entries for the inspected player (S5)
+  const [hofEntries, setHofEntries] = useState<Array<{ id: string; inductionType: string; hofBadge: string | null; title: string | null; championshipYear: number | null; championshipRank: number | null; chipsAtInduction: number; inductedAt: string }>>([]);
+  const [hofLoading, setHofLoading] = useState(false);
+
   // Fetch leaderboard data for allies when player changes
   const fetchLeaderboard = useCallback(async (country: string) => {
     setAlliesLoading(true);
@@ -89,11 +94,28 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
     }
   }, []);
 
+  // Fetch HOF entries for the inspected player
+  const fetchHofEntries = useCallback(async (tag: string) => {
+    setHofLoading(true);
+    try {
+      const res = await fetch(`/api/hof/inductees?playerTag=${encodeURIComponent(tag)}&limit=20`);
+      if (res.ok) {
+        const data = await res.json() as { entries?: typeof hofEntries };
+        queueMicrotask(() => setHofEntries(data.entries ?? []));
+      }
+    } catch {
+      // Silent
+    } finally {
+      queueMicrotask(() => setHofLoading(false));
+    }
+  }, []);
+
   useEffect(() => {
     if (player) {
       fetchLeaderboard(player.country);
+      fetchHofEntries(player.userTag);
     }
-  }, [player, fetchLeaderboard]);
+  }, [player, fetchLeaderboard, fetchHofEntries]);
 
   // Close on Escape
   useEffect(() => {
@@ -215,6 +237,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
           </div>
           <div className="min-w-0">
             <h2 id="player-inspector-title" className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-1.5">
+              {hofEntries.length > 0 && <Award className="w-4 h-4 text-yellow-400 shrink-0" title="Hall of Fame Inductee" />}
               <span className="truncate">{p.name}</span>
               <span className="text-xl" aria-hidden>{flag}</span>
             </h2>
@@ -394,6 +417,41 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                   ))}
                 </div>
               </div>
+
+              {/* Hall of Fame entries (S5) */}
+              {hofLoading ? (
+                <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex items-center justify-center gap-2 text-[11px] text-slate-500">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking Hall of Fame…
+                </div>
+              ) : hofEntries.length > 0 ? (
+                <div className="bg-yellow-950/20 p-3.5 rounded-xl border border-yellow-500/30 space-y-2">
+                  <div className="text-[10px] font-bold uppercase text-yellow-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Crown className="w-3.5 h-3.5 text-yellow-400" /> Hall of Fame — {hofEntries.length} Induction{hofEntries.length !== 1 ? 's' : ''}
+                    </span>
+                    <span className="text-[9px] text-yellow-400/70 font-mono">Permanent Record</span>
+                  </div>
+                  <ul className="space-y-1.5">
+                    {hofEntries.slice(0, 6).map((e) => (
+                      <li key={e.id} className="flex items-center justify-between text-xs p-2 bg-slate-900/80 rounded-lg border border-yellow-500/10">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-sm shrink-0" aria-hidden>{e.inductionType === 'championship' ? '🏆' : '⭐'}</span>
+                          <div className="min-w-0">
+                            <div className="font-bold text-yellow-200 text-[11px] truncate">{e.hofBadge || e.title || 'HOF Inductee'}</div>
+                            <div className="text-[9px] text-slate-400">
+                              {e.inductionType === 'championship'
+                                ? `${e.championshipYear} Championship · Rank #${e.championshipRank}`
+                                : 'Milestone Achievement'}
+                              {' · '}{new Date(e.inductedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-mono text-emerald-400 shrink-0">{e.chipsAtInduction.toLocaleString('en-IN')}c</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
 
               {/* Badges — calculated from real chip milestones */}
               <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
