@@ -1188,3 +1188,23 @@ Stage Summary:
 - 4 timeAgo duplicates eliminated (~60 lines)
 - Admin guide document created
 - No new code added to promote-self, repurposed as admin-to-admin promote
+---
+Task ID: 2
+Agent: main
+Task: Build full admin dashboard with tabs, APIs, and inline guide
+
+Work Log:
+- Created 3 admin API endpoints: search-players, players/[userTag], clans
+- Built PlayersTab: search, detail panel, chip modification, ban/unban
+- Built ClansTab: search, clan list, detail panel with stats
+- Built GuideTab: 9 collapsible sections covering all admin operations
+- Rewrote admin-panel.tsx as tabbed dashboard container
+- Added admin:navigate custom event for cross-tab navigation in page.tsx
+- Fixed ESLint parsing issue with multi-line template literals
+- Verified: non-admin users cannot see admin tab
+
+Stage Summary:
+- Admin dashboard has 5 tabs: Overview, Players, Content, Clans, Guide
+- 3 new API endpoints for admin data access
+- Admin guide is inline and accessible while doing admin work
+- All changes committed and pushed
