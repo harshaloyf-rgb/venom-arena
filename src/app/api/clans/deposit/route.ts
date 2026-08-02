@@ -34,7 +34,10 @@ export async function POST(req: NextRequest) {
       // Atomic: deduct from player (no totalLost increment), add to clan treasury
       await tx.player.update({
         where: { id: me.id },
-        data: { bankedChips: { decrement: amount } },
+        data: { 
+          bankedChips: { decrement: amount },
+          clanDeposited: { increment: amount },
+        },
       });
       await tx.clan.update({
         where: { tag },
