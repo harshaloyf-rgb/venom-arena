@@ -76,6 +76,8 @@ export function toProfile(p: Player): PlayerProfile {
     instagram: p.instagram,
     youtube: p.youtube,
     twitch: p.twitch,
+    nameChangedAt: p.nameChangedAt?.toISOString() ?? null,
+    countryChangedAt: p.countryChangedAt?.toISOString() ?? null,
     createdAt: p.createdAt.toISOString(),
     lastSeenAt: p.lastSeenAt.toISOString(),
   };

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { timeAgo } from '@/lib/date-utils';
 import {
   Award,
-  BadgeCheck,
   Calendar,
   Check,
   Clock,
@@ -12,22 +11,15 @@ import {
   Copy,
   Crown,
   Edit2,
-  ExternalLink,
-  Eye,
   Filter,
-  Flag,
   Gamepad2,
   Globe,
-  Heart,
   History,
   Landmark,
   Link as LinkIcon,
   Lock,
   LogOut,
-  MessageCircle,
-  Monitor,
   RefreshCw,
-  Search,
   Shield,
   Skull,
   Sparkles,
@@ -38,17 +30,12 @@ import {
   Trash2,
   Trophy,
   Upload,
-  UserCheck,
-  UserMinus,
   UserPlus,
   Users,
-  Wifi,
   X,
   AlertTriangle,
   Download,
-  Gift,
   UserCircle,
-  Zap,
   Share2,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
@@ -453,6 +440,20 @@ function ProfileContent({
     'en-US',
     { year: 'numeric', month: 'long', day: 'numeric' },
   );
+
+  // Identity cooldown helpers
+  function cooldownRemainingText(changedAt: string | null, cooldownDays: number): string | null {
+    if (!changedAt) return null;
+    const cooldownMs = cooldownDays * 24 * 60 * 60 * 1000;
+    const elapsed = Date.now() - new Date(changedAt).getTime();
+    if (elapsed >= cooldownMs) return null;
+    const remainingMs = cooldownMs - elapsed;
+    const d = Math.floor(remainingMs / 86_400_000);
+    const h = Math.floor((remainingMs % 86_400_000) / 3_600_000);
+    return d > 0 ? `${d}d ${h}h remaining` : `${h}h remaining`;
+  }
+  const nameCooldownText = cooldownRemainingText(player.nameChangedAt, 30);
+  const countryCooldownText = cooldownRemainingText(player.countryChangedAt, 7);
 
   // -- avatar drag & drop handlers
   function processAvatarFile(file: File) {
@@ -1068,6 +1069,8 @@ function ProfileContent({
               onCancel={() => setIsEditing(false)}
               onSave={handleSaveProfile}
               saving={saving}
+              nameCooldownText={nameCooldownText}
+              countryCooldownText={countryCooldownText}
             />
           )}
 
@@ -1160,17 +1163,14 @@ function ProfileContent({
             deleting={deletingAccount}
           />
 
-          {/* Challenger Standing Rating banner */}
+          {/* Identity Change Policy Banner */}
           <div className="p-4 rounded-xl border border-slate-900 bg-slate-900/10 flex items-center gap-4">
             <Shield className="w-8 h-8 text-indigo-500 shrink-0" />
             <div className="text-xs leading-relaxed text-slate-400">
               <span className="font-bold text-slate-200 uppercase block mb-0.5">
-                CHALLENGER STANDING RATING
+                IDENTITY LOCK POLICY
               </span>
-              All tournament statistics are linked directly to your global
-              challenger index handle. Altering your registry flag updates
-              leaderboard feeds dynamically. Data verification handshakes run
-              periodically to check metrics validity.
+              Your <strong className="text-slate-200">Challenger Handle</strong> can only be changed once every <strong className="text-amber-400">30 days</strong> and your <strong className="text-slate-200">Faction Region</strong> once every <strong className="text-amber-400">7 days</strong>. This protects leaderboard integrity and prevents identity confusion. Your permanent VENOM-XXXX tag never changes.
             </div>
           </div>
 
@@ -1972,6 +1972,8 @@ interface IdentityEditorProps {
   onCancel: () => void;
   onSave: () => void;
   saving: boolean;
+  nameCooldownText: string | null;
+  countryCooldownText: string | null;
 }
 
 function IdentityEditor(props: IdentityEditorProps) {
@@ -1995,6 +1997,8 @@ function IdentityEditor(props: IdentityEditorProps) {
     onCancel,
     onSave,
     saving,
+    nameCooldownText,
+    countryCooldownText,
   } = props;
 
   const isImageAvatar =
@@ -2032,8 +2036,13 @@ function IdentityEditor(props: IdentityEditorProps) {
             placeholder="Enter nickname"
           />
           <span className="text-[10px] text-slate-500">
-            Max 15 characters. System validates non-duplicate handle signatures.
+            Max 20 characters. Your VENOM-XXXX tag is permanent and never changes.
           </span>
+          {nameCooldownText && (
+            <span className="text-[10px] text-amber-400 font-bold flex items-center gap-1">
+              <Timer className="w-3 h-3" /> {nameCooldownText}
+            </span>
+          )}
         </div>
 
         {/* Country */}
@@ -2053,8 +2062,13 @@ function IdentityEditor(props: IdentityEditorProps) {
             ))}
           </select>
           <span className="text-[10px] text-slate-500">
-            Associates your extraction chips to regional champion rankings.
+            Associates your extraction chips to regional champion rankings. 7-day change cooldown applies.
           </span>
+          {countryCooldownText && (
+            <span className="text-[10px] text-amber-400 font-bold flex items-center gap-1">
+              <Timer className="w-3 h-3" /> {countryCooldownText}
+            </span>
+          )}
         </div>
 
         {/* Avatar customizer */}
@@ -2244,10 +2258,9 @@ function IdentityEditor(props: IdentityEditorProps) {
         <Shield className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
         <div className="text-xs font-sans leading-relaxed text-slate-300">
           <strong className="text-indigo-300 block mb-0.5">
-            CYBER HANDSHAKE WARNING:
+            IDENTITY CHANGE COOLDOWN:
           </strong>
-          Changing your registered alias or territory updates global tournament
-          indices. Immutable record logs are appended to the ledger below.
+          Your Challenger Handle is locked for <strong className="text-amber-400">30 days</strong> after each change. Your Faction Region is locked for <strong className="text-amber-400">7 days</strong>. These cooldowns protect leaderboard and championship integrity. Your VENOM-XXXX tag is always permanent.
         </div>
       </div>
 
