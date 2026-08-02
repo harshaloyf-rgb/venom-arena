@@ -174,8 +174,13 @@ export function PlayersTab({ onToast }: { onToast?: ToastFn }) {
         cache: 'no-store',
       });
       if (!res.ok) throw new Error();
-      const data = (await res.json().catch(() => ({}))) as { player?: PlayerDetail };
-      setPlayerDetail(data.player || null);
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      // API returns player fields at top level (not nested under .player)
+      if (data.id) {
+        setPlayerDetail(data as unknown as PlayerDetail);
+      } else {
+        setPlayerDetail(null);
+      }
     } catch {
       setPlayerDetail(null);
     } finally {

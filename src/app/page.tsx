@@ -125,8 +125,8 @@ export default function Home() {
   const handleInspectPlayer = useCallback((p: InspectedPlayer) => { setInspectedPlayer(p); }, []);
 
   const visibleTabs = useMemo(
-    () => TABS,
-    [],
+    () => player?.role === 'admin' ? TABS : TABS.filter((t) => t.id !== 'admin'),
+    [player?.role],
   );
 
   // -----------------------------------------------------------------------
@@ -269,7 +269,7 @@ export default function Home() {
   // -----------------------------------------------------------------------
 
   return (
-    <div className="h-dvh flex flex-col overflow-hidden bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white md:h-auto md:min-h-screen md:overflow-visible">
+    <div className="max-md:h-dvh max-md:overflow-hidden flex flex-col min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
       {/* ===================== HEADER ===================== */}
       <header className="shrink-0 border-b border-slate-900 bg-slate-950/80 backdrop-blur-md z-40">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-3 h-12 md:px-6 lg:px-8 md:h-auto md:py-4">
@@ -366,7 +366,7 @@ export default function Home() {
       </header>
 
       {/* ===================== MAIN ===================== */}
-      <main className="flex-1 overflow-hidden md:overflow-visible flex flex-col w-full max-w-7xl mx-auto md:px-4 lg:px-8 md:py-6">
+      <main className="flex-1 max-md:overflow-hidden flex flex-col w-full max-w-7xl mx-auto md:px-4 lg:px-8 md:py-6">
 
         {/* ====== DASHBOARD TAB ====== */}
         {activeTab === 'dashboard' && (
@@ -571,7 +571,7 @@ export default function Home() {
               {activeTab === 'rewards' && <DailyRewards onToast={toastFn} />}
               {activeTab === 'store' && <ChipStore onToast={toastFn} />}
               {activeTab === 'social' && <SocialPanel onToast={toastFn} onInspectPlayer={handleInspectPlayer} />}
-              {activeTab === 'admin' && player && <AdminPanel onToast={toastFn} />}
+              {activeTab === 'admin' && player?.role === 'admin' && <AdminPanel onToast={toastFn} />}
             </div>
           </div>
         )}

@@ -42,9 +42,12 @@ export async function getSession(): Promise<SessionPayload | null> {
   if (!payload) return null;
 
   // Invalidate session for banned players and token version mismatches
-  const player = await db.player.findUnique({ where: { id: payload.playerId }, select: { banned: true, tokenVersion: true } });
+  // Also refresh role from DB (source of truth) so promotions/demotions take effect immediately
+  const player = await db.player.findUnique({ where: { id: payload.playerId }, select: { banned: true, tokenVersion: true, role: true } });
   if (player?.banned === true) return null;
   if (payload.tokenVersion !== undefined && player && payload.tokenVersion !== player.tokenVersion) return null;
+  // Always use DB role as source of truth
+  payload.role = (player?.role as 'player' | 'admin') || 'player';
 
   return payload;
 }

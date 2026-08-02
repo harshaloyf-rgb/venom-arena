@@ -1228,3 +1228,32 @@ Stage Summary:
 - scripts/test-security.sh: Automated test suite (21 pass, 0 fail, 3 skip)
 - Bug fix: src/app/api/hof/induct/route.ts — replaced upsert with findFirst+create/update
 - Bug fix: .env — INTERNAL_SECRET changed from shell-command to static value
+
+---
+Task ID: 2-a
+Agent: main
+Task: Fix admin panel visibility, bento scroll, and admin login system
+
+Work Log:
+- Audited entire page.tsx, auth system, admin panel, and player tab components
+- Found 4 critical bugs:
+  1. Admin tab visible to ALL users (visibleTabs = TABS with no filtering)
+  2. Admin panel renders for non-admin users (no role check in page.tsx line 574)
+  3. Bento grid can't scroll (h-dvh overflow-hidden Tailwind v4 override issue)
+  4. Player detail API returns data at top level but frontend looks for data.player
+- Fixed visibleTabs to filter admin tab for non-admin users (player?.role === 'admin')
+- Added role check on AdminPanel rendering (player?.role === 'admin')
+- Fixed bento scroll: changed h-dvh overflow-hidden md:h-auto md:overflow-visible to max-md:h-dvh max-md:overflow-hidden
+- Fixed player detail parsing: data.player -> check data.id at top level
+- Fixed search-players API: removed empty query rejection, now returns all players when q is empty
+- Fixed getSession() to refresh role from DB (source of truth) so promotions take effect immediately
+- Demoted 3 guest accounts from admin to player role
+- Set admin password for testing
+
+Stage Summary:
+- Admin tab now hidden for all non-admin users (verified via browser)
+- Admin panel shows full working content for admin users (4 tabs: Overview, Players, Clans, Guide)
+- Players tab loads 20 real players with searchable list
+- Player detail panel shows full stats, chip modification, ban/unban controls
+- Bento grid scrolling works (scrollTop confirmed via browser eval)
+- Zero lint errors

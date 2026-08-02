@@ -18,16 +18,14 @@ export async function GET(req: NextRequest) {
   if (isNaN(limit) || limit < 1) limit = 20;
   if (limit > 50) limit = 50;
 
-  if (!q) {
-    return NextResponse.json({ error: 'Query parameter "q" is required' }, { status: 400 });
-  }
+  const whereClause: Record<string, unknown> = {};
 
-  const whereClause: Record<string, unknown> = {
-    OR: [
+  if (q) {
+    whereClause.OR = [
       { name: { contains: q } },
       { userTag: { contains: q.toUpperCase() } },
-    ],
-  };
+    ];
+  }
 
   if (bannedParam === 'true') {
     whereClause.banned = true;
