@@ -167,6 +167,16 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                 <li>Guest accounts cannot set a PIN (they have no password to recover)</li>
               </ul>
             </InfoCard>
+            <InfoCard title="🛡️ Identity Change Policy (Leaderboard Integrity)" accent="text-amber-300">
+              <p className="mb-1.5">To prevent leaderboard and championship abuse, identity changes are <strong>rate-limited</strong>:</p>
+              <ul className="list-disc pl-4 space-y-0.5">
+                <li><strong>Challenger Handle (Name):</strong> Can only be changed once every <strong>30 days</strong></li>
+                <li><strong>Faction Region (Country):</strong> Can only be changed once every <strong>7 days</strong></li>
+                <li>Your <strong>VENOM-XXXX tag is permanent</strong> and can never be changed — it is your true identity</li>
+                <li>Avatar, socials, and cosmetics can be changed <strong>anytime</strong> (no cooldown)</li>
+                <li>If you try to change during a cooldown, the save will be blocked with remaining time shown</li>
+              </ul>
+            </InfoCard>
           </Section>
 
           {/* ================================================================= */}
@@ -1214,6 +1224,9 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
               <FaqItem q="What can a Co-Leader do?" a="Co-Leaders can: claim weekly challenges, kick Viper-ranked members, and participate in all clan activities. They cannot: edit clan settings, disband the clan, promote/demote other members, or kick other Co-Leaders. Max 2 Co-Leaders per clan." />
               <FaqItem q="Can the Leader transfer leadership?" a="Yes. The Leader can transfer leadership to any Co-Leader via the crown icon on the member roster. The current Leader becomes a Co-Leader, and the selected Co-Leader becomes the new Leader. This is irreversible for that session." />
               <FaqItem q="What happens when a syndicate is disbanded?" a="All members are removed from the clan, all activity logs and challenge records are deleted, and the Treasury chips are lost. Disbanding is permanent and can only be done by the Leader." />
+              <FaqItem q="Can I change my display name?" a="Yes, but with a cooldown. Your Challenger Handle can only be changed once every 30 days to protect leaderboard integrity. Your VENOM-XXXX tag is permanent and can never be changed — it is your true identity. Go to Profile → Agent Profile → click the edit icon next to your name." />
+              <FaqItem q="Can I change my country/region?" a="Yes, with a 7-day cooldown. Your Faction Region can only be changed once every 7 days. This prevents leaderboard manipulation by repeatedly switching regions. The change takes effect immediately on leaderboards and championship standings." />
+              <FaqItem q="Why is there a cooldown on name and country changes?" a="Without cooldowns, players on the leaderboard could change their name or country to impersonate others, confuse rivals, or exploit regional/national leaderboards. The cooldown ensures leaderboard entries remain stable and trustworthy throughout each ranking period." />
             </div>
           </Section>
 

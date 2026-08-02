@@ -35,13 +35,44 @@ export async function PUT(req: NextRequest) {
     // Cosmetics equip / name / country / avatar only. Economy is server-only.
     const data: Record<string, unknown> = {};
 
+    // --- Name change: 30-day cooldown (leaderboard integrity) ---
     if (typeof body.name === 'string') {
       const name = body.name.trim().slice(0, 20);
-      if (name.length >= 2) data.name = name;
+      if (name.length >= 2) {
+        if (name !== player.name) {
+          const cooldownMs = 30 * 24 * 60 * 60 * 1000; // 30 days
+          if (player.nameChangedAt && (Date.now() - player.nameChangedAt.getTime()) < cooldownMs) {
+            const remainingMs = cooldownMs - (Date.now() - player.nameChangedAt.getTime());
+            const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+            return NextResponse.json(
+              { error: `Handle can only be changed once every 30 days. ${remainingDays} day${remainingDays !== 1 ? 's' : ''} remaining.`, cooldownEndsAt: player.nameChangedAt.toISOString() },
+              { status: 429 },
+            );
+          }
+          data.name = name;
+          data.nameChangedAt = new Date();
+        }
+      }
     }
+
+    // --- Country change: 7-day cooldown (leaderboard integrity) ---
     if (typeof body.country === 'string') {
       const c = COUNTRIES.find((x) => x.code === body.country);
-      if (c) data.country = c.code;
+      if (c) {
+        if (c.code !== player.country) {
+          const cooldownMs = 7 * 24 * 60 * 60 * 1000; // 7 days
+          if (player.countryChangedAt && (Date.now() - player.countryChangedAt.getTime()) < cooldownMs) {
+            const remainingMs = cooldownMs - (Date.now() - player.countryChangedAt.getTime());
+            const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+            return NextResponse.json(
+              { error: `Region can only be changed once every 7 days. ${remainingDays} day${remainingDays !== 1 ? 's' : ''} remaining.`, cooldownEndsAt: player.countryChangedAt.toISOString() },
+              { status: 429 },
+            );
+          }
+          data.country = c.code;
+          data.countryChangedAt = new Date();
+        }
+      }
     }
     if (typeof body.avatar === 'string' && body.avatar.length <= 8) {
       data.avatar = body.avatar;

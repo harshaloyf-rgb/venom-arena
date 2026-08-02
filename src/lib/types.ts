@@ -44,6 +44,9 @@ export interface PlayerProfile {
   youtube: string | null;
   twitch: string | null;
 
+  nameChangedAt: string | null;
+  countryChangedAt: string | null;
+
   createdAt: string;
   lastSeenAt: string;
 }

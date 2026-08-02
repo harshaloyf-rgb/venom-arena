@@ -66,6 +66,10 @@ model Player {
   clan            Clan?    @relation(fields: [clanTag], references: [tag], onDelete: SetNull)
   clanRank        String?  // Leader | Co-Leader | Viper
 
+  // Identity change cooldowns (leaderboard integrity — prevents name/country abuse)
+  nameChangedAt     DateTime?
+  countryChangedAt  DateTime?
+
   // Social links (creator channels)
   instagram       String?
   youtube         String?
