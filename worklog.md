@@ -1257,3 +1257,19 @@ Stage Summary:
 - Player detail panel shows full stats, chip modification, ban/unban controls
 - Bento grid scrolling works (scrollTop confirmed via browser eval)
 - Zero lint errors
+
+---
+Task ID: fix-clans-scroll
+Agent: main
+Task: Fix admin clans tab error + bento scrolling bug
+
+Work Log:
+- Fixed clans-tab.tsx: API returns `{ clans: [...], total }` but frontend expected flat array. Changed `await res.json()` to destructure `json.clans ?? json`.
+- Fixed bento scrolling: Root cause was `max-md:h-dvh max-md:overflow-hidden` on root div + `overflow-y-auto` on main creating a nested scroll container that browser native scroll couldn't reach.
+- Changed to standard document scrolling: root div uses `min-h-screen flex flex-col`, header is `sticky top-0`, main has no overflow constraint, footer has `mt-auto shrink-0`, bottom tab bar is `sticky bottom-0`.
+- Verified: mouse wheel scroll works (scrollTop goes from 0 to 600), clans tab loads data ("f45 Venom KILL"), lint clean.
+
+Stage Summary:
+- Clans tab: fixed API response parsing (json.clans ?? json)
+- Bento scroll: switched from nested scroll container (h-dvh + overflow-y-auto on main) to standard document scroll (min-h-screen + sticky header + sticky footer)
+- Both fixes verified via agent-browser at 800x600 viewport
