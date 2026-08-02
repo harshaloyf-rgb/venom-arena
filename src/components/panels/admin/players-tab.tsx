@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Search,
   Ban,
-  BanOff,
+  ShieldBan,
   Coins,
   Loader2,
   ChevronRight,
@@ -780,7 +780,7 @@ export function PlayersTab({ onToast }: { onToast?: ToastFn }) {
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : playerDetail.banned ? (
                         <>
-                          <BanOff className="w-4 h-4" />
+                          <ShieldBan className="w-4 h-4" />
                           Unban Player
                         </>
                       ) : (
