@@ -20,6 +20,9 @@ import {
   Heart,
   UserCheck,
   Unlock,
+  Crosshair,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import {
   countryFlag,
@@ -30,6 +33,7 @@ import {
 } from '@/lib/game-config';
 import type { LeaderboardEntry } from '@/lib/types';
 import { notify, type ToastFn } from './_panel-primitives';
+import { useAuth } from '@/components/providers/auth-provider';
 
 interface PlayerInspectorModalProps {
   player?: InspectedPlayer | null;
@@ -37,19 +41,14 @@ interface PlayerInspectorModalProps {
   onToast?: ToastFn;
 }
 
-type Tab = 'overview' | 'stats' | 'logs' | 'loadout';
-
-interface MatchLog {
-  arena: string;
-  outcome: 'Extracted' | 'Eliminated';
-  chips: number;
-  time: string;
-  kills: number;
-}
+type Tab = 'overview' | 'stats' | 'loadout';
 
 /** Fetched public profile data */
 interface PublicProfile {
   friendsCount: number;
+  followersCount: number;
+  followingCount: number;
+  rivalsCount: number;
   milestones: Array<{ id: string; tierId: string; chipsAtMilestone: number; createdAt: string }>;
   hofEntries: Array<{ id: string; inductionType: string; hofBadge: string | null; title: string | null; championshipYear: number | null; championshipRank: number | null; chipsAtInduction: number; inductedAt: string }>;
   instagram: string | null;
@@ -73,27 +72,33 @@ interface PublicProfile {
   lastSeenAt?: string;
 }
 
-function buildMatchHistory(p: InspectedPlayer): MatchLog[] {
+function buildMatchHistory(p: InspectedPlayer) {
   const bigChip = p.bankedChips >= 10_000_000 ? 10_000_000 : 2_500_000;
   return [
-    { arena: 'Tier-05 Crore High Roller', outcome: 'Extracted', chips: bigChip, time: '10 mins ago', kills: 14 },
-    { arena: 'Tier-04 Platinum Arena', outcome: 'Extracted', chips: 1_500_000, time: '2 hours ago', kills: 8 },
-    { arena: 'Tier-03 Viper Boundary', outcome: 'Extracted', chips: 500_000, time: '1 day ago', kills: 5 },
-    { arena: 'Tier-05 Crore High Roller', outcome: 'Eliminated', chips: -200_000, time: '2 days ago', kills: 3 },
+    { arena: 'Tier-05 Crore High Roller', outcome: 'Extracted' as const, chips: bigChip, time: '10 mins ago', kills: 14 },
+    { arena: 'Tier-04 Platinum Arena', outcome: 'Extracted' as const, chips: 1_500_000, time: '2 hours ago', kills: 8 },
+    { arena: 'Tier-03 Viper Boundary', outcome: 'Extracted' as const, chips: 500_000, time: '1 day ago', kills: 5 },
+    { arena: 'Tier-05 Crore High Roller', outcome: 'Eliminated' as const, chips: -200_000, time: '2 days ago', kills: 3 },
   ];
 }
 
 export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspectorModalProps) {
+  const { player: authPlayer } = useAuth();
+  const isAdmin = authPlayer?.role === 'admin';
   const [tab, setTab] = useState<Tab>('overview');
   const [friendRequested, setFriendRequested] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [blockLoading, setBlockLoading] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isRival, setIsRival] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
+  const [rivalLoading, setRivalLoading] = useState(false);
 
   // Real public profile data
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
 
-  // Leaderboard data for allies
+  // Leaderboard data for allies (admin only)
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
   const [alliesLoading, setAlliesLoading] = useState(false);
 
@@ -103,24 +108,35 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
     lastUserTagRef.current = player?.userTag;
     if (friendRequested) setFriendRequested(false);
     if (blocked) setBlocked(false);
+    if (isFollowing) setIsFollowing(false);
+    if (isRival) setIsRival(false);
     if (tab !== 'overview') setTab('overview');
     setProfile(null);
-    // Check if player is already blocked
+    // Check if player is already blocked/friend/following/rival
     if (player) {
       fetch('/api/friends/list')
         .then((r) => r.json())
         .then((data) => {
-          const isBlocked = (data.blocked ?? []).some(
+          const isBlk = (data.blocked ?? []).some(
             (b: { userTag: string }) => b.userTag === player.userTag,
           );
-          if (isBlocked) setBlocked(true);
-          // Also check if already a friend
-          const isFriend = (data.friends ?? []).some(
+          if (isBlk) setBlocked(true);
+          const isFrnd = (data.friends ?? []).some(
             (f: { userTag: string }) => f.userTag === player.userTag,
           );
-          if (isFriend) setFriendRequested(true);
+          if (isFrnd) setFriendRequested(true);
         })
         .catch(() => {/* ignore */});
+      // Check follow status
+      fetch(`/api/player/follow?tag=${encodeURIComponent(player.userTag)}`)
+        .then(r => r.json())
+        .then(d => { if (d.following) setIsFollowing(true); })
+        .catch(() => {});
+      // Check rival status
+      fetch(`/api/rivals?check=${encodeURIComponent(player.userTag)}`)
+        .then(r => r.json())
+        .then(d => { if (d.isRival) setIsRival(true); })
+        .catch(() => {});
     }
   }
 
@@ -132,7 +148,6 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
       if (res.ok) {
         const data: PublicProfile = await res.json();
         setProfile(data);
-        // Enrich the InspectedPlayer with real career stats
         if (data.lifetimeKills != null) player!.lifetimeKills = data.lifetimeKills;
         if (data.lifetimeDeaths != null) player!.lifetimeDeaths = data.lifetimeDeaths;
         if (data.lifetimeExtracts != null) player!.lifetimeExtracts = data.lifetimeExtracts;
@@ -151,8 +166,9 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
     }
   }, []);
 
-  // Fetch leaderboard data for allies when player changes
+  // Fetch leaderboard data for allies (admin demo only)
   const fetchLeaderboard = useCallback(async (country: string) => {
+    if (!isAdmin) return;
     setAlliesLoading(true);
     try {
       const res = await fetch('/api/leaderboard?type=chips&limit=10');
@@ -163,7 +179,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
     } catch { /* silent */ } finally {
       setAlliesLoading(false);
     }
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     if (player) {
@@ -194,10 +210,12 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   const regionalRank = p.regionalRank ?? Math.max(1, Math.floor(globalRank / 2));
   const achievedAt = p.achievedAt || '26 Jul 2026, 05:42 PM UTC';
 
-  const history = buildMatchHistory(p);
+  const history = isAdmin ? buildMatchHistory(p) : [];
 
-  // Real friends count from API, or fallback
+  // Real counts from API
   const friendsCount = profile?.friendsCount ?? null;
+  const followersCount = profile?.followersCount ?? 0;
+  const followingCount = profile?.followingCount ?? 0;
 
   // Real social links from API
   const socialLinks = [
@@ -207,7 +225,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   ];
   const activeSocials = socialLinks.filter(s => s.handle);
 
-  // Allies derived from leaderboard data
+  // Allies derived from leaderboard data (admin demo only)
   const regionalAllies = leaderboardData.filter(
     (e) => e.country === p.country && e.userTag !== p.userTag,
   );
@@ -252,7 +270,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
 
   // Member since
   const memberSince = profile?.createdAt
-    ? new Date(profile.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    ? new Date(profile.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
     : null;
 
   function handleAddFriend() {
@@ -266,7 +284,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
       .then((data) => {
         if (data.ok) {
           setFriendRequested(true);
-          notify(`Friend request sent to ${p.name}! 🤝`, 'success', onToast);
+          notify(`Friend request sent to ${p.name}!`, 'success', onToast);
         } else {
           notify(data.error || 'Failed to send request.', 'error', onToast);
         }
@@ -274,53 +292,67 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
       .catch(() => notify('Network error.', 'error', onToast));
   }
 
-  function handleChallenge() {
-    notify(`Arena challenge dispatch sent to ${p.name}! \u2694\uFE0F`, 'info', onToast);
+  async function handleFollowToggle() {
+    setFollowLoading(true);
+    try {
+      const res = await fetch('/api/player/follow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag: p.userTag }),
+      });
+      const data = await res.json();
+      if (data.following !== undefined) {
+        setIsFollowing(data.following);
+        // Update local profile count
+        if (profile) setProfile({ ...profile, followersCount: data.followersCount });
+      }
+    } catch { /* silent */ } finally { setFollowLoading(false); }
+  }
+
+  async function handleRivalToggle() {
+    setRivalLoading(true);
+    try {
+      const res = await fetch('/api/rivals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag: p.userTag, name: p.name, action: isRival ? 'remove' : 'add' }),
+      });
+      const data = await res.json();
+      if (data.isRival !== undefined) {
+        setIsRival(data.isRival);
+        notify(
+          data.isRival ? `${p.name} added as rival!` : `${p.name} removed from rivals.`,
+          data.isRival ? 'error' : 'success',
+          onToast,
+        );
+      }
+    } catch { /* silent */ } finally { setRivalLoading(false); }
   }
 
   async function handleBlockToggle() {
     setBlockLoading(true);
     try {
       if (blocked) {
-        // Unblock
-        const res = await fetch(`/api/friends/block?userTag=${encodeURIComponent(p.userTag)}`, {
-          method: 'DELETE',
-        });
+        const res = await fetch(`/api/friends/block?userTag=${encodeURIComponent(p.userTag)}`, { method: 'DELETE' });
         const data = await res.json();
-        if (data.ok) {
-          setBlocked(false);
-          notify(`${p.name} has been unblocked. ✓`, 'success', onToast);
-        } else {
-          notify(data.error || 'Failed to unblock.', 'error', onToast);
-        }
+        if (data.ok) { setBlocked(false); notify(`${p.name} unblocked.`, 'success', onToast); }
+        else notify(data.error || 'Failed to unblock.', 'error', onToast);
       } else {
-        // Block
         const res = await fetch('/api/friends/block', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userTag: p.userTag }),
         });
         const data = await res.json();
-        if (data.ok) {
-          setBlocked(true);
-          notify(`${p.name} has been blocked. 🚫`, 'error', onToast);
-        } else {
-          notify(data.error || 'Failed to block player.', 'error', onToast);
-        }
+        if (data.ok) { setBlocked(true); notify(`${p.name} blocked.`, 'error', onToast); }
+        else notify(data.error || 'Failed to block.', 'error', onToast);
       }
-    } catch {
-      notify('Network error.', 'error', onToast);
-    } finally {
-      setBlockLoading(false);
-    }
+    } catch { notify('Network error.', 'error', onToast); } finally { setBlockLoading(false); }
   }
 
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="player-inspector-title"
+      role="dialog" aria-modal="true" aria-labelledby="player-inspector-title"
       onClick={onClose}
     >
       <div
@@ -329,8 +361,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
       >
         {/* Close */}
         <button
-          type="button"
-          onClick={onClose}
+          type="button" onClick={onClose}
           className="absolute top-3 right-3 z-20 p-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-400 hover:text-white transition"
           aria-label="Close inspector"
         >
@@ -386,7 +417,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
           </div>
         </div>
 
-        {/* Social Stats Bar */}
+        {/* Social Stats Bar — REAL counts */}
         <div className="px-4 pt-1 pb-2 shrink-0">
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-slate-950/70 border border-slate-800/60 rounded-xl p-2.5 text-center">
@@ -398,8 +429,8 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
             </div>
             <div className="bg-slate-950/70 border border-slate-800/60 rounded-xl p-2.5 text-center">
               <div className="flex items-center justify-center gap-1">
-                <Heart className="w-3 h-3 text-rose-400" />
-                <span className="text-base font-bold font-mono text-rose-400 block">{realHofEntries.length > 0 ? Math.max(10, 50 + realHofEntries.length * 25) : profileLoading ? '\u2026' : '\u2014'}</span>
+                <Heart className={`w-3 h-3 ${isFollowing ? 'text-rose-400 fill-rose-400' : 'text-rose-400'}`} />
+                <span className="text-base font-bold font-mono text-rose-400 block">{profileLoading ? '\u2026' : followersCount}</span>
               </div>
               <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Followers</span>
             </div>
@@ -413,21 +444,18 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* Tabs — logs only for admin */}
         <div className="px-4 pb-2 shrink-0">
           <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-bold" role="tablist">
             {([
               ['overview', 'Overview'],
               ['stats', 'Career Stats'],
-              ['logs', 'Extraction Logs'],
+              ...(isAdmin ? [['logs', 'Extraction Logs'] as const] : []),
               ['loadout', 'Loadout'],
             ] as const).map(([id, label]) => (
               <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={tab === id}
-                onClick={() => setTab(id)}
+                key={id} type="button" role="tab" aria-selected={tab === id}
+                onClick={() => setTab(id as Tab)}
                 className={`flex-1 py-1.5 rounded-lg transition-all ${tab === id ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
               >
                 {label}
@@ -449,10 +477,8 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                   </span>
                   <span className="text-[9px] text-amber-400/70 font-mono">{earnedBadges.length} Badge{earnedBadges.length !== 1 ? 's' : ''} Earned</span>
                 </div>
-
                 {hasAchievements ? (
                   <>
-                    {/* Current tier badge */}
                     <div className="flex items-center gap-2.5 p-2.5 bg-amber-500/5 rounded-lg border border-amber-500/15">
                       <span className="text-2xl" aria-hidden>{milestone.badge.split(' ')[0]}</span>
                       <div className="min-w-0 flex-1">
@@ -460,8 +486,6 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                         <div className="text-[9px] text-slate-400">Current Tier \u00B7 {p.bankedChips.toLocaleString('en-IN')} chips</div>
                       </div>
                     </div>
-
-                    {/* HOF entries */}
                     {realHofEntries.length > 0 && (
                       <div className="space-y-1.5">
                         <span className="text-[9px] uppercase font-bold text-yellow-400 tracking-wider flex items-center gap-1">
@@ -486,8 +510,6 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                         ))}
                       </div>
                     )}
-
-                    {/* Milestone badges grid */}
                     {earnedBadges.length > 0 && (
                       <div className="grid grid-cols-2 gap-2">
                         {earnedBadges.map((t) => (
@@ -511,21 +533,14 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
               {clanTag && clanName && (
                 <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
                   <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
-                    <span className="flex items-center gap-1">
-                      <Shield className="w-3.5 h-3.5 text-indigo-400" /> Syndicate Clan Membership
-                    </span>
+                    <span className="flex items-center gap-1"><Shield className="w-3.5 h-3.5 text-indigo-400" /> Syndicate Clan Membership</span>
                     <span className="text-[9px] text-emerald-400 font-mono">Active Member</span>
                   </div>
                   <div className="flex items-center justify-between p-2.5 bg-slate-900 rounded-lg border border-slate-800">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <span className="text-2xl shrink-0" aria-hidden>\uD83D\uDC0D</span>
                       <div className="min-w-0">
-                        <div className="font-bold text-white text-xs truncate">
-                          {clanName}
-                          <span className="ml-1.5 bg-indigo-500/20 text-indigo-300 text-[9px] font-mono font-bold px-1 py-0.2 rounded border border-indigo-500/30">
-                            [{clanTag}]
-                          </span>
-                        </div>
+                        <div className="font-bold text-white text-xs truncate">{clanName}<span className="ml-1.5 bg-indigo-500/20 text-indigo-300 text-[9px] font-mono font-bold px-1 py-0.2 rounded border border-indigo-500/30">[{clanTag}]</span></div>
                         <div className="text-[10px] text-slate-400 mt-0.5">Member</div>
                       </div>
                     </div>
@@ -537,26 +552,17 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
               {activeSocials.length > 0 ? (
                 <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
                   <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
-                    <span className="flex items-center gap-1">
-                      <Globe className="w-3.5 h-3.5 text-emerald-400" /> Creator Social Channels
-                    </span>
+                    <span className="flex items-center gap-1"><Globe className="w-3.5 h-3.5 text-emerald-400" /> Creator Social Channels</span>
                     <span className="text-[9px] text-emerald-400 font-mono">Verified</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     {activeSocials.map((s) => (
-                      <a
-                        key={s.platform}
-                        href={`${s.url}${encodeURIComponent(s.handle!)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <a key={s.platform} href={`${s.url}${encodeURIComponent(s.handle!)}`} target="_blank" rel="noopener noreferrer"
                         className="p-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-xs font-bold text-white flex items-center gap-2 transition group"
                       >
-                        <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0"
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0"
                           style={{ backgroundColor: s.color + '15', border: `1px solid ${s.color}30` }}
-                        >
-                          {s.icon}
-                        </div>
+                        >{s.icon}</div>
                         <div className="min-w-0 flex-1">
                           <span className="text-[9px] uppercase font-bold block" style={{ color: s.color + 'CC' }}>{s.platform}</span>
                           <span className="text-[11px] font-mono text-slate-300 block truncate group-hover:text-white transition">{s.handle}</span>
@@ -568,84 +574,68 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                 </div>
               ) : (
                 <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-                  <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center gap-1">
-                    <Globe className="w-3.5 h-3.5 text-slate-500" /> Creator Social Channels
-                  </div>
+                  <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center gap-1"><Globe className="w-3.5 h-3.5 text-slate-500" /> Creator Social Channels</div>
                   <div className="text-center py-3 text-[11px] text-slate-500">No social channels linked.</div>
                 </div>
               )}
 
-              {/* Regional allies */}
-              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-                <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <Users className="w-3.5 h-3.5 text-violet-400" /> {flag} REGIONAL ALLIES ({p.country} NETWORK)
-                  </span>
-                  {alliesLoading ? (
-                    <Loader2 className="w-3 h-3 text-slate-500 animate-spin" />
-                  ) : (
-                    <span className="text-[9px] text-slate-500 font-mono">{regionalAllies.length} Members</span>
-                  )}
-                </div>
-                {alliesLoading ? (
-                  <div className="flex items-center justify-center py-4 text-[11px] text-slate-500 gap-2">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Loading regional allies\u2026
+              {/* Regional + Global allies (admin demo only) */}
+              {isAdmin && (
+                <>
+                  <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                    <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
+                      <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5 text-violet-400" /> {flag} REGIONAL ALLIES ({p.country} NETWORK)</span>
+                      {alliesLoading ? <Loader2 className="w-3 h-3 text-slate-500 animate-spin" /> : <span className="text-[9px] text-slate-500 font-mono">{regionalAllies.length} Members</span>}
+                    </div>
+                    {alliesLoading ? (
+                      <div className="flex items-center justify-center py-4 text-[11px] text-slate-500 gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Loading\u2026</div>
+                    ) : regionalAllies.length === 0 ? (
+                      <div className="text-center py-4 text-[11px] text-slate-500">No regional allies found.</div>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {regionalAllies.map((a) => (
+                          <li key={a.userTag} className="flex items-center justify-between text-xs p-2 bg-slate-900 rounded-lg border border-slate-800">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span aria-hidden>{countryFlag(a.country)}</span>
+                              <div className="min-w-0">
+                                <div className="font-bold text-white truncate">{a.name}</div>
+                                <div className="text-[10px] font-mono text-slate-500">{a.userTag}</div>
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-mono text-violet-300 bg-violet-500/10 border border-violet-500/30 px-1.5 py-0.5 rounded">Rank #{a.rank}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
-                ) : regionalAllies.length === 0 ? (
-                  <div className="text-center py-4 text-[11px] text-slate-500">No regional allies found on the leaderboard.</div>
-                ) : (
-                  <ul className="space-y-1.5">
-                    {regionalAllies.map((a) => (
-                      <li key={a.userTag} className="flex items-center justify-between text-xs p-2 bg-slate-900 rounded-lg border border-slate-800">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span aria-hidden>{countryFlag(a.country)}</span>
-                          <div className="min-w-0">
-                            <div className="font-bold text-white truncate">{a.name}</div>
-                            <div className="text-[10px] font-mono text-slate-500">{a.userTag}</div>
-                          </div>
-                        </div>
-                        <span className="text-[10px] font-mono text-violet-300 bg-violet-500/10 border border-violet-500/30 px-1.5 py-0.5 rounded">Rank #{a.rank}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              {/* Global allies */}
-              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-                <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <Globe className="w-3.5 h-3.5 text-cyan-400" /> GLOBAL ALLIES
-                  </span>
-                  {alliesLoading ? (
-                    <Loader2 className="w-3 h-3 text-slate-500 animate-spin" />
-                  ) : (
-                    <span className="text-[9px] text-slate-500 font-mono">{globalAllies.length} Members</span>
-                  )}
-                </div>
-                {alliesLoading ? (
-                  <div className="flex items-center justify-center py-4 text-[11px] text-slate-500 gap-2">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Loading global allies\u2026
+                  <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                    <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
+                      <span className="flex items-center gap-1"><Globe className="w-3.5 h-3.5 text-cyan-400" /> GLOBAL ALLIES</span>
+                      {alliesLoading ? <Loader2 className="w-3 h-3 text-slate-500 animate-spin" /> : <span className="text-[9px] text-slate-500 font-mono">{globalAllies.length} Members</span>}
+                    </div>
+                    {alliesLoading ? (
+                      <div className="flex items-center justify-center py-4 text-[11px] text-slate-500 gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Loading\u2026</div>
+                    ) : globalAllies.length === 0 ? (
+                      <div className="text-center py-4 text-[11px] text-slate-500">No global allies found.</div>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {globalAllies.map((a) => (
+                          <li key={a.userTag} className="flex items-center justify-between text-xs p-2 bg-slate-900 rounded-lg border border-slate-800">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span aria-hidden>{countryFlag(a.country)}</span>
+                              <div className="min-w-0">
+                                <div className="font-bold text-white truncate">{a.name}</div>
+                                <div className="text-[10px] font-mono text-slate-500">{a.userTag}</div>
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-1.5 py-0.5 rounded">Rank #{a.rank}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
-                ) : globalAllies.length === 0 ? (
-                  <div className="text-center py-4 text-[11px] text-slate-500">No global allies found on the leaderboard.</div>
-                ) : (
-                  <ul className="space-y-1.5">
-                    {globalAllies.map((a) => (
-                      <li key={a.userTag} className="flex items-center justify-between text-xs p-2 bg-slate-900 rounded-lg border border-slate-800">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span aria-hidden>{countryFlag(a.country)}</span>
-                          <div className="min-w-0">
-                            <div className="font-bold text-white truncate">{a.name}</div>
-                            <div className="text-[10px] font-mono text-slate-500">{a.userTag}</div>
-                          </div>
-                        </div>
-                        <span className="text-[10px] font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-1.5 py-0.5 rounded">Rank #{a.rank}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+                </>
+              )}
             </div>
           )}
 
@@ -654,9 +644,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
             <div className="space-y-3 text-xs">
               <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
                 <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between border-b border-slate-900 pb-1.5">
-                  <span className="flex items-center gap-1">
-                    <Trophy className="w-3.5 h-3.5 text-amber-400" /> Live Leaderboard Standings
-                  </span>
+                  <span className="flex items-center gap-1"><Trophy className="w-3.5 h-3.5 text-amber-400" /> Live Leaderboard Standings</span>
                   <span className="text-[9px] text-emerald-400 font-mono">Real-Time Sync</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center font-mono">
@@ -682,46 +670,26 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
               </div>
               {(p.lifetimeExtracts != null || p.bestStreak != null) && (
                 <div className="grid grid-cols-2 gap-3">
-                  {p.lifetimeExtracts != null && (
-                    <StatCard
-                      label="Total Extractions"
-                      value={p.lifetimeExtracts.toLocaleString()}
-                      accent="text-cyan-400"
-                      icon={<Sparkles className="w-3.5 h-3.5" />}
-                    />
-                  )}
-                  {p.bestStreak != null && (
-                    <StatCard
-                      label="Best Streak"
-                      value={`${p.bestStreak} Wins`}
-                      accent="text-yellow-400"
-                      icon={<Trophy className="w-3.5 h-3.5" />}
-                    />
-                  )}
+                  {p.lifetimeExtracts != null && <StatCard label="Total Extractions" value={p.lifetimeExtracts.toLocaleString()} accent="text-cyan-400" icon={<Sparkles className="w-3.5 h-3.5" />} />}
+                  {p.bestStreak != null && <StatCard label="Best Streak" value={`${p.bestStreak} Wins`} accent="text-yellow-400" icon={<Trophy className="w-3.5 h-3.5" />} />}
                 </div>
               )}
             </div>
           )}
 
-          {/* EXTRACTION LOGS */}
-          {tab === 'logs' && (
+          {/* EXTRACTION LOGS (admin demo only) */}
+          {tab === 'logs' && isAdmin && (
             <div className="space-y-2">
               {history.map((log, i) => (
                 <div key={i} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between text-xs gap-2">
                   <div className="min-w-0">
                     <div className="font-bold text-white flex items-center gap-1.5 flex-wrap">
                       <span className="truncate">{log.arena}</span>
-                      <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded ${log.outcome === 'Extracted' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
-                        {log.outcome}
-                      </span>
+                      <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded ${log.outcome === 'Extracted' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>{log.outcome}</span>
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">
-                      {'\uD83D\uDD52'} {log.time} \u00B7 {log.kills} kills
-                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">{'\uD83D\uDD52'} {log.time} \u00B7 {log.kills} kills</div>
                   </div>
-                  <div className={`font-mono font-bold tabular-nums shrink-0 ${log.chips > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {log.chips > 0 ? `+${log.chips.toLocaleString('en-IN')}c` : `${log.chips.toLocaleString('en-IN')}c`}
-                  </div>
+                  <div className={`font-mono font-bold tabular-nums shrink-0 ${log.chips > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{log.chips > 0 ? `+${log.chips.toLocaleString('en-IN')}c` : `${log.chips.toLocaleString('en-IN')}c`}</div>
                 </div>
               ))}
             </div>
@@ -740,32 +708,31 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
           )}
         </div>
 
-        {/* Action buttons */}
+        {/* Action buttons — Follow, Rival, Friend, Block */}
         <div className="grid grid-cols-2 gap-2 p-4 pt-2 border-t border-slate-800 shrink-0">
-          <button
-            type="button"
-            onClick={handleAddFriend}
-            disabled={friendRequested}
+          <button type="button" onClick={handleFollowToggle} disabled={followLoading}
+            className={`py-2.5 px-3 border rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${isFollowing ? 'bg-rose-500/20 text-rose-400 border-rose-500/40' : 'bg-rose-600 hover:bg-rose-500 text-white border-rose-500/30 shadow'} ${followLoading ? 'opacity-50' : ''}`}
+          >
+            {followLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : isFollowing ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            {followLoading ? 'Loading' : isFollowing ? 'Unfollow' : 'Follow'}
+          </button>
+          <button type="button" onClick={handleRivalToggle} disabled={rivalLoading}
+            className={`py-2.5 px-3 border rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${isRival ? 'bg-orange-500/20 text-orange-400 border-orange-500/40' : 'bg-orange-600 hover:bg-orange-500 text-white border-orange-500/30 shadow'} ${rivalLoading ? 'opacity-50' : ''}`}
+          >
+            {rivalLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Crosshair className="w-4 h-4" />}
+            {rivalLoading ? 'Loading' : isRival ? 'Remove Rival' : 'Add Rival'}
+          </button>
+          <button type="button" onClick={handleAddFriend} disabled={friendRequested}
             className={`py-2.5 px-3 border rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${friendRequested ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 cursor-default' : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500/30 shadow'}`}
           >
             {friendRequested ? <Check className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
             {friendRequested ? 'Request Sent' : 'Add Friend'}
           </button>
-          <button
-            type="button"
-            onClick={handleChallenge}
-            className="py-2.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500/30 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition shadow"
-          >
-            <Swords className="w-4 h-4" /> Challenge
-          </button>
-          <button
-            type="button"
-            onClick={handleBlockToggle}
-            disabled={blockLoading}
-            className={`col-span-2 py-2 border rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${blocked ? 'bg-emerald-950/30 hover:bg-emerald-950/50 text-emerald-400 border-emerald-500/30' : 'bg-rose-950/20 hover:bg-rose-950/40 text-rose-400 border-rose-500/20'} ${blockLoading ? 'opacity-50 cursor-wait' : ''}`}
+          <button type="button" onClick={handleBlockToggle} disabled={blockLoading}
+            className={`py-2.5 px-3 border rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${blocked ? 'bg-emerald-950/30 hover:bg-emerald-950/50 text-emerald-400 border-emerald-500/30' : 'bg-rose-950/20 hover:bg-rose-950/40 text-rose-400 border-rose-500/20'} ${blockLoading ? 'opacity-50 cursor-wait' : ''}`}
           >
             {blockLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : blocked ? <Unlock className="w-3.5 h-3.5" /> : <Ban className="w-3.5 h-3.5" />}
-            {blockLoading ? 'Processing…' : blocked ? `Unblock ${p.name}` : `Block ${p.name}`}
+            {blockLoading ? 'Processing\u2026' : blocked ? `Unblock ${p.name}` : `Block ${p.name}`}
           </button>
         </div>
       </div>
@@ -776,9 +743,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
 function StatCard({ label, value, accent, icon }: { label: string; value: string; accent: string; icon: React.ReactNode }) {
   return (
     <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1">
-      <span className="text-[10px] text-slate-400 font-bold uppercase flex items-center gap-1">
-        {icon} {label}
-      </span>
+      <span className="text-[10px] text-slate-400 font-bold uppercase flex items-center gap-1">{icon} {label}</span>
       <span className={`font-mono font-bold text-sm block ${accent}`}>{value}</span>
     </div>
   );

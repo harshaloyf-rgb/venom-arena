@@ -351,6 +351,17 @@ interface InviteStatusMessage {
 
 export function PlayerProfilePanel({ onToast }: PlayerProfilePanelProps) {
   const { player, loading, refresh, logout } = useAuth();
+  const isAdmin = player?.role === 'admin';
+  const [globalRank, setGlobalRank] = useState<string | null>(null);
+
+  // Fetch real global rank
+  useEffect(() => {
+    if (!player) return;
+    fetch('/api/leaderboard/my-rank?type=chips')
+      .then(r => r.json())
+      .then(d => { if (d.rank != null) setGlobalRank(`#${d.rank}`); })
+      .catch(() => {});
+  }, [player?.userTag]);
 
   if (loading) {
     return (
@@ -564,7 +575,7 @@ function ProfileContent({
         setRedeemCode('');
         setAlreadyReferred(true);
         fetchReferralData(); // refresh to show updated state
-        onToast?.('success', 'Invite code applied! Complete ' + REFERRAL_MATCH_THRESHOLD + ' matches to claim your reward.');
+        onToast?.('Invite code applied! Complete ' + REFERRAL_MATCH_THRESHOLD + ' matches to claim your reward.', 'success');
       } else {
         const msg = data.error || 'Failed to apply invite code.';
         setRedeemResult({ ok: false, message: msg });
@@ -884,6 +895,7 @@ function ProfileContent({
       status: Math.random() > 0.5 ? 'online' : 'offline',
       level: Math.floor(5 + Math.random() * 45),
       skinColor: '#38bdf8',
+      country: 'US',
       giftSentToday: false,
       giftReceivedToday: false,
     };
@@ -1243,7 +1255,7 @@ function ProfileContent({
               <span>
                 Global Standing:{' '}
                 <span className="text-amber-400 font-bold font-mono">
-                  #999
+                  {globalRank ?? '…'}
                 </span>
               </span>
             </p>
@@ -1425,16 +1437,16 @@ function ProfileContent({
           [
             { id: 'stats', label: 'Records & Statistics', icon: Target },
             { id: 'history', label: 'Match History Ledger', icon: History },
-            {
+            ...(isAdmin ? [{
               id: 'friends',
               label: `Friends & Spectate (${friends.length})`,
               icon: Users,
-            },
-            {
+            }] : []),
+            ...(isAdmin ? [{
               id: 'identityLog',
               label: 'Identity Anti-Tamper Logs',
               icon: Lock,
-            },
+            }] : []),
           ] as const
         ).map((tab) => {
           const Icon = tab.icon;

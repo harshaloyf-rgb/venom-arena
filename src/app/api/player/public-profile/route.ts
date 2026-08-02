@@ -55,6 +55,13 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    // Count followers and following
+    const [followersCount, followingCount, rivalsCount] = await Promise.all([
+      db.follow.count({ where: { followingId: player.id } }),
+      db.follow.count({ where: { followerId: player.id } }),
+      db.rival.count({ where: { playerId: player.id } }),
+    ]);
+
     // Fetch milestones
     const milestones = await db.playerMilestone.findMany({
       where: { playerId: player.id },
@@ -71,6 +78,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ...player,
       friendsCount,
+      followersCount,
+      followingCount,
+      rivalsCount,
       milestones,
       hofEntries,
     });
