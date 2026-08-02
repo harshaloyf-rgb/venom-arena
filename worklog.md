@@ -1139,3 +1139,24 @@ Stage Summary:
 - Admin API at /api/clips/admin for reviewing pending clips
 - Upload modal guides users with clear rules, examples, and review notice
 - Empty state is now informative instead of a blank page
+
+---
+Task ID: 5
+Agent: main
+Task: Admin moderation UI for Highlights + Enriched empty state
+
+Work Log:
+- Verified existing backend: Clip model has status/reviewedBy/reviewedAt fields, POST /api/clips sets user-clips to "pending", GET only shows "approved", /api/clips/admin has GET (list by status with counts), POST (approve/reject single), PUT (bulk approve/reject)
+- Added AdminModerationModal component inside clip-showcase.tsx with: status tabs (Pending/Approved/Rejected/All) with counts, clip list with thumbnails, detail panel with preview/metadata/URL, Approve/Reject buttons, bulk actions (Approve All/Reject All)
+- Added admin state + pendingCount fetcher in ClipShowcase, visible as amber "MODERATE" button with red badge showing pending count
+- Only visible when player.role === "admin" (uses existing PlayerProfile.role field)
+- Enriched EmptyState: gradient icon, detailed 3-step guide (Play Matches → Record & Upload → Get Featured), "What appears in Highlights?" section (Match Cards, Video Clips, Top Play), Community Guidelines section with icons
+- Promoted VENOM-3373 to admin role for testing
+- Verified full E2E flow via agent-browser: submit clip → clip goes to pending → appears in admin panel with badge → approve → clip appears in public feed
+
+Stage Summary:
+- Admin moderation accessible via amber "Moderate" button with pending count badge in Highlights header
+- User-submitted clips require admin approval before going public (match-cards auto-approved)
+- Word filter blocks profanity in English and Hindi
+- Empty state now provides comprehensive guidance on what highlights are, how to submit, and community rules
+
