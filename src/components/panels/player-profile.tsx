@@ -424,8 +424,11 @@ function ProfileContent({
   // -- derived values
   const xpNeeded = player.level * 200;
   const xpPercent = Math.min(100, Math.floor((player.xp / xpNeeded) * 100));
-  const deathsCount = player.lifetimeDeaths || 1;
-  const kdRatio = ((player.lifetimeKills || 0) / deathsCount).toFixed(2);
+  const deathsCount = player.lifetimeDeaths || 0;
+  const killsCount = player.lifetimeKills || 0;
+  const kdRatio = deathsCount > 0
+    ? (killsCount / deathsCount).toFixed(2)
+    : killsCount > 0 ? 'Perfect' : '0.00';
   const totalRuns =
     (player.lifetimeExtracts || 0) + (player.lifetimeDeaths || 0);
   const extractRate =
@@ -519,8 +522,8 @@ function ProfileContent({
       notify('Nickname cannot be empty!', 'error', onToast);
       return;
     }
-    if (trimmed.length > 15) {
-      notify('Nickname must be 15 characters or less.', 'error', onToast);
+    if (trimmed.length > 20) {
+      notify('Nickname must be 20 characters or less.', 'error', onToast);
       return;
     }
 
@@ -593,8 +596,8 @@ function ProfileContent({
     }
   }
 
-  // -- Determine which matches to display
-  const displayMatches = dbMatches.length > 0 ? dbMatches : matches;
+  // -- Determine which matches to display (only show real data, never fake samples)
+  const displayMatches = dbMatches;
 
   // -- Profile Card handlers
   async function handleGenerateProfileCard() {
@@ -1073,13 +1076,13 @@ function ProfileContent({
             <StatCard
               label="Banked Wallet"
               subLabel="Deposited Chips"
-              value={player.bankedChips.toLocaleString()}
+              value={player.bankedChips.toLocaleString() + ' c'}
               icon={<Landmark className="w-4 h-4 text-emerald-400" />}
               valueClass="text-emerald-400"
             />
             <StatCard
-              label="Tournament Kills"
-              subLabel="Total Terminations"
+              label="Total Kills"
+              subLabel="All Snake Eliminations"
               value={String(player.lifetimeKills)}
               icon={<Skull className="w-4 h-4 text-rose-400" />}
               valueClass="text-white"
@@ -1232,7 +1235,7 @@ function ProfileContent({
               Ledger
             </h3>
             <span className="text-xs text-slate-500 font-mono">
-              Showing {displayMatches.length} of {matchTotal || displayMatches.length} operations
+              Showing {dbMatches.length} of {matchTotal || dbMatches.length} operations
             </span>
           </div>
 
@@ -2024,7 +2027,7 @@ function IdentityEditor(props: IdentityEditorProps) {
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            maxLength={15}
+            maxLength={20}
             className="bg-slate-900 border border-slate-800 text-white font-sans text-sm px-3.5 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all w-full"
             placeholder="Enter nickname"
           />
