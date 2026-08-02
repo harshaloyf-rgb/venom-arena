@@ -10,7 +10,12 @@ export async function GET() {
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const player = await db.player.findUnique({ where: { id: session.playerId } });
     if (!player) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json({ player: toProfile(player) });
+    const [followersCount, followingCount, rivalsCount] = await Promise.all([
+      db.follow.count({ where: { followingId: session.playerId } }),
+      db.follow.count({ where: { followerId: session.playerId } }),
+      db.rival.count({ where: { playerId: session.playerId } }),
+    ]);
+    return NextResponse.json({ player: toProfile(player), followersCount, followingCount, rivalsCount });
   } catch (e) {
     console.error('[player/get] error', e);
     return NextResponse.json({ error: 'Failed to load profile.' }, { status: 500 });

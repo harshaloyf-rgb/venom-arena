@@ -1359,3 +1359,33 @@ Stage Summary:
 - Friends & Search data contract bugs (3)
 - Clip showcase admin moderation
 - Syndicate tab full overhaul
+
+---
+Task ID: backend-follow-rival
+Agent: backend
+Task: Create Follow + Rival API routes, update player routes with counts
+
+Work Log:
+- Created /api/player/follow (GET for counts/relationship, POST for toggle)
+- Created /api/rivals (GET for list/check, POST for add/remove)
+- Updated /api/player GET to return followersCount, followingCount, rivalsCount
+- Updated /api/player/public-profile to return followersCount, followingCount, rivalsCount
+
+Stage Summary:
+- Follow system: toggle follow/unfollow with real counts
+- Rival system: add/remove rivals with upsert, list all rivals
+- Both counts now available in player profile and public profile APIs
+
+---
+Task ID: frontend-fix-player-profile
+Agent: frontend
+Task: Fix TypeScript compilation errors in player-profile.tsx
+
+Work Log:
+- Fixed TS2345 on line 567: onToast arguments were swapped (type passed as msg, msg passed as type). Corrected to onToast?.(message, 'success')
+- Fixed TS2741 on line 880: Friend object literal missing required 'country' property. Added country: 'US' to the newFriend constructor
+- Verified zero TS errors remain in player-profile.tsx
+
+Stage Summary:
+- 2 TypeScript errors fixed (swapped ToastFn args, missing Friend.country)
+- player-profile.tsx now compiles cleanly

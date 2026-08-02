@@ -14,6 +14,7 @@ import {
 import {
   Users, Globe, UserPlus, Gift, Send, X, Check, Search, Loader2,
   Ban, ArrowUpDown, Clock, Activity, ExternalLink, Unlock,
+  Crosshair,
 } from 'lucide-react';
 
 /* ------------------------------------------------------------------ */
@@ -25,7 +26,7 @@ interface SocialPanelProps {
   onInspectPlayer?: (p: InspectedPlayer) => void;
 }
 
-type SubTab = 'friends' | 'search' | 'gifts';
+type SubTab = 'friends' | 'search' | 'gifts' | 'rivals';
 
 interface FriendItem {
   id: string;
@@ -483,6 +484,7 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
         <SubTabBtn active={sub === 'friends'} onClick={() => setSub('friends')} icon={Users} label={`My Friends (${friends.length})`} />
         <SubTabBtn active={sub === 'search'} onClick={() => setSub('search')} icon={Globe} label="Search Players" />
         <SubTabBtn active={sub === 'gifts'} onClick={() => setSub('gifts')} icon={Gift} label="Gift History" />
+        <SubTabBtn active={sub === 'rivals'} onClick={() => setSub('rivals')} icon={Crosshair} label="Rivals" />
       </div>
 
       {/* Add friend bar */}
@@ -796,6 +798,13 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
         </div>
       )}
 
+      {/* ==================== RIVALS TAB ==================== */}
+      {sub === 'rivals' && (
+        <div className="space-y-3">
+          <RivalsTab onToast={onToast} onInspectPlayer={onInspectPlayer} />
+        </div>
+      )}
+
       {/* ==================== GIFT HISTORY TAB ==================== */}
       {sub === 'gifts' && (
         <div className="space-y-3">
@@ -845,6 +854,98 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function RivalsTab({ onToast, onInspectPlayer }: { onToast?: ToastFn; onInspectPlayer?: (p: InspectedPlayer) => void }) {
+  const [rivals, setRivals] = useState<Array<{ id: string; rivalTag: string; rivalName: string; timesKilledBy: number; timesKilledYou: number; lastEncounterAt: string | null; createdAt: string }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchRivals = useCallback(() => {
+    let cancelled = false;
+    fetch('/api/rivals')
+      .then(r => r.json())
+      .then(d => { if (!cancelled) { setRivals(d.rivals ?? []); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => { const cleanup = fetchRivals(); return cleanup; }, [fetchRivals]);
+
+  async function handleRemove(rival: { rivalTag: string; rivalName: string }) {
+    const res = await fetch('/api/rivals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tag: rival.rivalTag, action: 'remove' }),
+    });
+    const data = await res.json();
+    if (data.isRival === false) {
+      setRivals(prev => prev.filter(r => r.rivalTag !== rival.rivalTag));
+      notify(`${rival.rivalName} removed from rivals.`, 'success', onToast);
+    }
+  }
+
+  if (loading) return <PanelSkeleton count={3} />;
+
+  if (rivals.length === 0) {
+    return (
+      <div className="p-6 rounded-xl border border-slate-800 bg-slate-950/60 text-center">
+        <Crosshair className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+        <h4 className="text-sm font-bold text-white">No Rivals Yet</h4>
+        <p className="text-xs text-slate-400 mt-1">
+          Inspect any player and click &quot;Add Rival&quot; to track your nemesis!
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-bold text-orange-300 uppercase tracking-wider flex items-center gap-1.5">
+          <Crosshair className="w-3.5 h-3.5" /> Your Rivals ({rivals.length})
+        </h3>
+      </div>
+      <ul className="space-y-2">
+        {rivals.map((r) => {
+          const totalEncounters = r.timesKilledBy + r.timesKilledYou;
+          const winRate = totalEncounters > 0 ? Math.round((r.timesKilledBy / totalEncounters) * 100) : 0;
+          return (
+            <li key={r.id} className="p-3 rounded-xl border border-orange-500/15 bg-orange-500/5 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center text-base shrink-0 bg-orange-500/10 border border-orange-500/30">
+                  ⚔️
+                </div>
+                <div className="min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => onInspectPlayer?.({ name: r.rivalName || r.rivalTag, userTag: r.rivalTag, country: 'US', flag: '🇺🇨', bankedChips: 0, level: 0 })}
+                    className="font-bold text-orange-200 text-sm truncate hover:text-orange-100 transition flex items-center gap-1"
+                  >
+                    {r.rivalName || r.rivalTag}
+                    <ExternalLink className="w-2.5 h-2.5 text-orange-400/50" />
+                  </button>
+                  <div className="text-[10px] font-mono text-slate-500">#{r.rivalTag}</div>
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-1 shrink-0">
+                <div className="flex items-center gap-2 text-[10px] font-mono">
+                  <span className="text-emerald-400">W:{r.timesKilledBy}</span>
+                  <span className="text-slate-500">/</span>
+                  <span className="text-rose-400">L:{r.timesKilledYou}</span>
+                </div>
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${winRate >= 50 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>{winRate}% WR</span>
+                <button
+                  type="button"
+                  onClick={() => handleRemove(r)}
+                  className="text-[9px] text-slate-500 hover:text-rose-400 transition"
+                >Remove</button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

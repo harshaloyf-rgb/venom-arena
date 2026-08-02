@@ -565,7 +565,7 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
   /* ── Inspect creator ── */
   function handleInspectCreator(clip: ClipItem) {
     if (!onInspectPlayer) return;
-    onInspectPlayer({ name: clip.player.name, userTag: clip.player.userTag, country: clip.player.country, flag: countryFlag(clip.player.country), bankedChips: clip.chipsExtracted, level: clip.player.level });
+    onInspectPlayer({ name: clip.player.name, userTag: clip.player.userTag, country: clip.player.country, flag: countryFlag(clip.player.country), bankedChips: 0, level: clip.player.level });
   }
 
   /* ── Upload ── */
