@@ -50,7 +50,7 @@ interface ClanSystemProps {
 }
 
 type Tab = 'mine' | 'browse' | 'form';
-type MineSubTab = 'overview' | 'challenges' | 'activity' | 'stats';
+type MineSubTab = 'overview' | 'challenges' | 'wars' | 'activity' | 'stats';
 
 interface ClanInfo {
   tag: string;
@@ -122,6 +122,19 @@ interface ClanStats {
   kdRatio: string;
 }
 
+interface WarInfo {
+  id: string;
+  declarerTag: string;
+  declarerName: string;
+  targetTag: string;
+  targetName: string;
+  wager: number;
+  declarerScore: number;
+  targetScore: number;
+  totalPot: number;
+  startedAt: string;
+}
+
 const EMBLEM_OPTIONS = [
   { value: '\u0001f40d', label: '\u0001f40d Viper Snake' },
   { value: '\u0001f451', label: '\u0001f451 Royal Crown' },
@@ -140,12 +153,18 @@ const ACTIVITY_ICONS: Record<string, string> = {
   demote: '\u2b07\ufe0f',
   challenge_claim: '\u0001f3c6',
   level_up: '\u2b50',
+  withdraw: '\u0001f4b0',
+  payout: '\u0001f4b0',
+  shop_purchase: '\u0001f6d2',
+  war_declare: '\u2694\ufe0f',
+  war_end: '\u0001f3c6',
 };
 
 const CHALLENGE_ICONS: Record<string, typeof Target> = {
   treasury_target: Coins,
   recruitment_drive: UserMinus,
   chat_activity: MessageSquare,
+  deposit_streak: Zap,
 };
 
 const RANK_COLORS: Record<string, string> = {
@@ -212,6 +231,10 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
   const [challengesLoading, setChallengesLoading] = useState(false);
   const [clanStats, setClanStats] = useState<ClanStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [activeWar, setActiveWar] = useState<WarInfo | null>(null);
+  const [warLoading, setWarLoading] = useState(false);
+  const [warWager, setWarWager] = useState('');
+  const [warSearch, setWarSearch] = useState('');
   const [actionBusy, setActionBusy] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [settingsForm, setSettingsForm] = useState({ name: '', description: '', emblem: '' });
@@ -285,6 +308,17 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
     } catch {} finally { setStatsLoading(false); }
   }, []);
 
+  const fetchWar = useCallback(async (tag: string) => {
+    setWarLoading(true);
+    try {
+      const res = await fetch(`/api/clans/war?tag=${encodeURIComponent(tag)}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = (await res.json()) as { war: WarInfo | null };
+        setActiveWar(data.war);
+      }
+    } catch { setActiveWar(null); } finally { setWarLoading(false); }
+  }, []);
+
   useEffect(() => {
     if (tab === 'browse') void fetchClans();
   }, [tab, fetchClans]);
@@ -296,6 +330,7 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
     void fetchActivities(playerClanTag);
     void fetchChallenges(playerClanTag);
     void fetchStats(playerClanTag);
+    void fetchWar(playerClanTag);
   }, [playerClanTag, fetchChat, fetchMembers, fetchActivities, fetchChallenges, fetchStats]);
 
   useEffect(() => { void fetchClans(); }, [fetchClans]);
@@ -401,6 +436,26 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
       if (!res.ok) { notify(data?.error || 'Purchase failed.', 'error', onToast); return; }
       notify(data?.effect || 'Purchased!', 'success', onToast);
       await refresh(); void fetchClans(); void fetchMembers(playerClanTag);
+    } catch { notify('Network error.', 'error', onToast); } finally { setActionBusy(''); }
+  }
+
+  async function handleDeclareWar(targetTag: string) {
+    if (!playerClanTag) return;
+    const wager = Math.floor(Number(warWager) || 0);
+    if (wager < 1000) { notify('Minimum wager is 1,000c.', 'error', onToast); return; }
+    setActionBusy('war');
+    try {
+      const res = await fetch('/api/clans/war/declare', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag: playerClanTag, targetTag, wager }) });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; totalPot?: number };
+      if (!res.ok) {
+        const msg = data?.error || 'War declaration failed.';
+        if (msg === 'TARGET_SHIELDED') notify('Target clan has an active War Shield!', 'error', onToast);
+        else notify(msg, 'error', onToast);
+        return;
+      }
+      notify(`War declared! Pot: ${data.totalPot?.toLocaleString()}c`, 'success', onToast);
+      setWarWager(''); setWarSearch('');
+      await refresh(); void fetchClans(); void fetchWar(playerClanTag); void fetchActivities(playerClanTag);
     } catch { notify('Network error.', 'error', onToast); } finally { setActionBusy(''); }
   }
 
@@ -622,6 +677,7 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
                   [
                     { key: 'overview' as const, Icon: Shield, label: 'Overview' },
                     { key: 'challenges' as const, Icon: Swords, label: 'Challenges' },
+                    { key: 'wars' as const, Icon: Skull, label: 'Wars' },
                     { key: 'stats' as const, Icon: TrendingUp, label: 'Stats' },
                     { key: 'activity' as const, Icon: ScrollText, label: 'Activity Log' },
                   ]
@@ -924,6 +980,129 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
                           </div>
                         );
                       })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+
+              {/* ========= WARS ========= */}
+              {mineSub === 'wars' && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-2xl border border-rose-500/20 bg-rose-500/5">
+                    <div className="flex items-center gap-2 mb-1"><Skull className="w-4 h-4 text-rose-400" /><h4 className="text-sm font-bold text-white">Clan Wars</h4></div>
+                    <p className="text-[11px] text-slate-400">Wager treasury chips against rival clans. First to 50 kills wins the pot. {isLeader ? 'You can declare war on other clans.' : 'Only the Leader can declare wars.'}</p>
+                  </div>
+                  {warLoading ? <PanelSkeleton count={2} height="h-48" /> : activeWar ? (
+                    <div className="p-4 rounded-2xl border border-rose-500/40 bg-rose-500/5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-bold text-rose-300 flex items-center gap-2"><Skull className="w-4 h-4" /> ACTIVE WAR</h4>
+                        <span className="text-[10px] font-mono text-slate-500">Started {getTimeAgo(new Date(activeWar.startedAt))}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="text-center flex-1 min-w-0">
+                          <p className={`text-xs font-bold truncate ${activeWar.declarerTag === playerClanTag ? 'text-emerald-400' : 'text-rose-400'}`}>{activeWar.declarerName}</p>
+                          <p className="text-[10px] font-mono text-slate-500">[{activeWar.declarerTag}]</p>
+                        </div>
+                        <div className="text-rose-400 font-black text-lg">VS</div>
+                        <div className="text-center flex-1 min-w-0">
+                          <p className={`text-xs font-bold truncate ${activeWar.targetTag === playerClanTag ? 'text-emerald-400' : 'text-rose-400'}`}>{activeWar.targetName}</p>
+                          <p className="text-[10px] font-mono text-slate-500">[{activeWar.targetTag}]</p>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] font-bold text-white">{activeWar.declarerName}</span>
+                            <span className="text-[10px] font-mono text-amber-400">{activeWar.declarerScore} / 50</span>
+                          </div>
+                          <div className="w-full h-3 bg-slate-900 rounded-full overflow-hidden">
+                            <div className="h-full bg-gradient-to-r from-rose-600 to-rose-400 rounded-full transition-all duration-700" style={{ width: `${Math.min(100, (activeWar.declarerScore / 50) * 100)}%` }} />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] font-bold text-white">{activeWar.targetName}</span>
+                            <span className="text-[10px] font-mono text-amber-400">{activeWar.targetScore} / 50</span>
+                          </div>
+                          <div className="w-full h-3 bg-slate-900 rounded-full overflow-hidden">
+                            <div className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full transition-all duration-700" style={{ width: `${Math.min(100, (activeWar.targetScore / 50) * 100)}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-center">
+                        <p className="text-[10px] font-mono text-amber-300/70 uppercase tracking-widest">Total Pot</p>
+                        <p className="text-xl font-mono font-black text-amber-300">{activeWar.totalPot.toLocaleString()}c</p>
+                        <p className="text-[10px] text-slate-500 mt-1">Each clan wagered {activeWar.wager.toLocaleString()}c - Winner takes all</p>
+                      </div>
+                      <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/60">
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          <strong className="text-white">How it works:</strong> Play matches normally. Every kill by any clan member counts toward your side score. First clan to reach <strong className="text-amber-400">50 kills</strong> wins the entire pot. The war ends automatically.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="p-6 rounded-2xl border border-slate-800 bg-slate-950/60 text-center">
+                        <Skull className="w-10 h-10 text-slate-600 mx-auto mb-2" />
+                        <h5 className="text-sm font-bold text-white">No Active War</h5>
+                        <p className="text-[11px] text-slate-500 mt-1">Your clan is not currently at war. Declare one below!</p>
+                      </div>
+                      {isLeader ? (
+                        <div className="p-4 rounded-2xl border border-rose-500/20 bg-rose-500/5 space-y-3">
+                          <h4 className="text-sm font-bold text-white flex items-center gap-2"><Swords className="w-4 h-4 text-rose-400" /> Declare War</h4>
+                          <div>
+                            <label className="text-[10px] font-mono uppercase tracking-widest text-slate-500 block mb-1">Target Clan</label>
+                            <div className="relative">
+                              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                              <input type="text" value={warSearch} onChange={(e) => setWarSearch(e.target.value.toUpperCase())} placeholder="Search by name or tag..." className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-rose-500/50" />
+                            </div>
+                          </div>
+                          {warSearch ? (
+                            <div className="max-h-48 overflow-y-auto va-scroll rounded-xl border border-slate-800 bg-slate-950/80">
+                              {clans.filter(c => c.tag !== playerClanTag && (c.name.toLowerCase().includes(warSearch.toLowerCase()) || c.tag.includes(warSearch))).length === 0 ? (
+                                <div className="p-4 text-center text-[11px] text-slate-500">No clans found.</div>
+                              ) : clans.filter(c => c.tag !== playerClanTag && (c.name.toLowerCase().includes(warSearch.toLowerCase()) || c.tag.includes(warSearch))).map(c => (
+                                <button key={c.tag} type="button" onClick={() => setWarSearch(c.tag)} className={`w-full px-4 py-2.5 text-left flex items-center justify-between hover:bg-rose-500/10 transition border-b border-slate-900 last:border-0 ${warSearch === c.tag ? 'bg-rose-500/10' : ''}`}>
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="text-lg" aria-hidden>{c.emblem}</span>
+                                    <div className="min-w-0">
+                                      <p className="text-xs text-white font-bold truncate">{c.name}</p>
+                                      <p className="text-[10px] font-mono text-slate-500">[{c.tag}] - Lvl {c.level} - {c.memberCount} members</p>
+                                    </div>
+                                  </div>
+                                  <span className="text-[10px] font-mono text-emerald-400 shrink-0">{c.bankedChips.toLocaleString()}c</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                          {clans.find(c => c.tag === warSearch) ? (
+                            <div className="p-3 rounded-xl border border-rose-500/30 bg-rose-500/5 flex items-center justify-between">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-lg" aria-hidden>{clans.find(c => c.tag === warSearch)?.emblem}</span>
+                                <div className="min-w-0">
+                                  <p className="text-xs text-white font-bold truncate">{clans.find(c => c.tag === warSearch)?.name} [{warSearch}]</p>
+                                  <p className="text-[10px] text-slate-500">Treasury: {clans.find(c => c.tag === warSearch)?.bankedChips.toLocaleString()}c - {clans.find(c => c.tag === warSearch)?.memberCount} members</p>
+                                </div>
+                              </div>
+                              <button type="button" onClick={() => setWarSearch('')} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white transition"><X className="w-3.5 h-3.5" /></button>
+                            </div>
+                          ) : null}
+                          <div>
+                            <label className="text-[10px] font-mono uppercase tracking-widest text-slate-500 block mb-1">Wager (min 1,000c per clan)</label>
+                            <input type="number" value={warWager} onChange={(e) => setWarWager(e.target.value)} placeholder="Enter wager amount..." className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-rose-500/50" />
+                            <p className="text-[9px] text-slate-500 mt-1">Both clans must have this amount in treasury. Total pot = wager x 2.</p>
+                          </div>
+                          <button type="button" onClick={() => void handleDeclareWar(warSearch)} disabled={actionBusy === 'war' || !warSearch || !clans.find(c => c.tag === warSearch) || (Math.floor(Number(warWager) || 0) < 1000)} className="w-full py-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 disabled:opacity-40 border border-rose-500/30">
+                            {actionBusy === 'war' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Swords className="w-3.5 h-3.5" />} Declare War
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="p-4 rounded-2xl border border-slate-800 bg-slate-950/60 text-center">
+                          <Lock className="w-6 h-6 text-slate-600 mx-auto mb-2" />
+                          <p className="text-xs text-slate-500">Only the <strong className="text-amber-300">Leader</strong> can declare clan wars.</p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
