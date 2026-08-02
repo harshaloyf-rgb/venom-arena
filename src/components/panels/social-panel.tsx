@@ -859,7 +859,7 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
 }
 
 function RivalsTab({ onToast, onInspectPlayer }: { onToast?: ToastFn; onInspectPlayer?: (p: InspectedPlayer) => void }) {
-  const [rivals, setRivals] = useState<Array<{ id: string; rivalTag: string; rivalName: string; timesKilledBy: number; timesKilledYou: number; lastEncounterAt: string | null; createdAt: string }>>([]);
+  const [rivals, setRivals] = useState<Array<{ id: string; rivalTag: string; rivalName: string; timesKilledBy: number; timesKilledYou: number; lastEncounterAt: string | null; createdAt: string; country?: string; bankedChips?: number; level?: number }>>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchRivals = useCallback(() => {
@@ -920,7 +920,7 @@ function RivalsTab({ onToast, onInspectPlayer }: { onToast?: ToastFn; onInspectP
                 <div className="min-w-0">
                   <button
                     type="button"
-                    onClick={() => onInspectPlayer?.({ name: r.rivalName || r.rivalTag, userTag: r.rivalTag, country: 'US', flag: '🇺🇨', bankedChips: 0, level: 0 })}
+                    onClick={() => onInspectPlayer?.({ name: r.rivalName || r.rivalTag, userTag: r.rivalTag, country: r.country || 'US', flag: '', bankedChips: r.bankedChips || 0, level: r.level || 0 })}
                     className="font-bold text-orange-200 text-sm truncate hover:text-orange-100 transition flex items-center gap-1"
                   >
                     {r.rivalName || r.rivalTag}
