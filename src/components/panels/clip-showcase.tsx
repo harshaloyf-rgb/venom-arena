@@ -32,6 +32,12 @@ import {
   AlertTriangle,
   Video,
   Upload,
+  Shield,
+  CheckCircle2,
+  XCircle,
+  Eye,
+  Trash2,
+  ChevronLeft,
 } from 'lucide-react';
 
 // ── Types ──
@@ -74,6 +80,258 @@ interface ClipShowcaseProps {
 
 const PAGE_SIZE = 20;
 
+// ── Admin Moderation Modal ──
+
+interface AdminClip {
+  id: string;
+  title: string;
+  description: string;
+  platform: string;
+  url: string;
+  thumbnailUrl: string | null;
+  chipsExtracted: number;
+  kills: number;
+  arenaName: string;
+  tags: string[];
+  upvotes: number;
+  featured: boolean;
+  cardType: string;
+  matchData: any;
+  status: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  player: { name: string; userTag: string; country: string; level: number };
+}
+
+function AdminModerationModal({ onClose }: { onClose: () => void }) {
+  const [tab, setTab] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
+  const [clips, setClips] = useState<AdminClip[]>([]);
+  const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
+  const [loading, setLoading] = useState(true);
+  const [acting, setActing] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  async function fetchClips() {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/clips/admin?status=${tab}&limit=50`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setClips(data.clips);
+      setCounts(data.counts);
+    } catch {}
+    setLoading(false);
+  }
+
+  useEffect(() => { fetchClips(); }, [tab]);
+
+  async function handleAction(clipId: string, action: 'approve' | 'reject') {
+    setActing(clipId);
+    try {
+      const res = await fetch('/api/clips/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clipId, action }),
+      });
+      if (!res.ok) throw new Error();
+      setClips((prev) => prev.map((c) => c.id === clipId ? { ...c, status: action === 'approve' ? 'approved' : 'rejected', reviewedAt: new Date().toISOString() } : c));
+      setCounts((prev) => ({
+        ...prev,
+        pending: prev.pending + (action === 'approve' ? -1 : 0),
+        [action === 'approve' ? 'approved' : 'rejected']: prev[action === 'approve' ? 'approved' : 'rejected'] + 1,
+      }));
+      if (selectedId === clipId) setSelectedId(null);
+    } catch {}
+    setActing(null);
+  }
+
+  async function handleBulkAction(action: 'approve' | 'reject') {
+    const ids = clips.filter((c) => c.status === 'pending').map((c) => c.id);
+    if (ids.length === 0) return;
+    setActing('bulk');
+    try {
+      const res = await fetch('/api/clips/admin', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clipIds: ids, action }),
+      });
+      if (!res.ok) throw new Error();
+      fetchClips();
+    } catch {}
+    setActing(null);
+  }
+
+  const selected = clips.find((c) => c.id === selectedId);
+  const pendingCount = clips.filter((c) => c.status === 'pending').length;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/90 backdrop-blur-sm">
+      <div className="relative w-full max-w-3xl rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl max-h-[92vh] flex flex-col">
+        {/* Header */}
+        <div className="shrink-0 flex items-center justify-between p-4 sm:p-5 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={onClose} className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition"><ChevronLeft className="w-4 h-4" /></button>
+            <div>
+              <h3 className="text-base font-black text-white flex items-center gap-2"><Shield className="w-5 h-5 text-amber-400" /> Clip Moderation</h3>
+              <p className="text-[10px] text-slate-500 mt-0.5">Review and manage user-submitted highlights</p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition"><X className="w-4 h-4" /></button>
+        </div>
+
+        {/* Status Tabs + Counts */}
+        <div className="shrink-0 flex items-center gap-1 px-4 sm:px-5 pt-3 overflow-x-auto">
+          {(['pending', 'approved', 'rejected', 'all'] as const).map((t) => (
+            <button key={t} type="button" onClick={() => { setTab(t); setSelectedId(null); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition whitespace-nowrap border ${tab === t ? 'bg-red-600 border-red-600 text-white' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'}`}>
+              {t} <span className="ml-1 text-[9px] opacity-70">{counts[t as keyof typeof counts] ?? 0}</span>
+            </button>
+          ))}
+          {tab === 'pending' && pendingCount > 1 && (
+            <div className="ml-auto flex items-center gap-1.5 shrink-0">
+              <button type="button" onClick={() => handleBulkAction('approve')} disabled={acting === 'bulk'} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider transition flex items-center gap-1 disabled:opacity-50"><CheckCircle2 className="w-3 h-3" /> Approve All</button>
+              <button type="button" onClick={() => handleBulkAction('reject')} disabled={acting === 'bulk'} className="px-2.5 py-1.5 rounded-lg bg-red-700 hover:bg-red-600 text-white text-[10px] font-bold uppercase tracking-wider transition flex items-center gap-1 disabled:opacity-50"><XCircle className="w-3 h-3" /> Reject All</button>
+            </div>
+          )}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 flex min-h-0 mt-3">
+          {/* Clip List */}
+          <div className="w-full sm:w-2/5 border-r border-slate-800/60 overflow-y-auto custom-scrollbar">
+            {loading ? (
+              <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-slate-500" /></div>
+            ) : clips.length === 0 ? (
+              <div className="text-center py-12 px-4">
+                <CheckCircle2 className="w-8 h-8 text-emerald-500/40 mx-auto mb-2" />
+                <p className="text-xs text-slate-500">No {tab === 'all' ? '' : tab} clips found</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-800/40">
+                {clips.map((clip) => (
+                  <button key={clip.id} type="button" onClick={() => setSelectedId(clip.id)} className={`w-full text-left px-3 py-3 hover:bg-slate-800/40 transition ${selectedId === clip.id ? 'bg-slate-800/60 border-l-2 border-red-500' : ''}`}>
+                    <div className="flex items-start gap-2">
+                      {clip.thumbnailUrl ? (
+                        <img src={clip.thumbnailUrl} alt="" className="w-14 h-10 rounded object-cover shrink-0 bg-slate-950" />
+                      ) : (
+                        <div className="w-14 h-10 rounded bg-slate-950 border border-slate-800 shrink-0 flex items-center justify-center"><Film className="w-4 h-4 text-slate-700" /></div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-bold text-white truncate leading-tight">{clip.title}</p>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="text-[9px] text-slate-500">{clip.player.name}</span>
+                          <span className="text-[9px] text-slate-700">·</span>
+                          <StatusBadge status={clip.status} />
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Clip Detail / Preview */}
+          <div className="hidden sm:flex flex-1 flex-col min-w-0">
+            {selected ? (
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+                {/* Preview */}
+                {selected.cardType === 'match-card' ? (
+                  <div className="rounded-xl bg-slate-950 border border-slate-800 p-4 text-center">
+                    <span className="text-[9px] font-mono text-red-400 font-bold uppercase tracking-widest">Match Card (auto-generated)</span>
+                    <p className="text-sm font-bold text-white mt-2">{selected.title}</p>
+                  </div>
+                ) : (
+                  <a href={selected.url} target="_blank" rel="noopener noreferrer" className="block rounded-xl overflow-hidden border border-slate-800">
+                    {selected.thumbnailUrl ? (
+                      <img src={selected.thumbnailUrl} alt={selected.title} className="w-full aspect-video object-cover" />
+                    ) : (
+                      <div className="w-full aspect-video bg-gradient-to-br from-slate-900 via-slate-950 to-red-950/20 flex items-center justify-center">
+                        <PlatformIcon platform={selected.platform.toLowerCase()} size="lg" />
+                      </div>
+                    )}
+                  </a>
+                )}
+
+                {/* Info */}
+                <div>
+                  <h4 className="text-sm font-bold text-white">{selected.title}</h4>
+                  {selected.description && <p className="text-[11px] text-slate-400 mt-1">{selected.description}</p>}
+                </div>
+
+                {/* Metadata Grid */}
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  <MetaItem label="Player" value={`${selected.player.name} (${selected.player.userTag})`} />
+                  <MetaItem label="Platform" value={selected.platform} />
+                  {selected.arenaName && <MetaItem label="Arena" value={selected.arenaName} />}
+                  {selected.chipsExtracted > 0 && <MetaItem label="Chips" value={selected.chipsExtracted.toLocaleString('en-IN')} />}
+                  {selected.kills > 0 && <MetaItem label="Kills" value={String(selected.kills)} />}
+                  <MetaItem label="Submitted" value={timeAgo(selected.createdAt)} />
+                  {selected.reviewedAt && <MetaItem label="Reviewed" value={timeAgo(selected.reviewedAt)} />}
+                </div>
+
+                {/* URL */}
+                {selected.url && (
+                  <div className="rounded-lg bg-slate-950 border border-slate-800 p-2.5">
+                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Video URL</p>
+                    <a href={selected.url} target="_blank" rel="noopener noreferrer" className="text-[10px] font-mono text-red-400 hover:text-red-300 break-all transition">{selected.url}</a>
+                </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+                  {selected.status === 'pending' ? (
+                    <>
+                      <button type="button" onClick={() => handleAction(selected.id, 'approve')} disabled={acting === selected.id} className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold uppercase tracking-wider transition flex items-center justify-center gap-1.5 disabled:opacity-50">
+                        {acting === selected.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Approve
+                      </button>
+                      <button type="button" onClick={() => handleAction(selected.id, 'reject')} disabled={acting === selected.id} className="flex-1 py-2.5 rounded-xl bg-red-700 hover:bg-red-600 text-white text-xs font-bold uppercase tracking-wider transition flex items-center justify-center gap-1.5 disabled:opacity-50">
+                        {acting === selected.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-4 h-4" />} Reject
+                      </button>
+                    </>
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center gap-2 py-2.5">
+                      <StatusBadge status={selected.status} size="md" />
+                      <span className="text-[10px] text-slate-500">Reviewed {selected.reviewedAt ? timeAgo(selected.reviewedAt) : ''}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-center px-6">
+                  <Eye className="w-10 h-10 text-slate-700 mx-auto mb-3" />
+                  <p className="text-xs text-slate-500">Select a clip from the list to review</p>
+                  <p className="text-[10px] text-slate-600 mt-1">Click on any clip to see preview, details, and approve/reject</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status, size = 'sm' }: { status: string; size?: 'sm' | 'md' }) {
+  const cfg: Record<string, { color: string; label: string }> = {
+    pending: { color: 'text-amber-400 bg-amber-500/10 border-amber-500/30', label: 'Pending' },
+    approved: { color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30', label: 'Approved' },
+    rejected: { color: 'text-red-400 bg-red-500/10 border-red-500/30', label: 'Rejected' },
+  };
+  const c = cfg[status] || cfg.pending;
+  return <span className={`inline-flex items-center gap-1 font-bold uppercase tracking-wider border px-1.5 py-0.5 rounded ${c.color} ${size === 'md' ? 'text-[10px]' : 'text-[8px]'}`}>{c.label}</span>;
+}
+
+function MetaItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-slate-950/80 border border-slate-800/60 px-2.5 py-2">
+      <p className="text-[9px] text-slate-600 font-bold uppercase">{label}</p>
+      <p className="text-[11px] text-white font-medium mt-0.5 truncate">{value}</p>
+    </div>
+  );
+}
+
 function formatCompact(n: number): string {
   if (n >= 10_000_000) return `${(n / 10_000_000).toFixed(1)} Cr`;
   if (n >= 100_000) return `${(n / 100_000).toFixed(1)}L`;
@@ -97,41 +355,64 @@ function timeAgo(iso: string): string {
 
 function EmptyState({ isLoggedIn, onOpenUpload }: { isLoggedIn: boolean; onOpenUpload: () => void }) {
   return (
-    <div className="text-center py-8">
-      <div className="text-4xl mb-4">🐍</div>
-      <h3 className="text-base font-bold text-white mb-2">No highlights yet</h3>
-      <p className="text-xs text-slate-500 mb-6 max-w-sm mx-auto">
-        Great matches auto-appear here as branded stat cards.
-        You can also share your YouTube, Instagram, or Twitch clips!
+    <div className="text-center py-6 sm:py-8">
+      {/* Hero icon */}
+      <div className="relative inline-flex items-center justify-center mb-5">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-600/20 to-amber-600/20 border border-red-500/20 flex items-center justify-center">
+          <Flame className="w-7 h-7 text-red-400" />
+        </div>
+      </div>
+      <h3 className="text-base sm:text-lg font-black text-white mb-1.5">Highlights Feed</h3>
+      <p className="text-[11px] sm:text-xs text-slate-400 mb-6 max-w-md mx-auto leading-relaxed">
+        The best Venom Arena plays, clutch extractions, and community clips all in one place.
+        Scroll through top plays, upvote your favorites, and share your own legendary moments!
       </p>
 
       {/* How it works steps */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6 max-w-md mx-auto">
-        <StepCard icon={<Video className="w-5 h-5 text-red-400" />} step="1" title="Play" desc="Play matches — impressive ones auto-publish" />
-        <StepCard icon={<Upload className="w-5 h-5 text-amber-400" />} step="2" title="Record" desc="Record gameplay & upload to YouTube/Instagram" />
-        <StepCard icon={<Flame className="w-5 h-5 text-emerald-400" />} step="3" title="Share" desc="Paste the link — your clip hits the feed!" />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5 max-w-sm mx-auto">
+        <StepCard icon={<Video className="w-5 h-5 text-red-400" />} step="1" title="Play Matches" desc="Impressive games (5K+ chips or 3+ kills) auto-generate highlight cards" />
+        <StepCard icon={<Upload className="w-5 h-5 text-amber-400" />} step="2" title="Record & Upload" desc="Record gameplay, upload to YouTube/Instagram, paste the link here" />
+        <StepCard icon={<Trophy className="w-5 h-5 text-emerald-400" />} step="3" title="Get Featured" desc="Most upvoted clips hit the Top Play spotlight at the top of the feed" />
       </div>
 
-      {/* Content rules summary */}
-      <div className="inline-flex flex-col items-start gap-1 text-left rounded-xl bg-slate-950/80 border border-slate-800 p-3 mb-5 max-w-sm">
-        <div className="flex items-center gap-1.5">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="text-[10px] font-bold text-slate-300">All clips are reviewed before publishing</span>
+      {/* What appears here */}
+      <div className="max-w-sm mx-auto mb-5 space-y-2">
+        <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-3 text-left">
+          <p className="text-[10px] font-bold text-slate-300 mb-2 flex items-center gap-1.5"><Film className="w-3.5 h-3.5 text-red-400" /> What appears in Highlights?</p>
+          <ul className="text-[10px] text-slate-400 space-y-1">
+            <li className="flex items-start gap-1.5"><span className="text-emerald-400 mt-0.5">✓</span> <span><strong className="text-slate-300">Match Cards</strong> — Auto-generated stat cards from impressive matches (big extractions, multi-kills)</span></li>
+            <li className="flex items-start gap-1.5"><span className="text-emerald-400 mt-0.5">✓</span> <span><strong className="text-slate-300">Video Clips</strong> — Community-submitted gameplay from YouTube, Instagram Reels, and Twitch</span></li>
+            <li className="flex items-start gap-1.5"><span className="text-emerald-400 mt-0.5">✓</span> <span><strong className="text-slate-300">Top Play</strong> — The most upvoted clip gets the featured trophy spotlight</span></li>
+          </ul>
         </div>
-        <div className="flex items-center gap-1.5">
-          <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-          <span className="text-[10px] text-slate-500">Only Venom Arena gameplay — no obscene or off-topic content</span>
+
+        {/* Content rules summary */}
+        <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-3 text-left">
+          <p className="text-[10px] font-bold text-slate-300 mb-1.5 flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Community Guidelines</p>
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+              <span className="text-[10px] text-slate-400">All user-submitted clips are reviewed by admins before going live</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+              <span className="text-[10px] text-slate-400">Only Venom Arena gameplay — no obscene, abusive, or off-topic content</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+              <span className="text-[10px] text-slate-500">Match Cards appear instantly (auto-generated), video clips need review</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      {isLoggedIn && (
-        <button
-          type="button"
-          onClick={onOpenUpload}
-          className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs uppercase tracking-wider transition"
-        >
+      {/* CTA */}
+      {isLoggedIn ? (
+        <button type="button" onClick={onOpenUpload} className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs uppercase tracking-wider transition shadow-lg shadow-red-600/20">
           <Plus className="w-4 h-4" /> Share Your First Clip
         </button>
+      ) : (
+        <p className="text-[11px] text-slate-500 italic">Sign in to submit your own gameplay highlights</p>
       )}
     </div>
   );
@@ -167,6 +448,9 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
   const [myClipsOnly, setMyClipsOnly] = useState(false);
   const [liveStats, setLiveStats] = useState<LiveStats | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'match-card' | 'user-clip'>('all');
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+  const isAdmin = player?.role === 'admin';
 
   const [uploadForm, setUploadForm] = useState({
     title: '',
@@ -236,6 +520,21 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
     fetchFeatured();
     fetchStats();
   }, [myClipsOnly, filterType]);
+
+  /* ── Admin: fetch pending count ── */
+  useEffect(() => {
+    if (!isAdmin) return;
+    async function load() {
+      try {
+        const res = await fetch('/api/clips/admin?status=pending&limit=1');
+        if (res.ok) {
+          const data = await res.json();
+          setPendingCount(data.counts?.pending ?? 0);
+        }
+      } catch {}
+    }
+    load();
+  }, [isAdmin, showAdmin]);
 
   useEffect(() => {
     setClips([]);
@@ -357,6 +656,12 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
               <option value="match-card">Match Cards</option>
               <option value="user-clip">Video Clips</option>
             </select>
+            {isAdmin && (
+              <button type="button" onClick={() => setShowAdmin(true)} className="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs uppercase tracking-wider transition flex items-center gap-1.5 relative">
+                <Shield className="w-3.5 h-3.5" /> Moderate
+                {pendingCount > 0 && <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center border-2 border-slate-900">{pendingCount > 9 ? '9+' : pendingCount}</span>}
+              </button>
+            )}
             {isLoggedIn && (
               <button type="button" onClick={() => setShowUpload(true)} className="px-3 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs uppercase tracking-wider transition flex items-center gap-1.5">
                 <Plus className="w-3.5 h-3.5" /> Share Clip
@@ -437,6 +742,9 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
 
       {/* Upload Modal */}
       {showUpload && <UploadModal uploadForm={uploadForm} setUploadForm={setUploadForm} uploading={uploading} onUpload={handleUpload} onClose={() => setShowUpload(false)} />}
+
+      {/* Admin Moderation Modal */}
+      {showAdmin && <AdminModerationModal onClose={() => { setShowAdmin(false); fetchClips(true); fetchFeatured(); }} />}
     </div>
   );
 }
