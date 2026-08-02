@@ -70,6 +70,12 @@ export async function POST(req: NextRequest) {
         data: { progress: { increment: amount } },
       });
 
+      // Update deposit_streak challenge progress (count each deposit transaction)
+      await tx.clanChallenge.updateMany({
+        where: { clanTag: tag, type: 'deposit_streak', weekStart, claimed: false },
+        data: { progress: { increment: 1 } },
+      });
+
       // Check level up
       const updatedClan = await tx.clan.findUnique({ where: { tag }, select: { xp: true, level: true } });
       let newLevel = updatedClan?.level || 1;

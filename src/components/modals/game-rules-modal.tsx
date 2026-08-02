@@ -5,7 +5,8 @@
  *
  * Comprehensive rules page covering ALL game mechanics, modes,
  * food, stars, collision, boost, bot AI, map, extraction, challenges,
- * HUD, lobby leaderboards, milestone badges, agent profile, social/friends, and FAQ.
+ * HUD, lobby leaderboards, milestone badges, agent profile, social/friends,
+ * highlights/clips, and FAQ.
  */
 
 import {
@@ -44,6 +45,7 @@ import {
   TrendingUp,
   ScrollText,
   UserCircle,
+  Flame,
 } from 'lucide-react';
 import { ARENA_TIERS, PRACTICE_TIERS, MILESTONE_TIERS } from '@/lib/game-config';
 
@@ -76,7 +78,7 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                 VENOM ARENA — OFFICIAL GUIDE &amp; RULES
               </DialogTitle>
               <DialogDescription className="text-xs text-slate-400">
-                Accounts, controls, modes, arena tiers, HUD, extraction, challenges, death, replay, leaderboards, championships, hall of fame, syndicates, social/friends &amp; FAQ
+                Accounts, controls, modes, arena tiers, HUD, extraction, challenges, death, replay, leaderboards, championships, hall of fame, syndicates, social/friends, highlights &amp; FAQ
               </DialogDescription>
             </div>
           </div>
@@ -1137,11 +1139,12 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                 </ul>
               </InfoCard>
               <InfoCard title="🏆 Weekly Challenges" accent="text-amber-300">
-                <p className="mb-1.5">Three challenges reset every <strong>Monday UTC</strong>. Scaled by clan level:</p>
+                <p className="mb-1.5">Four challenges reset every <strong>Monday UTC</strong>. Scaled by clan level:</p>
                 <ul className="list-disc pl-4 space-y-0.5">
                   <li><strong>Treasury Target</strong> — Deposit a total of X chips (scales: Level × 2,000 target, Level × 1,000 reward)</li>
                   <li><strong>Recruitment Drive</strong> — Recruit X new members (scales: min(Level, 5) target)</li>
                   <li><strong>Syndicate Comms</strong> — Send X chat messages (scales: Level × 5 + 15 target)</li>
+                  <li><strong>Deposit Streak</strong> — Make X total deposits as a clan (any member, any amount; scales: Level × 2 + 8 target, Level × 500 + 2,000 reward)</li>
                   <li>Leader/Co-Leader can <strong>Claim</strong> completed challenges — rewards go to the <strong>Clan Treasury</strong> as chips + 10% XP bonus</li>
                 </ul>
               </InfoCard>
@@ -1423,9 +1426,96 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
           </Section>
 
           {/* ================================================================= */}
-          {/* 18. FAQ */}
+          {/* 19. HIGHLIGHTS (CLIPS & MATCH CARDS) */}
           {/* ================================================================= */}
-          <Section icon={<AlertTriangle className="w-4 h-4" />} title="18. FAQ" accent="text-purple-400">
+          <Section icon={<Flame className="w-4 h-4" />} title="19. HIGHLIGHTS (CLIPS &amp; MATCH CARDS)" accent="text-orange-400">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <InfoCard title="🔥 What Are Highlights?" accent="text-orange-300">
+                <p className="mb-1.5">The <strong>Highlights</strong> tab is the community showcase where great matches and player-submitted clips live. Two types of content appear:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong className="text-emerald-300">Match Cards</strong> — Auto-generated stat cards from impressive matches. Instantly approved, always visible.</li>
+                  <li><strong className="text-amber-300">Video Clips</strong> — Player-submitted YouTube/Instagram/Twitch links. Require admin review before going live.</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="🤖 Auto-Publishing (Match Cards)" accent="text-emerald-300">
+                <p className="mb-1.5">The system automatically publishes a Match Card to the Highlights feed when your match meets <strong>any</strong> of these thresholds:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>Extraction</strong> with <strong>5,000+ chips</strong> earned</li>
+                  <li><strong>Extraction</strong> with <strong>3+ kills</strong></li>
+                  <li><strong>Death</strong> with <strong>5+ kills</strong> (impressive even without extracting)</li>
+                </ul>
+                <p className="mt-1.5 text-slate-500">Match Cards are always <strong>auto-approved</strong> — no waiting. They show: arena name, chips earned/lost, kills, snake length, duration, and your clan tag.</p>
+              </InfoCard>
+              <InfoCard title="📹 Submitting Video Clips" accent="text-amber-300">
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Click <strong>Upload Clip</strong> on the Highlights tab</li>
+                  <li>Choose platform: <strong>YouTube</strong>, <strong>Instagram</strong>, or <strong>Twitch</strong></li>
+                  <li>Paste the video URL — YouTube thumbnails are auto-extracted</li>
+                  <li>Title: 5-120 characters. Description: up to 300 characters</li>
+                  <li>Profanity filter applies (English + Hindi)</li>
+                  <li>Submitted clips enter <strong>&quot;Pending&quot;</strong> status — visible only to you until an admin approves or rejects them</li>
+                </ul>
+              </InfoCard>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+              <InfoCard title="🏆 Featured &quot;Top Play&quot; Spotlight" accent="text-amber-300">
+                <p className="mb-1.5">The <strong>Top Play</strong> spotlight at the top of the feed shows the single best clip, selected by a 3-tier priority system:</p>
+                <ol className="list-decimal pl-4 space-y-0.5">
+                  <li><strong className="text-amber-300">Admin-Featured</strong> — An admin has manually pinned this clip as the Top Play</li>
+                  <li><strong className="text-emerald-300">Today&apos;s Best Match Card</strong> — The match-card from today with the most chips extracted (then most kills as tiebreaker)</li>
+                  <li><strong className="text-slate-300">Highest Upvoted Ever</strong> — The most upvoted approved clip of all time</li>
+                </ol>
+                <p className="mt-1.5 text-slate-500">Only approved clips are eligible. The spotlight updates when you refresh the page.</p>
+              </InfoCard>
+              <InfoCard title="👍 Upvoting" accent="text-rose-300">
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Click the <strong>🔥 Flame</strong> button on any clip to upvote it</li>
+                  <li><strong>One vote per player per clip</strong> — enforced at the database level</li>
+                  <li>Upvotes are <strong>not reversible</strong> — once you upvote, it&apos;s permanent</li>
+                  <li>Must be logged in to upvote</li>
+                  <li>Upvote count is used in the Top Play fallback (highest upvoted ever)</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="📊 Live Stats Ticker" accent="text-cyan-300">
+                <p className="mb-1.5">A stats bar at the top of the Highlights panel shows <strong>today&apos;s live activity</strong>:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>Matches</strong> played today</li>
+                  <li><strong>Extractions</strong> completed today</li>
+                  <li><strong>Chips earned</strong> by all players today</li>
+                  <li><strong>Kills</strong> across all matches today</li>
+                  <li><strong>Total players</strong> registered on the platform</li>
+                </ul>
+              </InfoCard>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+              <InfoCard title="🔍 Feed Controls" accent="text-emerald-300">
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>My Clips</strong> toggle — Filter to show only your own clips (including pending ones)</li>
+                  <li><strong>Type Filter</strong> — All, Match Cards only, or Video Clips only</li>
+                  <li><strong>Infinite scroll</strong> — 20 clips per page, auto-loads as you scroll down</li>
+                  <li>Click a player&apos;s name to <strong>inspect their profile</strong></li>
+                  <li>Video clips show a <strong>Watch</strong> link that opens the video on the original platform</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="🛡️ Content Rules &amp; Moderation" accent="text-amber-300">
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Submitted clips are reviewed by admins before going public</li>
+                  <li>Profanity, spam, and inappropriate content will be <strong>rejected</strong></li>
+                  <li>Rejected clips are hidden from the public feed but preserved for audit</li>
+                  <li>Auto-generated Match Cards bypass moderation (system-verified data)</li>
+                  <li>Admins can <strong>feature</strong> any approved clip to pin it as the Top Play spotlight</li>
+                  <li>Target review time: within <strong>24 hours</strong> of submission</li>
+                </ul>
+              </InfoCard>
+            </div>
+          </Section>
+
+          {/* ================================================================= */}
+          {/* 20. FAQ */}
+          {/* ================================================================= */}
+          <Section icon={<AlertTriangle className="w-4 h-4" />} title="20. FAQ" accent="text-purple-400">
             <div className="flex flex-col gap-2.5">
               <FaqItem q="Do I lose my banked vault chips if I crash?" a="No! Your banked vault chips are 100% safe. You only lose the buy-in chips carried in that specific match." />
               <FaqItem q="What is the graduated commission?" a="If ≤3 real players are in the arena, extraction is FREE (0%). If ≥4 real players, 35% commission applies (you keep 65%)." />
@@ -1462,7 +1552,7 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
               <FaqItem q="Can I be in multiple syndicates?" a="No. You can only be a member of one syndicate at a time. To join another, you must leave your current syndicate first." />
               <FaqItem q="What happens to my deposited chips if I leave a syndicate?" a="Deposited chips go into the clan Treasury and cannot be withdrawn. They belong to the syndicate, not individual members. Think of it as a team contribution." />
               <FaqItem q="What happens if the Leader leaves?" a="If the Leader leaves, the oldest Co-Leader is automatically promoted to Leader. If there are no Co-Leaders, the oldest member becomes Leader. If you&apos;re the last member, the syndicate is automatically disbanded." />
-              <FaqItem q="How do weekly challenges work?" a="Three challenges are generated every Monday UTC: Treasury Target, Recruitment Drive, and Syndicate Comms. They scale with your clan level. When a challenge is complete, any Leader or Co-Leader can click Claim to add the reward chips to the Treasury and grant clan XP. Unclaimed challenges reset on the next Monday." />
+              <FaqItem q="How do weekly challenges work?" a="Four challenges are generated every Monday UTC: Treasury Target, Recruitment Drive, Syndicate Comms, and Deposit Streak. All scale with your clan level. Deposit Streak counts each deposit transaction (any member, any amount). When a challenge is complete, any Leader or Co-Leader can click Claim to add the reward chips to the Treasury and grant clan XP. Unclaimed challenges reset on the next Monday." />
               <FaqItem q="How does clan XP work?" a="Clan XP is earned two ways: (1) Deposits grant 5% of the deposited amount as XP. (2) Claiming a challenge grants 10% of the reward as XP. The XP needed to level up is Level × 1,000 (e.g. Level 2 needs 2,000 total XP, Level 3 needs 3,000 total XP). Leveling up is logged in the Activity Log." />
               <FaqItem q="What can a Co-Leader do?" a="Co-Leaders can: claim weekly challenges, kick Viper-ranked members, and participate in all clan activities. They cannot: edit clan settings, disband the clan, promote/demote other members, or kick other Co-Leaders. Max 2 Co-Leaders per clan." />
               <FaqItem q="Can the Leader transfer leadership?" a="Yes. The Leader can transfer leadership to any Co-Leader via the crown icon on the member roster. The current Leader becomes a Co-Leader, and the selected Co-Leader becomes the new Leader. This is irreversible for that session." />
@@ -1483,6 +1573,12 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
               <FaqItem q="What happens when I block someone?" a="They are removed from your friends list, cannot send you friend requests, and are hidden from your Search Players results. To undo, go to the expandable &quot;Blocked Players&quot; section on the Friends tab and click Unblock. This allows requests again but does NOT re-add them as a friend." />
               <FaqItem q="How do Rivals work?" a="Rivals are cosmetic tracking — no gameplay effect. Add a rival from the game-over kill screen (&quot;Add Rival&quot; button) or the Player Inspector. The Rivals tab shows your W/L record and win rate % against each rival. You can remove rivals or send them a friend request from the Rivals tab." />
               <FaqItem q="How does player search work?" a="The Search Players tab lets you find anyone by name or tag (300ms auto-debounce). You can also filter by country using the dropdown. Results show 20 players per page with a Load More button. Each result displays a relation badge (You / Connected / Sent / Accept / Connect) and key stats. Blocked players never appear in results." />
+              <FaqItem q="What is the Highlights tab?" a="The Highlights tab is the community showcase. It displays Match Cards (auto-generated from impressive matches) and Video Clips (player-submitted YouTube/Instagram/Twitch links). The feed also shows a Live Stats Ticker with today's platform activity." />
+              <FaqItem q="How do I get a Match Card on the Highlights feed?" a="Match Cards are auto-published when your match meets ANY threshold: Extraction with 5,000+ chips earned, Extraction with 3+ kills, OR Death with 5+ kills. No manual action needed — if your match is impressive enough, it appears automatically and instantly (no review required)." />
+              <FaqItem q="How do I submit a video clip?" a="Click the Upload Clip button on the Highlights tab. Choose your platform (YouTube, Instagram, Twitch), paste the video URL, add a title (5-120 chars) and optional description (300 chars max). Your clip enters &quot;Pending&quot; status and must be approved by an admin before it's visible to others. YouTube thumbnails are auto-extracted." />
+              <FaqItem q="How is the &quot;Top Play&quot; spotlight chosen?" a="Three-tier priority: (1) Admin-featured clip — if an admin has pinned one. (2) Today's best Match Card — highest chips extracted, then kills as tiebreaker. (3) Highest upvoted approved clip of all time. The spotlight updates on page refresh." />
+              <FaqItem q="Can I undo an upvote?" a="No. Upvotes are one-per-player-per-clip and are permanent. This prevents manipulation and keeps the Top Play ranking stable. Choose wisely before upvoting." />
+              <FaqItem q="Why is my submitted clip not showing up?" a="Video clips require admin review before becoming visible. Check the Highlights tab with &quot;My Clips&quot; toggled on — if your clip shows &quot;Pending&quot; status, it's still waiting for review (target: 24 hours). If it shows &quot;Rejected&quot;, it didn't meet community guidelines. Match Cards are auto-approved and appear instantly." />
             </div>
           </Section>
 

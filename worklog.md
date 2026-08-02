@@ -133,3 +133,58 @@ Stage Summary:
 - 9 data mismatches fixed in Section 12 (Leaderboards)
 - 1 FAQ entry corrected (Find Me)
 - Rules now accurately reflect: all 5 tab columns, HOF badge, Move column, championship status on 4 tabs (not 2), demo data visibility rules, live ticker is simulated not real
+
+---
+Task ID: 1
+Agent: main
+Task: (A) Add Section 19 HIGHLIGHTS to rules modal
+
+Work Log:
+- Added `Flame` icon import from lucide-react
+- Updated docstring to include highlights/clips
+- Updated DialogDescription to include highlights
+- Added Section 19 "HIGHLIGHTS (CLIPS & MATCH CARDS)" with 7 InfoCards: What Are Highlights, Auto-Publishing (Match Cards), Submitting Video Clips, Featured Top Play Spotlight, Upvoting, Live Stats Ticker, Feed Controls, Content Rules & Moderation
+- Renumbered FAQ from Section 18 to Section 20
+- Added 5 new FAQ entries: What is Highlights tab, How to get a Match Card, How to submit video clip, How Top Play is chosen, Can I undo upvote, Why is my clip not showing
+
+Stage Summary:
+- Full player-facing documentation for the Highlights feature
+- Section 19 with 7 InfoCards covering all aspects
+- 5 FAQ entries added to Section 20
+
+---
+Task ID: 2
+Agent: main
+Task: (B) Add Feature toggle API + admin UI button
+
+Work Log:
+- Extended POST /api/clips/admin to accept `feature` and `unfeature` actions
+- Feature/unfeature only works on approved clips
+- Added `Star` icon import to clip-showcase.tsx
+- Extended handleAction in AdminModerationModal to support feature/unfeature
+- Added Feature/Unfeature button with star icon on approved clip detail panel
+- Added "★ Featured" badge on clip list items for featured clips
+- Updated admin guide (guide-tab.tsx) to document the Feature action
+
+Stage Summary:
+- Dead code (`featured` field) is now fully functional
+- Admins can feature/unfeature approved clips from the moderation modal
+- Featured clips show a gold star badge in the admin list
+- Featured clip becomes the Top Play spotlight via existing 3-tier fallback
+
+---
+Task ID: 3
+Agent: main
+Task: (C) Fix deposit_streak dead code — implement 4th weekly challenge
+
+Work Log:
+- Added `deposit_streak` template to challenge generation in /api/clans/challenges GET
+- Added scaling logic: target = Level × 2 + 8, reward = Level × 500 + 2,000
+- Added progress increment in /api/clans/deposit POST (increments by 1 per deposit transaction)
+- Updated rules modal Section 15: "Three challenges" → "Four challenges", added Deposit Streak to the list
+- Updated FAQ weekly challenges entry: "Three challenges" → "Four challenges", added Deposit Streak description
+
+Stage Summary:
+- 4th weekly challenge is now live and functional
+- Counts each deposit transaction (any member, any amount) toward the weekly target
+- Scales with clan level like the other 3 challenges
