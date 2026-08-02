@@ -39,6 +39,7 @@ import {
   Eye,
   Trash2,
   ChevronLeft,
+  Star,
 } from 'lucide-react';
 
 // ── Types ──
@@ -127,7 +128,7 @@ function AdminModerationModal({ onClose }: { onClose: () => void }) {
 
   useEffect(() => { fetchClips(); }, [tab]);
 
-  async function handleAction(clipId: string, action: 'approve' | 'reject') {
+  async function handleAction(clipId: string, action: 'approve' | 'reject' | 'feature' | 'unfeature') {
     setActing(clipId);
     try {
       const res = await fetch('/api/clips/admin', {
@@ -136,13 +137,18 @@ function AdminModerationModal({ onClose }: { onClose: () => void }) {
         body: JSON.stringify({ clipId, action }),
       });
       if (!res.ok) throw new Error();
-      setClips((prev) => prev.map((c) => c.id === clipId ? { ...c, status: action === 'approve' ? 'approved' : 'rejected', reviewedAt: new Date().toISOString() } : c));
-      setCounts((prev) => ({
-        ...prev,
-        pending: prev.pending + (action === 'approve' ? -1 : 0),
-        [action === 'approve' ? 'approved' : 'rejected']: prev[action === 'approve' ? 'approved' : 'rejected'] + 1,
-      }));
-      if (selectedId === clipId) setSelectedId(null);
+      if (action === 'feature' || action === 'unfeature') {
+        const isFeatured = action === 'feature';
+        setClips((prev) => prev.map((c) => c.id === clipId ? { ...c, featured: isFeatured } : c));
+      } else {
+        setClips((prev) => prev.map((c) => c.id === clipId ? { ...c, status: action === 'approve' ? 'approved' : 'rejected', reviewedAt: new Date().toISOString() } : c));
+        setCounts((prev) => ({
+          ...prev,
+          pending: prev.pending + (action === 'approve' ? -1 : 0),
+          [action === 'approve' ? 'approved' : 'rejected']: prev[action === 'approve' ? 'approved' : 'rejected'] + 1,
+        }));
+        if (selectedId === clipId) setSelectedId(null);
+      }
     } catch {}
     setActing(null);
   }
@@ -218,7 +224,7 @@ function AdminModerationModal({ onClose }: { onClose: () => void }) {
                         <div className="w-14 h-10 rounded bg-slate-950 border border-slate-800 shrink-0 flex items-center justify-center"><Film className="w-4 h-4 text-slate-700" /></div>
                       )}
                       <div className="min-w-0 flex-1">
-                        <p className="text-[11px] font-bold text-white truncate leading-tight">{clip.title}</p>
+                        <p className="text-[11px] font-bold text-white truncate leading-tight flex items-center gap-1.5">{clip.title}{clip.featured && <span className="inline-flex items-center gap-0.5 text-[8px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1 py-0 rounded uppercase tracking-wider shrink-0">★ Featured</span>}</p>
                         <div className="flex items-center gap-1.5 mt-1">
                           <span className="text-[9px] text-slate-500">{clip.player.name}</span>
                           <span className="text-[9px] text-slate-700">·</span>
@@ -291,9 +297,16 @@ function AdminModerationModal({ onClose }: { onClose: () => void }) {
                       </button>
                     </>
                   ) : (
-                    <div className="flex-1 flex items-center justify-center gap-2 py-2.5">
-                      <StatusBadge status={selected.status} size="md" />
-                      <span className="text-[10px] text-slate-500">Reviewed {selected.reviewedAt ? timeAgo(selected.reviewedAt) : ''}</span>
+                    <div className="flex-1 flex items-center justify-between py-2.5">
+                      <div className="flex items-center gap-2">
+                        <StatusBadge status={selected.status} size="md" />
+                        <span className="text-[10px] text-slate-500">Reviewed {selected.reviewedAt ? timeAgo(selected.reviewedAt) : ''}</span>
+                      </div>
+                      {selected.status === 'approved' && (
+                        <button type="button" onClick={() => handleAction(selected.id, selected.featured ? 'unfeature' : 'feature')} disabled={acting === selected.id} className={`px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition flex items-center gap-1.5 disabled:opacity-50 border ${selected.featured ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/30' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-amber-300 hover:border-amber-500/50'}`}>
+                          {acting === selected.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Star className={`w-4 h-4 ${selected.featured ? 'fill-amber-400' : ''}`} />} {selected.featured ? 'Unfeature' : 'Feature'}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

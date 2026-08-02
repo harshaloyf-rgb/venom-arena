@@ -393,6 +393,9 @@ function SectionContentModeration() {
         <Bullet>
           Click <strong className="text-emerald-400">Approve</strong> to publish to the public feed, or <strong className="text-rose-400">Reject</strong> to hide it.
         </Bullet>
+        <Bullet>
+          For <strong className="text-amber-400">approved</strong> clips, a <strong className="text-amber-300">Feature ★</strong> button appears — click it to pin the clip as the Top Play spotlight on the Highlights feed. Click again to unfeature. Only one clip should be featured at a time for best results.
+        </Bullet>
       </ul>
 
       <SubHeading>SLA</SubHeading>

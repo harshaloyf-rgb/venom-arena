@@ -64,6 +64,13 @@ export async function GET(req: NextRequest) {
           target: 20,
           reward: 1500,
         },
+        {
+          type: 'deposit_streak',
+          title: 'Deposit Streak',
+          description: 'Make {target} total deposits into the treasury this week (any member, any amount)',
+          target: 10,
+          reward: 2000,
+        },
       ];
 
       const dynamicTemplates = TEMPLATES.map((t) => {
@@ -77,6 +84,9 @@ export async function GET(req: NextRequest) {
         } else if (t.type === 'recruitment_drive') {
           resolvedTarget = Math.min(clan.level, 5);
           resolvedReward = t.reward;
+        } else if (t.type === 'deposit_streak') {
+          resolvedTarget = clan.level * 2 + 8;
+          resolvedReward = clan.level * 500 + t.reward;
         } else {
           // chat_activity
           resolvedTarget = clan.level * 5 + 15;

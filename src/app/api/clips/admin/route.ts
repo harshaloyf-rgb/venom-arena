@@ -64,8 +64,8 @@ export async function GET(req: NextRequest) {
   });
 }
 
-// POST /api/clips/admin — approve or reject a clip
-// body: { clipId, action: 'approve' | 'reject' }
+// POST /api/clips/admin — approve, reject, or feature a clip
+// body: { clipId, action: 'approve' | 'reject' | 'feature' | 'unfeature' }
 export async function POST(req: NextRequest) {
   const { error, session } = await requireAdmin();
   if (error) return error;
@@ -77,13 +77,28 @@ export async function POST(req: NextRequest) {
   if (!clipId || !action) {
     return NextResponse.json({ error: 'clipId and action are required.' }, { status: 400 });
   }
-  if (action !== 'approve' && action !== 'reject') {
-    return NextResponse.json({ error: 'action must be approve or reject.' }, { status: 400 });
-  }
 
   const clip = await db.clip.findUnique({ where: { id: clipId } });
   if (!clip) {
     return NextResponse.json({ error: 'Clip not found.' }, { status: 404 });
+  }
+
+  // Handle feature/unfeature (works on any approved clip)
+  if (action === 'feature' || action === 'unfeature') {
+    if (clip.status !== 'approved') {
+      return NextResponse.json({ error: 'Only approved clips can be featured.' }, { status: 400 });
+    }
+    const isFeaturing = action === 'feature';
+    await db.clip.update({
+      where: { id: clipId },
+      data: { featured: isFeaturing },
+    });
+    return NextResponse.json({ ok: true, featured: isFeaturing });
+  }
+
+  // Handle approve/reject
+  if (action !== 'approve' && action !== 'reject') {
+    return NextResponse.json({ error: 'action must be approve, reject, feature, or unfeature.' }, { status: 400 });
   }
 
   const newStatus = action === 'approve' ? 'approved' : 'rejected';
