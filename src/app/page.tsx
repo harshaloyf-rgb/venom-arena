@@ -71,7 +71,6 @@ interface TabDef {
   label: string;
   icon: typeof Compass;
   activeColor: string;
-  adminOnly?: boolean;
 }
 
 const TABS: TabDef[] = [
@@ -87,7 +86,7 @@ const TABS: TabDef[] = [
   { id: 'rewards', label: 'Claims', icon: Gift, activeColor: 'text-emerald-400 bg-emerald-600/10 border-emerald-500/30' },
   { id: 'store', label: 'Vault', icon: Coins, activeColor: 'text-emerald-400 bg-emerald-600/10 border-emerald-500/30' },
   { id: 'social', label: 'Friends & Search', icon: Users, activeColor: 'text-violet-400 bg-violet-600/10 border-violet-500/30' },
-  { id: 'admin', label: 'Admin', icon: Shield, activeColor: 'text-red-400 bg-red-600/10 border-red-500/30', adminOnly: true },
+  { id: 'admin', label: 'Admin', icon: Shield, activeColor: 'text-red-400 bg-red-600/10 border-red-500/30' },
 ];
 
 const PANEL_TITLES: Record<string, string> = {
@@ -126,8 +125,8 @@ export default function Home() {
   const handleInspectPlayer = useCallback((p: InspectedPlayer) => { setInspectedPlayer(p); }, []);
 
   const visibleTabs = useMemo(
-    () => TABS.filter((t) => !t.adminOnly || player?.role === 'admin'),
-    [player?.role],
+    () => TABS,
+    [],
   );
 
   // -----------------------------------------------------------------------
@@ -560,7 +559,7 @@ export default function Home() {
               {activeTab === 'rewards' && <DailyRewards onToast={toastFn} />}
               {activeTab === 'store' && <ChipStore onToast={toastFn} />}
               {activeTab === 'social' && <SocialPanel onToast={toastFn} onInspectPlayer={handleInspectPlayer} />}
-              {activeTab === 'admin' && player.role === 'admin' && <AdminPanel onToast={toastFn} />}
+              {activeTab === 'admin' && player && <AdminPanel onToast={toastFn} />}
             </div>
           </div>
         )}

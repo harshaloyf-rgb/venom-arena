@@ -27,13 +27,13 @@ const ITEMS: MenuItem[] = [
   { tabId: 'clips', Icon: Film, label: 'Highlights', color: 'text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20' },
   { tabId: 'store', Icon: Coins, label: 'Chip Vault', color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20 hover:bg-cyan-500/20' },
   { tabId: 'social', Icon: Users, label: 'Social', color: 'text-violet-400 bg-violet-500/10 border-violet-500/20 hover:bg-violet-500/20' },
-  { tabId: 'admin', Icon: Shield, label: 'Admin', color: 'text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20', adminOnly: true },
+  { tabId: 'admin', Icon: Shield, label: 'Admin', color: 'text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20' },
 ];
 
 export function MoreMenu({ isOpen, onClose, onSelectTab, isAdmin }: MoreMenuProps) {
   if (!isOpen) return null;
 
-  const items = ITEMS.filter((i) => !i.adminOnly || isAdmin);
+  const items = ITEMS;
 
   return (
     <div className="fixed inset-0 z-50 md:hidden">
