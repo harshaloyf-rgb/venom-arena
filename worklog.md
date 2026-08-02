@@ -1208,3 +1208,23 @@ Stage Summary:
 - 3 new API endpoints for admin data access
 - Admin guide is inline and accessible while doing admin work
 - All changes committed and pushed
+
+---
+Task ID: security-test-suite
+Agent: main
+Task: Create testing guide and automated test script for Phase 1 security fixes
+
+Work Log:
+- Analyzed all Phase 1 security changes (11 files, 6 P0 + 5 P1 fixes)
+- Created SECURITY-TEST-GUIDE.md with manual curl-based test instructions for all 11 test categories
+- Created scripts/test-security.sh — automated test suite with 24 test cases
+- Discovered and fixed 2 additional bugs during testing:
+  1. HOF induct route: Prisma upsert() rejects null in compound-unique where clause (championshipYear: null for milestones). Fixed by replacing upsert with findFirst + create/update pattern.
+  2. INTERNAL_SECRET in .env had unevaluated $(openssl rand ...) that Next.js/dotenv reads as literal string but bash source evaluates. Fixed by setting a static value.
+- All 21 automated tests pass (3 skipped: clips/gift require pre-existing data)
+
+Stage Summary:
+- SECURITY-TEST-GUIDE.md: Manual testing guide with curl commands for each fix
+- scripts/test-security.sh: Automated test suite (21 pass, 0 fail, 3 skip)
+- Bug fix: src/app/api/hof/induct/route.ts — replaced upsert with findFirst+create/update
+- Bug fix: .env — INTERNAL_SECRET changed from shell-command to static value
