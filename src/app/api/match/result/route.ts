@@ -216,6 +216,42 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // --- War scoring (if player is in a clan with an active war) ---
+    if (p.clanTag && kills > 0) {
+      const war = await tx.clanWar.findFirst({
+        where: {
+          OR: [
+            { declarerTag: p.clanTag, status: 'active' },
+            { targetTag: p.clanTag, status: 'active' },
+          ],
+        },
+      });
+      if (war) {
+        const isDeclarer = war.declarerTag === p.clanTag;
+        await tx.clanWar.update({
+          where: { id: war.id },
+          data: { [isDeclarer ? 'declarerScore' : 'targetScore']: { increment: kills } },
+        });
+        // Re-read to check if war should end
+        const updatedWar = await tx.clanWar.findUnique({ where: { id: war.id } });
+        if (updatedWar && (updatedWar.declarerScore >= 50 || updatedWar.targetScore >= 50)) {
+          const winnerTag = updatedWar.declarerScore >= updatedWar.targetScore ? updatedWar.declarerTag : updatedWar.targetTag;
+          const pot = updatedWar.wager * 2;
+          await tx.clanWar.update({
+            where: { id: war.id },
+            data: { status: 'ended', endedAt: new Date(), winnerTag },
+          });
+          await tx.clan.update({
+            where: { tag: winnerTag },
+            data: { bankedChips: { increment: pot } },
+          });
+          const detail = `War ended! [${winnerTag}] won ${pot.toLocaleString()}c pot (${updatedWar.declarerScore}-${updatedWar.targetScore})`;
+          await tx.clanActivity.create({ data: { clanTag: updatedWar.declarerTag, type: 'war_end', actorTag: p.userTag, actorName: p.name, detail } });
+          await tx.clanActivity.create({ data: { clanTag: updatedWar.targetTag, type: 'war_end', actorTag: p.userTag, actorName: p.name, detail } });
+        }
+      }
+    }
+
     return updatedPlayer;
     });
   } catch (err) {
