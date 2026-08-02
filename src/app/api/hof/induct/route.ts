@@ -92,35 +92,49 @@ export async function POST(req: Request) {
     }
   }
 
-  // Upsert (unique on [playerId, inductionType, milestoneTierId, championshipYear])
+  // Upsert using findFirst + create/update because Prisma's upsert() rejects
+  // null values in compound-unique where clauses (e.g., championshipYear: null
+  // for milestone inductions).
   try {
-    const entry = await db.hallOfFameEntry.upsert({
-      where: {
-        playerId_inductionType_milestoneTierId_championshipYear: {
+    // Build the unique-key match filter
+    const whereFilter: Record<string, unknown> = {
+      playerId: player.id,
+      inductionType,
+    };
+    if (inductionType === 'milestone') {
+      whereFilter.milestoneTierId = milestoneTierId;
+      whereFilter.championshipYear = null;
+    } else {
+      whereFilter.championshipYear = championshipYear!;
+    }
+
+    const existing = await db.hallOfFameEntry.findFirst({ where: whereFilter });
+
+    let entry;
+    if (existing) {
+      entry = await db.hallOfFameEntry.update({
+        where: { id: existing.id },
+        data: {
+          championshipRank: championshipRank ?? undefined,
+          hofBadge: resolvedBadge,
+          title: resolvedTitle,
+          chipsAtInduction: Math.max(chipsAtInduction, 0),
+        },
+      });
+    } else {
+      entry = await db.hallOfFameEntry.create({
+        data: {
           playerId: player.id,
           inductionType,
           milestoneTierId: milestoneTierId ?? null,
           championshipYear: championshipYear ?? null,
+          championshipRank: championshipRank ?? null,
+          hofBadge: resolvedBadge,
+          title: resolvedTitle,
+          chipsAtInduction,
         },
-      },
-      create: {
-        playerId: player.id,
-        inductionType,
-        milestoneTierId: milestoneTierId ?? null,
-        championshipYear: championshipYear ?? null,
-        championshipRank: championshipRank ?? null,
-        hofBadge: resolvedBadge,
-        title: resolvedTitle,
-        chipsAtInduction,
-      },
-      update: {
-        // Only update chips and badge if re-inducted (e.g. higher championship rank)
-        championshipRank: championshipRank ?? undefined,
-        hofBadge: resolvedBadge,
-        title: resolvedTitle,
-        chipsAtInduction: Math.max(chipsAtInduction, 0),
-      },
-    });
+      });
+    }
 
     return NextResponse.json({
       inducted: true,
