@@ -62,3 +62,43 @@ Stage Summary:
 - VENOM-XXXX tag remains permanently unchangeable (true identity)
 - Rules & Guide updated with new policy section + 3 FAQ entries
 - No regressions found in browser verification
+
+---
+Task ID: 3
+Agent: Main
+Task: Add comprehensive Agent Profile section to Rules & Guide, address leaderboard name/country concern
+
+Work Log:
+- Re-audited player-profile.tsx to catalog ALL features for documentation
+- Added `UserCircle` icon import to game-rules-modal.tsx
+- Added new Section "16. AGENT PROFILE" with 8 InfoCards covering:
+  1. Overview (two tabs: Stats and History)
+  2. Identity Editor (name, country, avatar, social links with cooldown details)
+  3. Cosmetics Loadout (skin, trail, death FX, flag, banner)
+  4. Profile Card & Milestone Card (generate, download, copy, share)
+  5. Security Settings (password change, PIN management)
+  6. Stats Display (level, XP, chips, K/D, win stats, account age, milestone, tag/referral)
+  7. Match History Tab (filters, pagination, offline cache)
+  8. Guest Upgrade (progress carryover details)
+  9. Danger Zone — Delete Account (double-confirmation, irreversible)
+  10. Leaderboard Identity Integrity (live name/country, permanent VENOM tag, HOF snapshots)
+- Renumbered FAQ from Section 16 to Section 17
+- Updated Identity Change Policy in Section 0 with cross-reference to Section 16
+- Added 7 new FAQ entries:
+  - What is the Agent Profile?
+  - How do I edit my name, country, avatar, or social links?
+  - What are Profile Cards and Milestone Cards?
+  - How do I change my password or Security PIN?
+  - How do I upgrade from Guest to Registered?
+  - Can I delete my account?
+  - If I change my name on the leaderboard, does my old name disappear?
+- Updated existing FAQ entries (name change, country change, why cooldowns) with more accurate details
+- Updated file docstring to include "agent profile"
+- Verified via agent-browser: all sections render correctly, all FAQ entries visible
+- Lint passes cleanly
+
+Stage Summary:
+- Rules & Guide now has a full dedicated "16. AGENT PROFILE" section documenting all features
+- Leaderboard name/country concern addressed: documented that leaderboards show live identity (not snapshots), VENOM-XXXX tag is the permanent identifier, HOF entries do snapshot names
+- FAQ expanded from 3 profile-related entries to 10 total
+- FAQ renumbered from 16 to 17
