@@ -80,6 +80,8 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   const [followLoading, setFollowLoading] = useState(false);
   const [rivalLoading, setRivalLoading] = useState(false);
 
+  const [rivalToFriendLoading, setRivalToFriendLoading] = useState(false);
+
   // Real public profile data
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -94,6 +96,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
     if (isRival) setIsRival(false);
     if (tab !== 'overview') setTab('overview');
     setProfile(null);
+    setRivalToFriendLoading(false);
     // Check if player is already blocked/friend/following/rival
     if (player) {
       fetch('/api/friends/list')
@@ -290,6 +293,45 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
         );
       }
     } catch { /* silent */ } finally { setRivalLoading(false); }
+  }
+
+  async function handleRivalToFriend() {
+    setRivalToFriendLoading(true);
+    try {
+      // Step 1: Remove rival
+      const rivalRes = await fetch('/api/rivals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag: p.userTag, name: p.name, action: 'remove' }),
+      });
+      const rivalData = await rivalRes.json();
+      if (rivalData.isRival === false) {
+        setIsRival(false);
+        if (profile) setProfile({ ...profile, rivalsCount: (rivalData.rivalsCount ?? profile.rivalsCount) - 1 });
+      }
+
+      // Step 2: Send friend request
+      if (!friendRequested) {
+        const friendRes = await fetch('/api/friends/request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userTag: p.userTag }),
+        });
+        const friendData = await friendRes.json();
+        if (friendData.ok) {
+          setFriendRequested(true);
+          notify(`${p.name} is now a friend! Rivalry removed.`, 'success', onToast);
+        } else {
+          notify(`Rivalry removed, but couldn\u2019t send friend request: ${friendData.error || 'unknown'}`, 'error', onToast);
+        }
+      } else {
+        notify(`${p.name} is no longer a rival.`, 'success', onToast);
+      }
+    } catch {
+      notify('Network error. Try again.', 'error', onToast);
+    } finally {
+      setRivalToFriendLoading(false);
+    }
   }
 
   async function handleBlockToggle() {
@@ -603,7 +645,17 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
         </div>
 
         {/* Action buttons — Follow, Rival, Friend, Block */}
-        <div className="grid grid-cols-2 gap-2 p-4 pt-2 border-t border-slate-800 shrink-0">
+        <div className="space-y-2 p-4 pt-2 border-t border-slate-800 shrink-0">
+          {/* Turn rival to friend — shown when player is a rival */}
+          {isRival && (
+            <button type="button" onClick={handleRivalToFriend} disabled={rivalToFriendLoading}
+              className="w-full py-2.5 px-3 border rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all bg-gradient-to-r from-orange-500/20 to-emerald-500/20 text-white border-orange-500/30 hover:border-emerald-500/40 shadow {rivalToFriendLoading ? 'opacity-50' : ''}"
+            >
+              {rivalToFriendLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Heart className="w-4 h-4 text-rose-400" />}
+              {rivalToFriendLoading ? 'Processing…' : `Turn Rival into Friend`}
+            </button>
+          )}
+          <div className="grid grid-cols-2 gap-2">
           <button type="button" onClick={handleFollowToggle} disabled={followLoading}
             className={`py-2.5 px-3 border rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${isFollowing ? 'bg-rose-500/20 text-rose-400 border-rose-500/40' : 'bg-rose-600 hover:bg-rose-500 text-white border-rose-500/30 shadow'} ${followLoading ? 'opacity-50' : ''}`}
           >
@@ -631,6 +683,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
         </div>
       </div>
     </div>
+  </div>
   );
 }
 
