@@ -31,9 +31,7 @@ import {
   MILESTONE_TIERS,
   type InspectedPlayer,
 } from '@/lib/game-config';
-import type { LeaderboardEntry } from '@/lib/types';
 import { notify, type ToastFn } from './_panel-primitives';
-import { useAuth } from '@/components/providers/auth-provider';
 
 interface PlayerInspectorModalProps {
   player?: InspectedPlayer | null;
@@ -72,19 +70,7 @@ interface PublicProfile {
   lastSeenAt?: string;
 }
 
-function buildMatchHistory(p: InspectedPlayer) {
-  const bigChip = p.bankedChips >= 10_000_000 ? 10_000_000 : 2_500_000;
-  return [
-    { arena: 'Tier-05 Crore High Roller', outcome: 'Extracted' as const, chips: bigChip, time: '10 mins ago', kills: 14 },
-    { arena: 'Tier-04 Platinum Arena', outcome: 'Extracted' as const, chips: 1_500_000, time: '2 hours ago', kills: 8 },
-    { arena: 'Tier-03 Viper Boundary', outcome: 'Extracted' as const, chips: 500_000, time: '1 day ago', kills: 5 },
-    { arena: 'Tier-05 Crore High Roller', outcome: 'Eliminated' as const, chips: -200_000, time: '2 days ago', kills: 3 },
-  ];
-}
-
 export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspectorModalProps) {
-  const { player: authPlayer } = useAuth();
-  const isAdmin = authPlayer?.role === 'admin';
   const [tab, setTab] = useState<Tab>('overview');
   const [friendRequested, setFriendRequested] = useState(false);
   const [blocked, setBlocked] = useState(false);
@@ -97,10 +83,6 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   // Real public profile data
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
-
-  // Leaderboard data for allies (admin only)
-  const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
-  const [alliesLoading, setAlliesLoading] = useState(false);
 
   // Reset state when the inspected player changes
   const lastUserTagRef = useRef<string | undefined>(undefined);
@@ -154,27 +136,11 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
     }
   }, []);
 
-  // Fetch leaderboard data for allies (admin demo only)
-  const fetchLeaderboard = useCallback(async (country: string) => {
-    if (!isAdmin) return;
-    setAlliesLoading(true);
-    try {
-      const res = await fetch('/api/leaderboard?type=chips&limit=10');
-      if (res.ok) {
-        const data = await res.json();
-        setLeaderboardData(data.entries ?? []);
-      }
-    } catch { /* silent */ } finally {
-      setAlliesLoading(false);
-    }
-  }, [isAdmin]);
-
   useEffect(() => {
     if (player) {
       fetchPublicProfile(player.userTag);
-      fetchLeaderboard(player.country);
     }
-  }, [player, fetchPublicProfile, fetchLeaderboard]);
+  }, [player, fetchPublicProfile]);
 
   // Close on Escape
   useEffect(() => {
@@ -215,12 +181,11 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   const regionalRank = p.regionalRank ?? Math.max(1, Math.floor(globalRank / 2));
   const achievedAt = p.achievedAt || '26 Jul 2026, 05:42 PM UTC';
 
-  const history = isAdmin ? buildMatchHistory(p) : [];
-
   // Real counts from API
   const friendsCount = profile?.friendsCount ?? null;
   const followersCount = profile?.followersCount ?? 0;
   const followingCount = profile?.followingCount ?? 0;
+  const rivalsCount = profile?.rivalsCount ?? 0;
 
   // Real social links from API
   const socialLinks = [
@@ -229,14 +194,6 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
     { platform: 'Twitch', handle: profile?.twitch, color: '#9146FF', icon: '\uD83C\uDFAE', url: 'https://twitch.tv/' },
   ];
   const activeSocials = socialLinks.filter(s => s.handle);
-
-  // Allies derived from leaderboard data (admin demo only)
-  const regionalAllies = leaderboardData.filter(
-    (e) => e.country === p.country && e.userTag !== p.userTag,
-  );
-  const globalAllies = leaderboardData.filter(
-    (e) => e.country !== p.country && e.userTag !== p.userTag,
-  );
 
   // Badges derived from chip milestones
   const milestone = milestoneTierForChips(p.bankedChips);
@@ -425,7 +382,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
 
         {/* Social Stats Bar — REAL counts */}
         <div className="px-4 pt-1 pb-2 shrink-0">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             <div className="bg-slate-950/70 border border-slate-800/60 rounded-xl p-2.5 text-center">
               <div className="flex items-center justify-center gap-1">
                 <Users className="w-3 h-3 text-indigo-400" />
@@ -442,6 +399,13 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
             </div>
             <div className="bg-slate-950/70 border border-slate-800/60 rounded-xl p-2.5 text-center">
               <div className="flex items-center justify-center gap-1">
+                <Swords className="w-3 h-3 text-orange-400" />
+                <span className="text-base font-bold font-mono text-orange-400 block">{rivalsCount}</span>
+              </div>
+              <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Rivals</span>
+            </div>
+            <div className="bg-slate-950/70 border border-slate-800/60 rounded-xl p-2.5 text-center">
+              <div className="flex items-center justify-center gap-1">
                 <UserCheck className="w-3 h-3 text-emerald-400" />
                 <span className="text-base font-bold font-mono text-emerald-400 block">{earnedBadges.length}</span>
               </div>
@@ -450,13 +414,12 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
           </div>
         </div>
 
-        {/* Tabs — logs only for admin */}
+        {/* Tabs */}
         <div className="px-4 pb-2 shrink-0">
           <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-bold" role="tablist">
             {([
               ['overview', 'Overview'],
               ['stats', 'Career Stats'],
-              ...(isAdmin ? [['logs', 'Extraction Logs'] as const] : []),
               ['loadout', 'Loadout'],
             ] as const).map(([id, label]) => (
               <button
@@ -585,63 +548,6 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                 </div>
               )}
 
-              {/* Regional + Global allies (admin demo only) */}
-              {isAdmin && (
-                <>
-                  <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-                    <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
-                      <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5 text-violet-400" /> {flag} REGIONAL ALLIES ({p.country} NETWORK)</span>
-                      {alliesLoading ? <Loader2 className="w-3 h-3 text-slate-500 animate-spin" /> : <span className="text-[9px] text-slate-500 font-mono">{regionalAllies.length} Members</span>}
-                    </div>
-                    {alliesLoading ? (
-                      <div className="flex items-center justify-center py-4 text-[11px] text-slate-500 gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Loading\u2026</div>
-                    ) : regionalAllies.length === 0 ? (
-                      <div className="text-center py-4 text-[11px] text-slate-500">No regional allies found.</div>
-                    ) : (
-                      <ul className="space-y-1.5">
-                        {regionalAllies.map((a) => (
-                          <li key={a.userTag} className="flex items-center justify-between text-xs p-2 bg-slate-900 rounded-lg border border-slate-800">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span aria-hidden>{countryFlag(a.country)}</span>
-                              <div className="min-w-0">
-                                <div className="font-bold text-white truncate">{a.name}</div>
-                                <div className="text-[10px] font-mono text-slate-500">{a.userTag}</div>
-                              </div>
-                            </div>
-                            <span className="text-[10px] font-mono text-violet-300 bg-violet-500/10 border border-violet-500/30 px-1.5 py-0.5 rounded">Rank #{a.rank}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                  <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-                    <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
-                      <span className="flex items-center gap-1"><Globe className="w-3.5 h-3.5 text-cyan-400" /> GLOBAL ALLIES</span>
-                      {alliesLoading ? <Loader2 className="w-3 h-3 text-slate-500 animate-spin" /> : <span className="text-[9px] text-slate-500 font-mono">{globalAllies.length} Members</span>}
-                    </div>
-                    {alliesLoading ? (
-                      <div className="flex items-center justify-center py-4 text-[11px] text-slate-500 gap-2"><Loader2 className="w-3 h-3 animate-spin" /> Loading\u2026</div>
-                    ) : globalAllies.length === 0 ? (
-                      <div className="text-center py-4 text-[11px] text-slate-500">No global allies found.</div>
-                    ) : (
-                      <ul className="space-y-1.5">
-                        {globalAllies.map((a) => (
-                          <li key={a.userTag} className="flex items-center justify-between text-xs p-2 bg-slate-900 rounded-lg border border-slate-800">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span aria-hidden>{countryFlag(a.country)}</span>
-                              <div className="min-w-0">
-                                <div className="font-bold text-white truncate">{a.name}</div>
-                                <div className="text-[10px] font-mono text-slate-500">{a.userTag}</div>
-                              </div>
-                            </div>
-                            <span className="text-[10px] font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-1.5 py-0.5 rounded">Rank #{a.rank}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </>
-              )}
             </div>
           )}
 
@@ -680,24 +586,6 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                   {p.bestStreak != null && <StatCard label="Best Streak" value={`${p.bestStreak} Wins`} accent="text-yellow-400" icon={<Trophy className="w-3.5 h-3.5" />} />}
                 </div>
               )}
-            </div>
-          )}
-
-          {/* EXTRACTION LOGS (admin demo only) */}
-          {tab === 'logs' && isAdmin && (
-            <div className="space-y-2">
-              {history.map((log, i) => (
-                <div key={i} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between text-xs gap-2">
-                  <div className="min-w-0">
-                    <div className="font-bold text-white flex items-center gap-1.5 flex-wrap">
-                      <span className="truncate">{log.arena}</span>
-                      <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded ${log.outcome === 'Extracted' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>{log.outcome}</span>
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">{'\uD83D\uDD52'} {log.time} \u00B7 {log.kills} kills</div>
-                  </div>
-                  <div className={`font-mono font-bold tabular-nums shrink-0 ${log.chips > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{log.chips > 0 ? `+${log.chips.toLocaleString('en-IN')}c` : `${log.chips.toLocaleString('en-IN')}c`}</div>
-                </div>
-              ))}
             </div>
           )}
 

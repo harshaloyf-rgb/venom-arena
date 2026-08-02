@@ -84,7 +84,6 @@ function championshipPrizeForRank(rank: number) {
 // ── Extended milestone tiers including Rookie ──────────────────────
 const ALL_MILESTONE_TIERS = [
   { id: 'all', name: 'All Tiers', minChips: 0, badge: '\u2b50 All', color: '#94a3b8' },
-  { id: 'rookie', name: 'Rookie (Below 100K)', minChips: 0, badge: '\u{1F6E1}\u{FE0F} Rookie', color: '#64748b' },
   ...MILESTONE_TIERS.filter((t) => t.id !== 'all'),
 ];
 
