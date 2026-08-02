@@ -187,4 +187,99 @@ Work Log:
 Stage Summary:
 - 4th weekly challenge is now live and functional
 - Counts each deposit transaction (any member, any amount) toward the weekly target
-- Scales with clan level like the other 3 challenges
+---
+Task ID: 2-a
+Agent: main
+Task: Build POST /api/clans/withdraw and POST /api/clans/payout API routes
+
+Work Log:
+- Created `/src/app/api/clans/withdraw/route.ts`:
+  - Auth required via getSession()
+  - Validates: player in clan, amount > 0, amount <= player.clanDeposited, amount <= clan.bankedChips
+  - Transaction: increment player.bankedChips, decrement clan.bankedChips, decrement player.clanDeposited
+  - Creates ClanActivity type 'withdraw' with detail "withdrew {amount}c from treasury"
+  - Returns { ok, newTreasury, yourChips, depositedRemaining }
+  - Error map: PLAYER_NOT_FOUND, NOT_MEMBER, OVER_DEPOSITED, INSUFFICIENT_TREASURY, CLAN_NOT_FOUND
+- Created `/src/app/api/clans/payout/route.ts`:
+  - Auth required via getSession()
+  - Validates: caller is Leader or Co-Leader, amount > 0, amount <= clan.bankedChips
+  - Validates: target player exists, target is clan member, target is not caller
+  - Transaction: decrement clan.bankedChips, increment target player.bankedChips + totalEarned
+  - Creates ClanActivity type 'payout' with detail "distributed {amount}c to {targetName}"
+  - Returns { ok, newTreasury }
+  - Error map: PLAYER_NOT_FOUND, NOT_MEMBER, NOT_LEADER, CLAN_NOT_FOUND, INSUFFICIENT_TREASURY, TARGET_NOT_FOUND, TARGET_NOT_MEMBER, SELF_PAYOUT
+- Both routes follow exact same patterns as deposit route (db import, getSession, $transaction, error map)
+- Lint passes cleanly, no errors
+
+Stage Summary:
+- Two new clan treasury API routes fully implemented
+- Withdraw: members can withdraw up to what they deposited, if treasury has enough
+- Payout: Leader/Co-Leader can distribute treasury chips to any clan member (counts as earned for recipient)
+- All operations are atomic within db.$transaction
+---
+Task ID: 2-b
+Agent: main
+Task: Build POST /api/clans/shop API route
+
+Work Log:
+- Created `/src/app/api/clans/shop/route.ts`:
+  - Defines 3 shop items in-memory: member_expansion (15,000c, repeatable), xp_windfall (8,000c, repeatable), war_shield (5,000c, non-repeatable)
+  - Auth required via getSession()
+  - Validates: player is Leader of the clan (only Leader can purchase)
+  - Validates: itemId exists in SHOP_ITEMS, clan treasury has enough chips
+  - Non-repeatable items: checks ClanPurchase table for prior purchase (ALREADY_PURCHASED error)
+  - Atomic db.$transaction with effects:
+    - member_expansion: increments clan.maxMembers by 5
+    - xp_windfall: increments clan.xp by (level × 500), then checks level-up (xp >= level×1000 → level up, subtract threshold)
+    - war_shield: logs purchase only (war declaration route will check for active shields)
+  - Decrements clan.bankedChips by item cost
+  - Creates ClanPurchase record and ClanActivity type 'shop_purchase'
+  - Returns { ok, newTreasury, effect }
+  - Error map: PLAYER_NOT_FOUND, NOT_MEMBER, NOT_LEADER, CLAN_NOT_FOUND, INSUFFICIENT_TREASURY, ALREADY_PURCHASED
+- Lint passes cleanly, no errors
+
+Stage Summary:
+- Clan shop API route fully implemented with 3 purchasable perks
+- Leader-only access, atomic transactions, repeatable/non-repeatable enforcement
+- XP windfall includes automatic level-up check with activity log
+---
+Task ID: 2-c
+Agent: main
+Task: Build clan war API routes (declare, score, status)
+
+Work Log:
+- Created `/src/app/api/clans/war/declare/route.ts` (POST):
+  - Auth required via getSession()
+  - Validates: caller is Leader of their clan, target clan exists, not self-war, wager >= 1000
+  - Checks: neither clan already in an active war, both clans have bankedChips >= wager
+  - War shield check: queries ClanPurchase where clanTag=targetTag AND itemId='war_shield' AND createdAt > 7 days ago → rejects with TARGET_SHIELDED
+  - Atomic db.$transaction: deducts wager from both clans (escrow), creates ClanWar record (status='active'), creates ClanActivity type='war_declare' on both clans
+  - Returns { ok, warId, totalPot: wager * 2 }
+  - Error map: PLAYER_NOT_FOUND, NOT_MEMBER, NOT_LEADER, CLAN_NOT_FOUND, TARGET_NOT_FOUND, ALREADY_AT_WAR, TARGET_ALREADY_AT_WAR, INSUFFICIENT_TREASURY, TARGET_INSUFFICIENT_TREASURY, TARGET_SHIELDED
+- Created `/src/app/api/clans/war/score/route.ts` (POST):
+  - Auth required via getSession()
+  - Validates: player is in a clan, kills > 0
+  - Finds active war for player's clan (as declarer or target)
+  - If no active war, returns { ok: true, scored: false } (no-op)
+  - Increments declarerScore or targetScore based on which side the player's clan is on
+  - Checks if either score >= 50 → war ends
+  - On war end: sets status='ended', endedAt=now(), determines winner (higher score wins, declarer wins on tie), awards total pot to winner's bankedChips
+  - Creates ClanActivity type='war_end' on both clans with winner name and chips won
+  - Returns { ok, scored, warId, yourScore, enemyScore, warEnded }
+  - Error map: PLAYER_NOT_FOUND, NOT_MEMBER
+- Created `/src/app/api/clans/war/route.ts` (GET):
+  - Query param: tag (clan tag)
+  - Finds active war where declarerTag=tag OR targetTag=tag AND status='active'
+  - Includes both clan names via Prisma include
+  - Returns { war: { id, declarerTag, declarerName, targetTag, targetName, wager, declarerScore, targetScore, totalPot, startedAt } | null }
+  - No auth required (public war status)
+- All three routes follow existing clan route patterns (db import, getSession, $transaction, error map)
+- Lint passes cleanly, no errors
+
+Stage Summary:
+- Three clan war API routes fully implemented
+- Declare: Leader-only, validates both sides, escrow wager, war shield protection
+- Score: per-match kill contribution, automatic war end at 50 kills, pot distribution
+- Status: public read of active war with both clan names and scores
+- All operations are atomic within db.$transaction
+- War shield from clan shop integrates with declare route (7-day protection window)

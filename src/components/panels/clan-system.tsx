@@ -41,6 +41,7 @@ import {
   Lock,
   Star,
   AlertTriangle,
+  ShoppingCart,
 } from 'lucide-react';
 
 interface ClanSystemProps {
@@ -60,6 +61,7 @@ interface ClanInfo {
   xp: number;
   totalDeposited: number;
   bankedChips: number;
+  maxMembers: number;
   memberCount: number;
 }
 
@@ -357,6 +359,48 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
       notify(`Deposited ${val.toLocaleString()}c!`, 'success', onToast);
       setDepositAmount('');
       await refresh(); void fetchClans(); void fetchChallenges(playerClanTag); void fetchActivities(playerClanTag); void fetchStats(playerClanTag);
+    } catch { notify('Network error.', 'error', onToast); } finally { setActionBusy(''); }
+  }
+
+  async function handleWithdraw() {
+    const val = parseInt(depositAmount, 10);
+    if (!val || val <= 0) { notify('Enter a valid amount.', 'error', onToast); return; }
+    if (!playerClanTag) return;
+    setActionBusy('withdraw');
+    try {
+      const res = await fetch('/api/clans/withdraw', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag: playerClanTag, amount: val }) });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok) { notify(data?.error || 'Failed to withdraw.', 'error', onToast); return; }
+      notify(`Withdrew ${val.toLocaleString()}c!`, 'success', onToast);
+      setDepositAmount('');
+      await refresh(); void fetchClans(); void fetchStats(playerClanTag);
+    } catch { notify('Network error.', 'error', onToast); } finally { setActionBusy(''); }
+  }
+
+  async function handlePayout(targetUserTag: string) {
+    const val = parseInt(depositAmount, 10);
+    if (!val || val <= 0) { notify('Enter a valid amount.', 'error', onToast); return; }
+    if (!playerClanTag) return;
+    setActionBusy('payout');
+    try {
+      const res = await fetch('/api/clans/payout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag: playerClanTag, targetUserTag, amount: val }) });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok) { notify(data?.error || 'Payout failed.', 'error', onToast); return; }
+      notify(`Distributed ${val.toLocaleString()}c!`, 'success', onToast);
+      setDepositAmount('');
+      await refresh(); void fetchClans(); void fetchMembers(playerClanTag); void fetchStats(playerClanTag);
+    } catch { notify('Network error.', 'error', onToast); } finally { setActionBusy(''); }
+  }
+
+  async function handleShopPurchase(itemId: string) {
+    if (!playerClanTag) return;
+    setActionBusy('shop');
+    try {
+      const res = await fetch('/api/clans/shop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag: playerClanTag, itemId }) });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; effect?: string };
+      if (!res.ok) { notify(data?.error || 'Purchase failed.', 'error', onToast); return; }
+      notify(data?.effect || 'Purchased!', 'success', onToast);
+      await refresh(); void fetchClans(); void fetchMembers(playerClanTag);
     } catch { notify('Network error.', 'error', onToast); } finally { setActionBusy(''); }
   }
 
@@ -670,8 +714,33 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
                           {qd.label} ({qd.value.toLocaleString()}c)
                         </button>
                       ))}
+                      <button type="button" onClick={() => void handleWithdraw()} disabled={actionBusy === 'withdraw' || !depositAmount} className="ml-auto px-2 py-1 rounded text-[10px] font-bold bg-slate-900 hover:bg-rose-500/10 text-rose-400/80 border border-rose-500/20 hover:border-rose-500/40 transition disabled:opacity-30 flex items-center gap-1">
+                        {actionBusy === 'withdraw' ? <Loader2 className="w-3 h-3 animate-spin" /> : <LogOut className="w-3 h-3" />} Withdraw
+                      </button>
                     </div>
                   </div>
+
+                  {/* Treasury Actions: Shop */}
+                  {isLeader && (
+                    <div className="p-4 rounded-2xl border border-violet-500/20 bg-violet-500/5">
+                      <h4 className="text-sm font-bold text-white flex items-center gap-2 mb-3"><ShoppingCart className="w-4 h-4 text-violet-400" /> Clan Shop <span className="text-[10px] font-mono text-slate-500 font-normal">— spend treasury chips on perks</span></h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {[{ id: 'member_expansion', name: 'Member Expansion', cost: 15000, desc: '+5 max member slots', emoji: '👥' },
+                          { id: 'xp_windfall', name: 'XP Windfall', cost: 8000, desc: 'Instant Level × 500 XP', emoji: '⚡' },
+                          { id: 'war_shield', name: 'War Shield', cost: 5000, desc: 'Block war declarations 7 days', emoji: '🛡️' },
+                        ].map((item) => (
+                          <button key={item.id} type="button" onClick={() => void handleShopPurchase(item.id)} disabled={actionBusy === 'shop' || (myClanInfo?.bankedChips || 0) < item.cost} className="p-3 rounded-xl border border-slate-800 bg-slate-950/80 hover:border-violet-500/40 transition text-left disabled:opacity-40 group">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-base">{item.emoji}</span>
+                              <span className="text-xs font-mono font-bold text-violet-400">{item.cost.toLocaleString()}c</span>
+                            </div>
+                            <p className="text-[11px] font-bold text-white">{item.name}</p>
+                            <p className="text-[10px] text-slate-500">{item.desc}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Quick Challenge Preview */}
                   {challenges.length > 0 && (
@@ -707,7 +776,7 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="text-sm font-bold text-white flex items-center gap-2"><Users className="w-4 h-4 text-indigo-400" /> Member Roster ({myClanInfo?.memberCount || 0})</h4>
-                      <span className="text-[10px] font-mono text-slate-500">Max: 30</span>
+                      <span className="text-[10px] font-mono text-slate-500">Max: {myClanInfo?.maxMembers || 30}</span>
                     </div>
                     {membersLoading ? <PanelSkeleton count={3} height="h-12" /> : (
                       <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
@@ -754,6 +823,9 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
                                     )}
                                     {canKick && (
                                       <button type="button" title="Kick" disabled={actionBusy !== ''} onClick={() => void handleKickMember(m.userTag, m.name)} className="p-1.5 rounded text-[10px] bg-slate-900 hover:bg-rose-500/10 text-rose-400 border border-rose-500/20 transition disabled:opacity-50"><UserMinus className="w-3.5 h-3.5" /></button>
+                                    )}
+                                    {canManage && !isSelf && (
+                                      <button type="button" title="Payout chips" disabled={actionBusy !== ''} onClick={() => void handlePayout(m.userTag)} className="p-1.5 rounded text-[10px] bg-slate-900 hover:bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 transition disabled:opacity-50"><Coins className="w-3.5 h-3.5" /></button>
                                     )}
                                     <button type="button" onClick={() => inspectMember(m)} className="px-2 py-1 rounded text-[10px] font-bold bg-slate-900 hover:bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 transition">Inspect</button>
                                   </div>

@@ -26,8 +26,8 @@ export async function POST() {
         },
       });
 
-      // Remove player from clan
-      await tx.player.update({ where: { id: me.id }, data: { clanTag: null, clanRank: null } });
+      // Remove player from clan (forfeit deposited chips)
+      await tx.player.update({ where: { id: me.id }, data: { clanTag: null, clanRank: null, clanDeposited: 0 } });
 
       // Check remaining members and handle cleanup
       const remaining = await tx.player.count({ where: { clanTag } });

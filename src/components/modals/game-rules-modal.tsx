@@ -1123,8 +1123,11 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                   <li>Members deposit chips from their personal bank into the Treasury</li>
                   <li>Quick-deposit buttons: 10%, 25%, 50%, or MAX of your chips</li>
                   <li>Max 1,000,000c per transaction</li>
+                  <li><strong className="text-rose-300">Withdraw</strong> — You can withdraw chips you deposited (up to what you put in). Enter amount and click Withdraw. Leaving the clan forfeits unwithdrawn deposits.</li>
+                  <li><strong className="text-amber-300">Payout</strong> — Leader/Co-Leader can distribute chips from the treasury to any member. Uses the same input field as deposit/withdraw.</li>
                   <li>Treasury grows via deposits and challenge reward claims</li>
                   <li>Deposits also grant <strong>5% XP</strong> to your clan</li>
+                  <li>Treasury chips are spent in the <strong>Clan Shop</strong> and <strong>Clan Wars</strong> (see below)</li>
                 </ul>
               </InfoCard>
             </div>
@@ -1153,8 +1156,27 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                   <li><strong>Settings</strong> — Leader can edit name, description, emblem</li>
                   <li><strong>Transfer Leadership</strong> — Pass leadership to a Co-Leader</li>
                   <li><strong>Disband</strong> — Permanently dissolve the syndicate (Leader only)</li>
-                  <li><strong>Activity Log</strong> — Full history of joins, leaves, deposits, promotions, kicks, challenges, level-ups</li>
+                  <li><strong>Activity Log</strong> — Full history of joins, leaves, deposits, withdrawals, payouts, promotions, kicks, challenges, level-ups, shop purchases</li>
                   <li><strong>Stats</strong> — Aggregate combat stats across all members</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="🛒 Clan Shop" accent="text-violet-300">
+                <p className="mb-1.5">The <strong>Leader</strong> can spend treasury chips on permanent perks. Visible on the Overview tab:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>Member Expansion</strong> (15,000c) — +5 max member slots. Repeatable. Default is 30 members.</li>
+                  <li><strong>XP Windfall</strong> (8,000c) — Instantly grants Level × 500 XP. Repeatable.</li>
+                  <li><strong>War Shield</strong> (5,000c) — Blocks war declarations against your clan for 7 days. One-time.</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="⚔️ Clan Wars" accent="text-rose-300">
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Leader declares war on another clan, <strong>wagering chips</strong> from both treasuries (min 1,000c each)</li>
+                  <li>Both treasuries are <strong>locked immediately</strong> — the wager is held in escrow</li>
+                  <li>War ends when either clan reaches <strong>50 kills</strong> by its members during the war</li>
+                  <li>Kills from any clan member&apos;s match count toward the war score automatically</li>
+                  <li>Winner takes <strong>both wagers</strong> (total pot = wager × 2)</li>
+                  <li>A clan with an active <strong>War Shield</strong> cannot be declared against</li>
+                  <li>A clan can only have <strong>one active war</strong> at a time</li>
                 </ul>
               </InfoCard>
             </div>
@@ -1203,7 +1225,7 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                   <li>Overview shows the <strong>top 3 richest members</strong> by personal chip balance</li>
                   <li>Members have <strong>online/offline status</strong> indicators (green/gray dot)</li>
                   <li>Full member roster with rank badges, levels, chips, and management actions</li>
-                  <li>Clan display shows <strong>Max: 30</strong> members</li>
+                  <li>Clan display shows <strong>dynamic max members</strong> (starts at 30, can be increased via Clan Shop)</li>
                 </ul>
               </InfoCard>
             </div>
@@ -1550,7 +1572,7 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
               <FaqItem q="Are HOF records permanent?" a="Yes. HOF entries are immutable once created. Even if your banked chips drop below a milestone threshold later, your HOF induction for that tier remains. Championship entries are finalized when the year ends and locked forever." />
               <FaqItem q="How do I create a syndicate?" a="Go to the Syndicates tab → click &quot;Form Syndicate&quot; → enter a Name (3+ chars), Tag (3-5 uppercase letters/numbers), Description, and pick an Emblem (6 preset options). You become the Leader automatically. You must not already be in a clan." />
               <FaqItem q="Can I be in multiple syndicates?" a="No. You can only be a member of one syndicate at a time. To join another, you must leave your current syndicate first." />
-              <FaqItem q="What happens to my deposited chips if I leave a syndicate?" a="Deposited chips go into the clan Treasury and cannot be withdrawn. They belong to the syndicate, not individual members. Think of it as a team contribution." />
+              <FaqItem q="What happens to my deposited chips if I leave a syndicate?" a="You can now withdraw chips you deposited (up to what you put in) while you're still in the clan. However, if you leave, your unwithdrawn deposits are forfeited — they stay in the Treasury and cannot be recovered. Think carefully before leaving." />
               <FaqItem q="What happens if the Leader leaves?" a="If the Leader leaves, the oldest Co-Leader is automatically promoted to Leader. If there are no Co-Leaders, the oldest member becomes Leader. If you&apos;re the last member, the syndicate is automatically disbanded." />
               <FaqItem q="How do weekly challenges work?" a="Four challenges are generated every Monday UTC: Treasury Target, Recruitment Drive, Syndicate Comms, and Deposit Streak. All scale with your clan level. Deposit Streak counts each deposit transaction (any member, any amount). When a challenge is complete, any Leader or Co-Leader can click Claim to add the reward chips to the Treasury and grant clan XP. Unclaimed challenges reset on the next Monday." />
               <FaqItem q="How does clan XP work?" a="Clan XP is earned two ways: (1) Deposits grant 5% of the deposited amount as XP. (2) Claiming a challenge grants 10% of the reward as XP. The XP needed to level up is Level × 1,000 (e.g. Level 2 needs 2,000 total XP, Level 3 needs 3,000 total XP). Leveling up is logged in the Activity Log." />
@@ -1579,6 +1601,10 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
               <FaqItem q="How is the &quot;Top Play&quot; spotlight chosen?" a="Three-tier priority: (1) Admin-featured clip — if an admin has pinned one. (2) Today's best Match Card — highest chips extracted, then kills as tiebreaker. (3) Highest upvoted approved clip of all time. The spotlight updates on page refresh." />
               <FaqItem q="Can I undo an upvote?" a="No. Upvotes are one-per-player-per-clip and are permanent. This prevents manipulation and keeps the Top Play ranking stable. Choose wisely before upvoting." />
               <FaqItem q="Why is my submitted clip not showing up?" a="Video clips require admin review before becoming visible. Check the Highlights tab with &quot;My Clips&quot; toggled on — if your clip shows &quot;Pending&quot; status, it's still waiting for review (target: 24 hours). If it shows &quot;Rejected&quot;, it didn't meet community guidelines. Match Cards are auto-approved and appear instantly." />
+              <FaqItem q="How do I withdraw chips from the clan treasury?" a="Enter the amount in the same deposit input field on the clan Overview tab and click the red &quot;Withdraw&quot; button. You can only withdraw up to what you personally deposited (your deposited amount is tracked individually). The treasury must have enough chips. If you leave the clan, your unwithdrawn deposits are forfeited." />
+              <FaqItem q="How does the payout system work?" a="Leader or Co-Leader enters an amount in the treasury input and clicks the green payout icon (Coins button) on a member's row. Those chips are deducted from the treasury and added directly to the member's personal bank. Use this to reward active members or distribute winnings." />
+              <FaqItem q="What does the Clan Shop sell?" a="Three items: (1) Member Expansion (15,000c) — adds 5 member slots, repeatable. (2) XP Windfall (8,000c) — instant Level × 500 XP, repeatable. (3) War Shield (5,000c) — blocks war declarations for 7 days, one-time. Only the Leader can purchase, using treasury chips. The Shop appears on the Overview tab." />
+              <FaqItem q="How do Clan Wars work?" a="The Leader declares war on another clan and wagers chips (min 1,000c). Both clans&apos; treasuries are locked immediately. Every kill by any clan member during the war adds to their clan&apos;s war score. The war ends when one side reaches 50 kills — they win the entire pot (wager × 2). Each clan can only have one active war. War Shield blocks declarations against your clan." />
             </div>
           </Section>
 

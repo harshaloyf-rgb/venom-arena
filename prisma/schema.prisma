@@ -65,6 +65,7 @@ model Player {
   clanTag         String?
   clan            Clan?    @relation(fields: [clanTag], references: [tag], onDelete: SetNull)
   clanRank        String?  // Leader | Co-Leader | Viper
+  clanDeposited   Int      @default(0)  // tracks how much this player has deposited into their current clan
 
   // Identity change cooldowns (leaderboard integrity — prevents name/country abuse)
   nameChangedAt     DateTime?
@@ -114,12 +115,16 @@ model Clan {
   xp              Int      @default(0)
   totalDeposited  Int      @default(0)
   bankedChips     Int      @default(0)
+  maxMembers      Int      @default(30)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   members         Player[]
   messages        ClanMessage[]
   activities      ClanActivity[]
   challenges      ClanChallenge[]
+  purchases       ClanPurchase[]
+  warsDeclared    ClanWar[] @relation("warDeclaringClan")
+  warsReceived    ClanWar[] @relation("warTargetClan")
 }
 
 model ClanActivity {
@@ -487,4 +492,34 @@ model Rival {
 
   @@unique([playerId, rivalTag])
   @@index([playerId])
+}
+
+model ClanPurchase {
+  id        String   @id @default(cuid())
+  clanTag   String
+  clan      Clan     @relation(fields: [clanTag], references: [tag], onDelete: Cascade)
+  itemId    String   // "member_expansion" | "xp_windfall" | "clan_rename" | "war_shield"
+  cost      Int      // chips spent from treasury
+  purchasedBy String   // userTag of the leader who purchased
+  createdAt DateTime @default(now())
+
+  @@index([clanTag, createdAt(sort: Desc)])
+}
+
+model ClanWar {
+  id            String   @id @default(cuid())
+  declarerTag   String
+  declarer      Clan     @relation("warDeclaringClan", fields: [declarerTag], references: [tag], onDelete: Cascade)
+  targetTag     String
+  target        Clan     @relation("warTargetClan", fields: [targetTag], references: [tag], onDelete: Cascade)
+  wager        Int      // chips wagered by EACH clan (total pot = wager * 2)
+  declarerScore Int      @default(0) // total kills by declarer clan members during war
+  targetScore  Int      @default(0) // total kills by target clan members during war
+  status        String   @default("active") // "active" | "ended"
+  winnerTag    String?  // set when war ends
+  startedAt     DateTime @default(now())
+  endedAt      DateTime?
+
+  @@index([declarerTag, status])
+  @@index([targetTag, status])
 }
