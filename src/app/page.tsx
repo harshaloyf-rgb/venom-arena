@@ -396,11 +396,11 @@ export default function Home() {
                 </div>
                 <div className="bg-slate-900/60 border border-slate-800/80 rounded-lg px-2 py-1.5 text-center">
                   <span className="text-[9px] text-slate-500 block uppercase font-semibold">Matches</span>
-                  <span className="text-xs font-bold text-white font-mono">{player.matchesPlayed || 0}</span>
+                  <span className="text-xs font-bold text-white font-mono">{player.lifetimeKills + player.lifetimeDeaths || 0}</span>
                 </div>
                 <div className="bg-slate-900/60 border border-slate-800/80 rounded-lg px-2 py-1.5 text-center">
                   <span className="text-[9px] text-slate-500 block uppercase font-semibold">Extracts</span>
-                  <span className="text-xs font-bold text-emerald-400 font-mono">{player.extractions || 0}</span>
+                  <span className="text-xs font-bold text-emerald-400 font-mono">{player.lifetimeExtracts || 0}</span>
                 </div>
                 <div className="bg-slate-900/60 border border-slate-800/80 rounded-lg px-2 py-1.5 text-center">
                   <span className="text-[9px] text-slate-500 block uppercase font-semibold">Best</span>

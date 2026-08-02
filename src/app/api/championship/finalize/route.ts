@@ -14,7 +14,7 @@ export async function POST(req: Request) {
 
   // Admin only
   const admin = await db.player.findUnique({
-    where: { id: session.userId },
+    where: { id: session.playerId },
     select: { role: true },
   });
   if (!admin || admin.role !== 'admin') {

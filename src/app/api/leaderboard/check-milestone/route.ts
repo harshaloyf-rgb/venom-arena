@@ -26,6 +26,11 @@ export async function POST(req: Request) {
   let userTag: string | undefined;
 
   if (session?.userTag) {
+    // Session auth — only allow checking own milestones
+    const earlyBody = await req.json().catch(() => ({})) as { userTag?: string };
+    if (earlyBody.userTag && earlyBody.userTag.toUpperCase() !== session.userTag) {
+      return NextResponse.json({ error: 'Can only check your own milestones' }, { status: 403 });
+    }
     userTag = session.userTag;
   } else {
     // Check for internal secret (for game-server calls)

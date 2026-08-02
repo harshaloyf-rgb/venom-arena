@@ -38,7 +38,6 @@ export async function POST(req: NextRequest) {
           where: { id: player.id },
           data: {
             bankedChips: { decrement: cosmetic.cost },
-            totalLost: { increment: cosmetic.cost },
             unlockedSkins: encodeSkins([...unlocked, skinId]),
             // equip the freshly purchased item
             ...(cosmetic.type === 'skin' ? { currentSkin: skinId } : {}),

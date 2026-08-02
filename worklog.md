@@ -1160,3 +1160,31 @@ Stage Summary:
 - Word filter blocks profanity in English and Hindi
 - Empty state now provides comprehensive guidance on what highlights are, how to submit, and community rules
 
+---
+Task ID: 1
+Agent: main
+Task: Phase 1 Security Hardening + P1 Bug Fixes + P2 Dedup + Admin Guide
+
+Work Log:
+- P0-1: Rewrote /api/admin/promote-self to require existing admin + userTag (was zero-auth self-promote)
+- P0-2: Removed hardcoded access code venom_admin_2024 from admin-panel.tsx client bundle
+- P0-3: Fixed more-menu.tsx to filter adminOnly items using isAdmin prop
+- P0-4: Added client-side role gate in /admin/layout.tsx (redirects non-admins to /)
+- P0-5: Fixed championship/finalize session.userId -> session.playerId
+- P0-6: Rewrote /api/hof/induct to require INTERNAL_SECRET or admin role (removed session self-induction)
+- P1-1: Fixed dashboard matchesPlayed -> lifetimeKills+lifetimeDeaths, extractions -> lifetimeExtracts
+- P1-2: Fixed 3 race conditions - moved check-then-act inside transactions (video-reward, promo-reward, clips/upvote)
+- P1-3: Removed incorrect totalLost increment on cosmetic purchases
+- P1-4: Added totalEarned increment for gift recipients + userTag verification in check-milestone
+- P2-1: Extracted timeAgo() to shared src/lib/date-utils.ts, removed 4 duplicate implementations
+- P2-2: Removed hardcoded access gate from admin-panel (ClipModeration duplicate kept for now)
+- Promoted users account VENOM-3373 to admin (was already admin from prior session)
+- Created ADMIN-GUIDE.md — comprehensive admin operations manual
+- All changes pass ESLint clean
+
+Stage Summary:
+- 6 P0 security vulnerabilities fixed
+- 5 P1 bugs fixed
+- 4 timeAgo duplicates eliminated (~60 lines)
+- Admin guide document created
+- No new code added to promote-self, repurposed as admin-to-admin promote
