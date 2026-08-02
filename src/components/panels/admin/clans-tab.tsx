@@ -65,7 +65,8 @@ export default function ClansTab({ onToast }: { onToast?: ToastFn }) {
           const body = await res.text();
           throw new Error(body || res.statusText);
         }
-        const data: AdminClan[] = await res.json();
+        const json = await res.json();
+        const data: AdminClan[] = json.clans ?? json;
         setClans(data);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to load clans';

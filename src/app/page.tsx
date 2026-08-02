@@ -269,9 +269,9 @@ export default function Home() {
   // -----------------------------------------------------------------------
 
   return (
-    <div className="max-md:h-dvh max-md:overflow-hidden flex flex-col min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
       {/* ===================== HEADER ===================== */}
-      <header className="shrink-0 border-b border-slate-900 bg-slate-950/80 backdrop-blur-md z-40">
+      <header className="sticky top-0 shrink-0 border-b border-slate-900 bg-slate-950/80 backdrop-blur-md z-40">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-3 h-12 md:px-6 lg:px-8 md:h-auto md:py-4">
           {/* Logo */}
           <button
@@ -366,13 +366,13 @@ export default function Home() {
       </header>
 
       {/* ===================== MAIN ===================== */}
-      <main className="flex-1 max-md:overflow-hidden flex flex-col w-full max-w-7xl mx-auto md:px-4 lg:px-8 md:py-6">
+      <main className="flex-1 flex flex-col w-full max-w-7xl mx-auto md:px-4 lg:px-8 md:py-6">
 
         {/* ====== DASHBOARD TAB ====== */}
         {activeTab === 'dashboard' && (
           <>
-            {/* ---- Mobile Dashboard (compact, scroll-free) ---- */}
-            <div className="md:hidden flex flex-col flex-1 overflow-hidden px-3 py-2.5 gap-2.5 va-fade-in">
+            {/* ---- Mobile Dashboard (compact) ---- */}
+            <div className="md:hidden flex flex-col flex-1 px-3 py-2.5 gap-2.5 va-fade-in">
               {/* Welcome + XP bar */}
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center border border-indigo-400/20 shrink-0 shadow-lg">
@@ -578,7 +578,7 @@ export default function Home() {
       </main>
 
       {/* ===================== FOOTER (desktop only) ===================== */}
-      <footer className="hidden md:block border-t border-slate-900/60 bg-slate-950/40 py-6 mt-auto text-center text-xs text-slate-500">
+      <footer className="hidden md:block shrink-0 border-t border-slate-900/60 bg-slate-950/40 py-6 mt-auto text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="font-sans">&copy; 2026 Project Venom Arena. All Rights Reserved. Fully store-safe, non-gambling gameplay edition.</p>
           <div className="flex gap-4 font-mono text-[10px] text-slate-400">

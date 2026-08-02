@@ -30,7 +30,7 @@ export function BottomTabBar({ activeTab, onTabChange, onMoreOpen }: BottomTabBa
   const active = getActiveBottomTab(activeTab);
 
   return (
-    <nav className="md:hidden shrink-0 bg-slate-950/95 backdrop-blur-md border-t border-slate-800/80 pb-[env(safe-area-inset-bottom)] relative z-30">
+    <nav className="md:hidden sticky bottom-0 shrink-0 bg-slate-950/95 backdrop-blur-md border-t border-slate-800/80 pb-[env(safe-area-inset-bottom)] z-30">
       <div className="flex items-center justify-around h-14">
         {TABS.map(({ id, tabId, Icon, label }) => {
           const isActive = active === id;
