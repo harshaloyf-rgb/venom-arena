@@ -1389,3 +1389,31 @@ Work Log:
 Stage Summary:
 - 2 TypeScript errors fixed (swapped ToastFn args, missing Friend.country)
 - player-profile.tsx now compiles cleanly
+
+---
+Task ID: lobby-tabs-audit-fix
+Agent: main
+Task: Fix all lobby tab audit findings — Follow system, Rival system, gate fake data to admin
+
+Work Log:
+- Added Follow + Rival models to Prisma schema (Follow: followerId/followingId with unique constraint; Rival: playerId/rivalTag with kill tracking)
+- Created /api/player/follow (GET for relationship+counts, POST toggle follow/unfollow)
+- Created /api/rivals (GET list+check, POST add/remove with upsert)
+- Updated /api/player GET to return followersCount, followingCount, rivalsCount
+- Updated /api/player/public-profile to return followersCount, followingCount, rivalsCount
+- player-profile.tsx: Added isAdmin check, gated Friends & Spectate + Identity Logs tabs to admin only
+- player-profile.tsx: Replaced hardcoded #999 rank with real fetch from /api/leaderboard/my-rank
+- player-inspector-modal.tsx: Complete rewrite — real followers count from DB, Follow/Unfollow button, Add Rival/Remove Rival button
+- player-inspector-modal.tsx: Fake Extraction Logs tab + Allies sections gated to admin-only
+- player-inspector-modal.tsx: Removed fake Challenge button for non-admin
+- social-panel.tsx: Added Rivals sub-tab with full rival list, win rate display, remove button, inspect link
+- clip-showcase.tsx: Fixed handleInspectCreator passing clip.chipsExtracted as bankedChips (now passes 0, real data fetched by inspector)
+- Zero lint errors
+
+Stage Summary:
+- Follow system fully functional (DB model + API + UI toggle in inspector)
+- Rival system fully functional (DB model + API + UI list in Social tab + toggle in inspector)
+- All demo/fake data preserved for admin accounts only
+- Regular users see only real data everywhere
+- Profile shows 2 real tabs (Records & Statistics, Match History) for non-admin
+- Inspector shows real follower count, no fake logs/challenge/allies for non-admin
