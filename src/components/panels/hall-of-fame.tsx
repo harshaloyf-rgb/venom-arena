@@ -321,10 +321,17 @@ function MilestonesFlatTable({ entries, tierFilter, search, isDemo, firstAchieve
 
 export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
   const { player } = useAuth();
+  const isAdmin = player?.role === 'admin';
 
   // ── Shared state ──
   const [tab, setTab] = useState<Tab>('my-hof');
   const [commentary, setCommentary] = useState(INITIAL_COMMENTARY);
+
+  // Clear fake commentary for non-admin users
+  useEffect(() => {
+    if (!isAdmin) setCommentary([]);
+  }, [isAdmin]);
+
   const [tickerFilter, setTickerFilter] = useState<CommentaryFilter>('all');
 
   // ── Stats bar state ──
@@ -493,7 +500,7 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
 
   // Live commentary ticker
   useEffect(() => {
-    if (tab !== 'ticker') return;
+    if (tab !== 'ticker' || !isAdmin) return;
     const id = setInterval(() => {
       const name = COMMENTARY_NAMES[Math.floor(Math.random() * COMMENTARY_NAMES.length)];
       const country = COUNTRIES[Math.floor(Math.random() * COUNTRIES.length)];
@@ -529,20 +536,22 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
     if (stats?.championshipYears && stats.championshipYears.length > 0) {
       return stats.championshipYears.map((y) => y.year).sort((a, b) => b - a);
     }
+    if (!isAdmin) return [];
     return [2026, 2025, 2024];
-  }, [stats]);
+  }, [stats, isAdmin]);
 
   const champDisplayEntries = useMemo(() => {
     if (champEntries.length > 0) return champEntries;
-    // Fallback to demo data
+    if (!isAdmin) return [];
+    // Fallback to demo data (admin only)
     let demo = [...DEMO_CHAMPIONS];
     if (champYear) demo = demo.filter((d) => d.date.includes(String(champYear)));
     return demo;
-  }, [champEntries, champYear]);
+  }, [champEntries, champYear, isAdmin]);
 
-  const champIsDemo = champEntries.length === 0;
+  const champIsDemo = champEntries.length === 0 && isAdmin;
 
-  const mileIsDemo = mileEntries.length === 0;
+  const mileIsDemo = mileEntries.length === 0 && isAdmin;
 
   // ── Inspect helper ──
   function inspectEntry(entry: InducteeEntry) {
@@ -623,15 +632,17 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
         </div>
       )}
 
-      {/* Live broadcast marquee */}
+      {/* Live broadcast marquee - hidden for non-admin */}
+      {isAdmin && (
       <div className="relative mb-5 rounded-xl border border-rose-500/30 bg-rose-950/20 p-3 flex items-center gap-3 overflow-hidden">
         <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-rose-300 uppercase tracking-widest px-2 py-1 bg-rose-500/20 border border-rose-500/40 rounded shrink-0">
           <Radio className="w-3 h-3 animate-pulse" /> LIVE BROADCAST
         </span>
         <div className="text-xs text-rose-200 truncate">
-          {commentary[0]?.text || '🎙️ ESPORTS COMMENTARY ACTIVE: Welcome to Project Venom World Arena Championship!'}
+          {commentary[0]?.text || (isAdmin ? '🎙️ ESPORTS COMMENTARY ACTIVE: Welcome to Project Venom World Arena Championship!' : 'No live commentary at this time.')}
         </div>
       </div>
+      )}
 
       {/* ═══════════════════ TAB: My HOF Profile ═══════════════════ */}
       {tab === 'my-hof' && (
@@ -811,8 +822,15 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
             </div>
           )}
 
+          {/* Empty state for non-admin */}
+          {!champLoading && champDisplayEntries.length === 0 && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-8 text-center text-xs text-slate-500">
+              No championship inductees yet
+            </div>
+          )}
+
           {/* Table */}
-          {!champLoading && (
+          {!champLoading && champDisplayEntries.length > 0 && (
             <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
               {champIsDemo && (
                 <div className="px-4 py-2 bg-slate-900 border-b border-slate-800 flex items-center gap-2">
@@ -1020,7 +1038,7 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
           )}
 
           {/* Real data */}
-          {!mileLoading && !mileIsDemo && (
+          {!mileLoading && !mileIsDemo && mileEntries.length > 0 && (
             <MilestonesFlatTable
               entries={mileEntries}
               tierFilter={mileTierFilter}
@@ -1030,6 +1048,13 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
               myPlayerTag={player?.userTag ?? null}
               onInspectPlayer={onInspectPlayer}
             />
+          )}
+
+          {/* Empty state for non-admin */}
+          {!mileLoading && !mileIsDemo && mileEntries.length === 0 && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-8 text-center text-xs text-slate-500">
+              No milestone inductees yet
+            </div>
           )}
         </div>
       )}

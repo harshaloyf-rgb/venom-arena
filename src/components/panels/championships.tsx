@@ -312,7 +312,15 @@ function PastChampionships({ archives }: { archives: ArchiveEntry[] }) {
 // Clan Rankings Table (P3-3)
 // ============================================================================
 
-function ClanRankingsTable({ clans, hasRealData }: { clans: ClanEntry[]; hasRealData: boolean }) {
+function ClanRankingsTable({ clans, hasRealData, isAdmin }: { clans: ClanEntry[]; hasRealData: boolean; isAdmin: boolean }) {
+  if (!hasRealData && !isAdmin) {
+    return (
+      <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 p-6 text-center">
+        <Users className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+        <p className="text-xs text-slate-500">No clan data available yet. Clans appear here once members register for the championship.</p>
+      </div>
+    );
+  }
   if (clans.length === 0) {
     return (
       <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 p-6 text-center">
@@ -323,7 +331,7 @@ function ClanRankingsTable({ clans, hasRealData }: { clans: ClanEntry[]; hasReal
   }
   return (
     <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-      {!hasRealData && (
+      {!hasRealData && isAdmin && (
         <div className="px-4 py-1.5 bg-amber-500/10 border-b border-amber-500/20 text-[9px] font-mono text-amber-300">· Showing demo data</div>
       )}
       <div className="overflow-x-auto">
@@ -367,6 +375,7 @@ function ClanRankingsTable({ clans, hasRealData }: { clans: ClanEntry[]; hasReal
 
 export function Championships({ onToast }: ChampionshipsProps) {
   const { player, refresh } = useAuth();
+  const isAdmin = player?.role === 'admin';
   const listRef = useRef<HTMLOListElement>(null);
   const cd = useCountdown(CHAMPIONSHIP_END_DATE);
 
@@ -470,10 +479,12 @@ export function Championships({ onToast }: ChampionshipsProps) {
     return () => { cancelled = true; };
   }, [scope, region, country, rankFilter, search]);
 
-  // ── Demo fallback: merge real data with demo contenders ────────────────────
+  // ── Demo fallback: merge real data with demo contenders (admin-only) ─────────
   const displayEntries = useMemo<ApiEntry[]>(() => {
     if (hasRealData) return entries;
-    // No real data: use INITIAL_CONTENDERS as demo
+    // No real data: only show demo fallback to admins
+    if (!isAdmin) return [];
+    // Admin demo: use INITIAL_CONTENDERS
     const demo: ApiEntry[] = INITIAL_CONTENDERS.map((c, i) => {
       const rank = i + 1;
       const prize = prizeForRank(rank);
@@ -516,7 +527,7 @@ export function Championships({ onToast }: ChampionshipsProps) {
     return demo
       .sort((a, b) => b.bankedChips - a.bankedChips)
       .map((c, i) => ({ ...c, rank: i + 1 }));
-  }, [hasRealData, entries, registered, player, gamesPlayed]);
+  }, [hasRealData, isAdmin, entries, registered, player, gamesPlayed]);
 
   // ── Filtered entries (for client-side filtering of demo data) ─────────────
   const filteredEntries = useMemo(() => {
@@ -857,7 +868,7 @@ export function Championships({ onToast }: ChampionshipsProps) {
             <h3 className="text-sm font-bold text-white flex items-center gap-2"><Users className="w-4 h-4 text-cyan-400" /> Clan Championship Rankings</h3>
             <span className="text-[9px] font-mono text-slate-500">{clanEntries.length} clan{clanEntries.length !== 1 ? 's' : ''}</span>
           </div>
-          <ClanRankingsTable clans={clanEntries} hasRealData={hasRealData} />
+          <ClanRankingsTable clans={clanEntries} hasRealData={hasRealData} isAdmin={isAdmin} />
         </div>
       ) : (
         <div>
@@ -866,12 +877,12 @@ export function Championships({ onToast }: ChampionshipsProps) {
               2026 Championship Standings
               {scope === 'REGIONAL' && region !== 'ALL' && ` · ${region}`}
               {scope === 'NATIONAL' && country !== 'ALL' && ` · ${country}`}
-              {!hasRealData && ' · Showing demo data'}
+              {!hasRealData && isAdmin && ' · Showing demo data'}
             </h3>
             <span className="text-[9px] font-mono text-slate-500">{filteredEntries.length} contender{filteredEntries.length !== 1 ? 's' : ''}</span>
           </div>
           <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-            {!hasRealData && <div className="px-4 py-1.5 bg-amber-500/10 border-b border-amber-500/20 text-[9px] font-mono text-amber-300">· Showing demo data — register and play to appear in real standings</div>}
+            {!hasRealData && isAdmin && <div className="px-4 py-1.5 bg-amber-500/10 border-b border-amber-500/20 text-[9px] font-mono text-amber-300">· Showing demo data — register and play to appear in real standings</div>}
             <div className="overflow-x-auto">
               <div className="min-w-[680px]">
                 {/* Header */}
@@ -889,10 +900,10 @@ export function Championships({ onToast }: ChampionshipsProps) {
                   {loading ? (
                     <li className="p-8 text-center text-xs text-slate-500 animate-pulse">Loading standings...</li>
                   ) : filteredEntries.length === 0 ? (
-                    <li className="p-6 text-center text-xs text-slate-500">No contenders match the current filters.</li>
+                    <li className="p-6 text-center text-xs text-slate-500">{!hasRealData && !isAdmin ? 'No championship contenders yet. Register and play to appear in the standings!' : 'No contenders match the current filters.'}</li>
                   ) : filteredEntries.map((c) => {
                     const isMe = c.isPlayer;
-                    const isDemo = !hasRealData && !isMe;
+                    const isDemo = isAdmin && !hasRealData && !isMe;
                     const prize = c.prize ?? prizeForRank(c.rank);
                     return (
                       <li key={c.userTag + c.rank} data-champ-me={isMe ? 'true' : undefined} className={`grid grid-cols-12 gap-2 items-center px-4 py-3 text-sm transition-all duration-500 ${isMe && findMeHighlight ? 'bg-amber-500/20 border-l-2 border-amber-400 ring-1 ring-inset ring-amber-400/40' : isMe ? 'bg-amber-500/10 border-l-2 border-amber-500' : 'hover:bg-slate-900/40'}`}>

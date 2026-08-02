@@ -263,9 +263,7 @@ function GlobalPodium({ entries, onInspect }: { entries: EnrichedEntry[]; onInsp
           {p.clanTag && (
             <span className="text-[9px] font-mono text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded mt-1">[{p.clanTag}]</span>
           )}
-          {p.isDemo && (
-            <span className="absolute -top-1 -right-1 text-[9px] bg-slate-600 text-slate-300 px-1 rounded font-bold">DEMO</span>
-          )}
+          {/* isDemo badge hidden from podium — podium only shown for real data */}
         </button>
       ))}
     </div>
@@ -551,6 +549,7 @@ function MilestoneHistorySection({ milestones, isDemo }: { milestones: Milestone
 
 export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
   const { player } = useAuth();
+  const isAdmin = player?.role === 'admin';
   const [activeTab, setActiveTab] = useState<TopTab>('summit');
   const [selectedCountry, setSelectedCountry] = useState<string>(player?.country || 'IN');
   const [selectedRegion, setSelectedRegion] = useState<string>('APAC');
@@ -865,7 +864,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
           {lastUpdated && (
             <MicroLabel className="mt-1.5 inline-block">
               Last sync: {lastUpdated.toLocaleTimeString('en-US', { hour12: false })} UTC
-              {!isRealData && <span className="text-amber-400 ml-2">\u00b7 Showing demo data</span>}
+              {!isRealData && isAdmin && <span className="text-amber-400 ml-2">\u00b7 Showing demo data</span>}
             </MicroLabel>
           )}
         </div>
@@ -888,8 +887,8 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
       {/* Find Me Card (shown when player not in visible list) */}
       {showFindMe && myRankData && <FindMeCard myRank={myRankData} activeTab={activeTab} selectedCountry={selectedCountry} selectedRegion={selectedRegion} onClose={() => setShowFindMe(false)} />}
 
-      {/* Milestone History Section */}
-      {!milestonesLoading && <MilestoneHistorySection milestones={milestones} isDemo={!isRealData || milestones === DEMO_MILESTONES} />}
+      {/* Milestone History Section — only show for admins when data is demo, or for anyone with real milestones */}
+      {!milestonesLoading && (isAdmin || (isRealData && milestones !== DEMO_MILESTONES)) && <MilestoneHistorySection milestones={milestones} isDemo={!isRealData || milestones === DEMO_MILESTONES} />}
 
       {/* Tab Description */}
       <TabDescription tab={activeTab} />
@@ -917,7 +916,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
       {activeTab === 'summit' && (
         <div className="space-y-4">
           <TabToolbar
-            countLabel={isRealData ? `${filteredEntries.length} Country Champions` : 'Demo data \u2014 real champions appear when players compete'}
+            countLabel={isRealData ? `${filteredEntries.length} Country Champions` : (isAdmin ? 'Demo data \u2014 real champions appear when players compete' : 'No country champions yet. Be the first!')}
             tabColor="#f59e0b"
           />
           <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
@@ -955,7 +954,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                           {c.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
                           {c.name}
                           {isMe && <span className="text-[9px] bg-amber-500 text-black px-1 rounded font-bold">YOU</span>}
-                          {c.isDemo && <span className="text-[9px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                          {c.isDemo && isAdmin && <span className="text-[9px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
                         </div>
                         <div className="text-[10px] font-mono text-slate-500 truncate">{c.userTag}</div>
                       </div>
@@ -982,7 +981,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
       {activeTab === 'global' && (
         <div className="space-y-4">
           <TabToolbar
-            countLabel={isRealData ? `Total Players: ${filteredEntries.length}` : 'Demo data \u2014 real rankings appear when players compete'}
+            countLabel={isRealData ? `Total Players: ${filteredEntries.length}` : (isAdmin ? 'Demo data \u2014 real rankings appear when players compete' : 'No players ranked yet. Play matches to appear here!')}
             tabColor="#06b6d4"
           />
 
@@ -1028,7 +1027,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                           {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
                           {e.name}
                           {isMe && <span className="text-[9px] bg-amber-500 text-black px-1 rounded font-bold">YOU</span>}
-                          {e.isDemo && <span className="text-[9px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                          {e.isDemo && isAdmin && <span className="text-[9px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
                         </div>
                         <div className="text-[10px] font-mono text-slate-500 truncate">{e.userTag}</div>
                       </div>
@@ -1063,7 +1062,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
               </select>
             </div>
             <TabToolbar
-              countLabel={isRealData ? `${filteredEntries.length} players from ${countryName(selectedCountry)}` : `Demo \u2014 no real players ranked in ${countryName(selectedCountry)} yet`}
+              countLabel={isRealData ? `${filteredEntries.length} players from ${countryName(selectedCountry)}` : (isAdmin ? `Demo \u2014 no real players ranked in ${countryName(selectedCountry)} yet` : `No players ranked in ${countryName(selectedCountry)} yet`)}
               tabColor="#8b5cf6"
             />
           </div>
@@ -1103,7 +1102,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                           {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
                           {e.name}
                           {isMe && <span className="text-[9px] bg-violet-500 text-black px-1 rounded font-bold">YOU</span>}
-                          {e.isDemo && <span className="text-[9px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                          {e.isDemo && isAdmin && <span className="text-[9px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
                         </div>
                         <div className="text-[10px] font-mono text-slate-500 truncate">{e.userTag}</div>
                       </div>
@@ -1142,7 +1141,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
           </div>
 
           <TabToolbar
-            countLabel={isRealData ? undefined : 'Demo data \u2014 real regional rankings appear when players from these regions compete'}
+            countLabel={isRealData ? undefined : (isAdmin ? 'Demo data \u2014 real regional rankings appear when players from these regions compete' : undefined)}
             tabColor="#ec4899"
           />
 
@@ -1181,7 +1180,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                           {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
                           {e.name}
                           {isMe && <span className="text-[9px] bg-pink-500 text-black px-1 rounded font-bold">YOU</span>}
-                          {e.isDemo && <span className="text-[9px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                          {e.isDemo && isAdmin && <span className="text-[9px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
                         </div>
                         <div className="text-[10px] font-mono text-slate-500 truncate">{e.userTag}</div>
                       </div>
@@ -1224,8 +1223,8 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
 
           <TabToolbar
             countLabel={selectedTierId !== 'all' && selectedTierId !== 'rookie'
-              ? `Threshold: ${(MILESTONE_TIERS.find((t) => t.id === selectedTierId)?.minChips || 0).toLocaleString('en-IN')}c \u00b7 ${filteredEntries.length} players${!isRealData ? ' \u00b7 Demo data' : ''}`
-              : `${filteredEntries.length} players${!isRealData ? ' \u00b7 Demo data' : ''}`
+              ? `Threshold: ${(MILESTONE_TIERS.find((t) => t.id === selectedTierId)?.minChips || 0).toLocaleString('en-IN')}c \u00b7 ${filteredEntries.length} players${!isRealData && isAdmin ? ' \u00b7 Demo data' : ''}`
+              : `${filteredEntries.length} players${!isRealData && isAdmin ? ' \u00b7 Demo data' : ''}`
             }
             tabColor="#eab308"
           />
@@ -1265,7 +1264,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                           {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
                           {e.name}
                           {isMe && <span className="text-[9px] bg-yellow-500 text-black px-1 rounded font-bold">YOU</span>}
-                          {e.isDemo && <span className="text-[9px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                          {e.isDemo && isAdmin && <span className="text-[9px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
                         </div>
                         <div className="text-[10px] font-mono text-slate-500 truncate">{e.userTag}</div>
                       </div>
