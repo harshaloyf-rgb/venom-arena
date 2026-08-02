@@ -111,6 +111,29 @@ export async function GET(req: NextRequest) {
         where: { clanTag: tag, weekStart },
         orderBy: { createdAt: 'asc' },
       });
+    } else if (!challenges.some(c => c.type === 'deposit_streak')) {
+      // Backfill: clan had 3 challenges before deposit_streak was added — create the 4th
+      const clan = await db.clan.findUnique({ where: { tag } });
+      if (clan) {
+        const resolvedTarget = clan.level * 2 + 8;
+        const resolvedReward = clan.level * 500 + 2000;
+        const resolvedDescription = `Make ${resolvedTarget} total deposits into the treasury this week (any member, any amount)`;
+        await db.clanChallenge.create({
+          data: {
+            clanTag: tag,
+            type: 'deposit_streak',
+            title: 'Deposit Streak',
+            description: resolvedDescription,
+            target: resolvedTarget,
+            reward: resolvedReward,
+            weekStart,
+          },
+        });
+        challenges = await db.clanChallenge.findMany({
+          where: { clanTag: tag, weekStart },
+          orderBy: { createdAt: 'asc' },
+        });
+      }
     }
 
     return NextResponse.json({ challenges });
