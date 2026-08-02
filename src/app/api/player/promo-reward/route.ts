@@ -26,32 +26,41 @@ export async function POST(req: Request) {
 
   const playerId = session.playerId;
 
-  // Check if already claimed (DB-backed)
-  const existing = await db.promoReward.findFirst({
-    where: { playerId, code },
-  });
-  if (existing) {
-    return NextResponse.json({ error: 'You already redeemed this promo code.' }, { status: 400 });
+  // Credit chips and record redemption — duplicate check inside transaction
+  try {
+    const updated = await db.$transaction(async (tx) => {
+      // Check inside tx to prevent race condition
+      const existing = await tx.promoReward.findUnique({
+        where: { playerId_code: { playerId, code } },
+      });
+      if (existing) {
+        throw new Error('ALREADY_CLAIMED');
+      }
+
+      const player = await tx.player.update({
+        where: { id: playerId },
+        data: {
+          bankedChips: { increment: reward },
+          totalEarned: { increment: reward },
+        },
+      });
+      await tx.promoReward.create({
+        data: { playerId, code, reward },
+      });
+      return player;
+    });
+
+    return NextResponse.json({
+      player: toProfile(updated),
+      reward,
+      label: `${code} promo code`,
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === 'ALREADY_CLAIMED') {
+      return NextResponse.json({ error: 'You already redeemed this promo code.' }, { status: 400 });
+    }
+    console.error('[promo-reward] error', e);
+    return NextResponse.json({ error: 'Redemption failed.' }, { status: 500 });
   }
-
-  // Credit chips and record redemption in a transaction
-  const updated = await db.$transaction(async (tx) => {
-    const player = await tx.player.update({
-      where: { id: playerId },
-      data: {
-        bankedChips: { increment: reward },
-        totalEarned: { increment: reward },
-      },
-    });
-    await tx.promoReward.create({
-      data: { playerId, code, reward },
-    });
-    return player;
-  });
-
-  return NextResponse.json({
-    player: toProfile(updated),
-    reward,
-    label: `${code} promo code`,
-  });
 }

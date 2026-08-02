@@ -95,17 +95,7 @@ interface AdminClip {
   player: { name: string; userTag: string; country: string; level: number };
 }
 
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-}
+import { timeAgo } from '@/lib/date-utils';
 
 function PlatformBadge({ platform }: { platform: string }) {
   const p = platform.toLowerCase();
@@ -301,10 +291,6 @@ export function AdminPanel({ onToast }: AdminPanelProps) {
   const { player, refresh } = useAuth();
   const isAdmin = player?.role === 'admin';
 
-  // Access gate: admin role is already verified below; gate provides additional confirmation
-  const [gateUnlocked, setGateUnlocked] = useState(false);
-  const [accessCode, setAccessCode] = useState('');
-
   const [players, setPlayers] = useState<LeaderboardEntry[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(true);
   const [search, setSearch] = useState('');
@@ -345,52 +331,20 @@ export function AdminPanel({ onToast }: AdminPanelProps) {
   }, []);
 
   useEffect(() => {
-    if (!isAdmin || !gateUnlocked) return;
+    if (!isAdmin) return;
     void fetchPlayers();
-  }, [isAdmin, gateUnlocked, fetchPlayers]);
+  }, [isAdmin, fetchPlayers]);
 
-  // Allow access via operations code even if DB role isn't admin yet
-  // The code IS the authorization
-  if (!gateUnlocked) {
-    function handleAuthorize() {
-      const code = accessCode.trim();
-      if (code !== 'venom_admin_2024') {
-        notify('Invalid operations code.', 'error', onToast);
-        return;
-      }
-      // Auto-promote to admin if not already
-      if (!isAdmin) {
-        fetch('/api/admin/promote-self', { method: 'POST' }).catch(() => {});
-      }
-      setGateUnlocked(true);
-      notify('Admin credentials verified!', 'success', onToast);
-    }
-
+  if (!isAdmin) {
     return (
       <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 overflow-hidden max-w-md mx-auto my-12">
         <GlowBlob color="bg-rose-500/10" className="-top-12 -right-12 w-56 h-56" />
         <div className="relative text-center">
-          <Shield className="w-14 h-14 text-rose-400 mx-auto mb-3" />
-          <h3 className="text-xl font-black text-white mb-1 tracking-tight">Central Operations Gate</h3>
+          <ShieldAlert className="w-14 h-14 text-slate-600 mx-auto mb-3" />
+          <h3 className="text-xl font-black text-white mb-1 tracking-tight">Access Restricted</h3>
           <p className="text-xs text-slate-400 mb-5 leading-relaxed">
-            Access is restricted to authorized Syndicate Technical Overseers.
-            Enter your operations code to proceed.
+            This terminal is reserved for authorized administrators only.
           </p>
-          <input
-            type="password"
-            value={accessCode}
-            onChange={(e) => setAccessCode(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleAuthorize(); }}
-            placeholder="Operations Code"
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-rose-500/50 mb-3"
-          />
-          <button
-            type="button"
-            onClick={handleAuthorize}
-            className="w-full px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs uppercase tracking-wider transition"
-          >
-            Authorize Terminal
-          </button>
         </div>
       </div>
     );

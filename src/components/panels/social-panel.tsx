@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
 import { countryFlag, type InspectedPlayer } from '@/lib/game-config';
+import { timeAgo } from '@/lib/date-utils';
 import {
   GlowBlob,
   NotSignedIn,
@@ -107,13 +108,7 @@ function deriveSkinColor(tag: string): string {
   return palette[Math.abs(hash) % palette.length];
 }
 
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  if (diff < 60000) return 'just now';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-  return `${Math.floor(diff / 86400000)}d ago`;
-}
+
 
 /* ------------------------------------------------------------------ */
 /*  Sub-tab button                                                     */

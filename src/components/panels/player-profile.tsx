@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { timeAgo } from '@/lib/date-utils';
 import {
   Award,
   BadgeCheck,
@@ -330,29 +331,7 @@ function getFriendSimulatedChips(friend: Friend): number {
   return 750 + (Math.abs(h) % 9000);
 }
 
-// ---------------------------------------------------------------------------
-// timeAgo helper
-// ---------------------------------------------------------------------------
-function timeAgo(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diff = now - then;
-  if (diff < 60_000) return 'just now';
-  if (diff < 3_600_000) {
-    const mins = Math.floor(diff / 60_000);
-    return `${mins}m ago`;
-  }
-  if (diff < 86_400_000) {
-    const hrs = Math.floor(diff / 3_600_000);
-    return `${hrs}h ago`;
-  }
-  const days = Math.floor(diff / 86_400_000);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months}mo ago`;
-  const years = Math.floor(months / 12);
-  return `${years}y ago`;
-}
+
 
 // ---------------------------------------------------------------------------
 // Main component

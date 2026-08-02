@@ -4,15 +4,17 @@ import { getSession } from '@/lib/auth';
 import { HALL_OF_FAME_TIERS, CHAMPIONSHIP_PRIZE_TIERS } from '@/lib/game-config';
 
 // POST /api/hof/induct
-// Internal + authenticated endpoint for creating HOF entries.
-// Used by: milestone checker, championship finalization, and (in future) admin panel.
+// Internal + admin-only endpoint for creating HOF entries.
+// Used by: milestone checker (INTERNAL_SECRET), championship finalization (admin),
+// and future admin panel.
+// REMOVED: Session-auth self-induction was a security vulnerability.
 export async function POST(req: Request) {
-  // Accept session auth or INTERNAL_SECRET
   const session = await getSession();
   let isInternal = false;
+  let isAdmin = false;
 
-  if (session) {
-    // Authenticated player — only allow milestone type
+  if (session && session.role === 'admin') {
+    isAdmin = true;
   } else {
     const auth = req.headers.get('authorization');
     const secret = auth?.replace('Bearer ', '');
@@ -38,17 +40,6 @@ export async function POST(req: Request) {
 
   if (!userTag || !inductionType) {
     return NextResponse.json({ error: 'Missing userTag or inductionType' }, { status: 400 });
-  }
-
-  // Non-internal users can only create milestone entries for themselves
-  if (!isInternal && !session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  if (!isInternal && session?.userTag !== userTag) {
-    return NextResponse.json({ error: 'Can only create entries for yourself' }, { status: 403 });
-  }
-  if (!isInternal && inductionType !== 'milestone') {
-    return NextResponse.json({ error: 'Only milestone entries can be self-created' }, { status: 403 });
   }
 
   const player = await db.player.findUnique({
