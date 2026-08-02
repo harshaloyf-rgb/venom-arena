@@ -148,18 +148,6 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
       if (res.ok) {
         const data: PublicProfile = await res.json();
         setProfile(data);
-        if (data.lifetimeKills != null) player!.lifetimeKills = data.lifetimeKills;
-        if (data.lifetimeDeaths != null) player!.lifetimeDeaths = data.lifetimeDeaths;
-        if (data.lifetimeExtracts != null) player!.lifetimeExtracts = data.lifetimeExtracts;
-        if (data.bestStreak != null) player!.bestStreak = data.bestStreak;
-        if (data.biggestExtract != null) player!.biggestExtract = data.biggestExtract;
-        if (data.totalEarned != null) player!.totalEarned = data.totalEarned;
-        if (data.totalLost != null) player!.totalLost = data.totalLost;
-        if (data.currentSkin) player!.currentSkin = data.currentSkin;
-        if (data.currentTrail) player!.currentTrail = data.currentTrail;
-        if (data.currentDeath) player!.currentDeath = data.currentDeath;
-        if (data.currentFlag != null) player!.currentFlag = data.currentFlag;
-        if (data.currentBanner != null) player!.currentBanner = data.currentBanner;
       }
     } catch { /* silent */ } finally {
       setProfileLoading(false);
@@ -199,7 +187,24 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
 
   if (!player) return null;
 
-  const p = player;
+  const p = {
+    ...player,
+    // Enrich with public profile data (no prop mutation)
+    ...(profile ? {
+      lifetimeKills: profile.lifetimeKills ?? player.lifetimeKills,
+      lifetimeDeaths: profile.lifetimeDeaths ?? player.lifetimeDeaths,
+      lifetimeExtracts: profile.lifetimeExtracts ?? player.lifetimeExtracts,
+      bestStreak: profile.bestStreak ?? player.bestStreak,
+      biggestExtract: profile.biggestExtract ?? player.biggestExtract,
+      totalEarned: profile.totalEarned ?? player.totalEarned,
+      totalLost: profile.totalLost ?? player.totalLost,
+      currentSkin: profile.currentSkin ?? player.currentSkin,
+      currentTrail: profile.currentTrail ?? player.currentTrail,
+      currentDeath: profile.currentDeath ?? player.currentDeath,
+      currentFlag: profile.currentFlag ?? player.currentFlag,
+      currentBanner: profile.currentBanner ?? player.currentBanner,
+    } : {}),
+  };
   const flag = p.flag || countryFlag(p.country);
   const clanTag = profile?.clanTag || p.clanTag;
   const clanName = p.clanName;
@@ -320,6 +325,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
       const data = await res.json();
       if (data.isRival !== undefined) {
         setIsRival(data.isRival);
+        if (profile) setProfile({ ...profile, rivalsCount: data.rivalsCount });
         notify(
           data.isRival ? `${p.name} added as rival!` : `${p.name} removed from rivals.`,
           data.isRival ? 'error' : 'success',

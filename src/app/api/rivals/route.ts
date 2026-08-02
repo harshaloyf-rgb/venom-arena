@@ -20,8 +20,21 @@ export async function GET(req: NextRequest) {
       where: { playerId: session.playerId },
       orderBy: { lastEncounterAt: 'desc' },
     });
+    // Enrich with target player's country, bankedChips, level
+    const enriched = await Promise.all(rivals.map(async (r) => {
+      const target = await db.player.findUnique({
+        where: { userTag: r.rivalTag },
+        select: { country: true, bankedChips: true, level: true },
+      });
+      return {
+        ...r,
+        country: target?.country || 'US',
+        bankedChips: target?.bankedChips || 0,
+        level: target?.level || 1,
+      };
+    }));
     const rivalsCount = rivals.length;
-    return NextResponse.json({ rivals, rivalsCount });
+    return NextResponse.json({ rivals: enriched, rivalsCount: enriched.length });
   } catch (e) {
     console.error('[rivals/get] error', e);
     return NextResponse.json({ error: 'Failed.' }, { status: 500 });

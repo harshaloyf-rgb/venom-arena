@@ -1417,3 +1417,35 @@ Stage Summary:
 - Regular users see only real data everywhere
 - Profile shows 2 real tabs (Records & Statistics, Match History) for non-admin
 - Inspector shows real follower count, no fake logs/challenge/allies for non-admin
+
+---
+Task ID: lobby-tab-bugfix-round2
+Agent: main
+Task: Fix all runtime bugs found during pre-test verification of lobby tab changes
+
+Work Log:
+- Found CRITICAL bug: `isAdmin` and `globalRank` defined in `PlayerProfilePanel` but referenced in `ProfileContent` (separate function) — caused Profile tab to crash completely
+- Fixed by moving both variables into `ProfileContent` where they're actually used
+- Deep-scanned all 10 changed files via sub-agent for similar scope/import/API mismatch bugs
+- Fixed inspector `player-inspector-modal.tsx`: removed 12 lines of direct prop mutation (`player!.lifetimeKills = ...`), replaced with immutable spread merge using `profile` state
+- Fixed inspector: `handleRivalToggle` now updates `profile.rivalsCount` (was stale)
+- Fixed social-panel `RivalsTab`: was passing hardcoded `country: 'US', flag: '🇺🇸'` when inspecting rivals
+- Updated `/api/rivals` GET to enrich each rival with real `country`, `bankedChips`, `level` from Player table
+- Updated social-panel frontend to use enriched rival data for inspect
+- Fixed Profile rank: frontend read `d.rank` but API returns `d.globalRank` — rank always showed `…`
+- Discovered Follow/Rival APIs returned 500 due to stale Prisma client (server started before schema push) — needed full server restart
+- Reverted temporary debug error logging in follow route
+
+Browser Verification (all passed):
+- Profile tab renders with only 2 real sub-tabs (no fake admin tabs for guest)
+- Friends & Search → Rivals sub-tab shows empty state, then rival after adding
+- Player Inspector opens with real followers count (1), Follow/Unfollow toggle works
+- Add Rival button works, rival appears in Rivals tab with real data (country, chips, level)
+- Remove rival button works, list empties correctly
+- No Extraction Logs/Allies/Challenge for non-admin users
+- Zero lint errors
+
+Stage Summary:
+- 5 bugs fixed (1 critical crash, 3 data bugs, 1 API mismatch)
+- All lobby tab features now working: Profile (2 real tabs + admin gates), Inspector (follow/rival toggles, real counts), Social (Rivals tab), Follow API, Rival API
+- Root cause of original "profile not working" report: variables in wrong function scope

@@ -351,17 +351,6 @@ interface InviteStatusMessage {
 
 export function PlayerProfilePanel({ onToast }: PlayerProfilePanelProps) {
   const { player, loading, refresh, logout } = useAuth();
-  const isAdmin = player?.role === 'admin';
-  const [globalRank, setGlobalRank] = useState<string | null>(null);
-
-  // Fetch real global rank
-  useEffect(() => {
-    if (!player) return;
-    fetch('/api/leaderboard/my-rank?type=chips')
-      .then(r => r.json())
-      .then(d => { if (d.rank != null) setGlobalRank(`#${d.rank}`); })
-      .catch(() => {});
-  }, [player?.userTag]);
 
   if (loading) {
     return (
@@ -396,6 +385,18 @@ function ProfileContent({
   onRefresh,
   onLogout,
 }: ProfileContentProps) {
+  const isAdmin = player?.role === 'admin';
+  const [globalRank, setGlobalRank] = useState<string | null>(null);
+
+  // Fetch real global rank
+  useEffect(() => {
+    if (!player) return;
+    fetch('/api/leaderboard/my-rank?type=chips')
+      .then(r => r.json())
+      .then(d => { if (d.globalRank != null) setGlobalRank(`#${d.globalRank}`); })
+      .catch(() => {});
+  }, [player?.userTag]);
+
   const [activeTab, setActiveTab] = useState<ProfileTab>('stats');
 
   // Co-Op Lobby Invite modal state
