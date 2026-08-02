@@ -35,6 +35,7 @@ import { AdminPanel } from '@/components/panels/admin-panel';
 import { PlayerInspectorModal } from '@/components/panels/player-inspector-modal';
 import { GameRulesModal } from '@/components/modals/game-rules-modal';
 import { BottomTabBar } from '@/components/layout/bottom-tab-bar';
+import { ScrollTabStrip } from '@/components/layout/scroll-tab-strip';
 import { MoreMenu } from '@/components/layout/more-menu';
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
@@ -529,24 +530,18 @@ export default function Home() {
           <div className="h-full flex flex-col overflow-hidden va-fade-in">
             {/* Desktop: back button + tab strip */}
             <div className="hidden md:flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-900/40 border border-slate-800 rounded-2xl p-4 mb-6 shadow-md shrink-0">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 shrink-0">
                 <button onClick={() => setActiveTab('dashboard')} className="px-3.5 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-900 transition-all cursor-pointer flex items-center gap-1.5 shadow">
                   <ChevronLeft className="w-4 h-4 text-indigo-400" /> Lobby HQ
                 </button>
                 <div className="h-4 w-[1px] bg-slate-800 hidden sm:block" />
                 <div className="text-[10px] text-slate-500 font-mono hidden sm:block">STATION / {activeTab.toUpperCase()}</div>
               </div>
-              <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800/60 overflow-x-auto max-w-full no-scrollbar">
-                {visibleTabs.map((tab) => {
-                  const active = activeTab === tab.id;
-                  const TabIcon = tab.icon;
-                  return (
-                    <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border border-transparent shrink-0 ${active ? `${tab.activeColor} border` : 'text-slate-500 hover:text-slate-300'}`}>
-                      <TabIcon className="w-3.5 h-3.5" /><span>{tab.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              <ScrollTabStrip
+                tabs={visibleTabs.map((tab) => ({ id: tab.id, label: tab.label, icon: tab.icon, activeColor: tab.activeColor }))}
+                activeTab={activeTab}
+                onTabChange={(id) => setActiveTab(id as TabId)}
+              />
             </div>
 
             {/* Mobile: compact panel header */}

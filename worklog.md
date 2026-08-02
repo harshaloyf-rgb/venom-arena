@@ -1273,3 +1273,31 @@ Stage Summary:
 - Clans tab: fixed API response parsing (json.clans ?? json)
 - Bento scroll: switched from nested scroll container (h-dvh + overflow-y-auto on main) to standard document scroll (min-h-screen + sticky header + sticky footer)
 - Both fixes verified via agent-browser at 800x600 viewport
+
+---
+Task ID: admin-clan-controls
+Agent: main
+Task: Add admin clan management controls + fix bento tab scroller UX
+
+Work Log:
+- Analyzed user screenshot showing tab strip with 11+ tabs cut off, no scroll indicators
+- Identified admin ClansTab was read-only — zero action buttons despite overview card claiming "Disband, rename, edit"
+- Rewrote /api/admin/clans/route.ts POST handler with 8 admin actions: disband, edit, setLevel, setXp, setChips, setTotalDep, members, kick, promote
+- Rewrote admin/clans-tab.tsx with full management UI:
+  - 4 action buttons: Edit Info, Adjust Stats, View Members, Disband Clan (with confirmation)
+  - Edit modal: clan name, description, emblem fields
+  - Stats modal: level, XP, banked chips, total deposited number inputs
+  - Members list with rank badges, promote/demote, and kick buttons per member
+  - Disband requires double-click confirmation with pulsing red button
+- Created /src/components/layout/scroll-tab-strip.tsx:
+  - Scroll-aware component with left/right arrow buttons (z-20)
+  - Gradient fade overlays on edges (w-12, semi-transparent slate-900)
+  - ResizeObserver + scroll event listener for real-time overflow detection
+  - Auto-scrolls active tab into view when it changes
+- Updated page.tsx to use ScrollTabStrip replacing the old inline no-scrollbar div
+- Verified via agent-browser: arrows visible, fade gradient visible, scrolling works, reveals hidden tabs (Highlights, Claims), zero console errors, lint clean
+
+Stage Summary:
+- Admin clans tab now has full CRUD controls (edit, disband, kick, promote, adjust stats)
+- Tab scroller shows arrow buttons + fade gradient when tabs overflow
+- Users can now discover hidden tabs via visual indicators
