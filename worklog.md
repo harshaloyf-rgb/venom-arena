@@ -1301,3 +1301,61 @@ Stage Summary:
 - Admin clans tab now has full CRUD controls (edit, disband, kick, promote, adjust stats)
 - Tab scroller shows arrow buttons + fade gradient when tabs overflow
 - Users can now discover hidden tabs via visual indicators
+
+---
+Task ID: pending-task-list
+Agent: main
+Task: Compile complete pending task list from audit-engine.md, audit-api.md, GAP-ANALYSIS.md
+
+Work Log:
+- Cross-referenced all 3 audit/analysis docs against worklog to identify what's been fixed vs remaining
+- audit-engine.md: 23 findings total, 12 fixed/NA, 11 remaining
+- audit-api.md: 48 findings total, 41 fixed, 7 remaining
+- GAP-ANALYSIS.md: 5 gaps found, 0 fixed, 5 remaining
+
+Stage Summary:
+- Full pending task list compiled below. 23 items total.
+
+## PENDING TASKS (as of this session)
+
+### ENGINE — Code Quality & Physics (from audit-engine.md)
+1. [E-C04] Delete dead path-based body system from snake-engine.ts (buildInitialPath, extendPath, sampleSegments — ~85 lines)
+2. [E-H04] Segment spacing not maintained during movement — gap navigation feature doesn't work (both online + offline use simple unshift/pop, not the path system)
+3. [E-M02] Offline engine re-defines Vec2, SnakeBase, BotSession, Food types locally instead of importing from shared types — type drift risk
+4. [E-M04] Verify render-helpers.ts MAP_BASE_RADIUS/MAP_BREATH_* imports still resolve after game-config.ts cleanup
+5. [E-M05] Offline boost drop always value=1 regardless of snake size (minor, consistent with server)
+6. [E-M06] Food array grows unbounded on server — no cap on death-dropped food items
+7. [E-M08] calcDeathFood (returns tuple) vs computeDeathOrbs (returns object) — code duplication with different APIs
+8. [E-L01] WORLD_SIZE=8000 naming implies square world but game uses circular map — misleading in snapshots
+9. [E-L02] Bot personality not exposed in SnakeSnapshot — client can't render different bot behaviors visually
+10. [E-L04] online-replay-player.tsx — verify if imported anywhere, delete if dead code
+
+### API — Remaining Issues (from audit-api.md)
+11. [H-09] No validation that bankedAmount ≤ carriedChips in match/result — client could claim more chips than carried
+12. [L-01] Social-login returns 200 for unconfigured provider — should return 400/501
+13. [L-02] auth/me returns {player:null} for banned players instead of 403 + {error:'banned'}
+14. [L-06] Clan chat loads OLDEST 50 messages (orderBy asc, take 50) instead of NEWEST 50
+15. [L-08] Inconsistent error response formats — some use {error}, some use {ok:false, reason}, inconsistent status codes
+
+### GAP ANALYSIS — Rule vs Code Mismatches (from GAP-ANALYSIS.md)
+16. [GAP-1] Boost drop rate wrong: ~0.75/sec (interval=40) instead of rules' ~3/sec (needs interval=10)
+17. [GAP-2] Food collection sound never plays in online mode (playFoodCollect imported but never called)
+18. [GAP-3] Boost sound never plays (playBoost() exists in game-audio.ts but not imported/called)
+19. [GAP-4] Wall hit sound never plays (playWallHit() exists but not imported/called)
+20. [GAP-5] Star chip collection sound missing in online mode (same root cause as GAP-2)
+
+### ALREADY FIXED (for reference — do NOT redo)
+- All 8 Critical API issues (C-01 through C-08)
+- All 14 High API issues (H-01 through H-14) except H-09
+- All 18 Medium API issues (M-01 through M-18)
+- E-C01, E-C02, E-C03 (dead code deleted)
+- E-M03 (offline death score double-count)
+- E-H03, E-H05, E-H06 (stale constants removed)
+- 6 P0 security vulnerabilities (self-promote, hardcoded access code, admin visibility, etc.)
+- 5 P1 bugs (dashboard stats, race conditions, totalLost, etc.)
+- Admin clan controls (edit, disband, kick, promote, adjust stats)
+- Bento tab scroller (arrows + fade gradient + auto-scroll)
+- Bento grid scroll fix (standard document scrolling)
+- Friends & Search data contract bugs (3)
+- Clip showcase admin moderation
+- Syndicate tab full overhaul
