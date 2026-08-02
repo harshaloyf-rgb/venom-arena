@@ -705,7 +705,7 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
               </InfoCard>
 
               <InfoCard title="🌐 Global Rankings (1-to-N — All Players Worldwide)" accent="text-cyan-300">
-                <p className="mb-1.5">The main leaderboard — <strong>every player in the world</strong>, ranked #1 to N (up to 1000). This is the only tab that shows beyond top 100.</p>
+                <p className="mb-1.5">The main leaderboard — <strong>all ranked players worldwide</strong>, sorted by banked chips. Fetches the <strong>top 1000</strong> players maximum. This is the only tab that shows beyond the top 100 limit.</p>
                 <ul className="list-disc pl-4 space-y-0.5">
                   <li><strong>Top 3 Podium</strong>: A visual podium (2nd / 1st / 3rd layout) appears above the list when real data is available and 3+ players are ranked.</li>
                   <li>Columns: Rank, Move, Player (flag + name + tag), Clan Tag, Milestone Tier Badge, Chips, Status</li>
@@ -856,9 +856,17 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                 </ul>
               </InfoCard>
 
-              <InfoCard title="Auto-Refresh &amp; Live Ticker" accent="text-emerald-300">
+              <InfoCard title="Auto-Refresh" accent="text-emerald-300">
                 <p>Leaderboards auto-refresh every 30 minutes. Click the <strong>Refresh</strong> button to fetch the latest data immediately. &quot;Last sync&quot; timestamp shows when data was last fetched.</p>
-                <p className="mt-1">When real data is available, a <strong>Live Ticker</strong> bar cycles through simulated event messages (chip extractions, eliminations, tier milestones) for an esports-style atmosphere. These are cosmetic placeholders — not real-time game events.</p>
+              </InfoCard>
+
+              <InfoCard title="📺 Live Ticker Bar" accent="text-rose-300">
+                <p>At the <strong>very top</strong> of the Leaderboard panel, a small scrolling <strong>Live Ticker</strong> bar appears when real data is available. It cycles through simulated messages like &quot;A challenger from India 🇮🇳 extracted 2.5M chips!&quot; for an esports-style atmosphere.</p>
+                <ul className="list-disc pl-4 space-y-0.5 mt-1.5">
+                  <li>Messages are <strong>100% random and cosmetic</strong> — they do NOT reflect actual game events</li>
+                  <li>A new fake message appears every ~8 seconds (max 20 stored)</li>
+                  <li>Only visible when real player data exists (hidden during demo/placeholder mode)</li>
+                </ul>
               </InfoCard>
             </div>
           </Section>
