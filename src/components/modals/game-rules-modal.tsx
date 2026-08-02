@@ -5,7 +5,7 @@
  *
  * Comprehensive rules page covering ALL game mechanics, modes,
  * food, stars, collision, boost, bot AI, map, extraction, challenges,
- * HUD, lobby leaderboards, milestone badges, and FAQ.
+ * HUD, lobby leaderboards, milestone badges, agent profile, and FAQ.
  */
 
 import {
@@ -43,6 +43,7 @@ import {
   MessageSquare,
   TrendingUp,
   ScrollText,
+  UserCircle,
 } from 'lucide-react';
 import { ARENA_TIERS, PRACTICE_TIERS, MILESTONE_TIERS } from '@/lib/game-config';
 
@@ -176,6 +177,7 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                 <li>Avatar, socials, and cosmetics can be changed <strong>anytime</strong> (no cooldown)</li>
                 <li>If you try to change during a cooldown, the save will be blocked with remaining time shown</li>
               </ul>
+              <p className="mt-1.5 text-amber-200/80 text-[10px]">⚠️ Leaderboards show your <strong>current</strong> name and country (live, not historical). Your VENOM-XXXX tag remains constant across all leaderboards. See Section 16 (Agent Profile) for full details.</p>
             </InfoCard>
           </Section>
 
@@ -1180,9 +1182,119 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
           </Section>
 
           {/* ================================================================= */}
-          {/* 16. FAQ */}
+          {/* 16. AGENT PROFILE */}
           {/* ================================================================= */}
-          <Section icon={<AlertTriangle className="w-4 h-4" />} title="16. FAQ" accent="text-purple-400">
+          <Section icon={<UserCircle className="w-4 h-4" />} title="16. AGENT PROFILE" accent="text-pink-400">
+            <InfoCard title="📋 Overview" accent="text-pink-300">
+              <p className="mb-1.5">The <strong>Agent Profile</strong> (accessed via the Profile tab in the lobby) is your personal command center. It has <strong>two tabs</strong>:</p>
+              <ul className="list-disc pl-4 space-y-0.5">
+                <li><strong>Stats Tab</strong> — Your identity, stats, cosmetics, shareable cards, security settings, and account management</li>
+                <li><strong>History Tab</strong> — Your match history with filters (All, Extracted, Collided)</li>
+              </ul>
+            </InfoCard>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <InfoCard title="🆔 Identity Editor" accent="text-pink-300">
+                <p className="mb-1.5">Click the <strong>edit icon</strong> on the Stats tab to open the identity editor:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>Challenger Handle (Name):</strong> Change your display name (30-day cooldown). Remaining cooldown is shown if active</li>
+                  <li><strong>Faction Region (Country):</strong> Choose from 197 countries (7-day cooldown). Your flag updates everywhere instantly</li>
+                  <li><strong>Avatar:</strong> Upload a custom image or choose from preset avatars. No cooldown</li>
+                  <li><strong>Social Links:</strong> Add your Instagram, YouTube, and Twitch handles. Shown on your profile</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="🎮 Cosmetics Loadout" accent="text-amber-300">
+                <p className="mb-1.5">Your active cosmetic items are displayed on the Stats tab:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>Skin</strong> — Your snake&apos;s appearance</li>
+                  <li><strong>Trail</strong> — Visual effect behind your snake</li>
+                  <li><strong>Death FX</strong> — Explosion effect when you die</li>
+                  <li><strong>Flag</strong> — Custom flag cosmetic (separate from your Faction Region)</li>
+                  <li><strong>Banner</strong> — Background banner cosmetic</li>
+                  <li>All cosmetics are changeable anytime from the Cosmetics Shop</li>
+                </ul>
+              </InfoCard>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+              <InfoCard title="🪪 Profile Card &amp; Milestone Card" accent="text-violet-300">
+                <p className="mb-1.5">Generate shareable cards from your Stats tab:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>Profile Card:</strong> Shows your name, tag, country flag, level, chips, K/D, cosmetics, and social links</li>
+                  <li><strong>Milestone Card:</strong> Shows your highest milestone badge and chip progress</li>
+                  <li>Both cards can be <strong>downloaded</strong> as images, <strong>copied to clipboard</strong>, or <strong>shared</strong> via the Web Share API</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="🔐 Security Settings" accent="text-cyan-300">
+                <p className="mb-1.5">Available at the bottom of the Stats tab:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>Change Password:</strong> Registered accounts can update their password (enter current + new)</li>
+                  <li><strong>Security PIN:</strong> Set or change your 4-digit PIN. Required for password recovery</li>
+                  <li>If you have a PIN, you must enter the current one before setting a new one</li>
+                  <li>Guest accounts cannot use Security Settings (no password to recover)</li>
+                </ul>
+              </InfoCard>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+              <InfoCard title="📊 Stats Display" accent="text-emerald-300">
+                <p className="mb-1.5">The Stats tab shows your key performance metrics:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>Level &amp; XP:</strong> Current level, XP progress bar, and XP needed for next level</li>
+                  <li><strong>Chips:</strong> Banked vault balance and current buy-in arena tier</li>
+                  <li><strong>K/D Ratio:</strong> Lifetime kills, deaths, and kill/death ratio</li>
+                  <li><strong>Win Stats:</strong> Total runs, extractions, and extraction rate percentage</li>
+                  <li><strong>Account Age:</strong> Days since account creation</li>
+                  <li><strong>Milestone Tier:</strong> Current badge and next tier target</li>
+                  <li><strong>Tag &amp; Referral:</strong> Copy your VENOM-XXXX tag and referral code</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="📜 Match History Tab" accent="text-amber-300">
+                <p className="mb-1.5">Switch to the History tab to review your matches:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>Filter:</strong> All matches, Extracted only, or Collided only</li>
+                  <li>Shows arena type, score, chips won/lost, kills, duration, and timestamp</li>
+                  <li>Uses client-side cache for offline viewing, synced with server data</li>
+                  <li>Paginated — loads 25 matches at a time</li>
+                </ul>
+              </InfoCard>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+              <InfoCard title="🚀 Guest Upgrade" accent="text-emerald-300">
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Guest accounts see an <strong>upgrade banner</strong> at the top of the Stats tab</li>
+                  <li>Click to add an email and password, converting to a registered account</li>
+                  <li>All progress carries over: chips, stats, cosmetics, streaks, friends, and clan memberships</li>
+                  <li>You keep your VENOM-XXXX tag after upgrading</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="⚠️ Danger Zone — Delete Account" accent="text-rose-300">
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>At the bottom of the Stats tab: a <strong>Delete Account</strong> button</li>
+                  <li>Requires typing <strong>DELETE</strong> to confirm (double-confirmation)</li>
+                  <li>Permanently removes: chips, stats, cosmetics, friends, match history, clan memberships</li>
+                  <li><strong>This action is irreversible and cannot be recovered</strong></li>
+                </ul>
+              </InfoCard>
+            </div>
+
+            <InfoCard title="🛡️ Leaderboard Identity Integrity" accent="text-amber-300">
+              <p className="mb-1.5">Important note about how your identity appears on leaderboards:</p>
+              <ul className="list-disc pl-4 space-y-0.5">
+                <li>Leaderboards display your <strong>current</strong> Challenger Handle and Faction Region (live, not historical snapshots)</li>
+                <li>If you change your name or country, <strong>all leaderboards update immediately</strong> to show the new identity</li>
+                <li>Your <strong>VENOM-XXXX tag is always shown alongside your name</strong> — this is your permanent, unchangeable identity that links all your entries across time</li>
+                <li>The <strong>cooldowns (30 days for name, 7 days for country)</strong> limit how often identity can change, keeping leaderboards stable during ranking periods</li>
+                <li>Historical records like Hall of Fame entries snapshot your name and tag at the time of induction — those never change</li>
+              </ul>
+            </InfoCard>
+          </Section>
+
+          {/* ================================================================= */}
+          {/* 17. FAQ */}
+          {/* ================================================================= */}
+          <Section icon={<AlertTriangle className="w-4 h-4" />} title="17. FAQ" accent="text-purple-400">
             <div className="flex flex-col gap-2.5">
               <FaqItem q="Do I lose my banked vault chips if I crash?" a="No! Your banked vault chips are 100% safe. You only lose the buy-in chips carried in that specific match." />
               <FaqItem q="What is the graduated commission?" a="If ≤3 real players are in the arena, extraction is FREE (0%). If ≥4 real players, 35% commission applies (you keep 65%)." />
@@ -1224,9 +1336,16 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
               <FaqItem q="What can a Co-Leader do?" a="Co-Leaders can: claim weekly challenges, kick Viper-ranked members, and participate in all clan activities. They cannot: edit clan settings, disband the clan, promote/demote other members, or kick other Co-Leaders. Max 2 Co-Leaders per clan." />
               <FaqItem q="Can the Leader transfer leadership?" a="Yes. The Leader can transfer leadership to any Co-Leader via the crown icon on the member roster. The current Leader becomes a Co-Leader, and the selected Co-Leader becomes the new Leader. This is irreversible for that session." />
               <FaqItem q="What happens when a syndicate is disbanded?" a="All members are removed from the clan, all activity logs and challenge records are deleted, and the Treasury chips are lost. Disbanding is permanent and can only be done by the Leader." />
-              <FaqItem q="Can I change my display name?" a="Yes, but with a cooldown. Your Challenger Handle can only be changed once every 30 days to protect leaderboard integrity. Your VENOM-XXXX tag is permanent and can never be changed — it is your true identity. Go to Profile → Agent Profile → click the edit icon next to your name." />
-              <FaqItem q="Can I change my country/region?" a="Yes, with a 7-day cooldown. Your Faction Region can only be changed once every 7 days. This prevents leaderboard manipulation by repeatedly switching regions. The change takes effect immediately on leaderboards and championship standings." />
-              <FaqItem q="Why is there a cooldown on name and country changes?" a="Without cooldowns, players on the leaderboard could change their name or country to impersonate others, confuse rivals, or exploit regional/national leaderboards. The cooldown ensures leaderboard entries remain stable and trustworthy throughout each ranking period." />
+              <FaqItem q="What is the Agent Profile?" a="The Agent Profile (Profile tab in lobby) is your personal command center with two tabs. The Stats tab shows your identity, level, chips, K/D, cosmetics loadout, shareable profile/milestone cards, security settings, and account management. The History tab shows your match history with filters for All, Extracted, or Collided matches." />
+              <FaqItem q="How do I edit my name, country, avatar, or social links?" a="On the Stats tab of Agent Profile, click the edit icon. You can change: (1) Challenger Handle (30-day cooldown), (2) Faction Region / Country (7-day cooldown), (3) Avatar (upload image or pick preset — no cooldown), (4) Social links — Instagram, YouTube, Twitch (no cooldown). Click Save to apply all changes at once. If a cooldown is active, the save is blocked and remaining time is shown." />
+              <FaqItem q="What are Profile Cards and Milestone Cards?" a="On the Stats tab, you can generate shareable image cards. The Profile Card shows your name, tag, country flag, level, chips, K/D, cosmetics, and social links. The Milestone Card shows your highest milestone badge and chip progress. Both can be downloaded as images, copied to clipboard, or shared via the Web Share API." />
+              <FaqItem q="How do I change my password or Security PIN?" a="Scroll to the Security Settings card on the Stats tab. Registered accounts can change their password (enter current + new). You can also set or change your 4-digit Security PIN — this is required for password recovery. If you already have a PIN, enter the current one first. Guest accounts cannot use Security Settings." />
+              <FaqItem q="How do I upgrade from Guest to Registered?" a="Guest accounts see an upgrade banner at the top of the Stats tab. Click it to add an email and password. All progress carries over — chips, stats, cosmetics, streaks, friends, and clan memberships. You keep your VENOM-XXXX tag." />
+              <FaqItem q="Can I delete my account?" a="Yes. At the bottom of the Stats tab is a Danger Zone section with a Delete Account button. You must type &quot;DELETE&quot; to confirm, and a second confirmation dialog appears. This permanently removes all chips, stats, cosmetics, friends, match history, and clan memberships. This action is irreversible." />
+              <FaqItem q="Can I change my display name?" a="Yes, but with a 30-day cooldown. Your Challenger Handle can only be changed once every 30 days. Go to Profile → Agent Profile (Stats tab) → click the edit icon. Your VENOM-XXXX tag is permanent and can never be changed — it is your true identity on all leaderboards and records." />
+              <FaqItem q="Can I change my country/region?" a="Yes, with a 7-day cooldown. Your Faction Region can only be changed once every 7 days. Go to Profile → Agent Profile (Stats tab) → click the edit icon. The change takes effect immediately on leaderboards and championship standings. Your VENOM-XXXX tag remains the same." />
+              <FaqItem q="Why is there a cooldown on name and country changes?" a="Without cooldowns, players on the leaderboard could change their name or country to impersonate others, confuse rivals, or exploit regional/national leaderboards. The cooldown limits how often identity can change. Note: leaderboards always show your CURRENT name and country (not historical snapshots), so the cooldown keeps entries stable during ranking periods. Your permanent VENOM-XXXX tag ensures identity continuity across all leaderboards." />
+              <FaqItem q="If I change my name on the leaderboard, does my old name disappear?" a="Yes. Leaderboards display your current Challenger Handle in real-time — they do not store historical name snapshots. However, your permanent VENOM-XXXX tag is always shown alongside your name, so players can always identify you regardless of name changes. Hall of Fame entries DO snapshot your name at the time of induction — those never change." />
             </div>
           </Section>
 
