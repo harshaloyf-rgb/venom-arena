@@ -14,7 +14,7 @@ import {
 import {
   Users, Globe, UserPlus, Gift, Send, X, Check, Search, Loader2,
   Ban, ArrowUpDown, Clock, Activity, ExternalLink, Unlock,
-  Crosshair,
+  Crosshair, UserMinus, UserCheck,
 } from 'lucide-react';
 
 /* ------------------------------------------------------------------ */
@@ -26,7 +26,7 @@ interface SocialPanelProps {
   onInspectPlayer?: (p: InspectedPlayer) => void;
 }
 
-type SubTab = 'friends' | 'search' | 'gifts' | 'rivals';
+type SubTab = 'friends' | 'followers' | 'following' | 'rivals' | 'search' | 'gifts';
 
 interface FriendItem {
   id: string;
@@ -78,6 +78,21 @@ interface GiftEntry {
   createdAt: string;
   direction: 'sent' | 'received';
   player: { name: string; userTag: string };
+}
+
+interface FollowItem {
+  followerId?: string;
+  followerName?: string;
+  followerUserTag?: string;
+  followerCountry?: string;
+ followingId?: string;
+ followingName?: string;
+  followingUserTag?: string;
+  followingCountry?: string;
+ name?: string;
+  userTag?: string;
+  country?: string;
+  isFollowingBack?: boolean;
 }
 
 interface CountryOption {
@@ -162,6 +177,13 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
 
   /* ---- Recent matches state ---- */
   const [recentMatches, setRecentMatches] = useState<RecentMatch[]>([]);
+
+  /* ---- Followers / Following state ---- */
+  const [followers, setFollowers] = useState<FollowItem[]>([]);
+  const [following, setFollowing] = useState<FollowItem[]>([]);
+  const [followersLoading, setFollowersLoading] = useState(false);
+  const [followingLoading, setFollowingLoading] = useState(false);
+  const [followedBackTags, setFollowedBackTags] = useState<Set<string>>(new Set());
 
   /* ================================================================ */
   /*  Data fetchers                                                     */
@@ -276,6 +298,55 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
     } catch { /* ignore */ }
   }, []);
 
+  const fetchFollowers = useCallback(async () => {
+    setFollowersLoading(true);
+    try {
+      const res = await fetch('/api/player/follow?type=followers');
+      if (!res.ok) return;
+      const data = await res.json();
+      const items: FollowItem[] = (data.followers ?? []).map((f: Record<string, unknown>) => ({
+        followerId: (f.followerId as string) || (f.id as string) || '',
+        followerName: (f.followerName as string) || (f.name as string) || '',
+        followerUserTag: (f.followerUserTag as string) || (f.userTag as string) || '',
+        followerCountry: (f.followerCountry as string) || (f.country as string) || '',
+        name: (f.followerName as string) || (f.name as string) || '',
+        userTag: (f.followerUserTag as string) || (f.userTag as string) || '',
+        country: (f.followerCountry as string) || (f.country as string) || '',
+        isFollowingBack: (f.isFollowingBack as boolean) ?? false,
+      }));
+      setFollowers(items);
+      // Pre-populate already-followed-back tags
+      setFollowedBackTags(new Set(items.filter((i) => i.isFollowingBack).map((i) => i.userTag ?? i.followerUserTag ?? '')));
+    } catch {
+      /* silent */
+    } finally {
+      setFollowersLoading(false);
+    }
+  }, []);
+
+  const fetchFollowing = useCallback(async () => {
+    setFollowingLoading(true);
+    try {
+      const res = await fetch('/api/player/follow?type=following');
+      if (!res.ok) return;
+      const data = await res.json();
+      const items: FollowItem[] = (data.following ?? []).map((f: Record<string, unknown>) => ({
+        followingId: (f.followingId as string) || (f.id as string) || '',
+        followingName: (f.followingName as string) || (f.name as string) || '',
+        followingUserTag: (f.followingUserTag as string) || (f.userTag as string) || '',
+        followingCountry: (f.followingCountry as string) || (f.country as string) || '',
+        name: (f.followingName as string) || (f.name as string) || '',
+        userTag: (f.followingUserTag as string) || (f.userTag as string) || '',
+        country: (f.followingCountry as string) || (f.country as string) || '',
+      }));
+      setFollowing(items);
+    } catch {
+      /* silent */
+    } finally {
+      setFollowingLoading(false);
+    }
+  }, []);
+
   /* ---- Effects ---- */
 
   useEffect(() => { fetchFriends(); fetchRecentMatches(); }, [fetchFriends, fetchRecentMatches]);
@@ -286,6 +357,10 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
     if (sub !== 'gifts') return;
     fetchGiftHistory(giftHistoryFilter);
   }, [sub, giftHistoryFilter, fetchGiftHistory]);
+
+  useEffect(() => { if (sub === 'followers') fetchFollowers(); }, [sub, fetchFollowers]);
+
+  useEffect(() => { if (sub === 'following') fetchFollowing(); }, [sub, fetchFollowing]);
 
   /* ---- Debounced search ---- */
   useEffect(() => {
@@ -458,6 +533,38 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
     fetchSearch(searchQuery, searchCountry, searchOffset, true);
   }
 
+  async function handleFollowBack(tag: string, name: string) {
+    try {
+      const res = await fetch('/api/player/follow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetUserTag: tag }),
+      });
+      const data = await res.json();
+      if (!res.ok) { notify(data.error || 'Failed to follow back.', 'error', onToast); return; }
+      setFollowedBackTags((prev) => new Set(prev).add(tag));
+      notify(`Now following ${name}! 🤝`, 'success', onToast);
+    } catch {
+      notify('Network error. Please try again.', 'error', onToast);
+    }
+  }
+
+  async function handleUnfollow(tag: string, name: string) {
+    try {
+      const res = await fetch('/api/player/follow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetUserTag: tag, action: 'unfollow' }),
+      });
+      const data = await res.json();
+      if (!res.ok) { notify(data.error || 'Failed to unfollow.', 'error', onToast); return; }
+      setFollowing((prev) => prev.filter((f) => (f.userTag ?? f.followingUserTag) !== tag));
+      notify(`Unfollowed ${name}.`, 'info', onToast);
+    } catch {
+      notify('Network error. Please try again.', 'error', onToast);
+    }
+  }
+
   function inspect(tag: string, name: string, country: string, level: number, chips: number, clanTag: string | null) {
     if (!onInspectPlayer) return;
     onInspectPlayer({
@@ -482,9 +589,11 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
       {/* Sub-tabs */}
       <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800/60 mb-5">
         <SubTabBtn active={sub === 'friends'} onClick={() => setSub('friends')} icon={Users} label={`My Friends (${friends.length})`} />
+        <SubTabBtn active={sub === 'followers'} onClick={() => setSub('followers')} icon={UserCheck} label={`Followers (${followers.length})`} />
+        <SubTabBtn active={sub === 'following'} onClick={() => setSub('following')} icon={UserMinus} label={`Following (${following.length})`} />
+        <SubTabBtn active={sub === 'rivals'} onClick={() => setSub('rivals')} icon={Crosshair} label="Rivals" />
         <SubTabBtn active={sub === 'search'} onClick={() => setSub('search')} icon={Globe} label="Search Players" />
         <SubTabBtn active={sub === 'gifts'} onClick={() => setSub('gifts')} icon={Gift} label="Gift History" />
-        <SubTabBtn active={sub === 'rivals'} onClick={() => setSub('rivals')} icon={Crosshair} label="Rivals" />
       </div>
 
       {/* Add friend bar */}
@@ -695,6 +804,103 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
         </div>
       )}
 
+      {/* ==================== FOLLOWERS TAB ==================== */}
+      {sub === 'followers' && (
+        <div className="space-y-3">
+          {followersLoading ? (
+            <PanelSkeleton count={4} />
+          ) : followers.length === 0 ? (
+            <div className="p-6 rounded-xl border border-slate-800 bg-slate-950/60 text-center">
+              <UserCheck className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+              <h4 className="text-sm font-bold text-white">No Followers Yet</h4>
+              <p className="text-xs text-slate-400 mt-1">
+                When other players follow you, they will appear here.
+              </p>
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll rounded-2xl border border-slate-800/60 bg-slate-950/80">
+              {followers.map((f) => {
+                const tag = f.userTag ?? f.followerUserTag ?? '';
+                const name = f.name ?? f.followerName ?? '';
+                const country = f.country ?? f.followerCountry ?? '';
+                const alreadyFollowing = followedBackTags.has(tag);
+                return (
+                  <li key={f.followerId ?? tag} className="px-4 py-3 flex items-center justify-between gap-3 hover:bg-slate-900/40 transition-colors">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0 bg-slate-800/60 border border-slate-700/60" aria-hidden>
+                        {countryFlag(country)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-white text-sm truncate">{name}</div>
+                        <div className="text-[10px] font-mono text-slate-500">#{tag}</div>
+                      </div>
+                    </div>
+                    {alreadyFollowing ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 rounded-full">
+                        <Check className="w-3 h-3" /> Following
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleFollowBack(tag, name)}
+                        className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-violet-600/20 border border-violet-500/40 text-violet-300 hover:bg-violet-600 hover:text-white transition flex items-center gap-1"
+                      >
+                        <UserPlus className="w-3 h-3" /> Follow Back
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* ==================== FOLLOWING TAB ==================== */}
+      {sub === 'following' && (
+        <div className="space-y-3">
+          {followingLoading ? (
+            <PanelSkeleton count={4} />
+          ) : following.length === 0 ? (
+            <div className="p-6 rounded-xl border border-slate-800 bg-slate-950/60 text-center">
+              <UserMinus className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+              <h4 className="text-sm font-bold text-white">Not Following Anyone</h4>
+              <p className="text-xs text-slate-400 mt-1">
+                Follow players from the Followers tab or inspect their profiles.
+              </p>
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll rounded-2xl border border-slate-800/60 bg-slate-950/80">
+              {following.map((f) => {
+                const tag = f.userTag ?? f.followingUserTag ?? '';
+                const name = f.name ?? f.followingName ?? '';
+                const country = f.country ?? f.followingCountry ?? '';
+                return (
+                  <li key={f.followingId ?? tag} className="px-4 py-3 flex items-center justify-between gap-3 hover:bg-slate-900/40 transition-colors">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0 bg-slate-800/60 border border-slate-700/60" aria-hidden>
+                        {countryFlag(country)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-white text-sm truncate">{name}</div>
+                        <div className="text-[10px] font-mono text-slate-500">#{tag}</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleUnfollow(tag, name)}
+                      className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-rose-600/10 border border-rose-500/30 text-rose-300 hover:bg-rose-600 hover:text-white transition flex items-center gap-1"
+                    >
+                      <UserMinus className="w-3 h-3" /> Unfollow
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+
       {/* ==================== SEARCH TAB ==================== */}
       {sub === 'search' && (
         <div className="space-y-3">
@@ -886,6 +1092,22 @@ function RivalsTab({ onToast, onInspectPlayer }: { onToast?: ToastFn; onInspectP
     }
   }
 
+  async function handleRivalFollowBack(rival: { rivalTag: string; rivalName: string }) {
+    try {
+      const res = await fetch('/api/player/follow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetUserTag: rival.rivalTag }),
+      });
+      const data = await res.json();
+      if (data.isFollowing) {
+        notify(`Now following ${rival.rivalName}!`, 'success', onToast);
+      }
+    } catch {
+      notify('Failed to follow player.', 'error', onToast);
+    }
+  }
+
   if (loading) return <PanelSkeleton count={3} />;
 
   if (rivals.length === 0) {
@@ -936,11 +1158,18 @@ function RivalsTab({ onToast, onInspectPlayer }: { onToast?: ToastFn; onInspectP
                   <span className="text-rose-400">L:{r.timesKilledYou}</span>
                 </div>
                 <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${winRate >= 50 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>{winRate}% WR</span>
-                <button
-                  type="button"
-                  onClick={() => handleRemove(r)}
-                  className="text-[9px] text-slate-500 hover:text-rose-400 transition"
-                >Remove</button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleRivalFollowBack(r)}
+                    className="text-[9px] text-violet-400 hover:text-violet-300 transition flex items-center gap-0.5"
+                  >+Friend</button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemove(r)}
+                    className="text-[9px] text-slate-500 hover:text-rose-400 transition"
+                  >Remove</button>
+                </div>
               </div>
             </li>
           );
