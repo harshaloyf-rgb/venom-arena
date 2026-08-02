@@ -695,17 +695,23 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
               <InfoCard title="🏆 Summit — World Cup (Top 100 Country Champions)" accent="text-amber-300">
                 <p className="mb-1.5">Shows the <strong>#1 ranked player from each country</strong>, sorted by banked chips. Only one champion per nation — like the Olympics.</p>
                 <ul className="list-disc pl-4 space-y-0.5">
-                  <li>Columns: Rank, Country Champion (name + tag), Clan Tag, Nation (flag + name), Chips, Championship Status</li>
+                  <li>Columns: Rank, Move, Country Champion (name + tag), Clan Tag, Nation (flag + name), Chips, Status</li>
+                  <li><strong>Move column:</strong> Shows rank movement (up/down/unchanged) since last refresh</li>
+                  <li><strong>HOF badge (🏆):</strong> Players in the Hall of Fame get a gold Award icon next to their name</li>
+                  <li><strong>Status column:</strong> Championship prize tier (e.g. &quot;👑 World Champion&quot; for #1, &quot;🥈 Elite 10&quot; for #2-10)</li>
                   <li>Tie-break applies: if two country champions have equal chips, higher level wins, then earlier join date.</li>
                   <li>Shows <strong>top 100</strong> country champions.</li>
                 </ul>
               </InfoCard>
 
               <InfoCard title="🌐 Global Rankings (1-to-N — All Players Worldwide)" accent="text-cyan-300">
-                <p className="mb-1.5">The main leaderboard — <strong>every player in the world</strong>, ranked #1 to N. This is the only tab that shows beyond top 100.</p>
+                <p className="mb-1.5">The main leaderboard — <strong>every player in the world</strong>, ranked #1 to N (up to 1000). This is the only tab that shows beyond top 100.</p>
                 <ul className="list-disc pl-4 space-y-0.5">
-                  <li><strong>Top 3 Podium</strong>: A visual podium (2nd / 1st / 3rd layout) appears above the list when real data is available.</li>
-                  <li>Columns: Rank, Player (flag + name + tag), Clan Tag, Milestone Tier Badge, Chips, Championship Status</li>
+                  <li><strong>Top 3 Podium</strong>: A visual podium (2nd / 1st / 3rd layout) appears above the list when real data is available and 3+ players are ranked.</li>
+                  <li>Columns: Rank, Move, Player (flag + name + tag), Clan Tag, Milestone Tier Badge, Chips, Status</li>
+                  <li><strong>Move column:</strong> Shows rank movement (up/down/unchanged) since last refresh</li>
+                  <li><strong>HOF badge (🏆):</strong> Players in the Hall of Fame get a gold Award icon next to their name</li>
+                  <li><strong>Status column:</strong> Championship prize tier for top 100 players</li>
                   <li>Tie-break badges appear on tied rows (see tie-break rules above).</li>
                   <li>Your row is highlighted with a <strong>&quot;YOU&quot; badge</strong> if visible.</li>
                 </ul>
@@ -714,7 +720,10 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
               <InfoCard title="📍 National Rankings (Top 100 Per Country)" accent="text-violet-300">
                 <p className="mb-1.5">Choose from <strong>197 supported countries</strong> via dropdown. Shows the top 100 players from that country.</p>
                 <ul className="list-disc pl-4 space-y-0.5">
-                  <li>Columns: Rank, Challenger (name + tag), Clan Tag, Level, Chips, Championship Status</li>
+                  <li>Columns: Rank, Move, Challenger (name + tag), Clan Tag, Level, Chips, Status</li>
+                  <li><strong>Move column:</strong> Shows rank movement (up/down/unchanged) since last refresh</li>
+                  <li><strong>HOF badge (🏆):</strong> Players in the Hall of Fame get a gold Award icon next to their name</li>
+                  <li><strong>Status column:</strong> Championship prize tier for top 100 players</li>
                   <li>Defaults to your registered country. Switch anytime.</li>
                   <li>Tie-break applies: badges appear on tied rows.</li>
                 </ul>
@@ -728,7 +737,7 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                   <li>🌍 <strong>EU</strong> — UK, Germany, France, Italy, Spain, Netherlands, Poland, Sweden, Norway, Finland, and 10 more</li>
                   <li>💃 <strong>LATAM</strong> — Brazil, Argentina, Colombia, Chile, Peru</li>
                 </ul>
-                <p className="mt-1">Columns: Rank, Player, Clan Tag, Country (flag + name), Chips, Championship Status. Shows top 100 per region.</p>
+                <p className="mt-1">Columns: Rank, Move, Player (name + tag), Clan Tag, Country (flag + name), Chips, Status. <strong>HOF badge (🏆)</strong> appears next to Hall of Fame players&apos; names. <strong>Status column</strong> shows championship prize tier for top 100. Shows top 100 per region.</p>
               </InfoCard>
 
               <InfoCard title="🏅 Milestone Badge System — What Are These Badges?" accent="text-yellow-300">
@@ -809,7 +818,7 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                   <li>🔮 <strong>Diamond Warlord</strong> — 50 Lakh (5M+) banked chips</li>
                   <li>👑 <strong>Omega Legend</strong> — 1 Crore (10M+) banked chips</li>
                 </ul>
-                <p className="mt-1">Columns: Rank, Player, Clan Tag, Country (flag + name), Chips. The first player in each non-Rookie tier gets a &quot;👑 FIRST&quot; badge. Shows top 100 per tier.</p>
+                <p className="mt-1">Columns: Rank, Move, Player (name + tag), Clan Tag, Country (flag + name), Chips. <strong>No Status column</strong> on this tab. <strong>HOF badge (🏆)</strong> appears next to Hall of Fame players&apos; names. The first player in each non-Rookie tier gets a &quot;👑 FIRST&quot; badge. Shows top 100 per tier.</p>
               </InfoCard>
 
               <InfoCard title="📊 Milestone History — Your Achievement Timeline" accent="text-amber-300">
@@ -824,28 +833,32 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
               </InfoCard>
 
               <InfoCard title="🏆 Championship Prize Badges on Rows" accent="text-yellow-300">
-                <p>On Summit and Global tabs, players in the top 100 earn a <strong>Championship Prize badge</strong> based on their rank:</p>
+                <p>On Summit, Global, National, and Regional tabs, players in the top 100 earn a <strong>Championship Prize badge</strong> in the Status column based on their rank:</p>
                 <ul className="list-disc pl-4 space-y-0.5">
                   <li><strong>Rank #1</strong> — &quot;👑 World Champion&quot; (gold)</li>
                   <li><strong>Rank #2-10</strong> — &quot;🥈 Elite 10&quot; (silver)</li>
                   <li><strong>Rank #11-50</strong> — &quot;🥉 Masters 50&quot; (bronze)</li>
                   <li><strong>Rank #51-100</strong> — &quot;🛡️ Qualifier 100&quot; (slate)</li>
                 </ul>
-                <p className="mt-1">These badges connect the Leaderboard system to the Championship system — top-ranked players qualify for tournament events.</p>
+                <p className="mt-1">These badges connect the Leaderboard system to the Championship system — top-ranked players qualify for tournament events. The <strong>Tiers tab does not show</strong> Status badges.</p>
               </InfoCard>
 
               <InfoCard title="🔍 Search &amp; Player Inspector" accent="text-indigo-300">
-                <p><strong>Search:</strong> Every tab has a search box. Type a player name, tag, or clan tag to filter the visible list in real-time.</p>
-                <p className="mt-1.5"><strong>Player Inspector:</strong> Click any player row to open their profile inspector showing name, country, chips, level, clan, and their rank from the leaderboard.</p>
+                <p><strong>Search:</strong> A search box at the top lets you filter the visible list in real-time. Type a player name, VENOM tag, or clan tag to find specific players.</p>
+                <p className="mt-1.5"><strong>Player Inspector:</strong> Click any player row to open their profile inspector showing name, country, chips, level, clan, milestone badge, and their rank from the leaderboard.</p>
               </InfoCard>
 
               <InfoCard title="Empty Boards &amp; Demo Data" accent="text-slate-300">
-                <p>If no real players appear for a view (e.g., no players from a specific country, or no one has reached a tier yet), <strong>3 demo entries</strong> appear with a grey <strong>&quot;DEMO&quot; badge</strong> on each row. The header also shows &quot;· Showing demo data&quot;. This is temporary — once real players qualify, the demo rows disappear.</p>
+                <p>If no real players appear for a view (e.g., no players from a specific country, or no one has reached a tier yet), <strong>3 demo entries</strong> appear as placeholders so you can see what the board looks like. This is temporary — once real players qualify, the demo rows disappear.</p>
+                <ul className="list-disc pl-4 space-y-0.5 mt-1.5">
+                  <li><strong>Admin users</strong> see a &quot;DEMO&quot; label on each demo row and a &quot;· Showing demo data&quot; note in the header</li>
+                  <li><strong>Non-admin users</strong> see demo rows without any DEMO label, and the header shows &quot;No players ranked yet&quot;</li>
+                </ul>
               </InfoCard>
 
               <InfoCard title="Auto-Refresh &amp; Live Ticker" accent="text-emerald-300">
                 <p>Leaderboards auto-refresh every 30 minutes. Click the <strong>Refresh</strong> button to fetch the latest data immediately. &quot;Last sync&quot; timestamp shows when data was last fetched.</p>
-                <p className="mt-1">When real data is available, a <strong>Live Ticker</strong> bar cycles through recent in-game events (chip extractions, eliminations, tier milestones) for an esports-style feel.</p>
+                <p className="mt-1">When real data is available, a <strong>Live Ticker</strong> bar cycles through simulated event messages (chip extractions, eliminations, tier milestones) for an esports-style atmosphere. These are cosmetic placeholders — not real-time game events.</p>
               </InfoCard>
             </div>
           </Section>
@@ -1313,7 +1326,7 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
               <FaqItem q="Can I lose my milestone badge?" a="Yes. Your badge is calculated from your current banked chip balance in real-time. If you buy into an arena with a high buy-in and die (losing those chips), your banked balance may drop below your tier threshold, causing a downgrade. Only extracted chips count!" />
               <FaqItem q="How does tie-breaking work on the leaderboard?" a="When two players have the same banked chips, the system checks: (1) Higher level wins. (2) If still tied, the player who joined the game earlier wins (veteran advantage). You&apos;ll see a visible badge on tied rows — &quot;⚔ Lower Lv&quot; if they lost on level, or &quot;🕐 Joined Later&quot; if they lost on join date. This applies on every tab." />
               <FaqItem q="What is the Milestone History section?" a="It&apos;s a collapsible panel above the leaderboard tabs that shows your personal tier achievement timeline. Each milestone you&apos;ve reached displays the badge, chips you had when you achieved it, and the exact date/time (UTC). A progress bar shows how many of the 6 tiers you&apos;ve unlocked, and a &quot;Next milestone&quot; hint tells you what to aim for. If you haven&apos;t achieved any milestones yet, demo data is shown as a preview." />
-              <FaqItem q="How does Find Me work?" a="Each leaderboard tab has its own Find Me button. Click it and the system checks if you&apos;re on the current visible list. If yes, it scrolls to your row and highlights it. If not (e.g., you&apos;re viewing a different country), a Rank Summary Card appears showing your Global, National, and Regional ranks, chips, level, clan, and milestone history." />
+              <FaqItem q="How does Find Me work?" a="Each leaderboard tab has its own Find Me button. Click it and the system checks if you&apos;re on the current visible list. If yes, it scrolls to your row and highlights it. If not (e.g., you&apos;re viewing a different country or tier), a Rank Summary Card appears showing your Global Rank, National Rank, Regional Rank, banked chips, level, clan tag, and milestone history. On the Summit tab, Find Me shows your National (your country) rank instead of Summit rank." />
               <FaqItem q="How do I reset my password if I forgot it?" a="Go to the Login page → click &quot;Forgot Password?&quot; → enter your registered email + 4-digit Security PIN → set a new password. This works instantly — no email verification needed. Important: you must have set a Security PIN during registration or in Profile → Security Settings. Without a PIN, password recovery is not available." />
               <FaqItem q="How do I change or set my Security PIN?" a="Go to Profile → Agent Profile → Security Settings card. If you already have a PIN, enter your current PIN first, then set a new one. If you don&apos;t have a PIN yet, you can set one without entering a current PIN. Your PIN is required for password recovery — don&apos;t forget it!" />
               <FaqItem q="How does social login (Google, Facebook, Apple) work?" a="Click the provider button on the login page. You&apos;ll be redirected to sign in with your social account. After authorization, a Venom Arena account is automatically created (or linked if your social email matches an existing account). You get 150 starter chips and a VENOM-XXXX tag just like regular registration. No separate password needed." />

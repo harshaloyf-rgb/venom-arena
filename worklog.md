@@ -102,3 +102,34 @@ Stage Summary:
 - Leaderboard name/country concern addressed: documented that leaderboards show live identity (not snapshots), VENOM-XXXX tag is the permanent identifier, HOF entries do snapshot names
 - FAQ expanded from 3 profile-related entries to 10 total
 - FAQ renumbered from 16 to 17
+
+---
+Task ID: 4
+Agent: Main
+Task: Cross-check leaderboard data and rules/guide for correctness
+
+Work Log:
+- Read full leaderboard API (route.ts) — verified query params, tie-break logic, HOF badge lookup, field selection
+- Read full leaderboard component (leaderboards.tsx, 1290 lines) — verified all 5 tabs, columns, features
+- Cross-checked every column listed in rules Section 12 against actual rendered columns per tab
+- Cross-checked championship prize badge function, demo data behavior, live ticker, search, Find Me card
+- Verified milestone tier thresholds in game-config.ts against rules table
+- Fixed 9 mismatches in rules Section 12:
+  1. Summit columns: Added missing Move column, HOF badge, Status column details
+  2. Global columns: Added missing Move column, HOF badge, Status column details, clarified "up to 1000"
+  3. National columns: Added missing Move column, HOF badge, Status column details
+  4. Regional columns: Added missing Move column, HOF badge, Status column details
+  5. Tiers columns: Added missing Move column, HOF badge, clarified "No Status column"
+  6. Championship Prize Badges: Fixed from "Summit and Global" to "Summit, Global, National, and Regional"
+  7. Demo Data: Fixed from "grey DEMO badge on each row" to explain admin-only vs non-admin behavior
+  8. Live Ticker: Changed from "recent in-game events" to "simulated event messages... cosmetic placeholders — not real-time game events"
+  9. Search & Inspector: Clarified search box location and added milestone badge to inspector description
+- Fixed 1 FAQ mismatch:
+  - "How does Find Me work?": Added that Summit tab shows National rank (not Summit rank), added clan tag and milestone history
+- Verified all fixes via agent-browser: Move column, HOF badge, Status column, simulated ticker, admin/non-admin demo behavior all render correctly
+- Lint passes cleanly
+
+Stage Summary:
+- 9 data mismatches fixed in Section 12 (Leaderboards)
+- 1 FAQ entry corrected (Find Me)
+- Rules now accurately reflect: all 5 tab columns, HOF badge, Move column, championship status on 4 tabs (not 2), demo data visibility rules, live ticker is simulated not real
