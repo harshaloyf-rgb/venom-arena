@@ -160,6 +160,18 @@ export default function Home() {
   useEffect(() => { if (player) void fetchChallenges(); }, [player, fetchChallenges]);
   useEffect(() => { if (player) void fetchPendingFriends(); }, [player, fetchPendingFriends]);
 
+  // Listen for admin panel navigation requests
+  useEffect(() => {
+    function handleAdminNav(e: Event) {
+      const tab = (e as CustomEvent).detail;
+      if (tab && typeof tab === 'string') {
+        setActiveTab(tab as TabId);
+      }
+    }
+    window.addEventListener('admin:navigate', handleAdminNav);
+    return () => window.removeEventListener('admin:navigate', handleAdminNav);
+  }, []);
+
   const handleExitGame = useCallback(
     (result?: MatchResult) => {
       setActiveArenaId(null);
