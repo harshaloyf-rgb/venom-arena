@@ -433,4 +433,69 @@ Stage Summary:
 - Pass cosmetics now visible in Shop & Lab after claiming
 - Claim All is instant (single API call) with loading state
 - Rules documentation matches actual game behavior
+
+---
+Task ID: 3-4-5-6-7-8-9-10
+Agent: Main
+Task: Phase 0+1 game server rewrite — performance optimizations + wall-death star bug fix
+
+Work Log:
+- Read full game-state.ts (1201 lines) and index.ts (1083 lines)
+- Implemented all changes in 2 files only (game-state.ts, index.ts)
+- TypeScript compilation: clean (zero errors)
+- Boot test: server initializes correctly (port-in-use in sandbox expected)
+
+### BUG FIX: Wall Death Stars
+- game-state.ts `dropStarsAtDeath`: Changed `if (chips <= 0) return` to `if (chips < 0) return`. When chips=0, each star now has value 1 (10 stars × 1 = 10 chips of value on the ground).
+- index.ts wall-death path (line 509): Removed `&& dead.carriedChips > 0` guard — real players ALWAYS drop 10 stars on wall death.
+- index.ts body/headOn path (line 522): Removed `&& dead.carriedChips > 0` guard — real players ALWAYS drop 10 stars on any death.
+- index.ts `death_food_drop` event: Added wall-death emission for real players (droppedStars=10, score=0, empty bodyPoints). Changed non-wall path to `dead.isPlayer ? 10 : 0` (was `dead.isPlayer && dead.carriedChips > 0 ? 10 : 0`).
+
+### PHASE 0a: Lazy Arena Creation
+- Removed pre-creation loop (`for (const tier of ARENA_TIERS) getOrCreateRoom(tier.id)`). Arenas now created lazily on first `join_arena`.
+- Removed unused `ARENA_TIERS` import.
+
+### PHASE 0b: Auto-Cleanup Empty Rooms
+- Added `heartbeatCount` counter to heartbeat function (runs every 15s).
+- Every 4th heartbeat (~60s): iterates rooms Map, deletes any room with 0 players AND 0 bots.
+- Logs cleanup count when rooms are removed.
+
+### PHASE 0c: Dynamic Bot Count
+- `getOrCreateRoom` already calls `ensureBots` on new room creation (unchanged).
+- Added `ensureBots(room)` call in `handleJoinArena` when player joins existing room.
+- Bot respawn on death: now checks `room.bots.size < room.arena.botsCount` before respawning.
+- `handleLeave`: no bot removal logic existed, no change needed.
+
+### PHASE 1a: Cache collectAllSnakes (Stop allocating new arrays)
+- Added `_cachedSnakes: SnakeBase[] | null` and `_realPlayerCount: number` to `ArenaRoom` interface.
+- Initialized both fields in `createArenaRoom` (null and 0).
+- Created `cacheAllSnakes(room)` function: builds array once, computes realPlayerCount in same pass.
+- Updated `collectAllSnakes` to return `room._cachedSnakes` if available (backward compat).
+- `tickRoom` now calls `cacheAllSnakes(room)` as step 1, grid rebuild uses `room._cachedSnakes!`.
+- Updated `detectCollisions`, `detectHeadOnCollisions`, `eatFood`, `recomputeLeader`, `expireChat` to use cache (`room._cachedSnakes ?? collectAllSnakes(room)`).
+- Updated `spawnBot`, `spawnRandomFood`, `tickBot` to use `room._realPlayerCount` when cache is available.
+
+### PHASE 1b: In-Place Food Removal (Swap-and-Pop)
+- Created `compactFoods(foods: Food[]): number` — O(n) in-place compaction, no array allocation.
+- Replaced `replenishFood` body: removed `room.foods.some()` check + `room.foods.filter()` with single `compactFoods()` call.
+- Increased food replenishment guard from 50 to 100 per tick.
+
+### PHASE 1c: Shared Base Snapshot + Per-Viewer Customization
+- Created `buildBaseSnapshot(room)`: builds snakes, food, leaderboard, mapRadius, commissionRate — everything EXCEPT `yourRank`. Returns `GameSnapshot` with `yourRank: 0`.
+- Kept `buildSnapshot(room, viewerId)` as deprecated wrapper delegating to `buildBaseSnapshot`.
+- Rewrote `broadcastOnce()`: calls `buildBaseSnapshot(room)` ONCE per room, then for each player computes `yourRank` from a pre-sorted active players array and emits `{ ...base, yourRank }`.
+
+### PHASE 1e: Optimized realPlayerCount
+- `room._realPlayerCount` computed during `cacheAllSnakes()` — single pass, zero extra allocation.
+- All hot-path functions use cached value instead of `[...room.players.values()].filter().length`.
+
+### Cleanup
+- Removed unused imports: `ARENA_TIERS`, `collectAllSnakes`, `randomSpawnPoint`, `buildSnapshot` from index.ts.
+- Renumbered tickRoom step comments (1-12).
+
+Stage Summary:
+- Bug fix: Wall-death stars now ALWAYS drop 10 for real players (even with 0 carriedChips, each star=1 value)
+- Phase 0: Zero memory waste at boot (lazy arenas), auto-cleanup of empty rooms, dynamic bot count
+- Phase 1: Eliminated ~6+ array allocations per tick via snake caching, eliminated filter+map food allocation via swap-and-pop, reduced snapshot builds from N×room to 1×room per broadcast cycle
+- Zero TypeScript errors, server boots correctly
 - Players are informed about XP from challenges
