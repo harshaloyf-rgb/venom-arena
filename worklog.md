@@ -360,3 +360,26 @@ Stage Summary:
 - Claimed rewards are real cosmetics that appear in Shop & Lab
 - Elite Pass purchase actually deducts 100K chips
 - Two XP paths: match play + challenge completion
+---
+Task ID: 1
+Agent: Main
+Task: Audit and update Rules, Admin Guide, and Guide Tab with real Cyber Pass documentation
+
+Work Log:
+- Found ADMIN-GUIDE.md line 136 still said 'Season pass — entirely client-side fake state. No real backend.' (OUTDATED)
+- Found game-rules-modal.tsx had NO Season Pass section at all (missing Section 18)
+- Found guide-tab.tsx had NO Season Pass mention in economy section
+- Removed Season Pass from 'What\'s NOT Server-Enforced' section in ADMIN-GUIDE.md
+- Added dedicated 'Season Pass (Cyber Pass — Genesis Season)' subsection to ADMIN-GUIDE.md with DB fields, API routes, tier details, and chip drain table row
+- Added Section 18 'CYBER PASS (SEASON PASS)' to game-rules-modal.tsx with 8 InfoCards covering: what it is, XP earning, free vs elite, claiming, unlocking elite, reward types, current season details, and tips
+- Added 6 new FAQ items to game-rules-modal.tsx: What is Cyber Pass, How to earn XP, Retroactive claiming, Season carry-over, Is Elite worth it, Where do claimed cosmetics go
+- Updated docstring to include 'cyber pass (season pass)' in the file header
+- Added 'Elite Cyber Pass' row to chip drains table in guide-tab.tsx
+- Added 'Season Pass (Cyber Pass)' subsection to guide-tab.tsx with 6 bullet points covering DB fields, tiers, API endpoints, and economy rules
+- Ran lint — clean, no errors
+- Committed and pushed to main
+
+Stage Summary:
+- 3 files updated: ADMIN-GUIDE.md, game-rules-modal.tsx, guide-tab.tsx
+- Commit: 588a8d4 'docs: update Rules, Admin Guide, and Guide Tab with real Cyber Pass info'
+- Pushed to https://github.com/harshaloyf-rgb/venom-arena.git (main)
