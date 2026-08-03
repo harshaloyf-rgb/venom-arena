@@ -55,9 +55,22 @@ export async function POST(req: NextRequest) {
 
       if (newlyClaimed.length === 0) throw new Error('NOTHING_TO_CLAIM');
 
+      // Auto-equip defaults for the highest-tier cosmetic of each type
+      const data: Record<string, unknown> = {
+        unlockedSkins: encodeSkins(unlocked),
+        [claimedField]: JSON.stringify([...claimed, ...newlyClaimed]),
+      };
+      for (const c of newCosmetics) {
+        if (c.type === 'skin' && player.currentSkin === 'skin-default') data.currentSkin = c.id;
+        else if (c.type === 'trail' && player.currentTrail === 'trail-none') data.currentTrail = c.id;
+        else if (c.type === 'death' && player.currentDeath === 'death-default') data.currentDeath = c.id;
+        else if (c.type === 'flag' && !player.currentFlag) data.currentFlag = c.id;
+        else if (c.type === 'banner' && !player.currentBanner) data.currentBanner = c.id;
+      }
+
       const updated = await tx.player.update({
         where: { id: player.id },
-        data: { unlockedSkins: encodeSkins(unlocked), [claimedField]: JSON.stringify([...claimed, ...newlyClaimed]) },
+        data,
       });
 
       return { updated, newlyClaimed, newCosmetics };

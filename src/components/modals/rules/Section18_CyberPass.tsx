@@ -17,11 +17,11 @@ export function Section18_CyberPass() {
           </ul>
         </InfoCard>
         <InfoCard title="⚡ How Do I Earn XP?" accent="text-emerald-300">
-          <p className="mb-1.5">XP is earned exclusively from <strong>successful extractions</strong> in online matches:</p>
+          <p className="mb-1.5">XP is earned from <strong>all online match outcomes</strong>:</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong>Extract safely</strong> = XP earned (amount scales with chips extracted)</li>
-            <li><strong>Die / collide</strong> = 0 XP — no pass progress from dying</li>
-            <li>Complete <strong>daily challenges</strong> for bonus XP</li>
+            <li><strong>Extract safely</strong> = XP earned (amount scales with chips extracted + kills)</li>
+            <li><strong>Die / collide</strong> = XP still earned based on score and kills before death</li>
+            <li>Complete <strong>daily challenges</strong> for bonus XP (+25 per challenge)</li>
             <li>Your player level increases as XP accumulates</li>
           </ul>
         </InfoCard>
@@ -81,7 +81,7 @@ export function Section18_CyberPass() {
         </InfoCard>
         <InfoCard title="💡 Tips" accent="text-cyan-300">
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>Focus on <strong>extracting safely</strong> — dying gives 0 XP</li>
+            <li>Every match counts — you earn XP whether you extract or die</li>
             <li>Higher arena tiers give more chips per extraction = more XP</li>
             <li>Complete <strong>daily challenges</strong> for bonus XP</li>
             <li>Free track rewards are still valuable — don&apos;t skip them!</li>

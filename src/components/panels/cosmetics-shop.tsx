@@ -40,7 +40,7 @@ import {
   Wand2,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
-import { ALL_COSMETICS, type Skin } from '@/lib/game-config';
+import { ALL_COSMETICS, PASS_FREE_COSMETICS, PASS_ELITE_COSMETICS, type Skin } from '@/lib/game-config';
 import {
   PanelSkeleton,
   NotSignedIn,
@@ -394,11 +394,18 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
   }
 
   // -- derived lists --------------------------------------------------------
-  const manufacturedSkins = ALL_COSMETICS.filter((c) => c.type === 'skin');
-  const trailCosmetics = ALL_COSMETICS.filter((c) => c.type === 'trail');
-  const deathCosmetics = ALL_COSMETICS.filter((c) => c.type === 'death');
-  const flagCosmetics = ALL_COSMETICS.filter((c) => c.type === 'flag');
-  const bannerCosmetics = ALL_COSMETICS.filter((c) => c.type === 'banner');
+  // Merge pass cosmetics that the player has already claimed (so they can re-equip)
+  const passOwnedIds: Set<string> = new Set(player?.unlockedSkins ?? []);
+  const passOwnedCosmetics = [...PASS_FREE_COSMETICS, ...PASS_ELITE_COSMETICS].filter(
+    (c) => passOwnedIds.has(c.id),
+  );
+  const allVisible = [...ALL_COSMETICS, ...passOwnedCosmetics];
+
+  const manufacturedSkins = allVisible.filter((c) => c.type === 'skin');
+  const trailCosmetics = allVisible.filter((c) => c.type === 'trail');
+  const deathCosmetics = allVisible.filter((c) => c.type === 'death');
+  const flagCosmetics = allVisible.filter((c) => c.type === 'flag');
+  const bannerCosmetics = allVisible.filter((c) => c.type === 'banner');
 
   const showPresetsTab =
     activeCategory === 'all' || activeCategory === 'presets';
