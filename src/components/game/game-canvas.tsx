@@ -41,8 +41,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { io, type Socket } from 'socket.io-client';
-import { playExtractStart, playExtractSuccess, playExtractRestart, playDeath, playFoodCollect, playKill, playBoost, playWallHit, initGameAudio, setGameAudioMuted } from '@/lib/game-audio';
+import { type Socket } from 'socket.io-client';
 import {
   AlertTriangle,
   ChevronDown,
@@ -85,7 +84,6 @@ import {
   WORLD_SIZE,
   countryFlag,
   getArenaById,
-  getCosmeticById,
 } from '@/lib/game-config';
 import type {
   ArenaLeaderboardEntry,
@@ -95,25 +93,15 @@ import type {
   SnakeSnapshot,
 } from '@/lib/types';
 
-import {
-  drawChipLabel,
-  drawExtractionRing,
-  drawFood,
-  drawFoodOrb,
-  drawFullMap,
-  drawGrid,
-  drawMapBoundary,
-  drawMinimap,
-  drawParticles,
-  drawSnake,
-  drawSnakeWithLayering,
-  drawStarCollectible,
-  getArenaRadius,
-  type FrameRenderCtx,
-  type Particle,
-} from './render-helpers';
 import { OfflineGameEngine, type OfflineExitResult, type OfflineState } from './offline-engine';
 import EndOverlay from './end-overlay';
+import type { Phase, JoystickState, EndScreenState } from './game-types';
+import { useSocketLifecycle } from './use-socket-lifecycle';
+import { useRenderLoop } from './use-render-loop';
+import { useGameInput } from './use-game-input';
+
+// Re-export EndScreenState so existing consumers (e.g. end-overlay.tsx) still work.
+export type { EndScreenState } from './game-types';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -126,79 +114,8 @@ export interface GameCanvasProps {
 }
 
 // ---------------------------------------------------------------------------
-// Socket event payload types (strictly typed — no `any`).
+// Internal types
 // ---------------------------------------------------------------------------
-
-interface JoinedPayload {
-  arenaId: string;
-  worldSize: number;
-  yourId: string;
-}
-
-type JoinErrorReason =
-  | 'insufficient_chips'
-  | 'banned'
-  | 'invalid_arena'
-  | 'already_in_match';
-
-interface JoinErrorPayload {
-  reason: JoinErrorReason;
-}
-
-interface MatchResultPayload {
-  outcome: 'extract' | 'death';
-  arenaId: string;
-  arenaName: string;
-  chipsExtracted: number;
-  kills: number;
-  score: number;
-  xpGained: number;
-  newLevel: number;
-  newBankedChips: number;
-  durationSeconds: number;
-  killerName?: string;
-  killerTag?: string;
-}
-
-interface ExtractStartPayload {
-  durationMs: number;
-}
-
-interface ExtractProgressPayload {
-  progress: number; // 0..1
-}
-
-interface ExtractFailPayload {
-  reason: string;
-}
-
-interface DeathPayload {
-  killerId?: string;
-  killerName?: string;
-  killerTag?: string;
-  killerColor?: string;
-  killerIsBot?: boolean;
-}
-
-interface ChatPayload {
-  senderId: string;
-  senderName: string;
-  senderTag: string;
-  message: string;
-}
-
-interface KickedPayload {
-  reason: string;
-}
-
-interface ServerErrorPayload {
-  message: string;
-}
-
-interface PongPayload {
-  t: number;
-  id: string;
-}
 
 interface InputPayload {
   angle: number;
@@ -206,58 +123,10 @@ interface InputPayload {
 }
 
 // ---------------------------------------------------------------------------
-// Internal helper types
-// ---------------------------------------------------------------------------
-
-type Phase = 'connecting' | 'playing' | 'ended';
-
-interface KillerInfo {
-  name?: string;
-  tag?: string;
-  color?: string;
-  isBot?: boolean;
-}
-
-interface JoystickState {
-  active: boolean;
-  pointerId: number;
-  originX: number;
-  originY: number;
-  curX: number;
-  curY: number;
-}
-
-export interface EndScreenState {
-  outcome: 'extract' | 'death';
-  killer?: KillerInfo;
-  result?: MatchResult;
-  durationSeconds: number;
-  carriedChips: number;
-  score: number;
-  /** Combined replay frames: 15s pre-death + 15s post-death. */
-  replayFrames?: GameSnapshot[];
-  /** The player's snake id — used to follow them in replay. */
-  replayMyId?: string;
-  /** Index in replayFrames array where the death occurs. */
-  replayDeathFrameIdx?: number;
-}
-
-// ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const SOCKET_PORT = 3001;
-const MAX_PARTICLES = 200; // [FIXES C10] capped particle array
 const INPUT_HEARTBEAT_MS = 200;
-const PING_INTERVAL_MS = 2500;
-const FPS_LOW_THRESHOLD = 40;
-const FPS_HIGH_THRESHOLD = 55;
-const FPS_LOW_DURATION_MS = 2000;
-const FPS_HIGH_DURATION_MS = 5000;
-const MOUSE_DEADZONE_PX = 15; // [FIXES I2] old was 5px → jittery
-const JOYSTICK_DEADZONE = 0.18;
-const JOYSTICK_MAX_RADIUS_PX = 70;
-const JOYSTICK_BOOST_MAGNITUDE = 0.6; // >60% deflection = boost
 
 // ---------------------------------------------------------------------------
 // Component
@@ -391,7 +260,7 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
   });
   const camInitRef = useRef<boolean>(false);
 
-  const particlesRef = useRef<Particle[]>([]);
+  const particlesRef = useRef<import('./render-helpers').Particle[]>([]);
   const metallicCacheRef = useRef<Map<string, CanvasGradient>>(new Map());
 
   const lowQualityRef = useRef<boolean>(false);
@@ -490,671 +359,67 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
   }, []);
 
   // =========================================================================
-  // SOCKET LIFECYCLE EFFECT (mount-once per arenaId).
-  // Wires every server event with a paired `.off(...)` cleanup, re-emits
-  // `join_arena` on every `connect`/`reconnect`, and disconnects on unmount.
-  // [FIXES C7, C8, S1, S2, S3]
+  // Extracted hooks
   // =========================================================================
-  useEffect(() => {
-    // --- Offline mode: skip Socket.IO entirely. The OfflineGameEngine
-    // (instantiated in a separate effect below) owns the game loop, rendering,
-    // input, and HUD. ---
-    if (isOffline) {
-      setPhase('playing');
-      setConnectingMsg('');
-      return;
-    }
 
-    isMountedRef.current = true;
-    let cancelled = false;
-    let localSocket: Socket | null = null;
-
-    (async () => {
-      // --- Fetch a short-lived JWT for socket auth (cookie is httpOnly) ---
-      let token: string | null = null;
-      try {
-        const res = await fetch('/api/auth/token', { cache: 'no-store' });
-        if (res.ok) {
-          const data = (await res.json()) as { token: string | null };
-          token = data.token;
-        }
-      } catch {
-        /* network error — token stays null */
-      }
-      if (cancelled || !isMountedRef.current) return;
-
-      if (!token) {
-        setConnectionError('Not authenticated. Please sign in again.');
-        setConnectingMsg('');
-        return;
-      }
-
-      // --- Connect socket.io ---
-      // Path MUST be `/`, XTransformPort MUST be in query (per Caddy gateway).
-      // Use websocket transport only to avoid polling-fallback lag.
-      const socket = io('/', {
-        transports: ['websocket'],
-        query: { XTransformPort: SOCKET_PORT },
-        auth: { token },
-        reconnection: true,
-        reconnectionAttempts: Infinity,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        timeout: 10000,
-      });
-      localSocket = socket;
-      socketRef.current = socket;
-
-      // ----- Helpers -----
-      const emitJoin = () => {
-        socket.emit('join_arena', { arenaId });
-      };
-
-      // ----- Connection lifecycle handlers -----
-      const onConnect = () => {
-        setIsReconnecting(false);
-        setConnectionError(null);
-        initGameAudio(); // Initialize Web Audio on first interaction
-        // [FIXES S1] emit join_arena on EVERY connect (including reconnects)
-        emitJoin();
-        // Reset the ping clock.
-        lastPingSentRef.current = Date.now();
-      };
-
-      const onDisconnect = () => {
-        setIsReconnecting(true);
-        // Clear stuck keys/inputs so the snake doesn't keep steering.
-        keysRef.current.clear();
-        touchBoostRef.current = false;
-        boostHoldRef.current = false;
-      };
-
-      const onConnectError = (err: Error) => {
-        // [FIXES S2] surface the error to the user instead of a black screen
-        setIsReconnecting(true);
-        setConnectionError(err?.message || 'Connection failed');
-      };
-
-      const onReconnectAttempt = (attempt: number) => {
-        setIsReconnecting(true);
-        setConnectingMsg(`Reconnecting (attempt ${attempt})…`);
-      };
-
-      // ----- Game event handlers -----
-      const onJoined = (payload: unknown) => {
-        const data = payload as JoinedPayload;
-        if (!data || typeof data.yourId !== 'string') return;
-        mySnakeIdRef.current = data.yourId;
-        startTimeRef.current = Date.now();
-        matchEndedRef.current = false;
-        killsRef.current = 0;
-        prevSnakesRef.current = [];
-        carriedRef.current = 0;
-        scoreRef.current = 0;
-        wasBoostingRef.current = false;
-        setPhase('playing');
-        setEndScreen(null);
-        setHudKills(0);
-        setHudCarried(0);
-        setHudScore(0);
-        setHudRank(1);
-        // BUILD-13: reset arena-leaderboard HUD state on (re)join.
-        setHudCommissionRate(0);
-        setHudLeaderboard([]);
-        setHudYourRank(0);
-        setHudRealPlayerCount(isOfflineModeRef.current ? 0 : 1);
-        setConnectingMsg('');
-        toast({
-          title: isOffline ? 'Practice Mode' : 'Connected',
-          description: isOffline
-            ? 'Offline training arena loaded.'
-            : 'Connected to real-time multiplayer shard!',
-        });
-      };
-
-      const onJoinError = (payload: unknown) => {
-        const data = payload as JoinErrorPayload;
-        const messages: Record<JoinErrorReason, string> = {
-          insufficient_chips: 'Not enough chips to enter this arena.',
-          banned: 'Your account has been banned.',
-          invalid_arena: 'This arena does not exist.',
-          already_in_match: 'You are already in a match.',
-        };
-        const reason = data?.reason ?? 'invalid_arena';
-        const msg = messages[reason] || 'Could not join arena.';
-        setConnectionError(msg);
-        setConnectingMsg('');
-        toast({
-          title: 'Cannot join arena',
-          description: msg,
-          variant: 'destructive',
-        });
-        // Auto-exit after a short delay so the user sees the toast.
-        safeTimeout(() => {
-          if (isMountedRef.current) onExitRef.current();
-        }, 1800);
-      };
-
-      const onSnapshot = (payload: unknown) => {
-        const data = payload as GameSnapshot;
-        if (!data || !Array.isArray(data.snakes) || !Array.isArray(data.foods)) return;
-        snapshotRef.current = data;
-        // Record frame for replay: while playing OR during post-death 15s window
-        if (phaseRef.current === 'playing' || postDeathRecordRef.current > 0) {
-          recordReplayFrame(data);
-          if (postDeathRecordRef.current > 0) {
-            postDeathRecordRef.current--;
-            if (postDeathRecordRef.current === 0) {
-              isPostDeathRef.current = false;
-            }
-          }
-        }
-
-        // --- BUILD-13: server-provided arena-wide fields (online mode) ---
-        // In offline mode these are 0 / empty — the HUD falls back to
-        // client-computed values (rank by score vs bots, leaderboard
-        // built from snakes, etc.).
-        const realPlayerCount =
-          typeof data.realPlayerCount === 'number' ? data.realPlayerCount : 0;
-        const yourRank = typeof data.yourRank === 'number' ? data.yourRank : 0;
-        const commissionRate =
-          typeof data.commissionRate === 'number' ? data.commissionRate : 0;
-        const serverLeaderboard = Array.isArray(data.arenaLeaderboard)
-          ? data.arenaLeaderboard
-          : [];
-        setHudRealPlayerCount(realPlayerCount);
-        setHudYourRank(yourRank);
-        setHudCommissionRate(commissionRate);
-
-        // --- Update HUD carried chips, score, rank, counts ---
-        const myId = mySnakeIdRef.current;
-        const me = myId ? data.snakes.find((s) => s.id === myId) : undefined;
-        if (me) {
-          // [FIXES S10] throttle setState — only when value changes
-          let starCollected = false;
-          if (me.carriedChips !== carriedRef.current) {
-            const chipGain = me.carriedChips - carriedRef.current;
-            if (chipGain > 0 && !isOfflineModeRef.current) {
-              // Star chip collected — play the golden star sound
-              playFoodCollect('star');
-              starCollected = true;
-            }
-            carriedRef.current = me.carriedChips;
-            setHudCarried(me.carriedChips);
-          }
-          if (me.score !== scoreRef.current) {
-            const scoreGain = me.score - scoreRef.current;
-            if (scoreGain > 0 && !starCollected) {
-              // Food orb collected — determine size from gain amount
-              // Skip sound if star was already collected this frame (star also adds score)
-              const orbSize = scoreGain >= 5 ? 'large' : scoreGain >= 3 ? 'medium' : 'small';
-              playFoodCollect(orbSize);
-            }
-            scoreRef.current = me.score;
-            setHudScore(me.score);
-          }
-          // Boost activation sound
-          if (me.isBoosting && !wasBoostingRef.current) {
-            playBoost();
-          }
-          wasBoostingRef.current = !!me.isBoosting;
-
-          // BUILD-13: rank computation differs by mode:
-          //  - Online (realPlayerCount > 0): server-provided yourRank
-          //    (rank by carriedChips among real players). Falls back to
-          //    score-sort if the server didn't send it.
-          //  - Offline: rank by score vs all snakes (you + bots).
-          if (realPlayerCount > 0 && yourRank > 0) {
-            setHudRank(yourRank);
-          } else {
-            const sorted = [...data.snakes].sort((a, b) => b.score - a.score);
-            const idx = sorted.findIndex((s) => s.id === myId);
-            setHudRank(idx >= 0 ? idx + 1 : 1);
-          }
-
-          // Heuristic kill detection: a snake near us last tick that vanished.
-          // Not authoritative — server's match_result.kills is the source of truth.
-          const currentIds = new Set(data.snakes.map((s) => s.id));
-          const head = me.points?.[0];
-          if (head) {
-            const prev = prevSnakesRef.current;
-            for (const s of prev) {
-              if (currentIds.has(s.id) || s.id === myId) continue;
-              const h = s.points?.[0];
-              if (!h) continue;
-              const dx = h.x - head.x;
-              const dy = h.y - head.y;
-              const dist = Math.hypot(dx, dy);
-              if (dist < 220) {
-                killsRef.current += 1;
-                setHudKills(killsRef.current);
-              }
-            }
-          }
-          prevSnakesRef.current = data.snakes.slice();
-        }
-
-        // --- BUILD-13: arena leaderboard ---
-        // Online: use server-provided top-10 real players by carriedChips.
-        // Offline: build a top-10 by score from all snakes (you + bots).
-        if (realPlayerCount > 0) {
-          setHudLeaderboard(serverLeaderboard);
-        } else {
-          const offlineBoard: ArenaLeaderboardEntry[] = [...data.snakes]
-            .sort((a, b) => b.score - a.score)
-            .slice(0, 10)
-            .map((s) => ({
-              id: s.id,
-              name: s.name,
-              userTag: s.userTag,
-              carriedChips: s.carriedChips,
-              score: s.score,
-              kills: 0,
-              isPlayer: s.id === myId,
-              country: s.country,
-            }));
-          setHudLeaderboard(offlineBoard);
-        }
-
-        // --- Active competitor counts ---
-        // BUILD-13: prefer server-reported realPlayerCount (authoritative —
-        // includes humans not currently visible). Bots counted from snapshot.
-        const realPlayers =
-          realPlayerCount > 0
-            ? realPlayerCount
-            : data.snakes.filter((s) => s.isPlayer && !s.isBot).length;
-        const bots = data.snakes.filter((s) => s.isBot).length;
-        setHudRealPlayers(realPlayers);
-        setHudBots(bots);
-      };
-
-      const onMatchResult = (payload: unknown) => {
-        const data = payload as MatchResultPayload;
-        if (!data || !data.outcome) return;
-        // [FIXES C3] idempotency guard — ignore duplicate match_result
-        if (matchEndedRef.current && matchEndedRef.current === true) {
-          // Still update the end screen with the authoritative numbers if we
-          // previously got a `death` event with placeholder stats.
-          setEndScreen((prev) => {
-            if (!prev) return prev;
-            const result: MatchResult = {
-              outcome: data.outcome,
-              arenaId: data.arenaId,
-              arenaName: data.arenaName,
-              chipsExtracted: data.chipsExtracted,
-              commission: data.commission ?? 0,
-              bankedAmount: data.bankedAmount ?? 0,
-              kills: data.kills,
-              score: data.score,
-              deaths: data.outcome === 'death' ? 1 : 0,
-              xpGained: data.xpGained,
-              newLevel: data.newLevel,
-              newBankedChips: data.newBankedChips,
-              durationSeconds: data.durationSeconds,
-              killerName: data.killerName,
-              killerTag: data.killerTag,
-            };
-            return {
-              ...prev,
-              result,
-              durationSeconds: data.durationSeconds,
-              carriedChips: prev.carriedChips,
-              score: data.score || prev.score,
-            };
-          });
-          return;
-        }
-        matchEndedRef.current = true;
-
-        // Defensive: if onDeath hasn't fired yet (e.g. event reordering),
-        // set up post-death recording here so the replay still captures 15 s
-        // after death.  The server now emits death before match_result, but
-        // we guard against edge-cases.
-        if (data.outcome === 'death' && postDeathRecordRef.current === 0) {
-          isPostDeathRef.current = true;
-          postDeathRecordRef.current = 300;
-          safeTimeout(() => {
-            const { frames: finalFrames, deathFrameIdx: finalDeathIdx } = getReplayFrames();
-            setEndScreen(prev => prev?.outcome === 'death' ? {
-              ...prev,
-              replayFrames: finalFrames,
-              replayDeathFrameIdx: finalDeathIdx,
-            } : prev);
-          }, 15500);
-        }
-
-        const result: MatchResult = {
-          outcome: data.outcome,
-          arenaId: data.arenaId,
-          arenaName: data.arenaName,
-          chipsExtracted: data.chipsExtracted,
-          commission: data.commission ?? 0,
-          bankedAmount: data.bankedAmount ?? 0,
-          kills: data.kills,
-          score: data.score,
-          deaths: data.outcome === 'death' ? 1 : 0,
-          xpGained: data.xpGained,
-          newLevel: data.newLevel,
-          newBankedChips: data.newBankedChips,
-          durationSeconds: data.durationSeconds,
-          killerName: data.killerName,
-          killerTag: data.killerTag,
-        };
-        setPhase('ended');
-        setHudKills(data.kills);
-        if (data.outcome === 'extract') playExtractSuccess();
-        setEndScreen({
-          outcome: data.outcome,
-          result,
-          durationSeconds: data.durationSeconds,
-          carriedChips: carriedRef.current,
-          score: data.score || scoreRef.current,
-          killer:
-            data.outcome === 'death' && data.killerName
-              ? { name: data.killerName, tag: data.killerTag }
-              : undefined,
-          // Attach replay frames for death
-          ...(data.outcome === 'death' ? {
-            replayFrames: getReplayFrames().frames,
-            replayMyId: mySnakeIdRef.current ?? undefined,
-            replayDeathFrameIdx: getReplayFrames().deathFrameIdx,
-          } : {}),
-        });
-        // Show level-up toast if applicable.
-        if (data.newLevel > player.level) {
-          toast({
-            title: 'Level Up!',
-            description: `LEVEL UP! You reached Level ${data.newLevel}!`,
-          });
-        }
-      };
-
-      const onExtractStart = (payload: unknown) => {
-        const data = payload as ExtractStartPayload;
-        extractActiveRef.current = true;
-        setExtracting(true);
-        setExtractProgress(0);
-        playExtractStart();
-        // Server's durationMs is informational — progress events drive the bar.
-        void data;
-      };
-
-      const onExtractProgress = (payload: unknown) => {
-        const data = payload as ExtractProgressPayload;
-        if (typeof data?.progress === 'number') {
-          setExtractProgress(Math.max(0, Math.min(1, data.progress)));
-        }
-      };
-
-      const onExtractFail = (payload: unknown) => {
-        const data = payload as ExtractFailPayload;
-        extractActiveRef.current = false;
-        setExtracting(false);
-        setExtractProgress(0);
-        toast({
-          title: 'Extraction failed',
-          description: data?.reason || 'You moved or took damage.',
-          variant: 'destructive',
-        });
-      };
-
-      const onDeath = (payload: unknown) => {
-        const data = payload as DeathPayload;
-        // [FIXES C3] idempotency — if match already ended, ignore.
-        if (matchEndedRef.current) return;
-        matchEndedRef.current = true;
-        // Wall death (no killer) gets wall-hit thud; collision death gets dramatic crash
-        if (!data?.killerName) {
-          playWallHit();
-        } else {
-          playDeath();
-        }
-        const killer: KillerInfo | undefined = data?.killerName
-          ? {
-              name: data.killerName,
-              tag: data.killerTag,
-              color: data.killerColor,
-              isBot: data?.killerIsBot ?? true,
-            }
-          : undefined;
-        const duration = Math.floor((Date.now() - startTimeRef.current) / 1000);
-
-        // Start post-death recording: 300 frames = 15 seconds at 20Hz
-        isPostDeathRef.current = true;
-        postDeathRecordRef.current = 300;
-
-        // Show death vignette for 3 seconds BEFORE showing the end screen
-        setShowDeathVignette(true);
-        if (!isOffline) {
-          toast({
-            title: 'Eliminated',
-            description: `ELIMINATED: You collided with ${data?.killerName || 'another player'}! 💀`,
-            variant: 'destructive',
-          });
-        } else {
-          toast({
-            title: 'Crashed',
-            description: 'CRASH! (Offline Practice Mode - No chips lost!)',
-          });
-        }
-
-        // Prepare end screen data (but don't show it yet)
-        const { frames: initFrames, deathFrameIdx: initDeathIdx } = getReplayFrames();
-        setEndScreen({
-          outcome: 'death',
-          killer,
-          durationSeconds: duration,
-          carriedChips: carriedRef.current,
-          score: scoreRef.current,
-          replayFrames: initFrames,
-          replayMyId: mySnakeIdRef.current ?? undefined,
-          replayDeathFrameIdx: initDeathIdx,
-        });
-
-        // After 3-second death vignette, show the end overlay
-        const DEATH_VIGNETTE_DELAY_MS = 3000;
-        safeTimeout(() => {
-          setShowDeathVignette(false);
-          setPhase('ended');
-        }, DEATH_VIGNETTE_DELAY_MS);
-
-        // After 15s post-death recording completes, update endScreen with final frames.
-        // Use safeTimeout so the callback is skipped if the component unmounts.
-        safeTimeout(() => {
-          const { frames: finalFrames, deathFrameIdx: finalDeathIdx } = getReplayFrames();
-          setEndScreen(prev => prev?.outcome === 'death' ? {
-            ...prev,
-            replayFrames: finalFrames,
-            replayDeathFrameIdx: finalDeathIdx,
-          } : prev);
-        }, 15500); // slightly more than 15s to ensure all 300 frames captured
-      };
-
-      const onChat = (payload: unknown) => {
-        const data = payload as ChatPayload;
-        if (!data || typeof data.message !== 'string') return;
-        // Mention detection — toast if message contains player's name (case-insensitive).
-        const myName = playerNameRef.current.toLowerCase();
-        if (myName && data.message.toLowerCase().includes(myName)) {
-          toast({
-            title: `${data.senderName} mentioned you`,
-            description: data.message.slice(0, 120),
-          });
-        }
-      };
-
-      const onKicked = (payload: unknown) => {
-        const data = payload as KickedPayload;
-        toast({
-          title: 'Kicked',
-          description: data?.reason || 'You were removed by an admin.',
-          variant: 'destructive',
-        });
-        safeTimeout(() => {
-          if (isMountedRef.current) onExitRef.current();
-        }, 1500);
-      };
-
-      const onServerShutdown = () => {
-        toast({
-          title: 'Server restarting',
-          description: 'The game server is going down for maintenance.',
-          variant: 'destructive',
-        });
-        safeTimeout(() => {
-          if (isMountedRef.current) onExitRef.current();
-        }, 1500);
-      };
-
-      const onError = (payload: unknown) => {
-        const data = payload as ServerErrorPayload;
-        toast({
-          title: 'Server error',
-          description: data?.message || 'An error occurred.',
-          variant: 'destructive',
-        });
-      };
-
-      const onPong = (payload: unknown) => {
-        const data = payload as PongPayload;
-        if (!data || typeof data.id !== 'string') return;
-        const sentAt = pendingPingsRef.current.get(data.id);
-        if (sentAt === undefined) return;
-        pendingPingsRef.current.delete(data.id);
-        const rtt = Date.now() - sentAt;
-        pingRef.current = rtt;
-        setPing(rtt);
-      };
-
-      // ----- Register all listeners -----
-      socket.on('connect', onConnect);
-      socket.on('disconnect', onDisconnect);
-      socket.on('connect_error', onConnectError);
-      socket.on('reconnect_attempt', onReconnectAttempt);
-      socket.on('joined', onJoined);
-      socket.on('join_error', onJoinError);
-      socket.on('snapshot', onSnapshot);
-      socket.on('match_result', onMatchResult);
-      socket.on('extract_start', onExtractStart);
-      socket.on('extract_progress', onExtractProgress);
-      socket.on('extract_fail', onExtractFail);
-      socket.on('extract_cancelled_by_steer', () => {
-        // Steering detected during extraction — progress resets to 0% but extraction continues
-        playExtractRestart();
-        toast({
-          title: '⚠ Steering Detected',
-          description: 'Extraction progress restarted! Keep moving straight.',
-          variant: 'destructive',
-        });
-      });
-      socket.on('kill_feed', (payload: unknown) => {
-        const data = payload as { victimName?: string; victimIsBot?: boolean; killerName?: string | null; killerIsBot?: boolean; cause?: string };
-        if (!data?.victimName) return;
-        const id = ++killFeedIdRef.current;
-        // Play kill sound if the player is involved (killer or victim)
-        if (data.killerName && !data.killerIsBot) {
-          playKill();
-        }
-        setKillFeed(prev => {
-          const next = [...prev, {
-            victimName: data.victimName ?? '',
-            victimIsBot: data.victimIsBot ?? false,
-            killerName: data.killerName ?? null,
-            killerIsBot: data.killerIsBot ?? false,
-            cause: data.cause ?? 'unknown',
-            id,
-          }];
-          return next.slice(-8); // Keep last 8 entries max
-        });
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-          setKillFeed(prev => prev.filter(e => e.id !== id));
-        }, 5000);
-      });
-      socket.on('death_food_drop', (payload: unknown) => {
-        const data = payload as {
-          x?: number; y?: number; score?: number;
-          bodyPoints?: Array<{ x: number; y: number }>;
-          color?: string; droppedStars?: number;
-        };
-        if (!data?.bodyPoints || data.bodyPoints.length === 0) return;
-        const arr = particlesRef.current;
-        const foodColors = ['#34d399', '#38bdf8', '#f472b6', '#fbbf24'];
-        const step = Math.max(1, Math.floor(data.bodyPoints.length / 12));
-        for (let i = 0; i < data.bodyPoints.length; i += step) {
-          const pt = data.bodyPoints[i];
-          const count = 2 + Math.floor(Math.random() * 2);
-          for (let j = 0; j < count; j++) {
-            const a = Math.random() * Math.PI * 2;
-            const sp = 40 + Math.random() * 100;
-            arr.push({
-              x: pt.x, y: pt.y,
-              vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-              life: 500 + Math.random() * 400,
-              maxLife: 900,
-              color: foodColors[Math.floor(Math.random() * foodColors.length)],
-              size: 2 + Math.random() * 3,
-            });
-          }
-        }
-        // Cap particles
-        if (arr.length > MAX_PARTICLES) arr.splice(0, arr.length - MAX_PARTICLES);
-      });
-      socket.on('death', onDeath);
-      socket.on('chat', onChat);
-      socket.on('kicked', onKicked);
-      socket.on('server_shutdown', onServerShutdown);
-      socket.on('error', onError);
-      socket.on('pong', onPong);
-    })();
-
-    return () => {
-      cancelled = true;
-      isMountedRef.current = false;
-      const s = localSocket || socketRef.current;
-      if (s) {
-        // Best-effort leave emit, then disconnect.
-        try {
-          s.emit('leave', {});
-        } catch {
-          /* ignore */
-        }
-        // [FIXES C7] explicitly remove every listener we registered
-        s.off('connect');
-        s.off('disconnect');
-        s.off('connect_error');
-        s.off('reconnect_attempt');
-        s.off('joined');
-        s.off('join_error');
-        s.off('snapshot');
-        s.off('match_result');
-        s.off('extract_start');
-        s.off('extract_progress');
-        s.off('extract_fail');
-        s.off('extract_cancelled_by_steer');
-        s.off('kill_feed');
-        s.off('death_food_drop');
-        s.off('death');
-        s.off('chat');
-        s.off('kicked');
-        s.off('server_shutdown');
-        s.off('error');
-        s.off('pong');
-        s.disconnect();
-      }
-      socketRef.current = null;
-      // Clear all tracked timers.
-      for (const id of timersRef.current) clearTimeout(id);
-      timersRef.current.clear();
-      for (const id of chatTimeoutsRef.current.values()) clearTimeout(id);
-      chatTimeoutsRef.current.clear();
-      // Cancel any pending rAF (defensive — also handled by the canvas effect).
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-    };
-  }, [arenaId, isOffline, player.level, safeTimeout, toast]);
+  useSocketLifecycle({
+    arenaId,
+    isOffline,
+    playerLevel: player.level,
+    isMountedRef,
+    socketRef,
+    rafRef,
+    snapshotRef,
+    mySnakeIdRef,
+    phaseRef,
+    matchEndedRef,
+    killsRef,
+    prevSnakesRef,
+    carriedRef,
+    scoreRef,
+    wasBoostingRef,
+    lastPingSentRef,
+    pendingPingsRef,
+    timersRef,
+    chatTimeoutsRef,
+    startTimeRef,
+    pingRef,
+    isPostDeathRef,
+    postDeathRecordRef,
+    onExitRef,
+    playerNameRef,
+    isOfflineModeRef,
+    extractActiveRef,
+    touchBoostRef,
+    boostHoldRef,
+    keysRef,
+    killFeedIdRef,
+    particlesRef,
+    setPhase,
+    setConnectingMsg,
+    setConnectionError,
+    setIsReconnecting,
+    setEndScreen,
+    setHudCarried,
+    setHudKills,
+    setHudScore,
+    setHudRank,
+    setHudCommissionRate,
+    setHudLeaderboard,
+    setHudYourRank,
+    setHudRealPlayerCount,
+    setHudRealPlayers,
+    setHudBots,
+    setExtracting,
+    setExtractProgress,
+    setShowDeathVignette,
+    setPing,
+    setKillFeed,
+    recordReplayFrame,
+    getReplayFrames,
+    safeTimeout,
+    toast,
+  });
 
   // =========================================================================
   // OFFLINE ENGINE EFFECT (BUILD-14) — practice-* arenas run entirely
@@ -1240,545 +505,52 @@ export function GameCanvas({ arenaId, player, onExit }: GameCanvasProps) {
     lastEmittedBoostRef.current = boost;
   }, []);
 
-  // =========================================================================
-  // CANVAS + RENDER LOOP EFFECT (mount-once).
-  // =========================================================================
-  useEffect(() => {
-    // Offline mode: the OfflineGameEngine owns the canvas + rAF loop.
-    if (isOffline) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d', { alpha: false });
-    if (!ctx) return;
+  useRenderLoop({
+    canvasRef,
+    isOffline,
+    isMountedRef,
+    rafRef,
+    resizeObserverRef,
+    snapshotRef,
+    mySnakeIdRef,
+    camRef,
+    camInitRef,
+    particlesRef,
+    metallicCacheRef,
+    lowQualityRef,
+    fpsAccumRef,
+    socketRef,
+    lastPingSentRef,
+    pendingPingsRef,
+    playerSkinRef,
+    minimapVisibleRef,
+    fullMapOpenRef,
+    joystickRef,
+    computeInputRef,
+    maybeEmitInput,
+    setFps,
+    setLowQuality,
+  });
 
-    // ----- DPR-aware sizing -----
-    const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2); // cap DPR at 2 for perf
-      const rect = canvas.getBoundingClientRect();
-      const w = Math.max(1, Math.floor(rect.width));
-      const h = Math.max(1, Math.floor(rect.height));
-      canvas.width = Math.floor(w * dpr);
-      canvas.height = Math.floor(h * dpr);
-      // Invalidate the metallic gradient cache (gradients are device-pixel bound).
-      metallicCacheRef.current.clear();
-    };
-    resize();
-    resizeObserverRef.current = new ResizeObserver(resize);
-    resizeObserverRef.current.observe(canvas);
-
-    // ----- FPS tracking with adaptive quality -----
-    const updateFps = (now: number) => {
-      const acc = fpsAccumRef.current;
-      acc.frames += 1;
-      if (acc.lastSecond === 0) acc.lastSecond = now;
-      const dt = now - acc.lastSecond;
-      if (dt >= 1000) {
-        const measured = (acc.frames * 1000) / dt;
-        setFps(Math.round(measured));
-        if (measured < FPS_LOW_THRESHOLD) {
-          if (acc.lowSince === 0) acc.lowSince = now;
-          if (acc.highSince !== 0) acc.highSince = 0;
-          if (now - acc.lowSince >= FPS_LOW_DURATION_MS && !lowQualityRef.current) {
-            setLowQuality(true);
-          }
-        } else if (measured > FPS_HIGH_THRESHOLD) {
-          if (acc.highSince === 0) acc.highSince = now;
-          if (acc.lowSince !== 0) acc.lowSince = 0;
-          if (now - acc.highSince >= FPS_HIGH_DURATION_MS && lowQualityRef.current) {
-            setLowQuality(false);
-          }
-        } else {
-          // Hysteresis band — don't flap.
-          acc.lowSince = 0;
-          acc.highSince = 0;
-        }
-        acc.frames = 0;
-        acc.lastSecond = now;
-      }
-    };
-
-    // ----- Particle update -----
-    const updateParticles = (dtMs: number) => {
-      const arr = particlesRef.current;
-      const dt = dtMs / 1000;
-      for (let i = arr.length - 1; i >= 0; i--) {
-        const p = arr[i];
-        p.life -= dtMs;
-        if (p.life <= 0) {
-          arr.splice(i, 1);
-          continue;
-        }
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
-        p.vx *= 0.96;
-        p.vy *= 0.96;
-      }
-      // Hard cap (defensive — spawns are already throttled).
-      if (arr.length > MAX_PARTICLES) {
-        arr.splice(0, arr.length - MAX_PARTICLES);
-      }
-    };
-
-    // ----- Main loop -----
-    let lastFrameTime = performance.now();
-    const frame = (now: number) => {
-      if (!isMountedRef.current) return;
-      rafRef.current = requestAnimationFrame(frame);
-
-      const dt = now - lastFrameTime;
-      lastFrameTime = now;
-
-      updateFps(now);
-      updateParticles(dt);
-
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const cssW = canvas.clientWidth;
-      const cssH = canvas.clientHeight;
-      if (cssW === 0 || cssH === 0) return;
-
-      // --- Clear ---
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, cssW, cssH);
-      ctx.fillStyle = '#020617'; // Deep Slate (matches arena bg)
-      ctx.fillRect(0, 0, cssW, cssH);
-
-      // --- BUILD-13: full-screen arena map overlay (M key) ---
-      // Replaces the regular scene while open. Still emits input + ping
-      // so the snake keeps moving in the background.
-      if (fullMapOpenRef.current) {
-        const fmSnap = snapshotRef.current;
-        if (fmSnap) {
-          drawFullMap({
-            ctx,
-            w: cssW,
-            h: cssH,
-            worldSize: fmSnap.worldSize ?? WORLD_SIZE,
-            // Use dynamic mapRadius from server snapshot, fallback to breathing formula
-            arenaRadius: (fmSnap.mapRadius && fmSnap.mapRadius > 0) ? fmSnap.mapRadius : getArenaRadius(now),
-            snakes: fmSnap.snakes,
-            myId: mySnakeIdRef.current ?? '',
-          });
-          maybeEmitInput(now);
-          if (now - lastPingSentRef.current >= PING_INTERVAL_MS) {
-            lastPingSentRef.current = now;
-            const s = socketRef.current;
-            if (s && s.connected) {
-              const id = `${now}-${Math.random().toString(36).slice(2, 8)}`;
-              pendingPingsRef.current.set(id, now);
-              s.emit('ping', { t: now, id });
-            }
-          }
-          return;
-        }
-      }
-
-      // --- Camera follow ---
-      const snap = snapshotRef.current;
-      const myId = mySnakeIdRef.current;
-      const mySnake = snap && myId ? snap.snakes.find((s) => s.id === myId) : undefined;
-      const head = mySnake?.points?.[0];
-      const cam = camRef.current;
-      if (head) {
-        if (!camInitRef.current) {
-          cam.x = head.x;
-          cam.y = head.y;
-          camInitRef.current = true;
-        } else {
-          // Smooth lerp
-          cam.x += (head.x - cam.x) * 0.18;
-          cam.y += (head.y - cam.y) * 0.18;
-        }
-        // Zoom based on body length: bigger snake → zoom out.
-        const len = mySnake.points.length;
-        const targetZoom = Math.max(0.6, Math.min(1.4, 1.4 - (len - 12) * 0.008));
-        cam.zoom += (targetZoom - cam.zoom) * 0.05;
-      }
-
-      // --- Build per-frame render context ---
-      const playerSkin = getCosmeticById(playerSkinRef.current);
-      const rc: FrameRenderCtx = {
-        ctx,
-        w: cssW,
-        h: cssH,
-        camX: cam.x,
-        camY: cam.y,
-        zoom: cam.zoom,
-        worldSize: snap?.worldSize ?? WORLD_SIZE,
-        lowQuality: lowQualityRef.current,
-        myId: myId ?? '',
-        now,
-        metallicCache: metallicCacheRef.current,
-        playerSkin,
-        dpr,
-      };
-
-      // --- World transform ---
-      ctx.translate(cssW / 2, cssH / 2);
-      ctx.scale(cam.zoom, cam.zoom);
-      ctx.translate(-cam.x, -cam.y);
-
-      // --- Draw world (dynamic arena boundary + grid) ---
-      // Use the server-provided dynamic mapRadius for online arenas
-      const dynamicMapRadius = snap?.mapRadius && snap.mapRadius > 0 ? snap.mapRadius : undefined;
-      const mapCenterX = snap?.mapCenterX ?? rc.worldSize / 2;
-      const mapCenterY = snap?.mapCenterY ?? rc.worldSize / 2;
-
-      if (dynamicMapRadius) {
-        // Online mode: draw grid + dynamic map boundary
-        drawGrid(rc);
-        drawMapBoundary(ctx, mapCenterX, mapCenterY, dynamicMapRadius, now);
-      } else {
-        // Fallback: fixed breathing arena
-        drawGrid(rc);
-      }
-
-      // --- Draw food ---
-      if (snap) {
-        drawFood(rc, snap.foods);
-      }
-
-      // --- Draw snakes with opacity layering (player last, on top) ---
-      if (snap) {
-        // Use drawSnakeWithLayering for opacity system:
-        // larger snakes fade to 75% when a smaller snake passes underneath
-        for (const s of snap.snakes) {
-          if (s.id !== myId) drawSnakeWithLayering(rc, s, snap.snakes);
-        }
-        if (mySnake) drawSnake(rc, mySnake);
-
-        // Draw chip labels above real player heads (NOT bots)
-        for (const s of snap.snakes) {
-          if (s.isPlayer && s.carriedChips > 0 && s.points && s.points.length > 0) {
-            const head = s.points[0];
-            drawChipLabel(ctx, head.x, head.y, s.carriedChips, s.visualRadius ?? s.size, cam.zoom);
-          }
-        }
-
-        // Draw extraction progress rings — ONLY visible to the extracting player themselves
-        for (const s of snap.snakes) {
-          if (s.isExtracting && s.extractionProgress > 0 && s.points && s.points.length > 0 && s.id === myId) {
-            const head = s.points[0];
-            drawExtractionRing(ctx, head.x, head.y, s.visualRadius ?? s.size, s.extractionProgress, cam.zoom);
-          }
-        }
-      }
-
-      // --- Draw particles ---
-      drawParticles(rc, particlesRef.current);
-
-      // --- Reset transform for screen-space drawing ---
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-      // --- Minimap (bottom-right per AUDIT-A radar) ---
-      // BUILD-13: hidden when the user toggles it off via the top-right
-      // "Collapse" button. Range clamped to 1800 so only nearby snakes
-      // render (per BUILD-13 spec). Offline mode never reaches this code
-      // path (the OfflineGameEngine owns the canvas in practice arenas).
-      if (snap && minimapVisibleRef.current) {
-        const mmSize = 96;
-        const mmX = cssW - mmSize - 12;
-        const mmY = cssH - mmSize - 12;
-        // Use dynamic mapRadius from server snapshot, fallback to breathing formula
-        const mmArenaRadius = dynamicMapRadius ?? getArenaRadius(now);
-        drawMinimap({
-          ctx,
-          x: mmX,
-          y: mmY,
-          size: mmSize,
-          worldSize: rc.worldSize,
-          arenaRadius: mmArenaRadius,
-          snakes: snap.snakes,
-          myId: myId ?? '',
-          range: 1800,
-        });
-      }
-
-      // --- Joystick (touch) ---
-      const js = joystickRef.current;
-      if (js && js.active) {
-        const dx = js.curX - js.originX;
-        const dy = js.curY - js.originY;
-        const dist = Math.min(JOYSTICK_MAX_RADIUS_PX, Math.hypot(dx, dy));
-        const ang = Math.atan2(dy, dx);
-        const stickX = js.originX + Math.cos(ang) * dist;
-        const stickY = js.originY + Math.sin(ang) * dist;
-        // Outer ring
-        ctx.beginPath();
-        ctx.arc(js.originX, js.originY, JOYSTICK_MAX_RADIUS_PX, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(129, 140, 248, 0.12)'; // indigo-400 alpha
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(129, 140, 248, 0.5)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        // Inner stick
-        ctx.beginPath();
-        ctx.arc(stickX, stickY, 24, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(129, 140, 248, 0.85)';
-        ctx.fill();
-      }
-
-      // --- Emit input (throttled) ---
-      maybeEmitInput(now);
-
-      // --- Send periodic ping ---
-      if (now - lastPingSentRef.current >= PING_INTERVAL_MS) {
-        lastPingSentRef.current = now;
-        const s = socketRef.current;
-        if (s && s.connected) {
-          const id = `${now}-${Math.random().toString(36).slice(2, 8)}`;
-          pendingPingsRef.current.set(id, now);
-          s.emit('ping', { t: now, id });
-        }
-      }
-    };
-
-    rafRef.current = requestAnimationFrame(frame);
-
-    return () => {
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
-        resizeObserverRef.current = null;
-      }
-    };
-  }, [isOffline, maybeEmitInput]);
-
-  // =========================================================================
-  // INPUT effect — mouse + keyboard + touch joystick + pointer buttons.
-  // [FIXES I1, I2, I4, I6, I9, I11, C19]
-  // =========================================================================
-  useEffect(() => {
-    // Offline mode: the OfflineGameEngine attaches its own input listeners.
-    if (isOffline) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    // ----- Compute input angle + boost from current sources -----
-    // Priority: touch joystick > keyboard > mouse.
-    // Boost fires when SPACE held OR boost button held OR joystick magnitude
-    // > 0.6 (matches original AUDIT-A boost logic + mobile joystick convention).
-    const computeAngleAndBoost = (): { angle: number | null; boost: boolean } => {
-      const spaceHeld = keysRef.current.has(' ') || keysRef.current.has('space') || boostHoldRef.current;
-      // Touch joystick
-      if (touchAngleRef.current !== null) {
-        return { angle: touchAngleRef.current, boost: touchBoostRef.current || spaceHeld };
-      }
-      // Keyboard
-      const k = keysRef.current;
-      let kx = 0;
-      let ky = 0;
-      if (k.has('w') || k.has('arrowup')) ky -= 1;
-      if (k.has('s') || k.has('arrowdown')) ky += 1;
-      if (k.has('a') || k.has('arrowleft')) kx -= 1;
-      if (k.has('d') || k.has('arrowright')) kx += 1;
-      if (kx !== 0 || ky !== 0) {
-        return { angle: Math.atan2(ky, kx), boost: spaceHeld };
-      }
-      // Mouse
-      if (mouseActiveRef.current) {
-        const rect = canvas.getBoundingClientRect();
-        const cx = rect.width / 2;
-        const cy = rect.height / 2;
-        const dx = mousePosRef.current.x - cx;
-        const dy = mousePosRef.current.y - cy;
-        const dist = Math.hypot(dx, dy);
-        if (dist > MOUSE_DEADZONE_PX) {
-          return { angle: Math.atan2(dy, dx), boost: spaceHeld || mouseLeftDownRef.current };
-        }
-      }
-      return { angle: null, boost: false };
-    };
-
-    // Expose computeAngleAndBoost to the rAF loop via a ref.
-    computeInputRef.current = computeAngleAndBoost;
-
-    // ----- Mouse -----
-    const onMouseMove = (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      mousePosRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-      mouseActiveRef.current = true;
-    };
-    const onMouseDown = (e: MouseEvent) => {
-      if (e.button === 0) mouseLeftDownRef.current = true;
-    };
-    const onMouseUp = (e: MouseEvent) => {
-      if (e.button === 0) mouseLeftDownRef.current = false;
-    };
-    const onMouseLeave = () => {
-      mouseLeftDownRef.current = false;
-      // Keep last position but mark inactive so we don't keep steering if
-      // the user moves off the canvas (e.g., onto the HUD).
-    };
-
-    // ----- Keyboard -----
-    const onKeyDown = (e: KeyboardEvent) => {
-      const k = e.key.toLowerCase();
-      // [FIXES I4] prevent default for arrows/space so the page doesn't scroll
-      if (
-        k === 'arrowup' ||
-        k === 'arrowdown' ||
-        k === 'arrowleft' ||
-        k === 'arrowright' ||
-        k === ' ' ||
-        k === 'spacebar'
-      ) {
-        e.preventDefault();
-      }
-      if (k === 'escape') {
-        if (phaseRef.current === 'ended') {
-          onExitRef.current();
-        }
-        return;
-      }
-      // Hold E to extract
-      if (k === 'e' && phaseRef.current === 'playing' && !matchEndedRef.current && !extractActiveRef.current) {
-        socketRef.current?.emit('extract', {});
-        extractActiveRef.current = true;
-      }
-      // BUILD-13: M key toggles the full-screen arena map overlay.
-      if (k === 'm' && phaseRef.current === 'playing') {
-        setFullMapOpen((prev) => !prev);
-      }
-      // Quick chat emote keys 1-5
-      if (phaseRef.current === 'playing' && ['1', '2', '3', '4', '5'].includes(k)) {
-        const emotes = [
-          'GG! 🏆',
-          'Target Spot! 🎯',
-          'Fleeing! 🏃💨',
-          'Get Ripped! 💪',
-          'Extracting soon! ⚡',
-        ];
-        const idx = parseInt(k, 10) - 1;
-        if (idx >= 0 && idx < emotes.length) {
-          socketRef.current?.emit('chat', { message: emotes[idx] });
-        }
-      }
-      // Normalize space
-      const normalized = k === 'spacebar' ? ' ' : k;
-      keysRef.current.add(normalized);
-    };
-    const onKeyUp = (e: KeyboardEvent) => {
-      const k = e.key.toLowerCase();
-      // Release E cancels extract
-      if (k === 'e' && extractActiveRef.current) {
-        socketRef.current?.emit('cancel_extract', {});
-        extractActiveRef.current = false;
-      }
-      const normalized = k === 'spacebar' ? ' ' : k;
-      keysRef.current.delete(normalized);
-    };
-    // [FIXES I9] clear keys on blur so they don't stick
-    const onBlur = () => {
-      keysRef.current.clear();
-      mouseActiveRef.current = false;
-      boostHoldRef.current = false;
-    };
-
-    // ----- Touch joystick (bottom-left quadrant of canvas) -----
-    const findJoystickTouch = (touches: TouchList): Touch | null => {
-      const rect = canvas.getBoundingClientRect();
-      for (let i = 0; i < touches.length; i++) {
-        const t = touches[i];
-        const x = t.clientX - rect.left;
-        const y = t.clientY - rect.top;
-        // Bottom-left quadrant
-        if (x < rect.width / 2 && y > rect.height / 2) {
-          return t;
-        }
-      }
-      return null;
-    };
-    const onTouchStart = (e: TouchEvent) => {
-      if (joystickRef.current) return;
-      const t = findJoystickTouch(e.touches);
-      if (!t) return;
-      e.preventDefault();
-      const rect = canvas.getBoundingClientRect();
-      joystickRef.current = {
-        active: true,
-        pointerId: t.identifier,
-        originX: t.clientX - rect.left,
-        originY: t.clientY - rect.top,
-        curX: t.clientX - rect.left,
-        curY: t.clientY - rect.top,
-      };
-    };
-    const onTouchMove = (e: TouchEvent) => {
-      const js = joystickRef.current;
-      if (!js) return;
-      let t: Touch | null = null;
-      for (let i = 0; i < e.touches.length; i++) {
-        if (e.touches[i].identifier === js.pointerId) {
-          t = e.touches[i];
-          break;
-        }
-      }
-      if (!t) return;
-      e.preventDefault();
-      const rect = canvas.getBoundingClientRect();
-      js.curX = t.clientX - rect.left;
-      js.curY = t.clientY - rect.top;
-      const dx = js.curX - js.originX;
-      const dy = js.curY - js.originY;
-      const dist = Math.hypot(dx, dy);
-      const magnitude = Math.min(1, dist / JOYSTICK_MAX_RADIUS_PX);
-      if (magnitude > JOYSTICK_DEADZONE) {
-        touchAngleRef.current = Math.atan2(dy, dx);
-        // Boost when magnitude > 0.6 (BUILD-10 spec)
-        touchBoostRef.current = magnitude > JOYSTICK_BOOST_MAGNITUDE;
-      } else {
-        touchAngleRef.current = null;
-        touchBoostRef.current = false;
-      }
-    };
-    const onTouchEnd = (e: TouchEvent) => {
-      const js = joystickRef.current;
-      if (!js) return;
-      let stillActive = false;
-      for (let i = 0; i < e.touches.length; i++) {
-        if (e.touches[i].identifier === js.pointerId) {
-          stillActive = true;
-          break;
-        }
-      }
-      if (!stillActive) {
-        joystickRef.current = null;
-        touchAngleRef.current = null;
-        touchBoostRef.current = false;
-      }
-    };
-    const onTouchCancel = (e: TouchEvent) => onTouchEnd(e);
-
-    // Wire up
-    canvas.addEventListener('mousemove', onMouseMove);
-    canvas.addEventListener('mousedown', onMouseDown);
-    canvas.addEventListener('mouseup', onMouseUp);
-    canvas.addEventListener('mouseleave', onMouseLeave);
-    canvas.addEventListener('touchstart', onTouchStart, { passive: false });
-    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
-    canvas.addEventListener('touchend', onTouchEnd);
-    canvas.addEventListener('touchcancel', onTouchCancel);
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-    window.addEventListener('blur', onBlur);
-
-    return () => {
-      canvas.removeEventListener('mousemove', onMouseMove);
-      canvas.removeEventListener('mousedown', onMouseDown);
-      canvas.removeEventListener('mouseup', onMouseUp);
-      canvas.removeEventListener('mouseleave', onMouseLeave);
-      canvas.removeEventListener('touchstart', onTouchStart);
-      canvas.removeEventListener('touchmove', onTouchMove);
-      canvas.removeEventListener('touchend', onTouchEnd);
-      canvas.removeEventListener('touchcancel', onTouchCancel);
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-      window.removeEventListener('blur', onBlur);
-    };
-  }, [isOffline]);
+  useGameInput({
+    canvasRef,
+    isOffline,
+    keysRef,
+    mousePosRef,
+    mouseActiveRef,
+    mouseLeftDownRef,
+    touchAngleRef,
+    touchBoostRef,
+    joystickRef,
+    phaseRef,
+    matchEndedRef,
+    extractActiveRef,
+    boostHoldRef,
+    socketRef,
+    onExitRef,
+    computeInputRef,
+    setFullMapOpen,
+  });
 
   // =========================================================================
   // Extract / boost button handlers (pointer events with capture).
