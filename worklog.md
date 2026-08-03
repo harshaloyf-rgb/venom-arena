@@ -383,3 +383,29 @@ Stage Summary:
 - 3 files updated: ADMIN-GUIDE.md, game-rules-modal.tsx, guide-tab.tsx
 - Commit: 588a8d4 'docs: update Rules, Admin Guide, and Guide Tab with real Cyber Pass info'
 - Pushed to https://github.com/harshaloyf-rgb/venom-arena.git (main)
+
+---
+Task ID: 5
+Agent: Main
+Task: Diagnose and fix blank screen + login failure
+
+Work Log:
+- User reported blank screen and inability to login (even as guest)
+- Found dev server not running on port 3000
+- Discovered game server (port 3001) had missing npm dependencies — ran `bun install` in mini-services/game-server
+- Started dev server — got PrismaClientValidationError: `Unknown field 'tokenVersion' for select statement on model Player`
+- Root cause: `tokenVersion` field existed in prisma/schema.prisma (line 64) but the Prisma client was out of sync
+- auth.ts line 46 selects `tokenVersion` from Player — the stale Prisma client didn't know about this field
+- This caused EVERY authenticated request to /api/auth/me to return 500
+- Login/guest login would succeed (POST 200) but the subsequent refresh() call to /api/auth/me would 500, setting player=null, kicking user back to auth screen
+- Fix: ran `bunx prisma generate` to regenerate the Prisma client
+- Verified fix: all auth APIs now return 200 (guest login, auth/me, friends/list, challenges, leaderboard, logout)
+- Verified DB integrity: 171 players, 1 clan, 485 challenges, 24 clan activities, 4 friendships, 3 purchases, 2 follows, 2 rivals — all intact
+- Started game server on port 3001 (required bun install in mini-services/game-server)
+- Note: agent-browser Chrome processes consume ~500MB memory, causing dev server OOM kills in this 3.9GB sandbox. Verified via curl instead.
+
+Stage Summary:
+- Root cause: Stale Prisma client didn't include `tokenVersion` field added in previous session
+- Fix: `bunx prisma generate` (single command)
+- All previous work preserved — zero data loss, zero code changes needed
+- Both servers running: Next.js (3000) + Game server (3001)
