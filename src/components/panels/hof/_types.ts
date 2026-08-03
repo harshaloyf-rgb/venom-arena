@@ -15,7 +15,7 @@ export type Tab = 'my-hof' | 'champions' | 'milestones' | 'ticker';
 export type CommentaryFilter = 'all' | 'extractions' | 'eliminations' | 'milestones';
 
 export interface HallOfFameProps {
-  onToast?: import('./_panel-primitives').ToastFn;
+  onToast?: import('../_panel-primitives').ToastFn;
   onInspectPlayer?: (p: InspectedPlayer) => void;
 }
 

@@ -28,6 +28,7 @@ import { GiftsTab } from './social/gifts-tab';
 // Types & helpers
 import {
   deriveSkinColor,
+  type SocialPanelProps,
   type SubTab,
   type FriendItem,
   type PendingRequestItem,

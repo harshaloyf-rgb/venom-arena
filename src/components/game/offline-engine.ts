@@ -62,8 +62,8 @@ import type {
   OfflineState,
   OfflineExitResult,
   OfflineEngineRef,
-  SpatialHashGrid,
 } from './offline/offline-types';
+import { SpatialHashGrid } from './offline/offline-types';
 import {
   MAX_PARTICLES,
   MOUSE_DEADZONE_PX,
@@ -2113,3 +2113,6 @@ function computeDeathFoodDrop(
 
   return result;
 }
+
+// Re-export types needed by consumers (game-canvas.tsx)
+export type { OfflineState, OfflineExitResult } from './offline/offline-types';
