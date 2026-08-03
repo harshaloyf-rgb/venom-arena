@@ -34,6 +34,11 @@ export interface PlayerProfile {
   currentFlag: string | null;
   currentBanner: string | null;
 
+  // Season Pass
+  hasElitePass: boolean;
+  passClaimedFree: number[];
+  passClaimedElite: number[];
+
   clanTag: string | null;
   clanRank: string | null;
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { utcLastMonday, utcToday, utcYesterday, utcMonday } from '@/lib/date-utils';
+import { levelFromXp } from '@/lib/game-config';
 
 
 
@@ -493,11 +494,22 @@ export async function POST(req: NextRequest) {
       const bonusReward = Math.floor(baseReward * (multiplier - 1));
       const totalReward = baseReward + bonusReward;
 
+      // XP bonus: 25 XP per challenge claim (helps progress Season Pass)
+      const xpBonus = 25;
+
+      // Calculate new level from XP bonus
+      const p = await tx.player.findUnique({ where: { id: playerId }, select: { xp: true, level: true } });
+      if (!p) throw new Error('player_missing');
+      const newXp = p.xp + xpBonus;
+      const newLevel = Math.max(p.level, levelFromXp(newXp));
+
       const updated = await tx.player.update({
         where: { id: playerId },
         data: {
           bankedChips: { increment: totalReward },
           totalEarned: { increment: totalReward },
+          xp: { increment: xpBonus },
+          level: newLevel,
         },
       });
 
@@ -506,7 +518,7 @@ export async function POST(req: NextRequest) {
         data: { claimed: true },
       });
 
-      return { totalReward, baseReward, bonusReward, newBankedChips: updated.bankedChips };
+      return { totalReward, baseReward, bonusReward, newBankedChips: updated.bankedChips, xpGained: xpBonus, newLevel };
     });
 
     return NextResponse.json({
@@ -515,6 +527,8 @@ export async function POST(req: NextRequest) {
       baseReward: result.baseReward,
       bonusReward: result.bonusReward,
       streakMultiplier: multiplier,
+      xpGained: result.xpGained,
+      newLevel: result.newLevel,
     });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

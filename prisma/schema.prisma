@@ -45,6 +45,11 @@ model Player {
   streakFreezes   Int      @default(0) // purchasable streak protection
   referralCode    String?  @unique // e.g. "VIPER-A7X2"
 
+  // Season Pass — Genesis Season
+  hasElitePass     Boolean  @default(false)
+  passClaimedFree  String   @default("[]")   // JSON array of claimed tier numbers
+  passClaimedElite String   @default("[]")   // JSON array of claimed elite tier numbers
+
   // Cosmetics — JSON-encoded arrays/objects (default set in code on register)
   unlockedSkins   String   @default("[]")
   currentSkin     String   @default("skin-default")

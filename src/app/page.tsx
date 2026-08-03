@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '@/components/providers/auth-provider';
+import { PASS_TIER_LEVEL } from '@/lib/game-config';
 import AuthGate from '@/components/auth/auth-gate';
 import { GameCanvas } from '@/components/game/game-canvas';
 import { ArenaSelector } from '@/components/panels/arena-selector';
@@ -497,7 +498,8 @@ export default function Home() {
                     <BentoGate onClick={() => setActiveTab('championships')} icon={Crown} accent="rose" badge="Tournament" title="Championships" desc="Enter elite championship events. Compete against top-ranked operators for massive chip prizes and exclusive titles." footLeft="SEASONAL EVENTS" footRight="Compete" />
                     <BentoGate onClick={() => setActiveTab('halloffame')} icon={Award} accent="yellow" badge="Legends" title="Hall of Fame" desc="View legendary players and record-breaking performances. The greatest venom operators of all time." footLeft="LEGENDARY RANKINGS" footRight="View Legends" />
                     <BentoGate onClick={() => setActiveTab('clans')} icon={Shield} accent="violet" badge="Team Ops" title="Syndicates" desc="Create or join a syndicate. Team up with allies, pool resources, and dominate arenas together." footLeft="CLAN WARFARE" footRight="Assemble" />
-                    <BentoGate onClick={() => setActiveTab('seasonpass')} icon={Sparkles} accent="pink" badge="Season XP" title="Season Pass" desc="Track your seasonal progression. Unlock exclusive rewards, cosmetics, and bonus chip multipliers as you level up." footLeft="FREE TIER REWARDS" footRight="Progress" />
+                    <BentoGate onClick={() => setActiveTab('seasonpass')} icon={Sparkles} accent="pink" badge="Level Rewards" title="Season Pass" desc="Level up by playing matches. Unlock 20 free cosmetics + 20 exclusive elite rewards. Claimed items appear in your Shop." footLeft={player ? `${PASS_TIER_LEVEL.filter(l => player.level >= l).length}/20 Unlocked` : 'FREE REWARDS'}
+                    footRight="View Pass" />
                     <BentoGate onClick={() => setActiveTab('clips')} icon={Film} accent="red" badge="Replays" title="Highlights" desc="Watch and share your greatest moments. Review match replays, clutch extractions, and legendary eliminations." footLeft="MATCH HIGHLIGHTS" footRight="Watch" />
                     <div className="relative">
                       <BentoGate onClick={() => setActiveTab('social')} icon={Users} accent="violet" badge="Friends & Search" title="Friends & Global Player Search" desc="Search players by name or tag, send chip gifts, block players, and manage your friend network!" footLeft="SOCIAL HUB" footRight="Connect" wide />

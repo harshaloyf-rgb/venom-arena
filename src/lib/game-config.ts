@@ -1046,6 +1046,75 @@ export const COSMETIC_ELITE_REWARDS: SeasonReward[] = [
 export const ELITE_PASS_COST = 100_000;
 
 // ----------------------------------------------------------------------------
+// Season Pass — Real cosmetic rewards tied to player level
+// ----------------------------------------------------------------------------
+
+/** What player level is required to unlock each pass tier (1-indexed) */
+export const PASS_TIER_LEVEL: number[] = [
+  2,  3,  4,  5,  6,  7,  8,  10, 12, 14,
+  15, 17, 19, 21, 23, 25, 28, 31, 34, 38,
+];
+
+export const PASS_SEASON_NUMBER = 1;
+export const PASS_SEASON_NAME = 'Genesis';
+
+/** Real equippable cosmetics for the Free track (20 tiers). */
+export const PASS_FREE_COSMETICS: Skin[] = [
+  // Tiers 1-5 — Skins
+  { id: 'pass-f1-ember-worm',  name: 'Ember Worm',           cost: 0, type: 'skin',  color: '#ef4444', secondaryColor: '#991b1b', description: 'A smouldering vermilion skin radiating heat.', emoji: '🔥' },
+  { id: 'pass-f2-frost-viper', name: 'Frost Viper',           cost: 0, type: 'skin',  color: '#67e8f9', secondaryColor: '#0e7490', description: 'Icy blue scales that shimmer like frozen venom.', emoji: '❄️', pattern: 'neon' },
+  { id: 'pass-f3-moss-python', name: 'Moss Python',           cost: 0, type: 'skin',  color: '#22c55e', secondaryColor: '#14532d', description: 'Deep jungle camouflage with organic texture.', emoji: '🌿', pattern: 'camo' },
+  { id: 'pass-f4-solar-coil',  name: 'Solar Coil',            cost: 0, type: 'skin',  color: '#fbbf24', secondaryColor: '#92400e', description: 'Sun-baked golden coils with radiant glow.', emoji: '☀️', pattern: 'glow' },
+  { id: 'pass-f5-shadow-mamba', name: 'Shadow Mamba',         cost: 0, type: 'skin',  color: '#1e293b', secondaryColor: '#0f172a', description: 'Near-invisible dark matter scales.', emoji: '🌑', pattern: 'metallic' },
+  // Tiers 6-10 — Trails + Death
+  { id: 'pass-f6-venom-drip',  name: 'Venom Drip Trail',      cost: 0, type: 'trail', color: '#a855f7', description: 'Toxic purple droplets left in your wake.', emoji: '💧' },
+  { id: 'pass-f7-blaze-trail', name: 'Blaze Trail',           cost: 0, type: 'trail', color: '#f97316', description: 'Fiery orange afterburn particles.', emoji: '🔥' },
+  { id: 'pass-f8-phantom-burst', name: 'Phantom Burst',      cost: 0, type: 'death', color: '#6366f1', description: 'Ethereal indigo implosion on death.', emoji: '💀' },
+  { id: 'pass-f9-neon-fang',   name: 'Neon Fang',             cost: 0, type: 'skin',  color: '#06b6d4', secondaryColor: '#ec4899', description: 'Bifurcated neon cyber-stripe pattern.', emoji: '⚡', pattern: 'neon' },
+  { id: 'pass-f10-jade-scales', name: 'Jade Scales',           cost: 0, type: 'skin',  color: '#10b981', secondaryColor: '#064e3b', description: 'Polished jade armor plating.', emoji: '💎', pattern: 'metallic' },
+  // Tiers 11-15 — Flags + Banner + Skin
+  { id: 'pass-f11-clan-crest', name: 'Clan Crest Flag',       cost: 0, type: 'flag',  color: '#f59e0b', description: 'A golden crest flag for true syndicate loyalists.', emoji: '🚩' },
+  { id: 'pass-f12-inferno',    name: 'Inferno',               cost: 0, type: 'skin',  color: '#dc2626', secondaryColor: '#fbbf24', description: 'Raging fire gradient from tail to head.', emoji: '🌋', pattern: 'rainbow' },
+  { id: 'pass-f13-stardust-trail', name: 'Stardust Trail',    cost: 0, type: 'trail', color: '#eab308', description: 'Twinkling gold star particles.', emoji: '✨' },
+  { id: 'pass-f14-void-reaper', name: 'Void Reaper',          cost: 0, type: 'death', color: '#0f172a', description: 'A black hole collapse effect on death.', emoji: '🕳️' },
+  { id: 'pass-f15-chrome-king', name: 'Chrome King',          cost: 0, type: 'skin',  color: '#94a3b8', secondaryColor: '#fbbf24', description: 'Silver-chrome body with gold crown accents.', emoji: '👑', pattern: 'metallic' },
+  // Tiers 16-20 — Premium mix
+  { id: 'pass-f16-plasma-trail', name: 'Plasma Trail',        cost: 0, type: 'trail', color: '#ec4899', description: 'Electrified pink plasma stream.', emoji: '⚡' },
+  { id: 'pass-f17-pulse-skin',  name: 'Pulse Raptor',         cost: 0, type: 'skin',  color: '#8b5cf6', secondaryColor: '#06b6d4', description: 'Pulsing violet-to-cyan heartbeat pattern.', emoji: '💜', pattern: 'pulse' },
+  { id: 'pass-f18-war-banner',  name: 'War Banner',            cost: 0, type: 'banner', color: 'from-red-600 via-slate-900 to-red-900 border-red-500/40', description: 'A crimson battle-scarred banner for warriors.', emoji: '🏴' },
+  { id: 'pass-f19-rainbow-viper', name: 'Rainbow Viper',     cost: 0, type: 'skin',  color: '#ec4899', secondaryColor: '#3b82f6', description: 'Full spectrum flowing colour shift.', emoji: '🌈', pattern: 'rainbow' },
+  { id: 'pass-f20-omega-frame', name: 'Omega Avatar Frame',   cost: 0, type: 'banner', color: 'from-amber-400 via-emerald-600 to-cyan-600 border-amber-400', description: 'A legendary tri-colour frame for Genesis completion.', emoji: '🏆' },
+];
+
+/** Real equippable cosmetics for the Elite track (20 tiers). Elite pass exclusive. */
+export const PASS_ELITE_COSMETICS: Skin[] = [
+  // Tiers 1-5 — Premium Skins
+  { id: 'pass-e1-cyber-serpent', name: 'Cyber Serpent God',  cost: 0, type: 'skin',  color: '#a855f7', secondaryColor: '#fbbf24', description: 'Royal purple with gold cyber-circuit overlay.', emoji: '👑', pattern: 'cyber' },
+  { id: 'pass-e2-phantom-wraith', name: 'Phantom Wraith',    cost: 0, type: 'skin',  color: '#1e293b', secondaryColor: '#6366f1', description: 'Ghostly translucent dark scales with indigo glow.', emoji: '👻', pattern: 'glow' },
+  { id: 'pass-e3-magma-titan',  name: 'Magma Titan',          cost: 0, type: 'skin',  color: '#f97316', secondaryColor: '#dc2626', description: 'Volcanic lava flow between obsidian plates.', emoji: '🌋', pattern: 'pulse' },
+  { id: 'pass-e4-arctic-king',  name: 'Arctic King',          cost: 0, type: 'skin',  color: '#e0f2fe', secondaryColor: '#0ea5e9', description: 'Frost king crown with icy crystalline body.', emoji: '🧊', pattern: 'neon' },
+  { id: 'pass-e5-biohazard',    name: 'Biohazard Prime',      cost: 0, type: 'skin',  color: '#22c55e', secondaryColor: '#fbbf24', description: 'Radioactive green with hazard stripe accents.', emoji: '☢️', pattern: 'camo' },
+  // Tiers 6-10 — Premium Trails + Death
+  { id: 'pass-e6-hypernova-trail', name: 'Hypernova Trail',   cost: 0, type: 'trail', color: '#fbbf24', description: 'Supernova-grade golden particle cascade.', emoji: '🌟' },
+  { id: 'pass-e7-dark-matter-trail', name: 'Dark Matter Trail', cost: 0, type: 'trail', color: '#0f172a', description: 'Absorbs light around it. Pure void energy.', emoji: '🕳️' },
+  { id: 'pass-e8-apocalypse-burst', name: 'Apocalypse Burst', cost: 0, type: 'death', color: '#ef4444', description: 'Cataclysmic red explosion with shockwave ring.', emoji: '💥' },
+  { id: 'pass-e9-hologram-skin', name: 'Hologram Serpent',    cost: 0, type: 'skin',  color: '#06b6d4', secondaryColor: '#a855f7', description: 'Scanning-line holographic projection effect.', emoji: '🤖', pattern: 'cyber' },
+  { id: 'pass-e10-royal-cobra', name: 'Royal Cobra',          cost: 0, type: 'skin',  color: '#fbbf24', secondaryColor: '#b45309', description: 'Solid gold cobra hood with jewelled eyes.', emoji: '🐍', pattern: 'metallic' },
+  // Tiers 11-15 — Premium Flags + Banner + Skin
+  { id: 'pass-e11-elite-standard', name: 'Elite Standard',    cost: 0, type: 'flag',  color: '#fbbf24', description: 'A prestigious gold-embroidered elite standard.', emoji: '⚜️' },
+  { id: 'pass-e12-dragon-scale', name: 'Dragon Scale',        cost: 0, type: 'skin',  color: '#dc2626', secondaryColor: '#1e293b', description: 'Ancient dragon armour with metallic sheen.', emoji: '🐉', pattern: 'metallic' },
+  { id: 'pass-e13-galaxy-trail', name: 'Galaxy Drift Trail',   cost: 0, type: 'trail', color: '#8b5cf6', description: 'Swirling galactic dust and nebula particles.', emoji: '🌌' },
+  { id: 'pass-e14-soul-shatter', name: 'Soul Shatter',        cost: 0, type: 'death', color: '#a855f7', description: 'Purple soul fragment dispersal on death.', emoji: '🔮' },
+  { id: 'pass-e15-titanium-lord', name: 'Titanium Lord',      cost: 0, type: 'skin',  color: '#64748b', secondaryColor: '#fbbf24', description: 'Titanium exoskeleton with gold joint highlights.', emoji: '⚙️', pattern: 'metallic' },
+  // Tiers 16-20 — Legendary Tier
+  { id: 'pass-e16-aurora-trail', name: 'Aurora Trail',         cost: 0, type: 'trail', color: '#10b981', description: 'Northern lights ribbon trail effect.', emoji: '🌌' },
+  { id: 'pass-e17-neon-cyber',  name: 'Neon Cyber Overlord',  cost: 0, type: 'skin',  color: '#06b6d4', secondaryColor: '#ec4899', description: 'Full cyber-grid neon with pulsing data lines.', emoji: '📡', pattern: 'cyber' },
+  { id: 'pass-e18-throne-banner', name: 'Throne Room Banner', cost: 0, type: 'banner', color: 'from-amber-300 via-yellow-500 to-amber-700 border-yellow-300', description: 'Opulent golden throne room backdrop.', emoji: '👑' },
+  { id: 'pass-e19-prismatic',   name: 'Prismatic Void',       cost: 0, type: 'skin',  color: '#ec4899', secondaryColor: '#06b6d4', description: 'Prismatic light refraction across every segment.', emoji: '🌈', pattern: 'rainbow' },
+  { id: 'pass-e20-genesis-crown', name: 'Genesis Crown Frame', cost: 0, type: 'banner', color: 'from-amber-200 via-amber-500 to-amber-900 border-amber-300', description: 'The ultimate Genesis Season completion frame.', emoji: '👑' },
+];
+
+// ----------------------------------------------------------------------------
 // Player inspector — shared InspectedPlayer interface
 // ----------------------------------------------------------------------------
 export interface InspectedPlayer {
