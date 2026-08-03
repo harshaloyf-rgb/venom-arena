@@ -1,19 +1,14 @@
 'use client';
 
 /**
- * Share Card Generator — Pure Canvas API, zero external dependencies.
- * Produces branded 1080×1080 PNG cards for social media sharing.
- *
- * Usage:
- *   import { renderMatchCard, renderProfileCard, downloadBlob, shareBlob } from '@/lib/share-card';
- *   const blob = await renderMatchCard({ ... });
- *   downloadBlob(blob, 'venom-arena-highlight.png');
+ * Card Branding & Rendering — Canvas API drawing functions for share cards.
+ * Extracted from share-card for maintainability.
  */
 
-import { countryFlag } from './game-config';
-import { formatChipsIndian as formatChips } from './format-chips';
+import { countryFlag } from '../game-config';
+import { formatChipsIndian as formatChips } from '../format-chips';
 
-// ── Types ──
+// ── Types (re-exported) ──
 
 export interface MatchCardData {
   playerName: string;
@@ -57,12 +52,12 @@ export interface MilestoneCardData {
   currentChips: number;
 }
 
-// ── Helpers ──
+// ── Constants ──
 
 const W = 1080;
 const H = 1080;
 
-
+// ── Canvas Helpers ──
 
 function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -130,7 +125,7 @@ function drawBackground(ctx: CanvasRenderingContext2D) {
   ctx.fillRect(0, 0, W, H);
 }
 
-function drawBranding(ctx: CanvasRenderingContext2D) {
+export function drawBranding(ctx: CanvasRenderingContext2D) {
   // Top bar
   ctx.fillStyle = 'rgba(220, 38, 38, 0.15)';
   ctx.fillRect(0, 0, W, 80);
@@ -455,44 +450,4 @@ export async function renderMilestoneCard(data: MilestoneCardData): Promise<Blob
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Canvas toBlob failed'))), 'image/png');
   });
-}
-
-// ── Utility functions ──
-
-export function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-export async function shareBlob(blob: Blob, title?: string) {
-  const file = new File([blob], 'venom-arena-highlight.png', { type: 'image/png' });
-  if (navigator.share) {
-    try {
-      await navigator.share({
-        title: title || 'Venom Arena Highlight',
-        text: 'Check out my Venom Arena match! 🐍',
-        files: [file],
-      });
-      return { shared: true, method: 'share-api' as const };
-    } catch (e: unknown) {
-      // User cancelled or not supported
-      if ((e as Error).name === 'AbortError') return { shared: false, method: 'cancelled' as const };
-    }
-  }
-  return { shared: false, method: 'not-supported' as const };
-}
-
-export async function copyBlobToClipboard(blob: Blob) {
-  try {
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-    return true;
-  } catch {
-    return false;
-  }
 }
