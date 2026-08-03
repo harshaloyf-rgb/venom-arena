@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
-import { notify, type ToastFn } from '../../_panel-primitives';
+import { notify, type ToastFn } from '../_panel-primitives';
 import { formatChipsShort as formatChips } from '@/lib/format-chips';
 import { PlayerList, type AdminPlayer } from './players/player-list';
 import { PlayerDetailPanel, type PlayerDetail } from './players/player-detail';
