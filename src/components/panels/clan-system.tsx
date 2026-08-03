@@ -408,7 +408,7 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
       if (!res.ok) { notify(data?.error || 'Failed to withdraw.', 'error', onToast); return; }
       notify(`Withdrew ${val.toLocaleString()}c!`, 'success', onToast);
       setDepositAmount('');
-      await refresh(); void fetchClans(); void fetchStats(playerClanTag);
+      await refresh(); void fetchClans(); void fetchMembers(playerClanTag); void fetchActivities(playerClanTag); void fetchStats(playerClanTag);
     } catch { notify('Network error.', 'error', onToast); } finally { setActionBusy(''); }
   }
 
@@ -423,7 +423,7 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
       if (!res.ok) { notify(data?.error || 'Payout failed.', 'error', onToast); return; }
       notify(`Distributed ${val.toLocaleString()}c!`, 'success', onToast);
       setDepositAmount('');
-      await refresh(); void fetchClans(); void fetchMembers(playerClanTag); void fetchStats(playerClanTag);
+      await refresh(); void fetchClans(); void fetchMembers(playerClanTag); void fetchActivities(playerClanTag); void fetchStats(playerClanTag);
     } catch { notify('Network error.', 'error', onToast); } finally { setActionBusy(''); }
   }
 
