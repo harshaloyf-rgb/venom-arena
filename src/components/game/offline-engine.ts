@@ -24,6 +24,7 @@ import {
   type ArenaTier,
   getCosmeticById,
   type Skin,
+  FOOD_COUNT_TARGET,
 } from '@/lib/game-config';
 import {
   DEFAULT_SNAKE_CONFIG,
@@ -34,8 +35,6 @@ import {
   calcSpeed,
   turnToward as engineTurnToward,
   moveHead,
-  isNeckProtected,
-  circlesOverlap,
   getFoodOrbs,
   randomFoodOrb,
   calcDeathFood,
@@ -51,380 +50,61 @@ import {
   type Particle,
 } from './render-helpers';
 import { playFoodCollect, playDeath, playKill, playBoost, initGameAudio } from '@/lib/game-audio';
-import { FOOD_COUNT_TARGET } from '@/lib/game-config';
 
-/** Duration in ms for the extraction mechanic (matches snake-engine default) */
-const EXTRACT_DURATION_MS = 3000;
+// Sub-modules
+import type {
+  Vec2,
+  SnakeBase,
+  BotSession,
+  VirtualBot,
+  Food,
+  GridItem,
+  OfflineState,
+  OfflineExitResult,
+  OfflineEngineRef,
+  SpatialHashGrid,
+} from './offline/offline-types';
+import {
+  MAX_PARTICLES,
+  MOUSE_DEADZONE_PX,
+  JOYSTICK_DEADZONE,
+  JOYSTICK_MAX_RADIUS_PX,
+  JOYSTICK_BOOST_MAGNITUDE,
+  BOT_THINK_INTERVAL_MS,
+  BOT_THINK_JITTER_MS,
+  BOT_THREAT_SCAN_RADIUS,
+  BOT_MAX_TURN_PER_TICK,
+  BOT_PREDICT_AHEAD_TICKS,
+  BOT_PREDICT_SPEED,
+  PERSONALITIES,
+  QUICK_EMOTES,
+  VIRTUAL_BOT_COUNT,
+  ACTIVATION_RADIUS,
+  DEACTIVATION_RADIUS,
+  MAX_ACTIVE_BOTS,
+  VIRTUAL_BOT_SPEED,
+  VIRTUAL_WORLD_RADIUS,
+  FOOD_SPAWN_RADIUS_NEAR,
+  FOOD_SPAWN_RADIUS_FAR,
+  FOOD_FAR_FRACTION,
+  OPACITY_PROXIMITY_FACTOR,
+  OPACITY_FADE_TO,
+  TICK_MS,
+  EXTRACT_DURATION_MS,
+  MAX_SNAPSHOT_POINTS,
+} from './offline/offline-constants';
+import { buildHUD, teardownHUD, updateHUD, showEndScreen } from './offline/offline-hud';
+import {
+  enterPostDeathRecording,
+  captureReplaySnapshot,
+  finishPostDeathRecording,
+  enterReplayMode,
+  exitReplayMode,
+} from './offline/offline-replay';
 
-// ----------------------------------------------------------------------------
-// Public types
-// ----------------------------------------------------------------------------
-
-export type OfflineState = 'playing' | 'dead' | 'extracted';
-
-export interface OfflineExitResult {
-  score: number;
-  kills: number;
-  durationSeconds: number;
-}
-
-// ----------------------------------------------------------------------------
-// Internal types
-// ----------------------------------------------------------------------------
-
-interface Vec2 {
-  x: number;
-  y: number;
-}
-
-type BotPersonality = 'scavenger' | 'opportunist' | 'hunter' | 'extractor' | 'coward';
-
-interface SnakeBase {
-  id: string;
-  name: string;
-  userTag?: string;
-  country?: string;
-  points: Vec2[];
-  angle: number;
-  size: number;
-  collisionRadius: number;
-  color: string;
-  secondaryColor?: string;
-  isPlayer: boolean;
-  isBot: boolean;
-  /** Food-mass score (starts at 0, grows with food, shrinks with boost).
-   *  Display score = cfg.initialSpawnScore + this value. */
-  score: number;
-  boostFrameCounter: number;
-  isExtracting: boolean;
-  extractionProgress: number;
-  isDead: boolean;
-  spawnProtectedUntil: number;
-  chatMessage?: string;
-  chatExpiry?: number;
-  kills: number;
-  desiredAngle: number;
-  wantsBoost: boolean;
-  /** Whether the snake is actively boosting (for head-on collision + rendering). */
-  isBoosting: boolean;
-}
-
-interface BotSession extends SnakeBase {
-  botId: string;
-  personality: BotPersonality;
-  nextThinkAt: number;
-  /** Index into the virtualBots array this active bot came from. */
-  virtualIdx: number;
-}
-
-/** Lightweight bot definition for the virtual pool (1000 total). Only stores identity + cheap position.
- *  Active bots (BotSession) are created from these when near the player. */
-interface VirtualBot {
-  idx: number;
-  id: string;
-  botId: string;
-  name: string;
-  personality: BotPersonality;
-  color: string;
-  secondaryColor: string;
-  initialScore: number;
-  /** Cheap world position — updated each tick with straight-line wander. */
-  x: number;
-  y: number;
-  angle: number;
-  score: number;
-  isActive: boolean;
-}
-
-interface Food {
-  id: string;
-  x: number;
-  y: number;
-  /** Visual radius in px. */
-  size: number;
-  /** Score value (1, 3, or 5). */
-  value: number;
-  orbSize: 'small' | 'medium' | 'large';
-  color: string;
-  glowColor: string;
-  isStarChip?: boolean;
-}
-
-interface GridItem {
-  id: string;
-  kind: 'segment' | 'food';
-  x: number;
-  y: number;
-  radius: number;
-  snakeId?: string;
-  segIdx?: number;
-  value?: number;
-  foodRef?: Food;
-}
-
-interface ReplaySnakeData {
-  id: string;
-  name: string;
-  points: Vec2[];
-  angle: number;
-  size: number;
-  color: string;
-  secondaryColor?: string;
-  isDead: boolean;
-  score: number;
-  isBoosting: boolean;
-  isPlayer: boolean;
-}
-
-interface ReplayFoodData {
-  x: number;
-  y: number;
-  size: number;
-  value: number;
-  color: string;
-  glowColor: string;
-  orbSize: string;
-}
-
-interface ReplayFrame {
-  snakes: ReplaySnakeData[];
-  foods: ReplayFoodData[];
-  camX: number;
-  camY: number;
-  camZoom: number;
-}
-
-// ----------------------------------------------------------------------------
-// Spatial hash grid — slimmed-down client port of the server's grid.
-// Items are bucketed into square cells; queries return a deduplicated Map.
-// ----------------------------------------------------------------------------
-
-class SpatialHashGrid {
-  private readonly cellSize: number;
-  private readonly cells: Map<string, Map<string, GridItem>> = new Map();
-
-  constructor(cellSize = 120) {
-    this.cellSize = cellSize;
-  }
-
-  private key(cx: number, cy: number): string {
-    return cx + ':' + cy;
-  }
-
-  clear(): void {
-    this.cells.clear();
-  }
-
-  insert(item: GridItem): void {
-    const minCx = Math.floor((item.x - item.radius) / this.cellSize);
-    const maxCx = Math.floor((item.x + item.radius) / this.cellSize);
-    const minCy = Math.floor((item.y - item.radius) / this.cellSize);
-    const maxCy = Math.floor((item.y + item.radius) / this.cellSize);
-    for (let cx = minCx; cx <= maxCx; cx++) {
-      for (let cy = minCy; cy <= maxCy; cy++) {
-        const k = this.key(cx, cy);
-        let bucket = this.cells.get(k);
-        if (!bucket) {
-          bucket = new Map();
-          this.cells.set(k, bucket);
-        }
-        bucket.set(item.id, item);
-      }
-    }
-  }
-
-  queryRadius(x: number, y: number, r: number): Map<string, GridItem> {
-    const out = new Map<string, GridItem>();
-    const minCx = Math.floor((x - r) / this.cellSize);
-    const maxCx = Math.floor((x + r) / this.cellSize);
-    const minCy = Math.floor((y - r) / this.cellSize);
-    const maxCy = Math.floor((y + r) / this.cellSize);
-    for (let cx = minCx; cx <= maxCx; cx++) {
-      for (let cy = minCy; cy <= maxCy; cy++) {
-        const bucket = this.cells.get(this.key(cx, cy));
-        if (!bucket) continue;
-        for (const [id, item] of bucket) {
-          if (!out.has(id)) out.set(id, item);
-        }
-      }
-    }
-    return out;
-  }
-}
-
-// ----------------------------------------------------------------------------
-// Constants
-// ----------------------------------------------------------------------------
-
-const MAX_PARTICLES = 200;
-const FPS_LOW_THRESHOLD = 40;
-const FPS_HIGH_THRESHOLD = 55;
-const FPS_LOW_DURATION_MS = 2000;
-const FPS_HIGH_DURATION_MS = 5000;
-const MOUSE_DEADZONE_PX = 15;
-const JOYSTICK_DEADZONE = 0.18;
-const JOYSTICK_MAX_RADIUS_PX = 70;
-const JOYSTICK_BOOST_MAGNITUDE = 0.6;
-const MAX_SNAPSHOT_POINTS = 60;
-const BOT_THINK_INTERVAL_MS = 120;
-const BOT_THINK_JITTER_MS = 80;
-const BOT_THREAT_SCAN_RADIUS = 250;
-const BOT_MAX_TURN_PER_TICK = 0.22;
-const BOT_PREDICT_AHEAD_TICKS = 8;
-const BOT_PREDICT_SPEED = DEFAULT_SNAKE_CONFIG.baseSpeed * 1.5;
-const PERSONALITIES: BotPersonality[] = [
-  'scavenger',
-  'opportunist',
-  'hunter',
-  'extractor',
-  'coward',
-];
-
-const QUICK_EMOTES = [
-  'GG! 🏆',
-  'Target Spot! 🎯',
-  'Fleeing! 🏃💨',
-  'Get Ripped! 💪',
-  'Extracting soon! ⚡',
-];
-
-// Virtual bot pool constants
-const VIRTUAL_BOT_COUNT = 1000;
-const ACTIVATION_RADIUS = 2500;   // activate virtual bots within this distance of player
-const DEACTIVATION_RADIUS = 3500; // deactivate active bots beyond this distance (hysteresis)
-const MAX_ACTIVE_BOTS = 60;       // max active bots at any time
-const VIRTUAL_BOT_SPEED = 2.5;    // cheap movement speed for inactive virtual bots
-const VIRTUAL_WORLD_RADIUS = 8000; // virtual bots are spread within this radius of player
-
-/** Food spawn radius around player (primary cluster). */
-const FOOD_SPAWN_RADIUS_NEAR = 1500;
-/** Some food scattered further out. */
-const FOOD_SPAWN_RADIUS_FAR = 2500;
-/** Fraction of replenishment food that spawns far. */
-const FOOD_FAR_FRACTION = 0.15;
-/** Opacity layering proximity factor (multiplied by sum of sizes). */
-const OPACITY_PROXIMITY_FACTOR = 3;
-/** Opacity to which the larger snake fades. */
-const OPACITY_FADE_TO = 0.75;
-
-/** Physics tick interval (ms) — 30 Hz. */
-const TICK_MS = 33;
-
-// Replay recording constants
-const REPLAY_PRE_MAX = 450; // 15s at 30Hz before death (circular)
-const REPLAY_POST_MAX = 450; // 15s at 30Hz after death (linear)
-const REPLAY_VISIBLE_RADIUS = 2500; // only record snakes within this radius of camera
-const REPLAY_MAX_SNAKE_POINTS = 30; // downsample snake points for replay
-
-// ----------------------------------------------------------------------------
-// Math helpers
-// ----------------------------------------------------------------------------
-
-function dist(ax: number, ay: number, bx: number, by: number): number {
-  return Math.hypot(ax - bx, ay - by);
-}
-
-/** Random point within a circle of maxR around center. */
-function randomPointInCircle(cx: number, cy: number, maxR: number): Vec2 {
-  const r = Math.sqrt(Math.random()) * maxR;
-  const theta = Math.random() * Math.PI * 2;
-  return {
-    x: cx + Math.cos(theta) * r,
-    y: cy + Math.sin(theta) * r,
-  };
-}
-
-function initialBody(headX: number, headY: number, angle: number, length: number, spacing: number): Vec2[] {
-  const pts: Vec2[] = [];
-  for (let i = 0; i < length; i++) {
-    pts.push({
-      x: headX - Math.cos(angle) * i * spacing,
-      y: headY - Math.sin(angle) * i * spacing,
-    });
-  }
-  return pts;
-}
-
-// ----------------------------------------------------------------------------
-// Food orb helpers
-// ----------------------------------------------------------------------------
-
-/** Create a Food object at a random position around the player. */
-function createFoodOrb(idPrefix: string, idCounter: { value: number }, cx: number, cy: number, farSpawn: boolean, foodOrbs: FoodOrbDef[]): Food {
-  const orb = randomFoodOrb(foodOrbs);
-  const radius = farSpawn ? FOOD_SPAWN_RADIUS_FAR : FOOD_SPAWN_RADIUS_NEAR;
-  const pos = randomPointInCircle(cx, cy, radius);
-  return {
-    id: `${idPrefix}-food-${idCounter.value++}`,
-    x: pos.x,
-    y: pos.y,
-    size: orb.radius,
-    value: orb.value,
-    orbSize: orb.size,
-    color: orb.color,
-    glowColor: orb.glowColor,
-  };
-}
-
-// ----------------------------------------------------------------------------
-// Death food drop — use engine calcDeathFood + distribute along body
-// ----------------------------------------------------------------------------
-
-function computeDeathFoodDrop(
-  totalScore: number,
-  bodyPoints: Vec2[],
-  idPrefix: string,
-  idCounter: { value: number },
-  foodOrbs: FoodOrbDef[],
-): Food[] {
-  const result: Food[] = [];
-  if (!bodyPoints || bodyPoints.length === 0 || totalScore <= 0) return result;
-
-  const [smallCount, mediumCount, largeCount] = calcDeathFood(totalScore, false);
-
-  // Build orb sequence from food definitions
-  const largeOrb = foodOrbs.find(o => o.size === 'large') ?? foodOrbs[0];
-  const mediumOrb = foodOrbs.find(o => o.size === 'medium') ?? foodOrbs[0];
-  const smallOrb = foodOrbs.find(o => o.size === 'small') ?? foodOrbs[0];
-
-  const orbSequence: FoodOrbDef[] = [];
-  for (let i = 0; i < largeCount; i++) orbSequence.push(largeOrb);
-  for (let i = 0; i < mediumCount; i++) orbSequence.push(mediumOrb);
-  for (let i = 0; i < smallCount; i++) orbSequence.push(smallOrb);
-
-  // Shuffle
-  for (let i = orbSequence.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [orbSequence[i], orbSequence[j]] = [orbSequence[j], orbSequence[i]];
-  }
-
-  // Distribute orbs evenly along the body
-  const totalOrbs = orbSequence.length;
-  if (totalOrbs === 0) return result;
-  const scatter = 15;
-  let orbIdx = 0;
-  for (const orb of orbSequence) {
-    const segIdx = Math.min(bodyPoints.length - 1, Math.floor((orbIdx / totalOrbs) * bodyPoints.length));
-    const pt = bodyPoints[segIdx];
-    result.push({
-      id: `${idPrefix}-death-${idCounter.value++}`,
-      x: pt.x + (Math.random() - 0.5) * scatter,
-      y: pt.y + (Math.random() - 0.5) * scatter,
-      size: orb.radius,
-      value: orb.value,
-      orbSize: orb.size,
-      color: orb.color,
-      glowColor: orb.glowColor,
-    });
-    orbIdx++;
-  }
-
-  return result;
-}
-
-// ----------------------------------------------------------------------------
+// ============================================================================
 // Main engine
-// ----------------------------------------------------------------------------
+// ============================================================================
 
 export class OfflineGameEngine {
   // --- Public callbacks (set by the host) ---
@@ -547,9 +227,9 @@ export class OfflineGameEngine {
   private stopped: boolean = false;
 
   // Replay recording
-  private replayPreBuffer: ReplayFrame[] = [];
+  private replayPreBuffer: import('./offline/offline-types').ReplayFrame[] = [];
   private replayPreWriteIdx: number = 0;
-  private replayPostBuffer: ReplayFrame[] = [];
+  private replayPostBuffer: import('./offline/offline-types').ReplayFrame[] = [];
   private isPostDeathRecording: boolean = false;
   private postDeathTicksRemaining: number = 0;
   private replayDeathFrameIdx: number = 0;
@@ -558,7 +238,7 @@ export class OfflineGameEngine {
 
   // Replay playback mode
   private isReplayMode: boolean = false;
-  private replayFrames: ReplayFrame[] = [];
+  private replayFrames: import('./offline/offline-types').ReplayFrame[] = [];
   private replayPlaybackIdx: number = 0;
   private replayPlaying: boolean = true;
   private replaySpeed: number = 1;
@@ -599,7 +279,7 @@ export class OfflineGameEngine {
       (window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768);
     this.setupCanvas();
     this.attachInput();
-    this.buildHUD();
+    buildHUD(this);
     this.resetWorld();
     this.wasPlayerBoosting = false;
     initGameAudio(); // Initialize audio context on user interaction
@@ -610,7 +290,7 @@ export class OfflineGameEngine {
 
   stop(): void {
     this.stopped = true;
-    this.exitReplayMode();
+    exitReplayMode(this);
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
@@ -620,7 +300,7 @@ export class OfflineGameEngine {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
     }
-    this.teardownHUD();
+    teardownHUD(this);
   }
 
   // --------------------------------------------------------------------------
@@ -725,7 +405,7 @@ export class OfflineGameEngine {
     }
 
     this.setState('playing');
-    this.updateHUD();
+    updateHUD(this);
   }
 
   // --------------------------------------------------------------------------
@@ -1076,7 +756,7 @@ export class OfflineGameEngine {
     this.finalKills = p.kills;
     this.finalDurationSeconds = Math.floor((performance.now() - this.startTime) / 1000);
     this.setState('extracted');
-    this.showEndScreen('extract');
+    showEndScreen(this, 'extract');
   }
 
   // --------------------------------------------------------------------------
@@ -1119,12 +799,12 @@ export class OfflineGameEngine {
     if (this.isPostDeathRecording) {
       this.postDeathTicksRemaining--;
       if (this.postDeathTicksRemaining <= 0) {
-        this.finishPostDeathRecording();
+        finishPostDeathRecording(this);
       }
     }
 
     this.render(now);
-    this.updateHUD();
+    updateHUD(this);
   };
 
   private accumulator: number = 0;
@@ -1141,7 +821,7 @@ export class OfflineGameEngine {
     // During post-death recording, run simplified bot-only physics
     if (this.isPostDeathRecording) {
       this.tickPostDeathPhysics(now);
-      this.captureReplaySnapshot();
+      captureReplaySnapshot(this);
       return;
     }
 
@@ -1280,7 +960,7 @@ export class OfflineGameEngine {
     if (playerDied && !this.isPostDeathRecording) {
       p.isDead = true;
       playDeath(); // Dramatic crash sound on death
-      this.enterPostDeathRecording();
+      enterPostDeathRecording(this);
       // Don't return — continue to replenish food, expire chat, update camera
     }
 
@@ -1294,7 +974,7 @@ export class OfflineGameEngine {
     this.updateCamera();
 
     // 13) Capture replay snapshot.
-    this.captureReplaySnapshot();
+    captureReplaySnapshot(this);
   }
 
   // --------------------------------------------------------------------------
@@ -1606,19 +1286,8 @@ export class OfflineGameEngine {
   }
 
   // --------------------------------------------------------------------------
-  // Player death
+  // Post-death physics (bots-only simulation during recording)
   // --------------------------------------------------------------------------
-
-  private enterPostDeathRecording(): void {
-    this.isPostDeathRecording = true;
-    this.postDeathTicksRemaining = REPLAY_POST_MAX;
-    this.deathCamX = this.cam.x;
-    this.deathCamY = this.cam.y;
-    // Record death particles at head
-    if (this.player && this.player.points.length > 0) {
-      this.spawnDeathParticles(this.player.points[0].x, this.player.points[0].y, this.player.color);
-    }
-  }
 
   private tickPostDeathPhysics(now: number): void {
     // Move bots only (player is dead)
@@ -1708,113 +1377,6 @@ export class OfflineGameEngine {
 
     // Replenish food
     this.replenishFood();
-  }
-
-  private captureReplaySnapshot(): void {
-    const camX = this.isPostDeathRecording ? this.deathCamX : this.cam.x;
-    const camY = this.isPostDeathRecording ? this.deathCamY : this.cam.y;
-    const camZoom = this.cam.zoom;
-
-    const snakes: ReplaySnakeData[] = [];
-    const allSnakes: SnakeBase[] = [];
-    for (const bot of this.bots.values()) {
-      if (!bot.isDead) allSnakes.push(bot);
-    }
-    if (this.player && !this.player.isDead) allSnakes.push(this.player);
-    if (this.player && this.player.isDead && this.postDeathTicksRemaining > REPLAY_POST_MAX - 30) {
-      allSnakes.push(this.player);
-    }
-
-    for (const snake of allSnakes) {
-      if (snake.points.length === 0) continue;
-      const head = snake.points[0];
-      const d = dist(head.x, head.y, camX, camY);
-      if (d > REPLAY_VISIBLE_RADIUS) continue;
-
-      let pts = snake.points;
-      if (pts.length > REPLAY_MAX_SNAKE_POINTS) {
-        const step = pts.length / REPLAY_MAX_SNAKE_POINTS;
-        const downsampled: Vec2[] = [];
-        for (let i = 0; i < REPLAY_MAX_SNAKE_POINTS; i++) {
-          downsampled.push(pts[Math.floor(i * step)]);
-        }
-        pts = downsampled;
-      }
-
-      snakes.push({
-        id: snake.id,
-        name: snake.name,
-        points: pts.map(p => ({ x: p.x, y: p.y })),
-        angle: snake.angle,
-        size: snake.size,
-        color: snake.color,
-        secondaryColor: snake.secondaryColor,
-        isDead: snake.isDead,
-        score: snake.score,
-        isBoosting: snake.isBoosting,
-        isPlayer: snake.isPlayer,
-      });
-    }
-
-    const foods: ReplayFoodData[] = [];
-    for (const f of this.foods) {
-      if (f.value <= 0) continue;
-      const d = dist(f.x, f.y, camX, camY);
-      if (d > REPLAY_VISIBLE_RADIUS) continue;
-      foods.push({
-        x: f.x, y: f.y, size: f.size, value: f.value,
-        color: f.color, glowColor: f.glowColor, orbSize: f.orbSize,
-      });
-    }
-
-    const frame: ReplayFrame = {
-      snakes,
-      foods,
-      camX,
-      camY,
-      camZoom,
-    };
-
-    if (this.isPostDeathRecording) {
-      if (this.replayPostBuffer.length < REPLAY_POST_MAX) {
-        this.replayPostBuffer.push(frame);
-      }
-    } else {
-      const buf = this.replayPreBuffer;
-      if (buf.length < REPLAY_PRE_MAX) {
-        buf.push(frame);
-      } else {
-        buf[this.replayPreWriteIdx % REPLAY_PRE_MAX] = frame;
-      }
-      this.replayPreWriteIdx++;
-    }
-  }
-
-  private finishPostDeathRecording(): void {
-    this.isPostDeathRecording = false;
-    this.finalScore = INITIAL_SPAWN_SCORE + (this.player?.score ?? 0);
-    this.finalKills = this.player?.kills ?? 0;
-    this.finalDurationSeconds = Math.floor((performance.now() - this.startTime) / 1000);
-
-    const preFrames = this.getPreDeathFrames();
-    this.replayDeathFrameIdx = preFrames.length;
-    this.replayFrames = [...preFrames, ...this.replayPostBuffer];
-
-    this.setState('dead');
-    this.showEndScreen('death');
-  }
-
-  private getPreDeathFrames(): ReplayFrame[] {
-    const buf = this.replayPreBuffer;
-    const len = buf.length;
-    if (len === 0) return [];
-    if (len < REPLAY_PRE_MAX) return [...buf];
-    const start = this.replayPreWriteIdx % REPLAY_PRE_MAX;
-    const result: ReplayFrame[] = [];
-    for (let i = 0; i < REPLAY_PRE_MAX; i++) {
-      result.push(buf[(start + i) % REPLAY_PRE_MAX]);
-    }
-    return result;
   }
 
   // --------------------------------------------------------------------------
@@ -2372,16 +1934,16 @@ export class OfflineGameEngine {
     if (dt >= 1000) {
       const measured = (acc.frames * 1000) / dt;
       this.fps = Math.round(measured);
-      if (measured < FPS_LOW_THRESHOLD) {
+      if (measured < 40) {
         if (acc.lowSince === 0) acc.lowSince = now;
         if (acc.highSince !== 0) acc.highSince = 0;
-        if (now - acc.lowSince >= FPS_LOW_DURATION_MS && !this.lowQuality) {
+        if (now - acc.lowSince >= 2000 && !this.lowQuality) {
           this.lowQuality = true;
         }
-      } else if (measured > FPS_HIGH_THRESHOLD) {
+      } else if (measured > 55) {
         if (acc.highSince === 0) acc.highSince = now;
         if (acc.lowSince !== 0) acc.lowSince = 0;
-        if (now - acc.highSince >= FPS_HIGH_DURATION_MS && this.lowQuality) {
+        if (now - acc.highSince >= 5000 && this.lowQuality) {
           this.lowQuality = false;
         }
       } else {
@@ -2408,778 +1970,8 @@ export class OfflineGameEngine {
   }
 
   // --------------------------------------------------------------------------
-  // HUD construction (no chips, no wallet, no minimap, no commission)
-  // --------------------------------------------------------------------------
-
-  private buildHUD(): void {
-    const parent = this.canvas.parentElement;
-    if (!parent) return;
-    if (getComputedStyle(parent).position === 'static') {
-      parent.style.position = 'relative';
-    }
-
-    const root = document.createElement('div');
-    root.style.cssText =
-      'position:absolute;inset:0;pointer-events:none;z-index:30;font-family:ui-monospace,monospace;';
-    this.overlayRoot = root;
-
-    // --- Top-left HUD stack (Score / Kills / Rank / Boost / Bots) ---
-    const leftStack = document.createElement('div');
-    leftStack.style.cssText =
-      'position:absolute;left:12px;top:12px;display:flex;flex-direction:column;gap:8px;max-width:240px;';
-    leftStack.appendChild(this.makeHudCard([
-      this.makeHudRow('shield', '#ffffff', 'Score:', () => this.hudEls.score = this.makeSpan('', 'font-weight:bold;color:#fff;')),
-    ]));
-    leftStack.appendChild(this.makeHudCard([
-      this.makeHudRow('skull', '#f43f5e', 'Kills:', () => this.hudEls.kills = this.makeSpan('', 'font-weight:bold;color:#f43f5e;')),
-      this.makeHudRow('trophy', '#eab308', 'Rank:', () => this.hudEls.rank = this.makeSpan('', 'font-weight:bold;color:#eab308;')),
-      this.makeHudRow('zap', '#f59e0b', 'Boost:', () => {
-        const s = this.makeSpan('SPACE', 'font-weight:bold;color:#f59e0b;');
-        return s;
-      }),
-      this.makeHudRow('users', '#cbd5e1', 'Bots:', () => this.hudEls.bots = this.makeSpan('', 'font-weight:bold;color:#cbd5e1;')),
-    ]));
-    root.appendChild(leftStack);
-
-    // --- Top-right HUD stack (FPS only — no banked chips) ---
-    const rightStack = document.createElement('div');
-    rightStack.style.cssText =
-      'position:absolute;right:12px;top:12px;display:flex;flex-direction:column;align-items:flex-end;gap:6px;';
-
-    const fpsRow = document.createElement('div');
-    fpsRow.style.cssText =
-      'display:flex;gap:8px;align-items:center;border:1px solid rgba(51,65,85,0.6);background:rgba(2,6,23,0.8);padding:4px 8px;border-radius:6px;font-size:11px;backdrop-filter:blur(4px);';
-    this.hudEls.fps = this.makeSpan('60 fps', 'color:#94a3b8;');
-    fpsRow.appendChild(this.hudEls.fps);
-    rightStack.appendChild(fpsRow);
-    root.appendChild(rightStack);
-
-    // --- Leaderboard panel (top-right, below FPS — ranked by Score) ---
-    root.appendChild(this.buildLeaderboard());
-
-    // --- Top-center extract hint ---
-    const hint = document.createElement('div');
-    hint.style.cssText =
-      'position:absolute;left:50%;top:56px;transform:translateX(-50%);text-align:center;font-size:11px;color:#94a3b8;pointer-events:none;';
-    hint.innerHTML =
-      'Hold <kbd style="border:1px solid #475569;background:#1e293b;padding:1px 4px;border-radius:3px;font-size:10px;color:#e2e8f0;">E</kbd> or tap EXTRACT to end your practice run.';
-    this.hudEls.idleHint = hint;
-    root.appendChild(hint);
-
-    // --- Extract progress bar (hidden by default) ---
-    const exWrap = document.createElement('div');
-    exWrap.style.cssText =
-      'position:absolute;left:50%;top:80px;transform:translateX(-50%);display:none;border:1px solid rgba(245,158,11,0.4);background:rgba(2,6,23,0.85);padding:8px 16px;border-radius:8px;backdrop-filter:blur(4px);text-align:center;';
-    const exPct = this.makeSpan('0%', 'font-size:12px;font-weight:bold;color:#fbbf24;');
-    const exBarWrap = document.createElement('div');
-    exBarWrap.style.cssText =
-      'margin-top:6px;width:200px;height:8px;border-radius:4px;background:#1e293b;overflow:hidden;';
-    const exBar = document.createElement('div');
-    exBar.style.cssText = 'height:100%;width:0%;background:linear-gradient(to right,#eab308,#f59e0b);transition:width 80ms linear;';
-    exBarWrap.appendChild(exBar);
-    exWrap.appendChild(exPct);
-    exWrap.appendChild(exBarWrap);
-    this.hudEls.extractingWrap = exWrap;
-    this.hudEls.extractingBar = exBar;
-    this.hudEls.extractingPct = exPct;
-    root.appendChild(exWrap);
-
-    // --- Quick chat emotes bar (bottom-left) ---
-    root.appendChild(this.buildEmoteBar());
-
-    // --- Mobile controls: BOOST + EXTRACT (bottom-right) ---
-    root.appendChild(this.buildMobileControls());
-
-    // --- Leave button (bottom-left edge) ---
-    root.appendChild(this.buildLeaveButton());
-
-    parent.appendChild(root);
-  }
-
-  private makeHudCard(rows: HTMLDivElement[]): HTMLDivElement {
-    const card = document.createElement('div');
-    card.style.cssText =
-      'border:1px solid rgba(51,65,85,0.6);background:rgba(2,6,23,0.8);padding:8px 12px;border-radius:8px;backdrop-filter:blur(4px);font-size:12px;display:flex;flex-direction:column;gap:4px;';
-    for (const r of rows) card.appendChild(r);
-    return card;
-  }
-
-  private makeHudRow(
-    _icon: string,
-    color: string,
-    label: string,
-    makeValue: () => HTMLSpanElement,
-  ): HTMLDivElement {
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:6px;';
-    const dot = document.createElement('span');
-    dot.style.cssText = `display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};`;
-    row.appendChild(dot);
-    const lab = document.createElement('span');
-    lab.textContent = label;
-    lab.style.cssText = 'color:#94a3b8;';
-    row.appendChild(lab);
-    row.appendChild(makeValue());
-    return row;
-  }
-
-  private makeSpan(text: string, style: string): HTMLSpanElement {
-    const s = document.createElement('span');
-    s.textContent = text;
-    s.style.cssText = style;
-    return s;
-  }
-
-  private buildLeaderboard(): HTMLDivElement {
-    const wrap = document.createElement('div');
-    wrap.style.cssText =
-      'position:absolute;right:12px;top:52px;width:220px;border:1px solid rgba(51,65,85,0.6);background:rgba(2,6,23,0.85);border-radius:8px;backdrop-filter:blur(4px);overflow:hidden;';
-
-    const header = document.createElement('div');
-    header.style.cssText =
-      'display:flex;align-items:center;justify-content:space-between;padding:6px 10px;cursor:pointer;background:rgba(15,23,42,0.8);';
-    const title = document.createElement('span');
-    title.style.cssText = 'font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;';
-    title.textContent = 'Score Leaderboard';
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.textContent = '▾';
-    toggle.style.cssText =
-      'background:transparent;border:none;color:#cbd5e1;font-size:14px;cursor:pointer;pointer-events:auto;';
-    header.appendChild(title);
-    header.appendChild(toggle);
-    wrap.appendChild(header);
-
-    // Column header
-    const colHeader = document.createElement('div');
-    colHeader.style.cssText =
-      'display:flex;justify-content:space-between;padding:3px 10px;font-size:9px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;border-bottom:1px solid rgba(51,65,85,0.4);';
-    const colLeft = document.createElement('span');
-    colLeft.textContent = 'Player';
-    const colRight = document.createElement('span');
-    colRight.textContent = 'Score';
-    colHeader.appendChild(colLeft);
-    colHeader.appendChild(colRight);
-    wrap.appendChild(colHeader);
-
-    const rows = document.createElement('div');
-    rows.style.cssText =
-      'max-height:240px;overflow-y:auto;padding:4px 6px;display:flex;flex-direction:column;gap:2px;';
-    wrap.appendChild(rows);
-
-    this.hudEls.leaderboardRows = rows;
-    this.hudEls.leaderboardToggle = toggle;
-
-    const onClick = (e: MouseEvent) => {
-      e.preventDefault();
-      this.hudEls.leaderboardOpen = !this.hudEls.leaderboardOpen;
-      rows.style.display = this.hudEls.leaderboardOpen ? 'flex' : 'none';
-      toggle.textContent = this.hudEls.leaderboardOpen ? '▾' : '▸';
-    };
-    header.addEventListener('click', onClick);
-    header.style.pointerEvents = 'auto';
-
-    return wrap;
-  }
-
-  private buildEmoteBar(): HTMLDivElement {
-    const wrap = document.createElement('div');
-    wrap.style.cssText =
-      'position:absolute;left:8px;bottom:8px;width:min(60vw,260px);border:1px solid rgba(30,41,59,0.9);background:rgba(2,6,23,0.9);padding:8px 10px;border-radius:12px;backdrop-filter:blur(6px);pointer-events:auto;';
-    const title = document.createElement('div');
-    title.style.cssText =
-      'font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:6px;';
-    title.textContent = 'Emotes (Keys 1-5)';
-    wrap.appendChild(title);
-    const btnRow = document.createElement('div');
-    btnRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;';
-    const labels = ['GG! 🏆', 'Target! 🎯', 'Flee! 🏃💨', 'Ripped! 💪', 'Extracting! ⚡'];
-    for (let i = 0; i < labels.length; i++) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.textContent = labels[i];
-      b.style.cssText =
-        'border:1px solid #1e293b;background:#0f172a;color:#cbd5e1;padding:4px 8px;border-radius:6px;font-size:10px;font-weight:500;cursor:pointer;';
-      b.addEventListener('click', (e) => {
-        e.preventDefault();
-        this.setPlayerChat(QUICK_EMOTES[i]);
-      });
-      btnRow.appendChild(b);
-    }
-    wrap.appendChild(btnRow);
-    return wrap;
-  }
-
-  private buildMobileControls(): HTMLDivElement {
-    const wrap = document.createElement('div');
-    wrap.style.cssText =
-      'position:absolute;right:24px;bottom:24px;display:flex;align-items:flex-end;gap:12px;pointer-events:auto;';
-
-    // BOOST button
-    const boost = document.createElement('button');
-    boost.type = 'button';
-    boost.setAttribute('aria-label', 'Boost');
-    boost.innerHTML =
-      '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;">' +
-      '<div style="font-size:24px;line-height:1;">⚡</div>' +
-      '<div style="font-size:10px;font-weight:bold;">BOOST</div></div>';
-    boost.style.cssText =
-      'width:64px;height:64px;border-radius:50%;border:1px solid rgba(245,158,11,0.5);background:rgba(245,158,11,0.2);color:#fcd34d;cursor:pointer;touch-action:none;user-select:none;display:flex;align-items:center;justify-content:center;';
-    const boostDown = (e: Event) => {
-      e.preventDefault();
-      this.boostHold = true;
-      this.keys.add(' ');
-    };
-    const boostUp = (e: Event) => {
-      e.preventDefault();
-      this.boostHold = false;
-      this.keys.delete(' ');
-    };
-    boost.addEventListener('pointerdown', boostDown);
-    boost.addEventListener('pointerup', boostUp);
-    boost.addEventListener('pointercancel', boostUp);
-    boost.addEventListener('contextmenu', (e) => e.preventDefault());
-    wrap.appendChild(boost);
-
-    // EXTRACT button
-    const extract = document.createElement('button');
-    extract.type = 'button';
-    extract.setAttribute('aria-label', 'Extract');
-    extract.innerHTML =
-      '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;">' +
-      '<div style="font-size:22px;line-height:1;">🏆</div>' +
-      '<div style="font-size:10px;font-weight:bold;">EXTRACT</div></div>';
-    extract.style.cssText =
-      'width:80px;height:80px;border-radius:50%;border:1px solid rgba(16,185,129,0.6);background:rgba(16,185,129,0.15);color:#6ee7b7;cursor:pointer;touch-action:none;user-select:none;display:flex;align-items:center;justify-content:center;';
-    const exDown = (e: Event) => {
-      e.preventDefault();
-      if (this.state !== 'playing') return;
-      this.extractHold = true;
-      this.beginExtract();
-    };
-    const exUp = (e: Event) => {
-      e.preventDefault();
-      if (!this.extractHold) return;
-      this.extractHold = false;
-      this.cancelExtract();
-    };
-    extract.addEventListener('pointerdown', exDown);
-    extract.addEventListener('pointerup', exUp);
-    extract.addEventListener('pointercancel', exUp);
-    extract.addEventListener('contextmenu', (e) => e.preventDefault());
-    wrap.appendChild(extract);
-
-    return wrap;
-  }
-
-  private buildLeaveButton(): HTMLButtonElement {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.textContent = '⨯ Leave';
-    btn.style.cssText =
-      'position:absolute;left:12px;bottom:96px;height:36px;padding:0 12px;border-radius:18px;border:1px solid rgba(51,65,85,0.8);background:rgba(2,6,23,0.8);color:#94a3b8;font-size:12px;cursor:pointer;backdrop-filter:blur(4px);pointer-events:auto;';
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      this.handleExitToLobby();
-    });
-    return btn;
-  }
-
-  private teardownHUD(): void {
-    if (this.endOverlay && this.endOverlay.parentNode) {
-      this.endOverlay.parentNode.removeChild(this.endOverlay);
-    }
-    this.endOverlay = null;
-    if (this.overlayRoot && this.overlayRoot.parentNode) {
-      this.overlayRoot.parentNode.removeChild(this.overlayRoot);
-    }
-    this.overlayRoot = null;
-    this.hudEls = { leaderboardOpen: true };
-  }
-
-  // --------------------------------------------------------------------------
-  // HUD update (per-frame)
-  // --------------------------------------------------------------------------
-
-  private updateHUD(): void {
-    const p = this.player;
-    if (!p) return;
-    const totalScore = INITIAL_SPAWN_SCORE + p.score;
-    if (this.hudEls.score) this.hudEls.score.textContent = totalScore.toLocaleString();
-    if (this.hudEls.kills) this.hudEls.kills.textContent = String(p.kills);
-    if (this.hudEls.bots) this.hudEls.bots.textContent = String(VIRTUAL_BOT_COUNT);
-    if (this.hudEls.fps) this.hudEls.fps.textContent = `${this.fps} fps`;
-
-    // Rank by total score (player + bots).
-    const all: { id: string; name: string; totalScore: number; isPlayer: boolean }[] = [
-      { id: p.id, name: p.name, totalScore, isPlayer: true },
-    ];
-    for (const b of this.bots.values()) {
-      all.push({ id: b.id, name: b.name, totalScore: INITIAL_SPAWN_SCORE + b.score, isPlayer: false });
-    }
-    all.sort((a, b) => b.totalScore - a.totalScore);
-    const rank = all.findIndex((s) => s.isPlayer);
-    if (this.hudEls.rank) this.hudEls.rank.textContent = `#${rank >= 0 ? rank + 1 : 1}`;
-
-    // Leaderboard (top 10 by score).
-    if (this.hudEls.leaderboardRows) {
-      const top = all.slice(0, 10);
-      const rows = this.hudEls.leaderboardRows;
-      const sig = top.map((s) => `${s.id}:${s.totalScore}`).join('|');
-      if (sig !== this.lastLeaderboardSig) {
-        this.lastLeaderboardSig = sig;
-        rows.innerHTML = '';
-        for (let i = 0; i < top.length; i++) {
-          const s = top[i];
-          const row = document.createElement('div');
-          row.style.cssText = `display:flex;justify-content:space-between;align-items:center;padding:3px 6px;border-radius:4px;font-size:11px;${
-            s.isPlayer ? 'background:rgba(34,197,94,0.15);color:#86efac;' : 'color:#cbd5e1;'
-          }`;
-          const left = document.createElement('span');
-          left.style.cssText = 'display:flex;gap:6px;align-items:center;min-width:0;';
-          const r = document.createElement('span');
-          r.style.cssText = 'color:#64748b;font-weight:bold;min-width:20px;';
-          r.textContent = `${i + 1}.`;
-          const nm = document.createElement('span');
-          nm.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-          nm.textContent = s.name;
-          left.appendChild(r);
-          left.appendChild(nm);
-          const sc = document.createElement('span');
-          sc.style.cssText = 'font-weight:bold;';
-          sc.textContent = String(s.totalScore);
-          row.appendChild(left);
-          row.appendChild(sc);
-          rows.appendChild(row);
-        }
-      }
-    }
-
-    // Extract progress bar.
-    if (p.isExtracting && this.hudEls.extractingBar && this.hudEls.extractingPct) {
-      const pct = Math.min(100, Math.round((p.extractionProgress / EXTRACT_DURATION_MS) * 100));
-      this.hudEls.extractingBar.style.width = `${pct}%`;
-      this.hudEls.extractingPct.textContent = `${pct}%`;
-    }
-  }
-
-  private lastLeaderboardSig: string = '';
-
-  // --------------------------------------------------------------------------
-  // End screen (death / extract) — no XP, no chips
-  // --------------------------------------------------------------------------
-
-  private showEndScreen(outcome: 'death' | 'extract'): void {
-    const parent = this.canvas.parentElement;
-    if (!parent) return;
-    if (this.endOverlay) {
-      if (this.endOverlay.parentNode) this.endOverlay.parentNode.removeChild(this.endOverlay);
-      this.endOverlay = null;
-    }
-
-    const overlay = document.createElement('div');
-    overlay.style.cssText =
-      'position:absolute;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:rgba(2,6,23,0.85);backdrop-filter:blur(8px);pointer-events:auto;';
-    overlay.setAttribute('role', 'dialog');
-    overlay.setAttribute('aria-modal', 'true');
-
-    const isExtract = outcome === 'extract';
-    const mins = Math.floor(this.finalDurationSeconds / 60);
-    const secs = this.finalDurationSeconds % 60;
-    const durationStr = `${mins}:${secs.toString().padStart(2, '0')}`;
-
-    const title = isExtract ? 'Practice Run Completed!' : 'Arena Disintegration!';
-    const titleColor = isExtract ? '#fbbf24' : '#ef4444';
-    const accent = isExtract
-      ? 'linear-gradient(to right,#eab308,#f59e0b)'
-      : '#dc2626';
-    const subtitle = isExtract
-      ? `Practice run finished! You eliminated ${this.finalKills} training bots, reached a score of ${this.finalScore}, and survived for ${mins}m ${secs}s.`
-      : `Your snake was destroyed! Final score: ${this.finalScore}. No chips were wagered or lost — offline practice only.`;
-
-    overlay.innerHTML = `
-      <div style="width:min(94vw,520px);border:1px solid #1e293b;background:#020617;border-radius:16px;box-shadow:0 25px 60px rgba(0,0,0,0.6);overflow:hidden;">
-        <div style="height:6px;background:${accent};"></div>
-        <div style="padding:24px;">
-          <div style="margin:0 auto 12px;width:64px;height:64px;border-radius:16px;border:1px solid ${
-            isExtract ? 'rgba(245,158,11,0.2)' : 'rgba(239,68,68,0.2)'
-          };background:${isExtract ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)'};display:flex;align-items:center;justify-content:center;font-size:32px;">
-            ${isExtract ? '🧭' : '💀'}
-          </div>
-          <h3 style="text-align:center;font-size:24px;font-weight:bold;color:${titleColor};margin:0;">${title}</h3>
-          <p style="text-align:center;font-size:12px;color:#94a3b8;margin:6px 0 0;">${subtitle}</p>
-
-          <div style="margin-top:16px;border:1px solid #1e293b;background:rgba(15,23,42,0.6);border-radius:8px;padding:12px;font-size:12px;">
-            <div style="display:flex;justify-content:space-between;">
-              <span style="color:#94a3b8;">Final Score:</span>
-              <span style="color:#fff;">${this.finalScore.toLocaleString()}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;margin-top:4px;">
-              <span style="color:#94a3b8;">Opponents Eliminated:</span>
-              <span style="color:#fff;">${this.finalKills} Kills</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;margin-top:4px;">
-              <span style="color:#94a3b8;">Survival Time:</span>
-              <span style="color:#fff;">${durationStr}</span>
-            </div>
-          </div>
-
-          ${
-            isExtract
-              ? `<div style="margin-top:12px;border:1px solid #1e293b;background:rgba(15,23,42,0.6);border-radius:8px;padding:12px;text-align:center;">
-                   <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#fbbf24;">Offline Training Complete</div>
-                   <div style="margin-top:4px;font-size:11px;color:#94a3b8;">No chips, no XP — just pure practice. Great job sharpening your skills!</div>
-                 </div>`
-              : `<div style="margin-top:12px;border:1px solid rgba(15,23,42,0.6);background:rgba(15,23,42,0.4);border-radius:8px;padding:10px;text-align:center;font-size:11px;color:#94a3b8;">
-                   No chips were wagered or lost — offline practice only.
-                 </div>`
-          }
-
-          <div style="margin-top:20px;display:flex;flex-direction:column;gap:8px;">
-            ${!isExtract && this.replayFrames.length > 20 ? `
-            <button id="oe-watch-replay" type="button" style="width:100%;padding:12px;border-radius:12px;border:none;color:#fff;font-weight:bold;font-size:14px;cursor:pointer;background:linear-gradient(to right,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;gap:8px;">
-              📺 WATCH DEATH REPLAY (${this.replayFrames.length} frames)
-            </button>
-            ` : ''}
-            <button id="oe-play-again" type="button" style="width:100%;padding:12px;border-radius:12px;border:none;color:#fff;font-weight:bold;font-size:14px;cursor:pointer;background:${
-              isExtract ? 'linear-gradient(to right,#10b981,#14b8a6)' : 'linear-gradient(to right,#dc2626,#e11d48)'
-            };display:flex;align-items:center;justify-content:center;gap:8px;">
-              ${isExtract ? '🧭' : '💀'} PLAY AGAIN
-            </button>
-            <button id="oe-exit" type="button" style="width:100%;padding:10px;border-radius:12px;border:1px solid rgba(245,158,11,0.4);background:rgba(245,158,11,0.1);color:#fcd34d;font-weight:bold;font-size:12px;cursor:pointer;">
-              RETURN TO LOBBY
-            </button>
-          </div>
-          <p style="margin-top:12px;text-align:center;font-size:10px;color:#64748b;">Press ESC to exit</p>
-        </div>
-      </div>
-    `;
-    parent.appendChild(overlay);
-    this.endOverlay = overlay;
-
-    const playAgainBtn = overlay.querySelector('#oe-play-again') as HTMLButtonElement | null;
-    const exitBtn = overlay.querySelector('#oe-exit') as HTMLButtonElement | null;
-    const watchReplayBtn = overlay.querySelector('#oe-watch-replay') as HTMLButtonElement | null;
-    if (watchReplayBtn) {
-      watchReplayBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        this.enterReplayMode();
-      });
-    }
-    if (playAgainBtn) {
-      playAgainBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        this.handlePlayAgain();
-      });
-    }
-    if (exitBtn) {
-      exitBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        this.handleExitToLobby();
-      });
-    }
-  }
-
-  // --------------------------------------------------------------------------
   // End-screen actions
   // --------------------------------------------------------------------------
-
-  private enterReplayMode(): void {
-    if (this.replayFrames.length === 0) return;
-    this.isReplayMode = true;
-    this.replayPlaybackIdx = 0;
-    this.replayPlaying = true;
-    this.replaySpeed = 1;
-    this.replayZoom = 0.8;
-
-    // Hide end screen, show replay canvas
-    if (this.endOverlay) {
-      this.endOverlay.style.display = 'none';
-    }
-
-    // Create replay canvas + controls overlay
-    const parent = this.canvas.parentElement;
-    if (!parent) return;
-
-    const replayWrap = document.createElement('div');
-    replayWrap.id = 'oe-replay-wrap';
-    replayWrap.style.cssText = 'position:absolute;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(2,6,23,0.95);';
-
-    // Replay canvas
-    const replayCanvas = document.createElement('canvas');
-    replayCanvas.id = 'oe-replay-canvas';
-    replayCanvas.style.cssText = 'width:min(90vw,800px);aspect-ratio:16/9;border:1px solid #1e293b;border-radius:12px;background:#020617;display:block;';
-    replayWrap.appendChild(replayCanvas);
-
-    // Controls
-    const controls = document.createElement('div');
-    controls.id = 'oe-replay-controls';
-    controls.style.cssText = 'margin-top:12px;display:flex;align-items:center;gap:8px;';
-    controls.innerHTML = `
-      <button id="oe-replay-restart" type="button" style="width:32px;height:32px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#fff;cursor:pointer;font-size:14px;">↺</button>
-      <button id="oe-replay-toggle" type="button" style="width:36px;height:36px;border-radius:8px;border:none;background:#e11d48;color:#fff;cursor:pointer;font-size:16px;">⏸</button>
-      <button id="oe-replay-speed" type="button" style="height:32px;padding:0 8px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#fff;cursor:pointer;font-size:11px;font-weight:bold;font-family:monospace;">1x</button>
-      <div style="display:flex;align-items:center;gap:4px;">
-        <button id="oe-replay-zout" type="button" style="width:32px;height:32px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#fff;cursor:pointer;font-size:12px;">−</button>
-        <span id="oe-replay-zoom-label" style="width:32px;text-align:center;font-size:10px;color:#94a3b8;font-family:monospace;">80%</span>
-        <button id="oe-replay-zin" type="button" style="width:32px;height:32px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#fff;cursor:pointer;font-size:12px;">+</button>
-      </div>
-      <button id="oe-replay-exit" type="button" style="height:32px;padding:0 12px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#94a3b8;cursor:pointer;font-size:11px;font-weight:bold;">EXIT REPLAY</button>
-    `;
-    replayWrap.appendChild(controls);
-
-    // Progress bar
-    const progressWrap = document.createElement('div');
-    progressWrap.id = 'oe-replay-progress-wrap';
-    progressWrap.style.cssText = 'width:min(90vw,800px);height:6px;background:#1e293b;border-radius:3px;margin-top:8px;position:relative;';
-    const progressBar = document.createElement('div');
-    progressBar.id = 'oe-replay-progress-bar';
-    progressBar.style.cssText = 'height:100%;background:#e11d48;border-radius:3px;width:0%;transition:width 50ms;';
-    progressWrap.appendChild(progressBar);
-    // Death marker
-    if (this.replayDeathFrameIdx > 0 && this.replayFrames.length > 0) {
-      const deathPct = (this.replayDeathFrameIdx / (this.replayFrames.length - 1)) * 100;
-      const marker = document.createElement('div');
-      marker.style.cssText = `position:absolute;top:0;height:100%;width:2px;background:#fbbf24;left:${deathPct}%;`;
-      progressWrap.appendChild(marker);
-    }
-    replayWrap.appendChild(progressWrap);
-
-    // Frame counter
-    const counter = document.createElement('div');
-    counter.id = 'oe-replay-counter';
-    counter.style.cssText = 'margin-top:4px;font-size:11px;color:#94a3b8;font-family:monospace;';
-    counter.textContent = `Frame 1/${this.replayFrames.length}`;
-    replayWrap.appendChild(counter);
-
-    parent.appendChild(replayWrap);
-
-    // Setup canvas
-    this.replayCanvas = replayCanvas;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    replayCanvas.width = replayCanvas.clientWidth * dpr;
-    replayCanvas.height = replayCanvas.clientHeight * dpr;
-    this.replayCtx = replayCanvas.getContext('2d', { alpha: false });
-
-    // Event listeners
-    const toggleBtn = controls.querySelector('#oe-replay-toggle') as HTMLButtonElement;
-    const restartBtn = controls.querySelector('#oe-replay-restart') as HTMLButtonElement;
-    const speedBtn = controls.querySelector('#oe-replay-speed') as HTMLButtonElement;
-    const zinBtn = controls.querySelector('#oe-replay-zin') as HTMLButtonElement;
-    const zoutBtn = controls.querySelector('#oe-replay-zout') as HTMLButtonElement;
-    const exitBtn = controls.querySelector('#oe-replay-exit') as HTMLButtonElement;
-    const zoomLabel = controls.querySelector('#oe-replay-zoom-label') as HTMLSpanElement;
-
-    toggleBtn.onclick = () => {
-      this.replayPlaying = !this.replayPlaying;
-      toggleBtn.textContent = this.replayPlaying ? '⏸' : '▶';
-    };
-    restartBtn.onclick = () => {
-      this.replayPlaybackIdx = 0;
-      this.replayPlaying = true;
-      toggleBtn.textContent = '⏸';
-    };
-    const speeds = [0.25, 0.5, 1, 2];
-    speedBtn.onclick = () => {
-      const ci = speeds.indexOf(this.replaySpeed);
-      this.replaySpeed = speeds[(ci + 1) % speeds.length];
-      speedBtn.textContent = `${this.replaySpeed}x`;
-    };
-    zinBtn.onclick = () => {
-      this.replayZoom = Math.min(2, this.replayZoom + 0.15);
-      zoomLabel.textContent = `${Math.round(this.replayZoom * 100)}%`;
-    };
-    zoutBtn.onclick = () => {
-      this.replayZoom = Math.max(0.3, this.replayZoom - 0.15);
-      zoomLabel.textContent = `${Math.round(this.replayZoom * 100)}%`;
-    };
-    exitBtn.onclick = () => {
-      this.exitReplayMode();
-    };
-
-    // Start replay animation
-    this.replayLastTime = performance.now();
-    this.replayRafId = requestAnimationFrame(this.replayFrame.bind(this));
-  }
-
-  private replayFrame = (now: number): void => {
-    if (!this.isReplayMode || this.stopped) return;
-    this.replayRafId = requestAnimationFrame(this.replayFrame.bind(this));
-
-    const ctx = this.replayCtx;
-    const canvas = this.replayCanvas;
-    if (!ctx || !canvas) return;
-
-    // Advance frame
-    if (this.replayPlaying) {
-      const frameInterval = (1000 / 30) / this.replaySpeed;
-      const dt = now - this.replayLastTime;
-      if (dt >= frameInterval) {
-        this.replayPlaybackIdx = (this.replayPlaybackIdx + 1) % this.replayFrames.length;
-        this.replayLastTime = now;
-      }
-    } else {
-      this.replayLastTime = now;
-    }
-
-    const frame = this.replayFrames[this.replayPlaybackIdx];
-    if (!frame) return;
-
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-
-    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
-    }
-
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#020617';
-    ctx.fillRect(0, 0, w, h);
-
-    const z = this.replayZoom;
-    const camX = frame.camX;
-    const camY = frame.camY;
-
-    // World transform
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.translate(w / 2, h / 2);
-    ctx.scale(z, z);
-    ctx.translate(-camX, -camY);
-
-    // Grid
-    const gridSize = 60;
-    const viewL = camX - w / 2 / z - gridSize;
-    const viewR = camX + w / 2 / z + gridSize;
-    const viewT = camY - h / 2 / z - gridSize;
-    const viewB = camY + h / 2 / z + gridSize;
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 1 / z;
-    ctx.beginPath();
-    const sX = Math.floor(viewL / gridSize) * gridSize;
-    const eX = Math.ceil(viewR / gridSize) * gridSize;
-    const sY = Math.floor(viewT / gridSize) * gridSize;
-    const eY = Math.ceil(viewB / gridSize) * gridSize;
-    for (let x = sX; x <= eX; x += gridSize) { ctx.moveTo(x, viewT); ctx.lineTo(x, viewB); }
-    for (let y = sY; y <= eY; y += gridSize) { ctx.moveTo(viewL, y); ctx.lineTo(viewR, y); }
-    ctx.stroke();
-
-    // Draw food
-    for (const f of frame.foods) {
-      if (f.x < viewL || f.x > viewR || f.y < viewT || f.y > viewB) continue;
-      ctx.fillStyle = f.color;
-      ctx.beginPath();
-      ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Draw snakes
-    for (const s of frame.snakes) {
-      if (s.points.length === 0) continue;
-      const head = s.points[0];
-      if (head.x < viewL - 100 || head.x > viewR + 100 || head.y < viewT - 100 || head.y > viewB + 100) continue;
-
-      if (s.points.length >= 2) {
-        ctx.strokeStyle = s.color;
-        ctx.lineWidth = s.size * 2;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.moveTo(s.points[0].x, s.points[0].y);
-        for (let i = 1; i < s.points.length; i++) {
-          ctx.lineTo(s.points[i].x, s.points[i].y);
-        }
-        ctx.stroke();
-
-        // Head
-        ctx.fillStyle = s.secondaryColor ?? s.color;
-        ctx.beginPath();
-        ctx.arc(s.points[0].x, s.points[0].y, s.size * 1.2, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Player highlight
-        if (s.isPlayer && !s.isDead) {
-          ctx.strokeStyle = 'rgba(250, 204, 21, 0.5)';
-          ctx.lineWidth = s.size * 2.5;
-          ctx.beginPath();
-          ctx.moveTo(s.points[0].x, s.points[0].y);
-          for (let i = 1; i < s.points.length; i++) {
-            ctx.lineTo(s.points[i].x, s.points[i].y);
-          }
-          ctx.stroke();
-        }
-
-        // Name tag
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.font = 'bold 10px sans-serif';
-        ctx.fillStyle = s.isPlayer ? '#fcd34d' : '#e2e8f0';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-        const screenX = w / 2 + (head.x - camX) * z;
-        const screenY = h / 2 + (head.y - camY) * z - s.size * z * 1.5;
-        ctx.fillText(s.name, screenX, screenY);
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.translate(w / 2, h / 2);
-        ctx.scale(z, z);
-        ctx.translate(-camX, -camY);
-      }
-    }
-
-    // Reset transform for overlays
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    // Death indicator
-    const isPostDeathFrame = this.replayDeathFrameIdx > 0 && this.replayPlaybackIdx >= this.replayDeathFrameIdx;
-    ctx.font = 'bold 12px monospace';
-    ctx.fillStyle = 'rgba(244, 63, 94, 0.8)';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText('⏺ REPLAY', 8, 8);
-
-    if (this.replayDeathFrameIdx > 0) {
-      const preSec = Math.min(15, Math.floor(this.replayPlaybackIdx / 30));
-      const postSec = this.replayPlaybackIdx > this.replayDeathFrameIdx
-        ? Math.min(15, Math.floor((this.replayPlaybackIdx - this.replayDeathFrameIdx) / 30))
-        : 0;
-      ctx.font = '10px monospace';
-      ctx.fillStyle = isPostDeathFrame ? 'rgba(244, 63, 94, 0.9)' : 'rgba(226, 232, 240, 0.6)';
-      const label = isPostDeathFrame
-        ? `⛔ DEATH +${postSec}s | Frame ${this.replayPlaybackIdx + 1}/${this.replayFrames.length}`
-        : `Frame ${this.replayPlaybackIdx + 1}/${this.replayFrames.length} | -${Math.max(0, 15 - preSec)}s to death`;
-      ctx.fillText(label, 8, 24);
-    }
-
-    // Update progress bar
-    const progressEl = document.getElementById('oe-replay-progress-bar');
-    if (progressEl) {
-      const pct = this.replayFrames.length > 1 ? (this.replayPlaybackIdx / (this.replayFrames.length - 1)) * 100 : 0;
-      progressEl.style.width = `${pct}%`;
-    }
-    const counterEl = document.getElementById('oe-replay-counter');
-    if (counterEl) {
-      counterEl.textContent = `Frame ${this.replayPlaybackIdx + 1}/${this.replayFrames.length}`;
-    }
-  };
-
-  private exitReplayMode(): void {
-    this.isReplayMode = false;
-    if (this.replayRafId !== null) {
-      cancelAnimationFrame(this.replayRafId);
-      this.replayRafId = null;
-    }
-    this.replayCanvas = null;
-    this.replayCtx = null;
-
-    // Remove replay overlay
-    const wrap = document.getElementById('oe-replay-wrap');
-    if (wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
-
-    // Show end screen again
-    if (this.endOverlay) {
-      this.endOverlay.style.display = '';
-    }
-  }
 
   private handlePlayAgain(): void {
     if (this.endOverlay && this.endOverlay.parentNode) {
@@ -3194,7 +1986,7 @@ export class OfflineGameEngine {
     this.postDeathTicksRemaining = 0;
     this.replayFrames = [];
     this.replayDeathFrameIdx = 0;
-    this.exitReplayMode();
+    exitReplayMode(this);
     this.resetWorld();
     this.startTime = performance.now();
     this.accumulator = 0;
@@ -3214,4 +2006,110 @@ export class OfflineGameEngine {
       /* ignore */
     }
   }
+}
+
+// ============================================================================
+// Math helpers (used by multiple methods in this module)
+// ============================================================================
+
+function dist(ax: number, ay: number, bx: number, by: number): number {
+  return Math.hypot(ax - bx, ay - by);
+}
+
+/** Random point within a circle of maxR around center. */
+function randomPointInCircle(cx: number, cy: number, maxR: number): Vec2 {
+  const r = Math.sqrt(Math.random()) * maxR;
+  const theta = Math.random() * Math.PI * 2;
+  return {
+    x: cx + Math.cos(theta) * r,
+    y: cy + Math.sin(theta) * r,
+  };
+}
+
+function initialBody(headX: number, headY: number, angle: number, length: number, spacing: number): Vec2[] {
+  const pts: Vec2[] = [];
+  for (let i = 0; i < length; i++) {
+    pts.push({
+      x: headX - Math.cos(angle) * i * spacing,
+      y: headY - Math.sin(angle) * i * spacing,
+    });
+  }
+  return pts;
+}
+
+// ============================================================================
+// Food orb helpers
+// ============================================================================
+
+/** Create a Food object at a random position around the player. */
+function createFoodOrb(idPrefix: string, idCounter: { value: number }, cx: number, cy: number, farSpawn: boolean, foodOrbs?: FoodOrbDef[]): Food {
+  const orb = randomFoodOrb(foodOrbs ?? getFoodOrbs(DEFAULT_SNAKE_CONFIG));
+  const radius = farSpawn ? FOOD_SPAWN_RADIUS_FAR : FOOD_SPAWN_RADIUS_NEAR;
+  const pos = randomPointInCircle(cx, cy, radius);
+  return {
+    id: `${idPrefix}-food-${idCounter.value++}`,
+    x: pos.x,
+    y: pos.y,
+    size: orb.radius,
+    value: orb.value,
+    orbSize: orb.size,
+    color: orb.color,
+    glowColor: orb.glowColor,
+  };
+}
+
+// ----------------------------------------------------------------------------
+// Death food drop — use engine calcDeathFood + distribute along body
+// ----------------------------------------------------------------------------
+
+function computeDeathFoodDrop(
+  totalScore: number,
+  bodyPoints: Vec2[],
+  idPrefix: string,
+  idCounter: { value: number },
+  foodOrbs: FoodOrbDef[],
+): Food[] {
+  const result: Food[] = [];
+  if (!bodyPoints || bodyPoints.length === 0 || totalScore <= 0) return result;
+
+  const [smallCount, mediumCount, largeCount] = calcDeathFood(totalScore, false);
+
+  // Build orb sequence from food definitions
+  const largeOrb = foodOrbs.find(o => o.size === 'large') ?? foodOrbs[0];
+  const mediumOrb = foodOrbs.find(o => o.size === 'medium') ?? foodOrbs[0];
+  const smallOrb = foodOrbs.find(o => o.size === 'small') ?? foodOrbs[0];
+
+  const orbSequence: FoodOrbDef[] = [];
+  for (let i = 0; i < largeCount; i++) orbSequence.push(largeOrb);
+  for (let i = 0; i < mediumCount; i++) orbSequence.push(mediumOrb);
+  for (let i = 0; i < smallCount; i++) orbSequence.push(smallOrb);
+
+  // Shuffle
+  for (let i = orbSequence.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [orbSequence[i], orbSequence[j]] = [orbSequence[j], orbSequence[i]];
+  }
+
+  // Distribute orbs evenly along the body
+  const totalOrbs = orbSequence.length;
+  if (totalOrbs === 0) return result;
+  const scatter = 15;
+  let orbIdx = 0;
+  for (const orb of orbSequence) {
+    const segIdx = Math.min(bodyPoints.length - 1, Math.floor((orbIdx / totalOrbs) * bodyPoints.length));
+    const pt = bodyPoints[segIdx];
+    result.push({
+      id: `${idPrefix}-death-${idCounter.value++}`,
+      x: pt.x + (Math.random() - 0.5) * scatter,
+      y: pt.y + (Math.random() - 0.5) * scatter,
+      size: orb.radius,
+      value: orb.value,
+      orbSize: orb.size,
+      color: orb.color,
+      glowColor: orb.glowColor,
+    });
+    orbIdx++;
+  }
+
+  return result;
 }
