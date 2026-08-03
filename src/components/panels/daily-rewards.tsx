@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
+import { fmtChipsIndian as fmtChips } from '@/lib/format-chips';
 import {
   DAILY_REWARDS,
   STREAK_MILESTONES,
@@ -59,10 +60,6 @@ interface HistoryEntry {
 
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
-
-function fmtChips(n: number) {
-  return n.toLocaleString('en-IN');
-}
 
 function timeLabel(ms: number): string {
   if (ms <= 0) return '00:00:00';

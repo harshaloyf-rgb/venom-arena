@@ -57,3 +57,8 @@ export function timeAgo(date: string | Date): string {
   const years = Math.floor(months / 12);
   return `${years}y ago`;
 }
+
+/** Check if a lastSeenAt timestamp is within 5 minutes (considered online) */
+export function isOnline(lastSeenAt: string): boolean {
+  return Date.now() - new Date(lastSeenAt).getTime() < 5 * 60 * 1000;
+}

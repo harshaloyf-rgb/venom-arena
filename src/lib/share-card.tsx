@@ -11,6 +11,7 @@
  */
 
 import { countryFlag } from './game-config';
+import { formatChipsIndian as formatChips } from './format-chips';
 
 // ── Types ──
 
@@ -61,12 +62,7 @@ export interface MilestoneCardData {
 const W = 1080;
 const H = 1080;
 
-function formatChips(n: number): string {
-  if (n >= 10_000_000) return `${(n / 10_000_000).toFixed(1)} Cr`;
-  if (n >= 100_000) return `${(n / 100_000).toFixed(1)}L`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
-}
+
 
 function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60);

@@ -11,6 +11,7 @@ import {
   countryName,
   type InspectedPlayer,
 } from '@/lib/game-config';
+import { fmtChipsIndian as fmtChips } from '@/lib/format-chips';
 import {
   GlowBlob,
   MicroLabel,
@@ -123,10 +124,6 @@ const DEMO_CHAMPIONS = [
 ];
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-
-function fmtChips(n: number) {
-  return n.toLocaleString('en-IN');
-}
 
 function fmtDate(iso: string) {
   try {
