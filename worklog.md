@@ -313,3 +313,27 @@ Stage Summary:
 - No code changes needed — the features were role-gated and the user was testing as Viper
 - VENOM-3373 confirmed as Leader in DB
 - End-to-end browser verification: deposit ✅, withdraw ✅, activity log ✅, wars tab ✅, shop visible ✅, payout buttons visible ✅
+
+---
+Task ID: 4
+Agent: Main
+Task: Update Rules & Guide + Admin Guide with clear Clan Wars, War Shield, and treasury info
+
+Work Log:
+- Fixed bug: handlePayout and handleWithdraw missing fetchActivities() call — Activity Log didn't refresh after payout/withdraw
+- Rewrote Clan Wars InfoCard in rules modal: added step-by-step numbered flow (Declare→Fight→Score→Win), emphasized "No separate clan arenas needed" and "normal matches"
+- Updated War Shield description: from "Blocks war declarations for 7 days" to "7-day peace mode. No other clan can declare war on you while active"
+- Fixed Perks Roadmap note: from "All syndicates support up to 30 members regardless of level" to "start with 30 member slots, can buy Member Expansion to add +5"
+- Rewrote Clan Wars FAQ with full step-by-step explanation
+- Added new FAQ: "Can I create multiple clans?" — answered: 1 at a time, no lifetime limit
+- Updated Clan Shop FAQ: War Shield now says "7-day peace mode"
+- Updated admin guide-tab.tsx: replaced "Clan Deposits" section with full "Clan Treasury Operations" (Deposit, Withdraw, Payout, Shop) + new "Clan Wars" subsection
+- Fixed admin economy table: Clan Deposits note from "no withdrawals yet" to "withdrawable + payouts exist"
+- All changes browser-verified, lint passes
+
+Stage Summary:
+- Rules Section 15 Clan Wars now crystal clear: no separate arenas, normal matches, auto-kill scoring, 50 kill target
+- War Shield explained as "peace mode" in both rules and admin guide
+- New FAQ for multiple clan creation
+- Admin guide fully updated with all 4 treasury outflow features
+- Activity Log bug fixed (payout/withdraw now refresh the log)
