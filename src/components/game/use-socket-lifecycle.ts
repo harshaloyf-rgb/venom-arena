@@ -28,7 +28,11 @@ type JoinErrorReason =
   | 'insufficient_chips'
   | 'banned'
   | 'invalid_arena'
-  | 'already_in_match';
+  | 'already_in_match'
+  | 'player_not_found'
+  | 'database_error'
+  | 'server_error'
+  | string;
 
 interface JoinErrorPayload {
   reason: JoinErrorReason;
@@ -342,14 +346,17 @@ export function useSocketLifecycle({
 
       const onJoinError = (payload: unknown) => {
         const data = payload as JoinErrorPayload;
-        const messages: Record<JoinErrorReason, string> = {
+        const messages: Record<string, string> = {
           insufficient_chips: 'Not enough chips to enter this arena.',
           banned: 'Your account has been banned.',
           invalid_arena: 'This arena does not exist.',
           already_in_match: 'You are already in a match.',
+          player_not_found: 'Player profile not found. Try re-logging.',
+          database_error: 'Server error — please try again.',
+          server_error: 'Server error — please try again.',
         };
-        const reason = data?.reason ?? 'invalid_arena';
-        const msg = messages[reason] || 'Could not join arena.';
+        const reason = data?.reason ?? 'server_error';
+        const msg = messages[reason] || `Join failed (${reason}).`;
         setConnectionError(msg);
         setConnectingMsg('');
         toast({

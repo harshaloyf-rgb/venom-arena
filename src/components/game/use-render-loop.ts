@@ -251,6 +251,7 @@ export function useRenderLoop({
 
       // --- Build per-frame render context ---
       const playerSkin = getCosmeticById(playerSkinRef.current);
+      const input = computeInputRef.current?.() ?? { angle: null, boost: false };
       const rc: FrameRenderCtx = {
         ctx,
         w: cssW,
@@ -265,6 +266,7 @@ export function useRenderLoop({
         metallicCache: metallicCacheRef.current,
         playerSkin,
         dpr,
+        pointerAngle: input.angle ?? mySnake?.angle,
       };
 
       // --- World transform ---
