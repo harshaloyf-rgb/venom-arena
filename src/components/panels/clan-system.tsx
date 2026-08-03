@@ -3,192 +3,35 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
 import { countryFlag, type InspectedPlayer } from '@/lib/game-config';
-import { isOnline, timeAgo } from '@/lib/date-utils';
 import {
   GlowBlob,
   MicroLabel,
   NotSignedIn,
-  PanelSkeleton,
   notify,
   type ToastFn,
 } from './_panel-primitives';
 import {
-  Shield,
-  Search,
-  Plus,
-  Trophy,
-  Coins,
-  Users,
-  MessageSquare,
-  Send,
-  Award,
-  Check,
-  X,
-  Loader2,
-  Swords,
-  ChevronUp,
-  ChevronDown,
-  ScrollText,
-  Zap,
-  UserMinus,
-  Target,
-  Settings,
-  Skull,
-  TrendingUp,
-  Crosshair,
-  LogOut,
-  Circle,
-  Crown,
-  Lock,
-  Star,
-  AlertTriangle,
-  ShoppingCart,
+  Shield, Search, Plus, Trophy, LogOut, Loader2, Swords, ScrollText, Skull, TrendingUp, Circle, Settings, X, Check, AlertTriangle,
 } from 'lucide-react';
 
-interface ClanSystemProps {
-  onToast?: ToastFn;
-  onInspectPlayer?: (p: InspectedPlayer) => void;
-}
+// Sub-view components
+import { ClanOverview } from './clan/clan-overview';
+import { ClanWars } from './clan/clan-wars';
+import { ClanChallenges } from './clan/clan-challenges';
+import { ClanStatsView } from './clan/clan-stats';
+import { ClanActivity } from './clan/clan-activity';
+import { ClanBrowse } from './clan/clan-browse';
 
-type Tab = 'mine' | 'browse' | 'form';
-type MineSubTab = 'overview' | 'challenges' | 'wars' | 'activity' | 'stats';
-
-interface ClanInfo {
-  tag: string;
-  name: string;
-  emblem: string;
-  description: string;
-  level: number;
-  xp: number;
-  totalDeposited: number;
-  bankedChips: number;
-  maxMembers: number;
-  memberCount: number;
-}
-
-interface ClanMember {
-  userTag: string;
-  name: string;
-  country: string;
-  level: number;
-  bankedChips: number;
-  clanRank: string | null;
-  avatar: string | null;
-  lastSeenAt: string;
-}
-
-interface ChatMessage {
-  id: string;
-  senderTag: string;
-  senderName: string;
-  rank: string;
-  message: string;
-  createdAt: string;
-}
-
-interface ActivityEntry {
-  id: string;
-  type: string;
-  actorTag: string;
-  actorName: string;
-  detail: string | null;
-  createdAt: string;
-}
-
-interface ClanChallenge {
-  id: string;
-  type: string;
-  title: string;
-  description: string;
-  target: number;
-  progress: number;
-  reward: number;
-  claimed: boolean;
-  claimedBy: string | null;
-  weekStart: string;
-}
-
-interface ClanStats {
-  totalMembers: number;
-  onlineCount: number;
-  totalChips: number;
-  avgLevel: number;
-  totalKills: number;
-  totalDeaths: number;
-  totalExtracts: number;
-  totalEarned: number;
-  highestLevel: number;
-  richestChips: number;
-  bestStreak: number;
-  kdRatio: string;
-}
-
-interface WarInfo {
-  id: string;
-  declarerTag: string;
-  declarerName: string;
-  targetTag: string;
-  targetName: string;
-  wager: number;
-  declarerScore: number;
-  targetScore: number;
-  totalPot: number;
-  startedAt: string;
-}
-
-const EMBLEM_OPTIONS = [
-  { value: '\u0001f40d', label: '\u0001f40d Viper Snake' },
-  { value: '\u0001f451', label: '\u0001f451 Royal Crown' },
-  { value: '\u0001f977', label: '\u0001f977 Cyber Ninja' },
-  { value: '\u0001f525', label: '\u0001f525 Phoenix Fire' },
-  { value: '\u26a1', label: '\u26a1 Lightning Bolt' },
-  { value: '\u0001f48e', label: '\u0001f48e Diamond Shield' },
-];
-
-const ACTIVITY_ICONS: Record<string, string> = {
-  join: '\u2b06\ufe0f',
-  leave: '\u2b07\ufe0f',
-  deposit: '\u0001f4b0',
-  create: '\u0001f3af',
-  promote: '\u2b06\ufe0f',
-  demote: '\u2b07\ufe0f',
-  challenge_claim: '\u0001f3c6',
-  level_up: '\u2b50',
-  withdraw: '\u0001f4b0',
-  payout: '\u0001f4b0',
-  shop_purchase: '\u0001f6d2',
-  war_declare: '\u2694\ufe0f',
-  war_end: '\u0001f3c6',
-};
-
-const CHALLENGE_ICONS: Record<string, typeof Target> = {
-  treasury_target: Coins,
-  recruitment_drive: UserMinus,
-  chat_activity: MessageSquare,
-  deposit_streak: Zap,
-};
-
-const RANK_COLORS: Record<string, string> = {
-  Leader: 'text-amber-300',
-  'Co-Leader': 'text-purple-300',
-  Viper: 'text-indigo-300',
-};
-
-const RANK_BG: Record<string, string> = {
-  Leader: 'text-amber-300 bg-amber-500/10 border-amber-500/30',
-  'Co-Leader': 'text-purple-300 bg-purple-500/10 border-purple-500/30',
-  Viper: 'text-slate-400 bg-slate-500/10 border-slate-500/30',
-};
-
-const PERK_ROADMAP = [
-  { level: 1, title: 'Base', desc: 'Up to 10 members' },
-  { level: 2, title: 'Extended Roster', desc: 'Up to 15 members' },
-  { level: 3, title: 'Quick Deposit', desc: '10% XP bonus on deposits' },
-  { level: 5, title: 'Elite Status', desc: 'Up to 20 members, +20% challenge rewards' },
-  { level: 10, title: 'Legendary Syndicate', desc: 'Up to 30 members, custom emblem colors' },
-];
+// Types & constants
+import {
+  EMBLEM_OPTIONS, RANK_BG,
+  type Tab, type MineSubTab, type ClanSystemProps,
+  type ClanInfo, type ClanMember, type ChatMessage, type ActivityEntry,
+  type ClanChallenge, type ClanStats, type WarInfo,
+} from './clan/_types';
 
 export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
+  const { player, refresh } = useAuth();
   const [tab, setTab] = useState<Tab>('mine');
   const [mineSub, setMineSub] = useState<MineSubTab>('overview');
   const [search, setSearch] = useState('');
@@ -228,7 +71,8 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
   const isCoLeader = player?.clanRank === 'Co-Leader';
   const canManage = isLeader || isCoLeader;
 
-  // Fetch clan directory
+  // ─── Fetch functions ───────────────────────────────────────
+
   const fetchClans = useCallback(async () => {
     setClansLoading(true);
     try {
@@ -314,7 +158,7 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
     void fetchChallenges(playerClanTag);
     void fetchStats(playerClanTag);
     void fetchWar(playerClanTag);
-  }, [playerClanTag, fetchChat, fetchMembers, fetchActivities, fetchChallenges, fetchStats]);
+  }, [playerClanTag, fetchChat, fetchMembers, fetchActivities, fetchChallenges, fetchStats, fetchWar]);
 
   useEffect(() => { void fetchClans(); }, [fetchClans]);
 
@@ -339,6 +183,8 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
   }, [player?.bankedChips]);
 
   if (!player) return <NotSignedIn />;
+
+  // ─── Handlers ─────────────────────────────────────────────
 
   async function handleJoinClan(tag: string, clanName: string) {
     if (playerClanTag) { notify('Already in a clan!', 'error', onToast); return; }
@@ -367,7 +213,7 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
   async function handleDeposit(amt?: number) {
     const val = amt ?? parseInt(depositAmount, 10);
     if (!val || val <= 0) { notify('Enter a valid amount.', 'error', onToast); return; }
-    if (val > player.bankedChips) { notify('Insufficient chips.', 'error', onToast); return; }
+    if (!player || val > player.bankedChips) { notify('Insufficient chips.', 'error', onToast); return; }
     if (!playerClanTag) { notify('Join a clan first.', 'error', onToast); return; }
     setActionBusy('deposit');
     try {
@@ -557,6 +403,8 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
     onInspectPlayer({ name: m.name, userTag: m.userTag, country: m.country, flag: countryFlag(m.country), bankedChips: m.bankedChips, level: m.level, clanTag: playerClanTag || undefined, clanName: myClanInfo?.name || undefined });
   }
 
+  // ─── Render ───────────────────────────────────────────────
+
   return (
     <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 overflow-hidden">
       <GlowBlob color="bg-indigo-500/10" className="-top-12 -right-12 w-56 h-56" />
@@ -685,575 +533,109 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
                 ))}
               </div>
 
-              {/* ========= OVERVIEW ========= */}
+              {/* ========= Sub-views ========= */}
               {mineSub === 'overview' && (
-                <div className="space-y-4">
-                  {/* Perks Roadmap */}
-                  <div className="p-4 rounded-2xl border border-amber-500/20 bg-amber-500/5">
-                    <h4 className="text-sm font-bold text-white flex items-center gap-2 mb-3"><Star className="w-4 h-4 text-amber-400" /> Perks Roadmap</h4>
-                    <div className="relative pl-6 space-y-3">
-                      <div className="absolute left-2 top-1 bottom-1 w-px bg-slate-700" />
-                      {PERK_ROADMAP.map((perk) => {
-                        const unlocked = (myClanInfo?.level || 1) >= perk.level;
-                        return (
-                          <div key={perk.level} className="relative flex items-start gap-3">
-                            <div className={`absolute -left-4 top-0.5 w-3 h-3 rounded-full border-2 ${unlocked ? 'bg-amber-400 border-amber-300' : 'bg-slate-800 border-slate-600'}`} />
-                            <div className={`flex-1 p-2.5 rounded-xl border ${unlocked ? 'border-amber-500/30 bg-amber-500/5' : 'border-slate-800 bg-slate-950/60 opacity-60'}`}>
-                              <div className="flex items-center gap-2">
-                                <span className={`text-[10px] font-mono font-bold ${unlocked ? 'text-amber-300' : 'text-slate-500'}`}>LVL {perk.level}</span>
-                                <span className={`text-xs font-bold ${unlocked ? 'text-white' : 'text-slate-500'}`}>{perk.title}</span>
-                                {!unlocked && <Lock className="w-3 h-3 text-slate-600" />}
-                              </div>
-                              <p className={`text-[10px] mt-0.5 ${unlocked ? 'text-slate-300' : 'text-slate-600'}`}>{perk.desc}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Top Depositors */}
-                  {members.length > 0 && (() => {
-                    const top3 = [...members].sort((a, b) => b.bankedChips - a.bankedChips).slice(0, 3);
-                    const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
-                    return (
-                      <div className="p-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/5">
-                        <h4 className="text-sm font-bold text-white flex items-center gap-2 mb-3"><Trophy className="w-4 h-4 text-emerald-400" /> Top Depositors</h4>
-                        <div className="space-y-2">
-                          {top3.map((m, i) => (
-                            <div key={m.userTag} className="flex items-center justify-between p-2 rounded-lg bg-slate-950/60 border border-slate-800">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className="text-base" aria-hidden>{medals[i]}</span>
-                                <span className="text-xs text-white font-bold truncate">{m.name}</span>
-                              </div>
-                              <span className="text-[11px] font-mono text-emerald-400 font-bold shrink-0">{m.bankedChips.toLocaleString()}c</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Treasury */}
-                  <div className="p-4 rounded-2xl border border-slate-800 bg-slate-950/60">
-                    <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                      <h4 className="text-sm font-bold text-white flex items-center gap-2"><Coins className="w-4 h-4 text-emerald-400" /> Clan Treasury Bank</h4>
-                      <span className="text-sm font-mono font-bold text-emerald-400">{(myClanInfo?.bankedChips || 0).toLocaleString()}c</span>
-                    </div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <input type="number" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)} placeholder="Amount..." className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-emerald-500/50" />
-                      <button type="button" onClick={() => void handleDeposit()} disabled={actionBusy === 'deposit'} className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50">
-                        {actionBusy === 'deposit' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Coins className="w-3.5 h-3.5" />} Deposit
-                      </button>
-                    </div>
-                    {/* Quick deposit buttons */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {quickDeposits.map((qd) => (
-                        <button key={qd.label} type="button" onClick={() => void handleDeposit(qd.value)} disabled={qd.value <= 0 || actionBusy === 'deposit'} className="px-2 py-1 rounded text-[10px] font-bold bg-slate-900 hover:bg-emerald-500/10 text-emerald-400/80 border border-emerald-500/20 hover:border-emerald-500/40 transition disabled:opacity-30">
-                          {qd.label} ({qd.value.toLocaleString()}c)
-                        </button>
-                      ))}
-                      <button type="button" onClick={() => void handleWithdraw()} disabled={actionBusy === 'withdraw' || !depositAmount} className="ml-auto px-2 py-1 rounded text-[10px] font-bold bg-slate-900 hover:bg-rose-500/10 text-rose-400/80 border border-rose-500/20 hover:border-rose-500/40 transition disabled:opacity-30 flex items-center gap-1">
-                        {actionBusy === 'withdraw' ? <Loader2 className="w-3 h-3 animate-spin" /> : <LogOut className="w-3 h-3" />} Withdraw
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Treasury Actions: Shop */}
-                  {isLeader && (
-                    <div className="p-4 rounded-2xl border border-violet-500/20 bg-violet-500/5">
-                      <h4 className="text-sm font-bold text-white flex items-center gap-2 mb-3"><ShoppingCart className="w-4 h-4 text-violet-400" /> Clan Shop <span className="text-[10px] font-mono text-slate-500 font-normal">— spend treasury chips on perks</span></h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        {[{ id: 'member_expansion', name: 'Member Expansion', cost: 15000, desc: '+5 max member slots', emoji: '👥' },
-                          { id: 'xp_windfall', name: 'XP Windfall', cost: 8000, desc: 'Instant Level × 500 XP', emoji: '⚡' },
-                          { id: 'war_shield', name: 'War Shield', cost: 5000, desc: 'Block war declarations 7 days', emoji: '🛡️' },
-                        ].map((item) => (
-                          <button key={item.id} type="button" onClick={() => void handleShopPurchase(item.id)} disabled={actionBusy === 'shop' || (myClanInfo?.bankedChips || 0) < item.cost} className="p-3 rounded-xl border border-slate-800 bg-slate-950/80 hover:border-violet-500/40 transition text-left disabled:opacity-40 group">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-base">{item.emoji}</span>
-                              <span className="text-xs font-mono font-bold text-violet-400">{item.cost.toLocaleString()}c</span>
-                            </div>
-                            <p className="text-[11px] font-bold text-white">{item.name}</p>
-                            <p className="text-[10px] text-slate-500">{item.desc}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Quick Challenge Preview */}
-                  {challenges.length > 0 && (
-                    <div className="p-4 rounded-2xl border border-amber-500/20 bg-amber-500/5">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-bold text-white flex items-center gap-2"><Swords className="w-4 h-4 text-amber-400" /> Weekly Challenges</h4>
-                        <button type="button" onClick={() => setMineSub('challenges')} className="text-[10px] font-bold text-amber-400 hover:text-amber-300 transition">View All &rarr;</button>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        {challenges.slice(0, 3).map((ch) => {
-                          const pct = Math.min(100, Math.floor((ch.progress / ch.target) * 100));
-                          const done = ch.progress >= ch.target;
-                          const Icon = CHALLENGE_ICONS[ch.type] || Target;
-                          return (
-                            <div key={ch.id} className={`p-2.5 rounded-xl border ${ch.claimed ? 'border-emerald-500/30 bg-emerald-500/5' : done ? 'border-amber-500/40 bg-amber-500/10' : 'border-slate-800 bg-slate-950/60'}`}>
-                              <div className="flex items-center gap-1.5 mb-1">
-                                <Icon className="w-3 h-3 text-amber-400" />
-                                <span className="text-[10px] font-bold text-white truncate">{ch.title}</span>
-                                {ch.claimed && <Check className="w-3 h-3 text-emerald-400 ml-auto" />}
-                              </div>
-                              <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
-                                <div className={`h-full rounded-full transition-all duration-500 ${ch.claimed ? 'bg-emerald-500' : done ? 'bg-amber-400' : 'bg-amber-600/60'}`} style={{ width: `${pct}%` }} />
-                              </div>
-                              <div className="text-[9px] text-slate-500 mt-1 font-mono">{ch.progress}/{ch.target} &middot; +{ch.reward.toLocaleString()}c</div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Members */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-sm font-bold text-white flex items-center gap-2"><Users className="w-4 h-4 text-indigo-400" /> Member Roster ({myClanInfo?.memberCount || 0})</h4>
-                      <span className="text-[10px] font-mono text-slate-500">Max: {myClanInfo?.maxMembers || 30}</span>
-                    </div>
-                    {membersLoading ? <PanelSkeleton count={3} height="h-12" /> : (
-                      <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-                        {members.length === 0 ? (
-                          <div className="p-6 text-center text-xs text-slate-500"><Users className="w-8 h-8 mx-auto mb-2 opacity-40" />No members.</div>
-                        ) : (
-                          <ol className="divide-y divide-slate-900 max-h-72 overflow-y-auto va-scroll">
-                            {members.map((m) => {
-                              const canPromote = isLeader && m.clanRank === 'Viper';
-                              const canDemote = isLeader && m.clanRank === 'Co-Leader';
-                              const canTransfer = isLeader && m.clanRank === 'Co-Leader';
-                              const canKick = canManage && m.clanRank !== 'Leader' && m.userTag !== player?.userTag;
-                              const online = isOnline(m.lastSeenAt);
-                              const isSelf = m.userTag === player?.userTag;
-                              return (
-                                <li key={m.userTag} className="px-4 py-3 text-sm flex items-center justify-between gap-3">
-                                  <div className="flex items-center gap-3 min-w-0">
-                                    <div className="relative shrink-0">
-                                      <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-base" aria-hidden>{countryFlag(m.country)}</div>
-                                      {online ? (
-                                        <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-slate-950" />
-                                      ) : (
-                                        <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-slate-600 border-2 border-slate-950" />
-                                      )}
-                                    </div>
-                                    <div className="min-w-0">
-                                      <div className="font-bold text-white truncate flex items-center gap-1.5 flex-wrap">
-                                        {m.name} <span className="text-[9px] font-mono text-slate-500">{m.userTag}</span>
-                                        {m.clanRank && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${RANK_BG[m.clanRank] || RANK_BG.Viper}`}>{m.clanRank.toUpperCase()}</span>}
-                                        {isSelf && <span className="text-[9px] font-mono text-slate-600">(you)</span>}
-                                      </div>
-                                      <div className="text-[10px] font-mono text-slate-500">Lvl {m.level} &middot; {m.bankedChips.toLocaleString()}c {online ? <span className="text-emerald-400">&middot; online</span> : <span className="text-slate-600">&middot; offline</span>}</div>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-1 shrink-0">
-                                    {canTransfer && (
-                                      <button type="button" title="Transfer Leader" disabled={actionBusy !== ''} onClick={() => void handleTransferLeadership(m.userTag, m.name)} className="p-1.5 rounded text-[10px] bg-slate-900 hover:bg-amber-500/10 text-amber-300 border border-amber-500/20 transition disabled:opacity-50"><Crown className="w-3.5 h-3.5" /></button>
-                                    )}
-                                    {canPromote && (
-                                      <button type="button" title="Promote" disabled={actionBusy !== ''} onClick={() => void handleRoleAction(m.userTag, 'promote', m.name)} className="p-1.5 rounded text-[10px] bg-slate-900 hover:bg-purple-500/10 text-purple-300 border border-purple-500/20 transition disabled:opacity-50"><ChevronUp className="w-3.5 h-3.5" /></button>
-                                    )}
-                                    {canDemote && (
-                                      <button type="button" title="Demote" disabled={actionBusy !== ''} onClick={() => void handleRoleAction(m.userTag, 'demote', m.name)} className="p-1.5 rounded text-[10px] bg-slate-900 hover:bg-rose-500/10 text-rose-300 border border-rose-500/20 transition disabled:opacity-50"><ChevronDown className="w-3.5 h-3.5" /></button>
-                                    )}
-                                    {canKick && (
-                                      <button type="button" title="Kick" disabled={actionBusy !== ''} onClick={() => void handleKickMember(m.userTag, m.name)} className="p-1.5 rounded text-[10px] bg-slate-900 hover:bg-rose-500/10 text-rose-400 border border-rose-500/20 transition disabled:opacity-50"><UserMinus className="w-3.5 h-3.5" /></button>
-                                    )}
-                                    {canManage && !isSelf && (
-                                      <button type="button" title="Payout chips" disabled={actionBusy !== ''} onClick={() => void handlePayout(m.userTag)} className="p-1.5 rounded text-[10px] bg-slate-900 hover:bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 transition disabled:opacity-50"><Coins className="w-3.5 h-3.5" /></button>
-                                    )}
-                                    <button type="button" onClick={() => inspectMember(m)} className="px-2 py-1 rounded text-[10px] font-bold bg-slate-900 hover:bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 transition">Inspect</button>
-                                  </div>
-                                </li>
-                              );
-                            })}
-                          </ol>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Chat Feed */}
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950/60 overflow-hidden">
-                    <div className="px-4 py-2.5 border-b border-slate-800 flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4 text-indigo-400" />
-                      <h4 className="text-sm font-bold text-white">Syndicate Chat Feed</h4>
-                    </div>
-                    {chatLoading ? <PanelSkeleton count={3} height="h-10" /> : (
-                      <>
-                        <div className="p-4 space-y-2 max-h-[200px] overflow-y-auto va-scroll">
-                          {chatMessages.length === 0 ? (
-                            <div className="text-center text-xs text-slate-500 py-4">No messages yet. Be the first to post!</div>
-                          ) : (
-                            chatMessages.map((msg) => {
-                              const rankColor = RANK_COLORS[msg.rank] || 'text-indigo-300';
-                              return (
-                                <div key={msg.id} className="p-2 rounded-lg bg-slate-900/60 border border-slate-800">
-                                  <div className="text-[10px] font-mono text-slate-500 mb-0.5">
-                                    <span className={`font-bold ${rankColor}`}>{msg.senderName}</span>
-                                    <span className="text-slate-600"> [{msg.rank}]</span>
-                                    {' \u00b7 '}{new Date(msg.createdAt).toLocaleTimeString()}
-                                  </div>
-                                  <div className="text-xs text-slate-200">{msg.message}</div>
-                                </div>
-                              );
-                            })
-                          )}
-                        </div>
-                        <div className="p-3 border-t border-slate-800 flex items-center gap-2">
-                          <input type="text" value={broadcast} onChange={(e) => setBroadcast(e.target.value)} placeholder="Type a message..." className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50" />
-                          <button type="button" onClick={() => void handleBroadcast()} disabled={actionBusy === 'broadcast' || !broadcast.trim()} className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50">
-                            {actionBusy === 'broadcast' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />} Send
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
+                <ClanOverview
+                  playerClanTag={playerClanTag}
+                  isLeader={isLeader}
+                  isCoLeader={isCoLeader}
+                  canManage={canManage}
+                  myClanInfo={myClanInfo}
+                  clanStats={clanStats}
+                  xpProgress={xpProgress}
+                  xpNeeded={xpNeeded}
+                  members={members}
+                  membersLoading={membersLoading}
+                  chatMessages={chatMessages}
+                  chatLoading={chatLoading}
+                  challenges={challenges}
+                  depositAmount={depositAmount}
+                  broadcast={broadcast}
+                  quickDeposits={quickDeposits}
+                  actionBusy={actionBusy}
+                  onDepositAmountChange={setDepositAmount}
+                  onBroadcastChange={setBroadcast}
+                  onDeposit={handleDeposit}
+                  onWithdraw={handleWithdraw}
+                  onBroadcast={handleBroadcast}
+                  onShopPurchase={handleShopPurchase}
+                  onPromote={(t, n) => void handleRoleAction(t, 'promote', n)}
+                  onDemote={(t, n) => void handleRoleAction(t, 'demote', n)}
+                  onKick={handleKickMember}
+                  onTransfer={handleTransferLeadership}
+                  onPayout={handlePayout}
+                  onInspect={inspectMember}
+                  onOpenSettings={openSettings}
+                  onLeave={handleLeaveClan}
+                  onSetMineSub={setMineSub}
+                  playerUserTag={player.userTag}
+                  playerClanRank={player.clanRank ?? undefined}
+                  playerBankedChips={player.bankedChips}
+                />
               )}
 
-              {/* ========= CHALLENGES ========= */}
               {mineSub === 'challenges' && (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-2xl border border-amber-500/20 bg-amber-500/5">
-                    <div className="flex items-center gap-2 mb-1"><Swords className="w-4 h-4 text-amber-400" /><h4 className="text-sm font-bold text-white">Weekly Syndicate Challenges</h4></div>
-                    <p className="text-[11px] text-slate-400">Complete challenges to earn bonus treasury chips! Resets every Monday. {canManage ? 'Leaders/Co-Leaders can claim rewards.' : 'Ask a Leader to claim.'}</p>
-                  </div>
-                  {challengesLoading ? <PanelSkeleton count={3} height="h-32" /> : (
-                    <div className="space-y-3">
-                      {challenges.length === 0 ? (
-                        <div className="p-6 text-center text-xs text-slate-500"><Swords className="w-8 h-8 mx-auto mb-2 opacity-40" />Challenges will appear when your clan is active.</div>
-                      ) : challenges.map((ch) => {
-                        const pct = Math.min(100, Math.floor((ch.progress / ch.target) * 100));
-                        const done = ch.progress >= ch.target;
-                        const Icon = CHALLENGE_ICONS[ch.type] || Target;
-                        return (
-                          <div key={ch.id} className={`p-4 rounded-2xl border transition ${ch.claimed ? 'border-emerald-500/30 bg-emerald-500/5' : done ? 'border-amber-500/40 bg-amber-500/10' : 'border-slate-800 bg-slate-950/60'}`}>
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex items-start gap-3 min-w-0">
-                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${ch.claimed ? 'bg-emerald-500/20' : done ? 'bg-amber-500/20' : 'bg-slate-900'}`}>
-                                  {ch.claimed ? <Check className="w-4.5 h-4.5 text-emerald-400" /> : <Icon className={`w-4.5 h-4.5 ${done ? 'text-amber-400' : 'text-slate-500'}`} />}
-                                </div>
-                                <div className="min-w-0">
-                                  <h5 className="text-xs font-bold text-white">{ch.title}</h5>
-                                  <p className="text-[11px] text-slate-400 mt-0.5">{ch.description}</p>
-                                  <div className="flex items-center gap-3 mt-2">
-                                    <span className="text-[10px] font-mono text-slate-500">{ch.progress.toLocaleString()} / {ch.target.toLocaleString()}</span>
-                                    <span className="text-[10px] font-mono text-emerald-400">+{ch.reward.toLocaleString()}c</span>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="shrink-0 flex flex-col items-end gap-2">
-                                {done && !ch.claimed && canManage && (
-                                  <button type="button" onClick={() => void handleClaimChallenge(ch.id)} disabled={actionBusy === 'claim'} className="px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-bold transition flex items-center gap-1.5 disabled:opacity-50">
-                                    {actionBusy === 'claim' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Award className="w-3 h-3" />} Claim
-                                  </button>
-                                )}
-                                {ch.claimed && <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded">Claimed</span>}
-                              </div>
-                            </div>
-                            <div className="mt-3 w-full h-2 bg-slate-900 rounded-full overflow-hidden">
-                              <div className={`h-full rounded-full transition-all duration-700 ${ch.claimed ? 'bg-emerald-500' : done ? 'bg-amber-400' : 'bg-amber-600/60'}`} style={{ width: `${pct}%` }} />
-                            </div>
-                            {ch.claimed && ch.claimedBy && <div className="text-[9px] text-slate-500 mt-1.5 font-mono">Claimed by {ch.claimedBy}</div>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                <ClanChallenges
+                  challenges={challenges}
+                  challengesLoading={challengesLoading}
+                  canManage={canManage}
+                  actionBusy={actionBusy}
+                  onClaim={handleClaimChallenge}
+                />
               )}
 
-
-              {/* ========= WARS ========= */}
               {mineSub === 'wars' && (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-2xl border border-rose-500/20 bg-rose-500/5">
-                    <div className="flex items-center gap-2 mb-1"><Skull className="w-4 h-4 text-rose-400" /><h4 className="text-sm font-bold text-white">Clan Wars</h4></div>
-                    <p className="text-[11px] text-slate-400">Wager treasury chips against rival clans. First to 50 kills wins the pot. {isLeader ? 'You can declare war on other clans.' : 'Only the Leader can declare wars.'}</p>
-                  </div>
-                  {warLoading ? <PanelSkeleton count={2} height="h-48" /> : activeWar ? (
-                    <div className="p-4 rounded-2xl border border-rose-500/40 bg-rose-500/5 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-bold text-rose-300 flex items-center gap-2"><Skull className="w-4 h-4" /> ACTIVE WAR</h4>
-                        <span className="text-[10px] font-mono text-slate-500">Started {timeAgo(new Date(activeWar.startedAt))}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="text-center flex-1 min-w-0">
-                          <p className={`text-xs font-bold truncate ${activeWar.declarerTag === playerClanTag ? 'text-emerald-400' : 'text-rose-400'}`}>{activeWar.declarerName}</p>
-                          <p className="text-[10px] font-mono text-slate-500">[{activeWar.declarerTag}]</p>
-                        </div>
-                        <div className="text-rose-400 font-black text-lg">VS</div>
-                        <div className="text-center flex-1 min-w-0">
-                          <p className={`text-xs font-bold truncate ${activeWar.targetTag === playerClanTag ? 'text-emerald-400' : 'text-rose-400'}`}>{activeWar.targetName}</p>
-                          <p className="text-[10px] font-mono text-slate-500">[{activeWar.targetTag}]</p>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-bold text-white">{activeWar.declarerName}</span>
-                            <span className="text-[10px] font-mono text-amber-400">{activeWar.declarerScore} / 50</span>
-                          </div>
-                          <div className="w-full h-3 bg-slate-900 rounded-full overflow-hidden">
-                            <div className="h-full bg-gradient-to-r from-rose-600 to-rose-400 rounded-full transition-all duration-700" style={{ width: `${Math.min(100, (activeWar.declarerScore / 50) * 100)}%` }} />
-                          </div>
-                        </div>
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] font-bold text-white">{activeWar.targetName}</span>
-                            <span className="text-[10px] font-mono text-amber-400">{activeWar.targetScore} / 50</span>
-                          </div>
-                          <div className="w-full h-3 bg-slate-900 rounded-full overflow-hidden">
-                            <div className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full transition-all duration-700" style={{ width: `${Math.min(100, (activeWar.targetScore / 50) * 100)}%` }} />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-center">
-                        <p className="text-[10px] font-mono text-amber-300/70 uppercase tracking-widest">Total Pot</p>
-                        <p className="text-xl font-mono font-black text-amber-300">{activeWar.totalPot.toLocaleString()}c</p>
-                        <p className="text-[10px] text-slate-500 mt-1">Each clan wagered {activeWar.wager.toLocaleString()}c - Winner takes all</p>
-                      </div>
-                      <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/60">
-                        <p className="text-[11px] text-slate-400 leading-relaxed">
-                          <strong className="text-white">How it works:</strong> Play matches normally. Every kill by any clan member counts toward your side score. First clan to reach <strong className="text-amber-400">50 kills</strong> wins the entire pot. The war ends automatically.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <div className="p-6 rounded-2xl border border-slate-800 bg-slate-950/60 text-center">
-                        <Skull className="w-10 h-10 text-slate-600 mx-auto mb-2" />
-                        <h5 className="text-sm font-bold text-white">No Active War</h5>
-                        <p className="text-[11px] text-slate-500 mt-1">Your clan is not currently at war. Declare one below!</p>
-                      </div>
-                      {isLeader ? (
-                        <div className="p-4 rounded-2xl border border-rose-500/20 bg-rose-500/5 space-y-3">
-                          <h4 className="text-sm font-bold text-white flex items-center gap-2"><Swords className="w-4 h-4 text-rose-400" /> Declare War</h4>
-                          <div>
-                            <label className="text-[10px] font-mono uppercase tracking-widest text-slate-500 block mb-1">Target Clan</label>
-                            <div className="relative">
-                              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                              <input type="text" value={warSearch} onChange={(e) => setWarSearch(e.target.value.toUpperCase())} placeholder="Search by name or tag..." className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-rose-500/50" />
-                            </div>
-                          </div>
-                          {warSearch ? (
-                            <div className="max-h-48 overflow-y-auto va-scroll rounded-xl border border-slate-800 bg-slate-950/80">
-                              {clans.filter(c => c.tag !== playerClanTag && (c.name.toLowerCase().includes(warSearch.toLowerCase()) || c.tag.includes(warSearch))).length === 0 ? (
-                                <div className="p-4 text-center text-[11px] text-slate-500">No clans found.</div>
-                              ) : clans.filter(c => c.tag !== playerClanTag && (c.name.toLowerCase().includes(warSearch.toLowerCase()) || c.tag.includes(warSearch))).map(c => (
-                                <button key={c.tag} type="button" onClick={() => setWarSearch(c.tag)} className={`w-full px-4 py-2.5 text-left flex items-center justify-between hover:bg-rose-500/10 transition border-b border-slate-900 last:border-0 ${warSearch === c.tag ? 'bg-rose-500/10' : ''}`}>
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <span className="text-lg" aria-hidden>{c.emblem}</span>
-                                    <div className="min-w-0">
-                                      <p className="text-xs text-white font-bold truncate">{c.name}</p>
-                                      <p className="text-[10px] font-mono text-slate-500">[{c.tag}] - Lvl {c.level} - {c.memberCount} members</p>
-                                    </div>
-                                  </div>
-                                  <span className="text-[10px] font-mono text-emerald-400 shrink-0">{c.bankedChips.toLocaleString()}c</span>
-                                </button>
-                              ))}
-                            </div>
-                          ) : null}
-                          {clans.find(c => c.tag === warSearch) ? (
-                            <div className="p-3 rounded-xl border border-rose-500/30 bg-rose-500/5 flex items-center justify-between">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className="text-lg" aria-hidden>{clans.find(c => c.tag === warSearch)?.emblem}</span>
-                                <div className="min-w-0">
-                                  <p className="text-xs text-white font-bold truncate">{clans.find(c => c.tag === warSearch)?.name} [{warSearch}]</p>
-                                  <p className="text-[10px] text-slate-500">Treasury: {clans.find(c => c.tag === warSearch)?.bankedChips.toLocaleString()}c - {clans.find(c => c.tag === warSearch)?.memberCount} members</p>
-                                </div>
-                              </div>
-                              <button type="button" onClick={() => setWarSearch('')} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white transition"><X className="w-3.5 h-3.5" /></button>
-                            </div>
-                          ) : null}
-                          <div>
-                            <label className="text-[10px] font-mono uppercase tracking-widest text-slate-500 block mb-1">Wager (min 1,000c per clan)</label>
-                            <input type="number" value={warWager} onChange={(e) => setWarWager(e.target.value)} placeholder="Enter wager amount..." className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-rose-500/50" />
-                            <p className="text-[9px] text-slate-500 mt-1">Both clans must have this amount in treasury. Total pot = wager x 2.</p>
-                          </div>
-                          <button type="button" onClick={() => void handleDeclareWar(warSearch)} disabled={actionBusy === 'war' || !warSearch || !clans.find(c => c.tag === warSearch) || (Math.floor(Number(warWager) || 0) < 1000)} className="w-full py-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 disabled:opacity-40 border border-rose-500/30">
-                            {actionBusy === 'war' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Swords className="w-3.5 h-3.5" />} Declare War
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="p-4 rounded-2xl border border-slate-800 bg-slate-950/60 text-center">
-                          <Lock className="w-6 h-6 text-slate-600 mx-auto mb-2" />
-                          <p className="text-xs text-slate-500">Only the <strong className="text-amber-300">Leader</strong> can declare clan wars.</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <ClanWars
+                  playerClanTag={playerClanTag}
+                  isLeader={isLeader}
+                  clans={clans}
+                  activeWar={activeWar}
+                  warLoading={warLoading}
+                  warSearch={warSearch}
+                  warWager={warWager}
+                  actionBusy={actionBusy}
+                  onWarSearchChange={setWarSearch}
+                  onWarWagerChange={setWarWager}
+                  onDeclareWar={handleDeclareWar}
+                />
               )}
 
-              {/* ========= STATS ========= */}
               {mineSub === 'stats' && (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-2xl border border-indigo-500/20 bg-indigo-500/5">
-                    <div className="flex items-center gap-2 mb-1"><TrendingUp className="w-4 h-4 text-indigo-400" /><h4 className="text-sm font-bold text-white">Syndicate Combat Statistics</h4></div>
-                    <p className="text-[11px] text-slate-400">Aggregate combat stats across all clan members.</p>
-                  </div>
-                  {statsLoading ? <PanelSkeleton count={2} height="h-48" /> : clanStats ? (
-                    <div className="space-y-3">
-                      {/* Combat Stats */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {[
-                          { label: 'Total Kills', value: clanStats.totalKills.toLocaleString(), icon: Crosshair, color: 'text-rose-400' },
-                          { label: 'Total Deaths', value: clanStats.totalDeaths.toLocaleString(), icon: Skull, color: 'text-slate-400' },
-                          { label: 'K/D Ratio', value: clanStats.kdRatio, icon: TrendingUp, color: 'text-amber-400' },
-                          { label: 'Total Extracts', value: clanStats.totalExtracts.toLocaleString(), icon: Zap, color: 'text-emerald-400' },
-                        ].map((s) => (
-                          <div key={s.label} className="p-3 rounded-xl border border-slate-800 bg-slate-950/60">
-                            <div className="flex items-center gap-1.5 mb-1"><s.icon className={`w-3 h-3 ${s.color}`} /><MicroLabel>{s.label.toUpperCase()}</MicroLabel></div>
-                            <div className={`text-lg font-mono font-bold ${s.color}`}>{s.value}</div>
-                          </div>
-                        ))}
-                      </div>
-                      {/* Wealth & Level Stats */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {[
-                          { label: 'Combined Wealth', value: `${(clanStats.totalChips / 1000).toFixed(1)}K c`, color: 'text-emerald-400' },
-                          { label: 'Total Earned', value: `${(clanStats.totalEarned / 1000).toFixed(1)}K c`, color: 'text-emerald-300' },
-                          { label: 'Highest Level', value: `Lvl ${clanStats.highestLevel}`, color: 'text-amber-400' },
-                          { label: 'Best Streak', value: clanStats.bestStreak.toLocaleString(), color: 'text-amber-300' },
-                        ].map((s) => (
-                          <div key={s.label} className="p-3 rounded-xl border border-slate-800 bg-slate-950/60">
-                            <MicroLabel>{s.label.toUpperCase()}</MicroLabel>
-                            <div className={`text-sm font-mono font-bold mt-0.5 ${s.color}`}>{s.value}</div>
-                          </div>
-                        ))}
-                      </div>
-                      {/* Member Summary */}
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/60">
-                          <MicroLabel>TOTAL MEMBERS</MicroLabel>
-                          <div className="text-white text-sm font-bold mt-0.5">{clanStats.totalMembers}</div>
-                        </div>
-                        <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/60">
-                          <MicroLabel>AVG LEVEL</MicroLabel>
-                          <div className="text-white text-sm font-bold mt-0.5">{clanStats.avgLevel}</div>
-                        </div>
-                        <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/60">
-                          <MicroLabel>RICHEST MEMBER</MicroLabel>
-                          <div className="text-emerald-400 text-sm font-bold mt-0.5">{clanStats.richestChips.toLocaleString()}c</div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-6 text-center text-xs text-slate-500"><TrendingUp className="w-8 h-8 mx-auto mb-2 opacity-40" />Stats will load when your clan has members.</div>
-                  )}
-                </div>
+                <ClanStatsView
+                  clanStats={clanStats}
+                  statsLoading={statsLoading}
+                />
               )}
 
-              {/* ========= ACTIVITY LOG ========= */}
               {mineSub === 'activity' && (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/5">
-                    <div className="flex items-center gap-2 mb-1"><ScrollText className="w-4 h-4 text-emerald-400" /><h4 className="text-sm font-bold text-white">Syndicate Activity Log</h4></div>
-                    <p className="text-[11px] text-slate-400">Track all clan events — joins, leaves, deposits, promotions, and challenge completions.</p>
-                  </div>
-                  {activitiesLoading ? <PanelSkeleton count={5} height="h-10" /> : (
-                    <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-                      {activities.length === 0 ? (
-                        <div className="p-6 text-center text-xs text-slate-500"><ScrollText className="w-8 h-8 mx-auto mb-2 opacity-40" />No activity yet.</div>
-                      ) : (
-                        <ol className="divide-y divide-slate-900 max-h-[400px] overflow-y-auto va-scroll">
-                          {activities.map((a) => {
-                            const icon = ACTIVITY_ICONS[a.type] || '\u2022';
-                            return (
-                              <li key={a.id} className="px-4 py-2.5 text-sm flex items-center gap-3">
-                                <span className="text-base shrink-0" aria-hidden>{icon}</span>
-                                <div className="min-w-0 flex-1">
-                                  <span className="text-xs text-white font-bold">{a.actorName}</span>
-                                  <span className="text-xs text-slate-500 font-mono ml-1">{a.actorTag}</span>
-                                  {a.detail && <span className="text-xs text-slate-400"> {a.detail}</span>}
-                                </div>
-                                <span className="text-[10px] text-slate-500 font-mono shrink-0">{timeAgo(new Date(a.createdAt))}</span>
-                              </li>
-                            );
-                          })}
-                        </ol>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <ClanActivity
+                  activities={activities}
+                  activitiesLoading={activitiesLoading}
+                />
               )}
             </div>
           )}
         </div>
       )}
 
-      {/* =================== BROWSE TAB =================== */}
-      {tab === 'browse' && (
-        <div className="space-y-4">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search clans by name or tag..." className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50" />
-          </div>
-          {clansLoading ? <PanelSkeleton count={6} height="h-52" /> : (
-            <>
-              {clans.length === 0 ? (
-                <div className="p-8 rounded-2xl border border-slate-800 bg-slate-950/60 text-center max-w-md mx-auto">
-                  <Shield className="w-12 h-12 text-slate-600 mx-auto mb-3" /><h3 className="text-base font-bold text-white">No Clans Found</h3>
-                  <p className="text-xs text-slate-400 mt-2 mb-4">No syndicates yet. Be the first!</p>
-                  <button type="button" onClick={() => setTab('form')} className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition">Form the First Syndicate</button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filteredClans.map((clan) => {
-                    const isJoined = playerClanTag === clan.tag;
-                    return (
-                      <div key={clan.tag} className="p-4 rounded-2xl border border-slate-800 bg-slate-950/70 shadow-md flex flex-col gap-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="text-3xl" aria-hidden>{clan.emblem}</span>
-                            <div className="min-w-0">
-                              <h4 className="text-sm font-bold text-white truncate">{clan.name}</h4>
-                              <span className="text-[10px] font-mono text-indigo-300 bg-indigo-500/10 border border-indigo-500/30 px-1.5 py-0.5 rounded">[{clan.tag}]</span>
-                            </div>
-                          </div>
-                        </div>
-                        {clan.description && <p className="text-[11px] text-slate-400 italic">&quot;{clan.description}&quot;</p>}
-                        <div className="grid grid-cols-3 gap-2 text-[10px] font-mono">
-                          <div className="p-2 bg-slate-900/60 rounded border border-slate-800 text-center"><MicroLabel>LEVEL</MicroLabel><div className="text-amber-400 mt-0.5">{clan.level}</div></div>
-                          <div className="p-2 bg-slate-900/60 rounded border border-slate-800 text-center"><MicroLabel>MEMBERS</MicroLabel><div className="text-white mt-0.5">{clan.memberCount}/30</div></div>
-                          <div className="p-2 bg-slate-900/60 rounded border border-slate-800 text-center"><MicroLabel>TREASURY</MicroLabel><div className="text-emerald-400 mt-0.5">{clan.bankedChips >= 1_000_000 ? `${(clan.bankedChips / 1_000_000).toFixed(1)}M` : clan.bankedChips.toLocaleString()}</div></div>
-                        </div>
-                        <button type="button" onClick={() => void handleJoinClan(clan.tag, clan.name)} disabled={isJoined || !!playerClanTag || actionBusy === 'join'} className={`w-full py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${isJoined ? 'bg-slate-900 text-slate-500 border border-slate-800 cursor-default' : !!playerClanTag ? 'bg-slate-900 text-slate-500 border border-slate-800 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}>
-                          {actionBusy === 'join' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}{isJoined ? 'Already a Member' : 'Join Syndicate'}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {/* =================== FORM TAB =================== */}
-      {tab === 'form' && (
-        <div className="max-w-xl mx-auto p-5 rounded-2xl border border-slate-800 bg-slate-950/60 shadow-md">
-          <h3 className="text-base font-black text-white flex items-center gap-2 mb-4"><Plus className="w-5 h-5 text-indigo-400" /> Form a New Viper Syndicate Clan</h3>
-          <div className="space-y-3">
-            <div><label className="text-[10px] font-mono uppercase tracking-widest text-slate-500 block mb-1">Syndicate Name</label><input type="text" value={formState.name} onChange={(e) => setFormState((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Omega Extractions" className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500/50" /></div>
-            <div><label className="text-[10px] font-mono uppercase tracking-widest text-slate-500 block mb-1">Clan Tag (3-5 Chars)</label><input type="text" value={formState.tag} onChange={(e) => setFormState((f) => ({ ...f, tag: e.target.value.toUpperCase() }))} placeholder="e.g. OMG" maxLength={5} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-indigo-500/50" /></div>
-            <div><label className="text-[10px] font-mono uppercase tracking-widest text-slate-500 block mb-1">Description</label><input type="text" value={formState.motto} onChange={(e) => setFormState((f) => ({ ...f, motto: e.target.value }))} placeholder="e.g. Extraction above all else." className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500/50" /></div>
-            <div><label className="text-[10px] font-mono uppercase tracking-widest text-slate-500 block mb-1">Emblem Logo</label><select value={formState.emblem} onChange={(e) => setFormState((f) => ({ ...f, emblem: e.target.value }))} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500/50">{EMBLEM_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}</select></div>
-            <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
-              <div className="text-[11px] font-mono">Formation: <span className="text-emerald-300 font-bold">Free</span></div>
-              <button type="button" onClick={() => void handleFormSubmit()} disabled={formBusy} className="px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50">
-                {formBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Award className="w-3.5 h-3.5" />} Form Syndicate
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* =================== BROWSE / FORM TAB =================== */}
+      {(tab === 'browse' || tab === 'form') && (
+        <ClanBrowse
+          tab={tab}
+          clans={clans}
+          clansLoading={clansLoading}
+          filteredClans={filteredClans}
+          search={search}
+          playerClanTag={playerClanTag}
+          actionBusy={actionBusy}
+          formState={formState}
+          formBusy={formBusy}
+          onSearchChange={setSearch}
+          onSetTab={setTab}
+          onJoinClan={handleJoinClan}
+          onFormStateChange={setFormState}
+          onFormSubmit={handleFormSubmit}
+        />
       )}
 
       {/* =================== SETTINGS MODAL =================== */}
@@ -1272,12 +654,12 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
               <button type="button" onClick={() => setShowSettings(false)} className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 hover:text-white text-xs font-bold transition">Cancel</button>
               <button type="button" onClick={() => void handleSaveSettings()} disabled={settingsBusy} className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50">
-                {settingsBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Save Changes
+                {settingsBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Save Changes
               </button>
             </div>
             <div className="pt-3 border-t border-rose-500/20">
               <button type="button" onClick={() => void handleDisbandClan()} disabled={actionBusy === 'disband'} className="w-full px-4 py-2.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 text-xs font-bold transition flex items-center justify-center gap-2 border border-rose-500/30 hover:border-rose-500/50 disabled:opacity-50">
-                {actionBusy === 'disband' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <AlertTriangle className="w-3.5 h-3.5" />} Disband Syndicate
+                {actionBusy === 'disband' ? <Loader2 className="w-3 h-3 animate-spin" /> : <AlertTriangle className="w-3 h-3" />} Disband Syndicate
               </button>
               <p className="text-[9px] text-rose-400/60 text-center mt-1.5 font-mono">Permanently deletes the syndicate, all data, and removes all members.</p>
             </div>
