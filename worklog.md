@@ -409,3 +409,28 @@ Stage Summary:
 - Fix: `bunx prisma generate` (single command)
 - All previous work preserved — zero data loss, zero code changes needed
 - Both servers running: Next.js (3000) + Game server (3001)
+
+---
+Task ID: 6
+Agent: Main
+Task: Season Pass (Cyber Pass) — audit and fix all issues
+
+Work Log:
+- Ran comprehensive audit of Season Pass: 2 critical bugs, 4 functional gaps, 4 missing features found
+- **P0 Fix: `xpForLevel` off-by-one** — Changed from `level * 200` to `(level - 1) * 200` so it's the inverse of `levelFromXp`. Before: Level 1 player saw "-200 / 200 XP" in the progress bar.
+- **P0 Fix: Pass cosmetics invisible in Shop & Lab** — Imported PASS_FREE_COSMETICS + PASS_ELITE_COSMETICS into cosmetics-shop.tsx. Merged any claimed pass cosmetics into the filtered inventory lists so players can re-equip them.
+- **P1 Fix: Claim All used slow sequential loop** — Replaced handleClaimAll (which called single-claim API 10+ times with 300ms delays) with a single call to /api/season-pass/claim-all. Added `claimingAll` loading state with spinner on both buttons.
+- **P1 Fix: claim-all route missing auto-equip** — Added auto-equip logic matching single-claim: if player has default skin/trail/death/flag/banner, auto-equip the highest-tier pass cosmetic of that type.
+- **P1 Fix: Rules doc said dying gives 0 XP** — Updated Section18_CyberPass.tsx: "XP is earned from all online match outcomes" and "Die/collide = XP still earned". Also updated tips section.
+- **P2 Fix: Challenge claim toast omitted XP** — Updated page.tsx challenge claim toasts to show "+25 XP" when xpGained is present.
+- **P2 Fix: Bento card showed no unclaimed count** — Dashboard bento card now shows "X to claim!" when there are unclaimed free pass rewards.
+- **P3: Added season label** — "Genesis Season — No Expiry" badge in the pass panel header.
+- Lint passes cleanly. All APIs tested via curl.
+
+Stage Summary:
+- 8 fixes applied across 6 files: game-config.ts, cosmetics-shop.tsx, season-pass.tsx, claim-all/route.ts, Section18_CyberPass.tsx, page.tsx
+- XP bar now shows correct positive numbers
+- Pass cosmetics now visible in Shop & Lab after claiming
+- Claim All is instant (single API call) with loading state
+- Rules documentation matches actual game behavior
+- Players are informed about XP from challenges

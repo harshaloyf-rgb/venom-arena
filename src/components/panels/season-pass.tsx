@@ -36,6 +36,7 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
   const { player, refresh } = useAuth();
   const [unlocking, setUnlocking] = useState(false);
   const [claiming, setClaiming] = useState<number | null>(null);
+  const [claimingAll, setClaimingAll] = useState(false);
 
   const hasElite = player?.hasElitePass ?? false;
   const currentLevel = player?.level ?? 1;
@@ -127,17 +128,28 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
     }
   }
 
-  function handleClaimAll(track: 'free' | 'elite') {
-    const tiers = track === 'free'
-      ? Array.from({ length: 20 }, (_, i) => i + 1).filter(t => currentLevel >= PASS_TIER_LEVEL[t - 1] && !claimedFreeSet.has(t))
-      : Array.from({ length: 20 }, (_, i) => i + 1).filter(t => currentLevel >= PASS_TIER_LEVEL[t - 1] && !claimedEliteSet.has(t));
-    // Claim sequentially
-    (async () => {
-      for (const t of tiers) {
-        await handleClaim(t, track);
-        await new Promise(r => setTimeout(r, 300)); // small delay between claims
+  async function handleClaimAll(track: 'free' | 'elite') {
+    if (claimingAll) return;
+    setClaimingAll(true);
+    try {
+      const res = await fetch('/api/season-pass/claim-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ track }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        notify(data?.error || 'Failed to claim.', 'error', onToast);
+        return;
       }
-    })();
+      const count = Array.isArray(data.claimed) ? data.claimed.length : 0;
+      notify(`Claimed ${count} reward${count !== 1 ? 's' : ''} — check Shop & Lab!`, 'success', onToast);
+      void refresh();
+    } catch {
+      notify('Network error. Try again.', 'error', onToast);
+    } finally {
+      setClaimingAll(false);
+    }
   }
 
   // Current tier = highest unlocked tier
@@ -162,6 +174,9 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
             </span>
             <span className="text-[10px] text-emerald-400 font-mono font-bold flex items-center gap-1">
               <Trophy className="w-3 h-3" /> {unlockedTiers}/20 Tiers Unlocked
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              Genesis Season — No Expiry
             </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
@@ -237,18 +252,22 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
             {unclaimedFree > 0 && (
               <button
                 type="button"
-                onClick={() => handleClaimAll('free')}
-                className="text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded-lg transition"
+                onClick={() => void handleClaimAll('free')}
+                disabled={claimingAll}
+                className="text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-3 py-1 rounded-lg transition inline-flex items-center gap-1"
               >
+                {claimingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
                 Claim All Free
               </button>
             )}
             {unclaimedElite > 0 && (
               <button
                 type="button"
-                onClick={() => handleClaimAll('elite')}
-                className="text-[10px] font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 px-3 py-1 rounded-lg transition"
+                onClick={() => void handleClaimAll('elite')}
+                disabled={claimingAll}
+                className="text-[10px] font-bold bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 px-3 py-1 rounded-lg transition inline-flex items-center gap-1"
               >
+                {claimingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
                 Claim All Elite
               </button>
             )}

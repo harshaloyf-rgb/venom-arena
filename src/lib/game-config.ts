@@ -385,10 +385,11 @@ export const PROMO_CODES: Record<string, number> = {
 };
 
 // ----------------------------------------------------------------------------
-// Levels / XP — original: xpNeeded = level * 200
+// Levels / XP — xpForLevel and levelFromXp are inverse functions.
+// Level 1 requires 0 XP. Level N requires (N-1)*200 XP.
 // ----------------------------------------------------------------------------
 export function xpForLevel(level: number): number {
-  return level * 200;
+  return (level - 1) * 200;
 }
 export function levelFromXp(xp: number): number {
   return Math.max(1, Math.floor(xp / 200) + 1);
