@@ -7,6 +7,7 @@
  */
 
 import { countryFlag } from '@/lib/game-config';
+import { formatChipsIndian as formatChips } from '@/lib/format-chips';
 
 interface MatchCardVisualProps {
   title: string;
@@ -27,12 +28,7 @@ interface MatchCardVisualProps {
   compact?: boolean; // smaller version for feed list
 }
 
-function formatChips(n: number): string {
-  if (n >= 10_000_000) return `${(n / 10_000_000).toFixed(1)} Cr`;
-  if (n >= 100_000) return `${(n / 100_000).toFixed(1)}L`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
-}
+
 
 function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60);

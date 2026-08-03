@@ -21,6 +21,7 @@ import { useAuth } from '@/components/providers/auth-provider';
 import { notify, type ToastFn } from '../_panel-primitives';
 import { countryFlag } from '@/lib/game-config';
 import { timeAgo } from '@/lib/date-utils';
+import { formatChipsShort as formatChips } from '@/lib/format-chips';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -68,13 +69,6 @@ interface PlayerDetail extends AdminPlayer {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatChips(n: number): string {
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
-}
 
 function RoleBadge({ role }: { role: string }) {
   if (role === 'admin') {

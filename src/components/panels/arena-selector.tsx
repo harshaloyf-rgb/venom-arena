@@ -31,22 +31,7 @@ import {
   type ToastFn,
 } from './_panel-primitives';
 
-// ── Chip formatting helpers ────────────────────────────────────────────
-// Returns short form only: e.g. 1500 → "1.5Kc"
-function chipShort(n: number): string {
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}Bc`;
-  if (n >= 1_000_000) return `${(n / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}Mc`;
-  if (n >= 1_000) return `${(n / 1_000).toLocaleString(undefined, { maximumFractionDigits: 1 })}Kc`;
-  return `${n}c`;
-}
-// Returns full number + short form: e.g. 1500 → "1,500c (1.5Kc)"
-// Values below 1,000 return just the number (no short form needed)
-function chipFull(n: number): string {
-  if (n === 0) return 'FREE';
-  const full = `${n.toLocaleString()}c`;
-  if (n >= 1_000) return `${full} (${chipShort(n)})`;
-  return full;
-}
+import { chipShort, chipFull } from '@/lib/format-chips';
 
 // ── Difficulty filter groups ──────────────────────────────────────────
 

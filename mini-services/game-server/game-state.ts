@@ -30,7 +30,6 @@ import {
   turnToward as engineTurnToward,
   moveHead,
   isNeckProtected,
-  dist as engineDist,
   getFoodOrbs,
   randomFoodOrb,
   getBreathingMapRadius,

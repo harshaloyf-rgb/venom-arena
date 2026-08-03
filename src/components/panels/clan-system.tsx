@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
 import { countryFlag, type InspectedPlayer } from '@/lib/game-config';
+import { isOnline, timeAgo } from '@/lib/date-utils';
 import {
   GlowBlob,
   MicroLabel,
@@ -187,25 +188,7 @@ const PERK_ROADMAP = [
   { level: 10, title: 'Legendary Syndicate', desc: 'Up to 30 members, custom emblem colors' },
 ];
 
-function isOnline(lastSeenAt: string): boolean {
-  return Date.now() - new Date(lastSeenAt).getTime() < 5 * 60 * 1000;
-}
-
-function getTimeAgo(date: Date): string {
-  const now = Date.now();
-  const diff = now - date.getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return date.toLocaleDateString();
-}
-
 export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
-  const { player, refresh } = useAuth();
   const [tab, setTab] = useState<Tab>('mine');
   const [mineSub, setMineSub] = useState<MineSubTab>('overview');
   const [search, setSearch] = useState('');
@@ -997,7 +980,7 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
                     <div className="p-4 rounded-2xl border border-rose-500/40 bg-rose-500/5 space-y-4">
                       <div className="flex items-center justify-between">
                         <h4 className="text-sm font-bold text-rose-300 flex items-center gap-2"><Skull className="w-4 h-4" /> ACTIVE WAR</h4>
-                        <span className="text-[10px] font-mono text-slate-500">Started {getTimeAgo(new Date(activeWar.startedAt))}</span>
+                        <span className="text-[10px] font-mono text-slate-500">Started {timeAgo(new Date(activeWar.startedAt))}</span>
                       </div>
                       <div className="flex items-center justify-between gap-4">
                         <div className="text-center flex-1 min-w-0">
@@ -1190,7 +1173,7 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
                                   <span className="text-xs text-slate-500 font-mono ml-1">{a.actorTag}</span>
                                   {a.detail && <span className="text-xs text-slate-400"> {a.detail}</span>}
                                 </div>
-                                <span className="text-[10px] text-slate-500 font-mono shrink-0">{getTimeAgo(new Date(a.createdAt))}</span>
+                                <span className="text-[10px] text-slate-500 font-mono shrink-0">{timeAgo(new Date(a.createdAt))}</span>
                               </li>
                             );
                           })}

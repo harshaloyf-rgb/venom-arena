@@ -36,7 +36,7 @@ import {
   WORLD_SIZE,
   getArenaById,
 } from '../../src/lib/game-config';
-import { calcVisualRadius, calcBaseMapRadius, getFoodOrbs } from '../../src/lib/snake-engine.js';
+import { calcVisualRadius, calcBaseMapRadius, getFoodOrbs, calcCommissionRate, DEFAULT_SNAKE_CONFIG } from '../../src/lib/snake-engine.js';
 import {
   type ArenaRoom,
   type BotSession,
@@ -321,7 +321,7 @@ async function settleMatch(
 
   // Dynamic commission: 0% if <=3 real players in arena, 35% if >=4.
   const realPlayerCount = room.players.size;
-  const commissionRate = realPlayerCount <= 3 ? 0 : 0.35;
+  const commissionRate = calcCommissionRate(realPlayerCount, DEFAULT_SNAKE_CONFIG);
   const commission = outcome === 'extract' ? Math.floor(carriedChips * commissionRate) : 0;
   const bankedAmount = outcome === 'extract' ? (carriedChips - commission) : 0;
 

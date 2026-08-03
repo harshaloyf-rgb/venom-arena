@@ -35,7 +35,6 @@ import {
   turnToward as engineTurnToward,
   moveHead,
   isNeckProtected,
-  dist as engineDist,
   circlesOverlap,
   getFoodOrbs,
   randomFoodOrb,
@@ -52,6 +51,10 @@ import {
   type Particle,
 } from './render-helpers';
 import { playFoodCollect, playDeath, playKill, playBoost, initGameAudio } from '@/lib/game-audio';
+import { FOOD_COUNT_TARGET } from '@/lib/game-config';
+
+/** Duration in ms for the extraction mechanic (matches snake-engine default) */
+const EXTRACT_DURATION_MS = 3000;
 
 // ----------------------------------------------------------------------------
 // Public types
