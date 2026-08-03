@@ -5,8 +5,8 @@
  *
  * Comprehensive rules page covering ALL game mechanics, modes,
  * food, stars, collision, boost, bot AI, map, extraction, challenges,
- * HUD, lobby leaderboards, milestone badges, agent profile, social/friends,
- * highlights/clips, and FAQ.
+ * HUD, lobby leaderboards, milestone badges, cyber pass (season pass),
+ * agent profile, social/friends, highlights/clips, and FAQ.
  */
 
 import {
@@ -1447,6 +1447,94 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
           </Section>
 
           {/* ================================================================= */}
+          {/* 18. CYBER PASS (SEASON PASS) */}
+          {/* ================================================================= */}
+          <Section icon={<Award className="w-4 h-4" />} title="18. CYBER PASS (SEASON PASS)" accent="text-purple-400">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <InfoCard title="🏆 What Is the Cyber Pass?" accent="text-purple-300">
+                <p className="mb-1.5">The <strong>Cyber Pass</strong> is a progression-based reward track with <strong>20 tiers</strong> of exclusive cosmetics. As you level up by playing matches, new tiers unlock automatically.</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Each tier requires a specific <strong>player level</strong> (Lv 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 15, 17, 19, 21, 23, 25, 28, 31, 34, 38)</li>
+                  <li>Every tier has a <strong>Free reward</strong> + an <strong>Elite reward</strong></li>
+                  <li>Rewards are <strong>real cosmetics</strong> — skins, trails, death effects, flags, and banners</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="⚡ How Do I Earn XP?" accent="text-emerald-300">
+                <p className="mb-1.5">XP is earned exclusively from <strong>successful extractions</strong> in online matches:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>Extract safely</strong> = XP earned (amount scales with chips extracted)</li>
+                  <li><strong>Die / collide</strong> = 0 XP — no pass progress from dying</li>
+                  <li>Complete <strong>daily challenges</strong> for bonus XP</li>
+                  <li>Your player level increases as XP accumulates</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="💰 Free vs Elite Track" accent="text-amber-300">
+                <p className="mb-1.5">Two parallel reward tracks at every tier:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong className="text-emerald-300">Free Track:</strong> Available to all players. Claim anytime you reach the tier&apos;s level requirement.</li>
+                  <li><strong className="text-amber-300">Elite Track:</strong> Requires the <strong>Elite Cyber Pass</strong> (100,000c one-time purchase). Gives premium cosmetics at every tier.</li>
+                  <li>Elite cosmetics are <strong>exclusive</strong> — never sold in the Shop.</li>
+                </ul>
+              </InfoCard>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+              <InfoCard title="🎁 Claiming Rewards" accent="text-cyan-300">
+                <p className="mb-1.5">Rewards must be <strong>manually claimed</strong> from the Pass tab:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Once your level meets a tier&apos;s requirement, the <strong>Claim</strong> button activates</li>
+                  <li>Claiming adds the cosmetic to your <strong>inventory</strong> (unlockedSkins — server-persisted)</li>
+                  <li>After claiming, equip it in <strong>Shop &amp; Lab</strong> like any other cosmetic</li>
+                  <li>Each reward can only be claimed <strong>once</strong> (server-enforced, no double-claim)</li>
+                  <li><strong>Claim All</strong> buttons let you batch-claim all unclaimed rewards at once</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="👑 Unlocking Elite" accent="text-yellow-300">
+                <p className="mb-1.5">To unlock the Elite track:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Go to the <strong>Pass tab</strong> in Lobby Station</li>
+                  <li>Click <strong>&quot;Unlock Elite (1,00,000c)&quot;</strong></li>
+                  <li>100,000 chips are deducted <strong>server-side</strong></li>
+                  <li>Elite is permanent for the season — no subscription</li>
+                  <li>All previously-locked elite tiers become claimable immediately (if your level qualifies)</li>
+                </ul>
+              </InfoCard>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+              <InfoCard title="🎭 Reward Types" accent="text-pink-300">
+                <p className="mb-1.5">The 40 pass cosmetics span all cosmetic categories:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>Skins</strong> — Snake appearances (Ember Worm, Cyber Serpent God, Rainbow Viper, etc.)</li>
+                  <li><strong>Trails</strong> — Visual effects behind your snake (Venom Drip, Hypernova, Galaxy Drift, etc.)</li>
+                  <li><strong>Death FX</strong> — Explosion effects on death (Phantom Burst, Void Reaper, Apocalypse Burst, etc.)</li>
+                  <li><strong>Flags</strong> — Custom flag cosmetics (Clan Crest, Elite Standard)</li>
+                  <li><strong>Banners</strong> — Profile background banners (War Banner, Throne Room, Genesis Crown Frame)</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="📊 Current Season: Genesis" accent="text-emerald-300">
+                <p className="mb-1.5">Season 1 — <strong>Genesis</strong>:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>20 tiers from Level 2 to Level 38</li>
+                  <li>20 free cosmetics (mix of skins, trails, deaths, flags, banners)</li>
+                  <li>20 elite-exclusive cosmetics (premium variants)</li>
+                  <li>Elite cost: <strong>1,00,000 chips</strong> (one-time)</li>
+                  <li>All rewards are <strong>pass-exclusive</strong> — not available anywhere else</li>
+                </ul>
+              </InfoCard>
+              <InfoCard title="💡 Tips" accent="text-cyan-300">
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Focus on <strong>extracting safely</strong> — dying gives 0 XP</li>
+                  <li>Higher arena tiers give more chips per extraction = more XP</li>
+                  <li>Complete <strong>daily challenges</strong> for bonus XP</li>
+                  <li>Free track rewards are still valuable — don&apos;t skip them!</li>
+                  <li>Elite is best value if you play regularly and are above Level 5</li>
+                </ul>
+              </InfoCard>
+            </div>
+          </Section>
+
+          {/* ================================================================= */}
           {/* 19. HIGHLIGHTS (CLIPS & MATCH CARDS) */}
           {/* ================================================================= */}
           <Section icon={<Flame className="w-4 h-4" />} title="19. HIGHLIGHTS (CLIPS &amp; MATCH CARDS)" accent="text-orange-400">
@@ -1605,6 +1693,12 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
               <FaqItem q="What does the Clan Shop sell?" a="Three items: (1) Member Expansion (15,000c) — adds 5 member slots, repeatable. (2) XP Windfall (8,000c) — instant Level × 500 XP, repeatable. (3) War Shield (5,000c) — 7-day peace mode, no other clan can declare war on you, one-time. Only the Leader can purchase, using treasury chips. The Shop appears on the Overview tab." />
               <FaqItem q="How do Clan Wars work?" a="No separate arenas — members play normal matches. Step by step: (1) Leader declares war on a target clan and enters a wager (min 1,000c). (2) Both clans&apos; treasuries are deducted the wager immediately — held in escrow. (3) Every member of BOTH clans plays their normal matches. After each match, the kills are automatically added to their clan&apos;s war score. (4) Check the Wars tab to see live score bars. (5) First clan to reach 50 total kills wins the entire pot (wager × 2). Only one active war per clan. War Shield (5,000c from shop) blocks declarations against your clan for 7 days." />
               <FaqItem q="Can I create multiple clans?" a="You can only be in one syndicate at a time. If you leave or disband your current clan, you can create a new one. There is no lifetime limit on how many clans you can create across your account." />
+              <FaqItem q="What is the Cyber Pass?" a="The Cyber Pass (Season Pass) is a 20-tier progression reward system. As you level up by extracting from matches, you unlock tiers that contain exclusive cosmetics (skins, trails, death effects, flags, banners). Each tier has a free reward available to everyone and an elite reward that requires the Elite Cyber Pass (100,000c one-time purchase)." />
+              <FaqItem q="How do I earn XP for the Cyber Pass?" a="XP is earned ONLY from successful extractions in online matches. Dying gives 0 XP. The more chips you extract, the more XP you earn. Daily challenges also grant bonus XP. Your player level increases as XP accumulates, and each level milestone unlocks a new pass tier." />
+              <FaqItem q="Do Cyber Pass rewards carry over between seasons?" a="Currently there is only one season (Genesis). Claimed cosmetics are permanently added to your inventory and will not be removed, even if future seasons are introduced. Elite status is also permanent." />
+              <FaqItem q="Can I claim pass rewards retroactively if I already reached the level?" a="Yes! If your level already meets a tier&apos;s requirement, it&apos;s already unlocked. Just go to the Pass tab and click Claim (or Claim All). The server validates your level, so even if you reached Level 20 last week, all tiers up to Level 20 are claimable right now." />
+              <FaqItem q="Is the Elite Cyber Pass worth it?" a="The Elite track contains 20 premium-exclusive cosmetics that are NEVER sold in the Shop — they are only available through the pass. At 100,000c, it&apos;s a one-time purchase (no subscription). If you play regularly and plan to reach Level 10+, the elite skins alone are worth far more than the cosmetic shop prices." />
+              <FaqItem q="Where do claimed pass cosmetics go?" a="Claimed cosmetics are added to your `unlockedSkins` inventory (server-persisted). To equip them, go to the Shop &amp; Lab tab in Lobby Station. They appear alongside shop-purchased cosmetics and can be equipped as your active skin, trail, death effect, flag, or banner." />
             </div>
           </Section>
 

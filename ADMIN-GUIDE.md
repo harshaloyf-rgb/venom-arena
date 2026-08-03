@@ -130,10 +130,19 @@
 | Cosmetics | Item cost | Deducted in transaction |
 | Gifts | Player-chosen (max 1000c) | Deducted in transaction |
 | Clan deposits | Player-chosen | Deducted in transaction |
+| Elite Cyber Pass | 100,000c (one-time) | Deducted server-side, sets `hasElitePass = true` |
+
+### Season Pass (Cyber Pass — Genesis Season)
+- **Fully server-enforced.** 3 DB fields on Player: `hasElitePass` (boolean), `passClaimedFree` (JSON array), `passClaimedElite` (JSON array).
+- **20 tiers** tied to player level thresholds (Lv 2 → Lv 38). Each tier unlocks a free cosmetic and an elite cosmetic.
+- **40 pass-exclusive cosmetics** defined in `game-config.ts` (`PASS_FREE_COSMETICS`, `PASS_ELITE_COSMETICS`). Types: skins, trails, death effects, flags, banners.
+- **Elite unlock:** `POST /api/season-pass/unlock-elite` — deducts 100K chips atomically, sets `hasElitePass = true`.
+- **Claim rewards:** `POST /api/season-pass/claim` — validates level ≥ tier requirement, track ownership, prevents double-claim, adds cosmetic ID to `unlockedSkins`.
+- **XP source:** Earned from successful match extraction only (0 XP on death). Level = XP-based progression.
+- Claimed cosmetics appear in the Cosmetics Shop & Lab for equipping.
 
 ### What's NOT Server-Enforced
 - **Chip store purchase caps** (yearly buy limit, daily ad limit) — tracked in `localStorage` only. Players can bypass by clearing browser data.
-- **Season pass** — entirely client-side fake state. No real backend.
 
 ---
 
