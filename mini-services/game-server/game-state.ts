@@ -168,6 +168,10 @@ export interface ArenaRoom {
   mapCenterX: number;
   /** Cached map center Y for spawn/reference. */
   mapCenterY: number;
+  /** Cached array of all snakes (players + bots). Rebuilt each tick via cacheAllSnakes(). */
+  _cachedSnakes: SnakeBase[] | null;
+  /** Cached real player count (non-dead, non-settling). Updated each tick via cacheAllSnakes(). */
+  _realPlayerCount: number;
 }
 
 // ----------------------------------------------------------------------------
@@ -298,6 +302,8 @@ export function createArenaRoom(arena: ArenaTier): ArenaRoom {
     botIdCounter: 0,
     mapCenterX: 0,
     mapCenterY: 0,
+    _cachedSnakes: null,
+    _realPlayerCount: 0,
   };
 }
 
@@ -310,7 +316,9 @@ export function spawnBot(room: ArenaRoom): BotSession {
   const personality = personalities[idx % personalities.length];
   const cfg = room.cfg;
 
-  const realPlayerCount = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
+  const realPlayerCount = room._cachedSnakes
+    ? room._realPlayerCount
+    : [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
   const baseRadius = calcBaseMapRadius(Math.max(1, realPlayerCount), cfg);
   const spawn = findSafeSpawnPoint(room, baseRadius - 200, room.mapCenterX, room.mapCenterY);
   const angle = Math.random() * Math.PI * 2;
@@ -354,7 +362,9 @@ export function ensureBots(room: ArenaRoom): void {
 export function spawnRandomFood(room: ArenaRoom): Food {
   const id = `food-${room.arena.id}-${room.foodIdCounter++}`;
   const cfg = room.cfg;
-  const realPlayerCount = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
+  const realPlayerCount = room._cachedSnakes
+    ? room._realPlayerCount
+    : [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
   const baseRadius = calcBaseMapRadius(Math.max(1, realPlayerCount), cfg);
   const pos = randomSpawnPoint(baseRadius - 50, room.mapCenterX, room.mapCenterY);
 
@@ -439,10 +449,11 @@ export function dropStarsAtDeath(
   y: number,
   chips: number,
 ): void {
-  if (chips <= 0) return;
+  if (chips < 0) return;
 
   const cfg = room.cfg;
-  const valuePerStar = chips / cfg.starDropCount; // all stars have the exact same value
+  // When chips is 0, each star has value 1 (10 stars × 1 = 10 chips of value on ground)
+  const valuePerStar = chips > 0 ? chips / cfg.starDropCount : 1;
 
   for (let i = 0; i < cfg.starDropCount; i++) {
     const id = `food-${room.arena.id}-${room.foodIdCounter++}`;
@@ -565,7 +576,9 @@ export function tickBot(bot: BotSession, room: ArenaRoom, now: number): void {
 
   const cfg = room.cfg;
   const head = bot.points[0];
-  const realPlayerCount = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
+  const realPlayerCount = room._cachedSnakes
+    ? room._realPlayerCount
+    : [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
   const baseRadius = calcBaseMapRadius(Math.max(1, realPlayerCount), cfg);
   const mapRadius = getBreathingMapRadius(baseRadius, now, cfg);
 
@@ -874,8 +887,10 @@ export function detectCollisions(room: ArenaRoom, now: number): PendingDeath[] {
   const deaths: PendingDeath[] = [];
   const seenDead = new Set<string>();
 
-  const allSnakes: SnakeBase[] = collectAllSnakes(room);
-  const realPlayerCount = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
+  const allSnakes = room._cachedSnakes ?? collectAllSnakes(room);
+  const realPlayerCount = room._cachedSnakes
+    ? room._realPlayerCount
+    : [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
   const cfg = room.cfg;
   const mapRadius = getBreathingMapRadius(calcBaseMapRadius(Math.max(1, realPlayerCount), cfg), now, cfg);
 
@@ -934,7 +949,7 @@ export function detectHeadOnCollisions(room: ArenaRoom, now: number): PendingDea
   const deaths: PendingDeath[] = [];
   const seenDead = new Set<string>();
 
-  const allSnakes: SnakeBase[] = collectAllSnakes(room);
+  const allSnakes = room._cachedSnakes ?? collectAllSnakes(room);
   const headMap = new Map<string, SnakeBase>();
   for (const s of allSnakes) {
     if (s.isDead || s.points.length === 0 || now < s.spawnProtectedUntil) continue;
@@ -1024,7 +1039,7 @@ export function detectHeadOnCollisions(room: ArenaRoom, now: number): PendingDea
  * Bots NEVER collect star chips.
  */
 export function eatFood(room: ArenaRoom): void {
-  const allSnakes: SnakeBase[] = collectAllSnakes(room);
+  const allSnakes = room._cachedSnakes ?? collectAllSnakes(room);
   for (const snake of allSnakes) {
     if (snake.isDead) continue;
     if (snake.points.length === 0) continue;
@@ -1057,8 +1072,25 @@ export function eatFood(room: ArenaRoom): void {
 // Snapshot
 // ----------------------------------------------------------------------------
 
-/** Iterator: yield every snake (player + bot) in the room. */
+/**
+ * Build and cache the all-snakes array + realPlayerCount for one tick.
+ * Call ONCE at the start of tickRoom(), after grid rebuild.
+ */
+export function cacheAllSnakes(room: ArenaRoom): void {
+  const snakes: SnakeBase[] = [];
+  let realPlayerCount = 0;
+  for (const p of room.players.values()) {
+    snakes.push(p);
+    if (!p.isDead && !p.matchSettling) realPlayerCount++;
+  }
+  for (const b of room.bots.values()) snakes.push(b);
+  room._cachedSnakes = snakes;
+  room._realPlayerCount = realPlayerCount;
+}
+
+/** Iterator: yield every snake (player + bot) in the room. Uses cache if available. */
 export function collectAllSnakes(room: ArenaRoom): SnakeBase[] {
+  if (room._cachedSnakes) return room._cachedSnakes;
   const out: SnakeBase[] = [];
   for (const p of room.players.values()) out.push(p);
   for (const b of room.bots.values()) out.push(b);
@@ -1066,16 +1098,38 @@ export function collectAllSnakes(room: ArenaRoom): SnakeBase[] {
 }
 
 /**
- * Build the broadcast GameSnapshot for an arena.
+ * In-place compact: remove food items with value <= 0 using swap-and-pop.
+ * Returns the new length.
  */
-export function buildSnapshot(room: ArenaRoom, viewerId?: string): GameSnapshot {
+export function compactFoods(foods: Food[]): number {
+  let write = 0;
+  for (let read = 0; read < foods.length; read++) {
+    if (foods[read].value > 0) {
+      if (write !== read) {
+        foods[write] = foods[read];
+      }
+      write++;
+    }
+  }
+  foods.length = write;
+  return write;
+}
+
+/**
+ * Build the shared (viewer-independent) portion of a GameSnapshot for an arena.
+ * Called ONCE per room per broadcast cycle. Add `yourRank` per-viewer afterwards.
+ */
+export function buildBaseSnapshot(room: ArenaRoom): GameSnapshot {
   const snakes: SnakeSnapshot[] = [];
   const now = Date.now();
-  const realPlayerCount = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
+  const realPlayerCount = room._cachedSnakes
+    ? room._realPlayerCount
+    : [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
   const cfg = room.cfg;
   const mapRadius = getBreathingMapRadius(calcBaseMapRadius(Math.max(1, realPlayerCount), cfg), now, cfg);
 
-  for (const snake of collectAllSnakes(room)) {
+  const allSnakes = room._cachedSnakes ?? collectAllSnakes(room);
+  for (const snake of allSnakes) {
     let points = snake.points;
     if (points.length > MAX_SNAPSHOT_POINTS) {
       const step = points.length / MAX_SNAPSHOT_POINTS;
@@ -1123,7 +1177,7 @@ export function buildSnapshot(room: ArenaRoom, viewerId?: string): GameSnapshot 
     orbSize: f.orbSize,
   }));
 
-  // Arena leaderboard: real players by carriedChips desc
+  // Arena leaderboard: real players by carriedChips desc (shared, isPlayer=false for all)
   const realPlayers = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling);
   const sorted = realPlayers.sort((a, b) => b.carriedChips - a.carriedChips);
   const arenaLeaderboard = sorted.slice(0, 10).map(p => ({
@@ -1132,12 +1186,11 @@ export function buildSnapshot(room: ArenaRoom, viewerId?: string): GameSnapshot 
     userTag: p.userTag,
     carriedChips: Math.floor(p.carriedChips),
     score: p.score,
-    kills: p.kills,
-    isPlayer: p.id === viewerId,
+    kills: (p as PlayerSession).kills ?? 0,
+    isPlayer: false,
     country: p.country,
   }));
 
-  const yourRank = viewerId ? sorted.findIndex(p => p.id === viewerId) + 1 : 0;
   const commissionRate = calcCommissionRate(realPlayerCount, cfg);
 
   return {
@@ -1152,10 +1205,23 @@ export function buildSnapshot(room: ArenaRoom, viewerId?: string): GameSnapshot 
     leaderId: room.leaderId,
     leaderChips: room.leaderChips,
     realPlayerCount,
-    yourRank: yourRank > 0 ? yourRank : 0,
+    yourRank: 0,
     arenaLeaderboard,
     commissionRate,
   };
+}
+
+/**
+ * Build the broadcast GameSnapshot for an arena.
+ * @deprecated Use buildBaseSnapshot() + per-viewer yourRank in the broadcast loop instead.
+ */
+export function buildSnapshot(room: ArenaRoom, viewerId?: string): GameSnapshot {
+  const base = buildBaseSnapshot(room);
+  if (!viewerId) return base;
+  const realPlayers = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling);
+  const sorted = realPlayers.sort((a, b) => b.carriedChips - a.carriedChips);
+  const yourRank = sorted.findIndex(p => p.id === viewerId) + 1;
+  return { ...base, yourRank: yourRank > 0 ? yourRank : 0 };
 }
 
 /**
@@ -1164,7 +1230,8 @@ export function buildSnapshot(room: ArenaRoom, viewerId?: string): GameSnapshot 
 export function recomputeLeader(room: ArenaRoom): void {
   let topId: string | null = null;
   let topChips = 0;
-  for (const snake of collectAllSnakes(room)) {
+  const allSnakes = room._cachedSnakes ?? collectAllSnakes(room);
+  for (const snake of allSnakes) {
     if (snake.carriedChips > topChips) {
       topChips = snake.carriedChips;
       topId = snake.id;
@@ -1174,13 +1241,11 @@ export function recomputeLeader(room: ArenaRoom): void {
   room.leaderChips = Math.floor(topChips);
 }
 
-/** Re-populate food up to target. */
+/** Re-populate food up to target. Uses in-place compaction (no array allocation). */
 export function replenishFood(room: ArenaRoom): void {
-  if (room.foods.some((f) => f.value <= 0)) {
-    room.foods = room.foods.filter((f) => f.value > 0);
-  }
+  compactFoods(room.foods);
   let guard = 0;
-  while (room.foods.length < room.cfg.foodCountTarget && guard < 50) {
+  while (room.foods.length < room.cfg.foodCountTarget && guard < 100) {
     room.foods.push(spawnRandomFood(room));
     guard++;
   }
@@ -1188,7 +1253,8 @@ export function replenishFood(room: ArenaRoom): void {
 
 /** Expire chat bubbles. */
 export function expireChat(room: ArenaRoom, now: number): void {
-  for (const snake of collectAllSnakes(room)) {
+  const allSnakes = room._cachedSnakes ?? collectAllSnakes(room);
+  for (const snake of allSnakes) {
     if (snake.chatExpiry && now > snake.chatExpiry) {
       snake.chatMessage = undefined;
       snake.chatExpiry = undefined;

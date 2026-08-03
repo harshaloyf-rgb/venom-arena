@@ -31,7 +31,6 @@
 import { createServer } from 'http';
 import { Server, type Socket } from 'socket.io';
 import {
-  ARENA_TIERS,
   TICK_MS,
   WORLD_SIZE,
   getArenaById,
@@ -44,8 +43,8 @@ import {
   type PlayerIdentity,
   type PlayerSession,
   type SnakeBase,
-  buildSnapshot,
-  collectAllSnakes,
+  buildBaseSnapshot,
+  cacheAllSnakes,
   createArenaRoom,
   detectCollisions,
   detectHeadOnCollisions,
@@ -56,7 +55,6 @@ import {
   expireChat,
   findSafeSpawnPoint,
   initialBody,
-  randomSpawnPoint,
   recomputeLeader,
   replenishFood,
   spawnBot,
@@ -406,11 +404,14 @@ async function settleMatch(
 function tickRoom(room: ArenaRoom, now: number): void {
   room.tick++;
 
-  // 1) Rebuild spatial grid from scratch each tick.
+  // 1) Cache all snakes + realPlayerCount for this tick (used by all subsequent functions).
+  cacheAllSnakes(room);
+
+  // 2) Rebuild spatial grid from scratch each tick.
   room.grid.clear();
 
-  // 2) Insert all snake body segments (skip dead / empty).
-  for (const snake of collectAllSnakes(room)) {
+  // 3) Insert all snake body segments (skip dead / empty).
+  for (const snake of room._cachedSnakes!) {
     if (snake.isDead) continue;
     if (snake.points.length === 0) continue;
     for (let i = 0; i < snake.points.length; i++) {
@@ -427,7 +428,7 @@ function tickRoom(room: ArenaRoom, now: number): void {
     }
   }
 
-  // 3) Insert all food (skip already-eaten with value=0).
+  // 4) Insert all food (skip already-eaten with value=0).
   for (const food of room.foods) {
     if (food.value <= 0) continue;
     room.grid.insert({
@@ -443,7 +444,7 @@ function tickRoom(room: ArenaRoom, now: number): void {
     });
   }
 
-  // 4) Bot AI tick.
+  // 5) Bot AI tick.
   for (const bot of room.bots.values()) {
     if (bot.isDead) continue;
     try {
@@ -453,7 +454,7 @@ function tickRoom(room: ArenaRoom, now: number): void {
     }
   }
 
-  // 5) Player movement (server-authoritative — apply desired angle + speed).
+  // 6) Player movement (server-authoritative — apply desired angle + speed).
   for (const session of room.players.values()) {
     if (session.isDead || session.matchSettling) continue;
     try {
@@ -479,7 +480,7 @@ function tickRoom(room: ArenaRoom, now: number): void {
     }
   }
 
-  // 6) Collision detection (body + head-on).
+  // 7) Collision detection (body + head-on).
   let deaths: PendingDeath[] = [];
   try {
     deaths = detectCollisions(room, now);
@@ -490,9 +491,9 @@ function tickRoom(room: ArenaRoom, now: number): void {
     log('error', `Collision detection error in ${room.arena.id}: ${(err as Error).message}`);
   }
 
-  // 7) Apply deaths with CORRECT drop rules per spec:
-  //    Body/headOn collision: drop score orbs (ALL snakes, including selfDestruct bots) + 10 stars (real players only).
-  //    Wall death: drop 0 food (score destroyed) + 10 stars (real players only).
+  // 8) Apply deaths with CORRECT drop rules per spec:
+  //    Body/headOn collision: drop score orbs (ALL snakes, including selfDestruct bots) + 10 stars (real players always).
+  //    Wall death: drop 0 food (score destroyed) + 10 stars (real players always, even if carriedChips=0).
   //    Bot selfDestruct WALL death: 0 food, 0 stars (vanish cleanly).
   //    Bot selfDestruct COLLISION death: STILL drops food (only wall death vanishes cleanly).
   for (const death of deaths) {
@@ -505,8 +506,9 @@ function tickRoom(room: ArenaRoom, now: number): void {
 
     if (death.cause === 'wall') {
       // Wall death: NO food orbs (score destroyed).
-      // Stars: real players always get 10 stars; selfDestruct bots get 0.
-      if (dead.isPlayer && dead.carriedChips > 0) {
+      // Stars: real players ALWAYS get 10 stars (even if carriedChips=0, each star=1 chip value).
+      // selfDestruct bots get 0 stars.
+      if (dead.isPlayer) {
         dropStarsAtDeath(room, headX, headY, dead.carriedChips);
         log('info', `Wall-death star drop: ${dead.name} → 10 stars (${Math.floor(dead.carriedChips)} chips) at (${headX.toFixed(0)},${headY.toFixed(0)})`);
       }
@@ -518,8 +520,8 @@ function tickRoom(room: ArenaRoom, now: number): void {
       dropScoreOrbsAtBody(room, dead.points, dead.score, dead.color);
       const foodDropped = room.foods.length - foodCountBefore;
       log('info', `Death food drop: ${dead.name} (${dead.isBot?'bot':'player'}) score=${dead.score} bodyLen=${dead.points.length} → ${foodDropped} orbs`);
-      // Stars: real players only.
-      if (dead.isPlayer && dead.carriedChips > 0) {
+      // Stars: real players ALWAYS get 10 stars (even if carriedChips=0).
+      if (dead.isPlayer) {
         dropStarsAtDeath(room, headX, headY, dead.carriedChips);
         log('info', `Death star drop: ${dead.name} → 10 stars (${Math.floor(dead.carriedChips)} chips) at (${headX.toFixed(0)},${headY.toFixed(0)})`);
       }
@@ -544,14 +546,29 @@ function tickRoom(room: ArenaRoom, now: number): void {
     }
 
     // Notify all players about death food/star drops so they can show visual effects.
-    if (death.cause !== 'wall') {
+    if (death.cause === 'wall') {
+      // Wall death: no food orbs, but stars may have dropped for real players.
+      if (dead.isPlayer) {
+        const wallDropEvent = {
+          x: headX,
+          y: headY,
+          score: 0,
+          bodyPoints: [],
+          color: dead.color,
+          droppedStars: 10,
+        };
+        for (const socketId of room.players.keys()) {
+          io.to(socketId).emit('death_food_drop', wallDropEvent);
+        }
+      }
+    } else {
       const dropEvent = {
         x: headX,
         y: headY,
         score: dead.score,
         bodyPoints: dead.points.slice(0, Math.min(60, dead.points.length)),
         color: dead.color,
-        droppedStars: dead.isPlayer && dead.carriedChips > 0 ? 10 : 0,
+        droppedStars: dead.isPlayer ? 10 : 0,
       };
       for (const socketId of room.players.keys()) {
         io.to(socketId).emit('death_food_drop', dropEvent);
@@ -566,32 +583,34 @@ function tickRoom(room: ArenaRoom, now: number): void {
         log('error', `settleMatch(death) failed: ${(err as Error).message}`);
       });
     } else {
-      // Bot dies: remove + respawn a fresh one to keep the bot count stable.
+      // Bot dies: remove + respawn only if under cap.
       room.bots.delete(dead.id);
-      try {
-        const fresh = spawnNewBot(room);
-        if (fresh) room.bots.set(fresh.id, fresh);
-      } catch (err) {
-        log('error', `Bot respawn error: ${(err as Error).message}`);
+      if (room.bots.size < room.arena.botsCount) {
+        try {
+          const fresh = spawnNewBot(room);
+          if (fresh) room.bots.set(fresh.id, fresh);
+        } catch (err) {
+          log('error', `Bot respawn error: ${(err as Error).message}`);
+        }
       }
     }
   }
 
-  // 8) Food collision (credits carriedChips, marks food as eaten via sentinel).
+  // 9) Food collision (credits carriedChips, marks food as eaten via sentinel).
   try {
     eatFood(room);
   } catch (err) {
     log('error', `eatFood error in ${room.arena.id}: ${(err as Error).message}`);
   }
 
-  // 9) Replenish food up to target.
+  // 10) Replenish food up to target.
   try {
     replenishFood(room);
   } catch (err) {
     log('error', `replenishFood error in ${room.arena.id}: ${(err as Error).message}`);
   }
 
-  // 10) Extraction progress for players. NO zone check — extract anywhere.
+  // 11) Extraction progress for players. NO zone check — extract anywhere.
   for (const session of room.players.values()) {
     if (session.isDead || session.matchSettling) continue;
     if (!session.isExtracting) continue;
@@ -609,7 +628,7 @@ function tickRoom(room: ArenaRoom, now: number): void {
     }
   }
 
-  // 11) Recompute leader + expire chat bubbles.
+  // 12) Recompute leader + expire chat bubbles.
   try {
     recomputeLeader(room);
   } catch (err) {
@@ -659,15 +678,19 @@ function broadcastOnce(): void {
     for (const room of rooms.values()) {
       if (room.players.size === 0) continue;
       // Build one base snapshot per room, then customize yourRank per viewer.
+      let base: ReturnType<typeof buildBaseSnapshot> | null = null;
+      const sorted = [...room.players.values()]
+        .filter(p => !p.isDead && !p.matchSettling)
+        .sort((a, b) => b.carriedChips - a.carriedChips);
       for (const socketId of room.players.keys()) {
-        let snapshot: ReturnType<typeof buildSnapshot>;
         try {
-          snapshot = buildSnapshot(room, socketId);
+          if (!base) base = buildBaseSnapshot(room);
+          const yourRank = sorted.findIndex(p => p.id === socketId) + 1;
+          io.to(socketId).emit('snapshot', { ...base, yourRank: yourRank > 0 ? yourRank : 0 });
         } catch (err) {
           log('error', `Snapshot build error in ${room.arena.id}: ${(err as Error).message}`);
           continue;
         }
-        io.to(socketId).emit('snapshot', snapshot);
       }
     }
   } catch (err) {
@@ -828,6 +851,9 @@ async function handleJoinArena(socket: Socket, payload: unknown): Promise<void> 
     socket.emit('join_error', { reason: 'invalid_arena' });
     return;
   }
+
+  // Ensure bots exist (cap at arena.botsCount — won't over-spawn).
+  ensureBots(room);
 
   const cfg = room.cfg;
   const realPlayerCount = [...room.players.values()].filter(p => !p.isDead && !p.matchSettling).length;
@@ -1049,8 +1075,26 @@ process.on('exit', (code) => {
 });
 
 // Heartbeat: log every 15s so we can pinpoint when the process dies.
+// Every 4th heartbeat (60s), clean up empty rooms (0 players AND 0 active bots).
+let heartbeatCount = 0;
 function heartbeat(): void {
+  heartbeatCount++;
   log('info', `heartbeat — rooms=${rooms.size} players=${countPlayers()}`);
+
+  // Cleanup: every 4th heartbeat (every ~60s)
+  if (heartbeatCount % 4 === 0) {
+    let cleaned = 0;
+    for (const [key, room] of rooms) {
+      if (room.players.size === 0 && room.bots.size === 0) {
+        rooms.delete(key);
+        cleaned++;
+      }
+    }
+    if (cleaned > 0) {
+      log('info', `Cleaned up ${cleaned} empty arena room(s) — ${rooms.size} remaining`);
+    }
+  }
+
   setTimeout(heartbeat, 15000);
 }
 function countPlayers(): number {
@@ -1066,11 +1110,7 @@ function countPlayers(): number {
 log('warn', 'CORS is open (origin: *) — OK for dev (Caddy restricts in prod)');
 log('info', `NEXT_APP_URL=${NEXT_APP_URL}  PORT=${PORT}`);
 
-// Pre-create all online arenas so bots are ready when the first player joins.
-for (const tier of ARENA_TIERS) {
-  getOrCreateRoom(tier.id);
-}
-log('info', `Pre-created ${rooms.size} arena rooms`);
+// Arenas are created lazily on first join_arena — no pre-creation.
 
 // Start tick + broadcast loops.
 setTimeout(tickOnce, TICK_MS);
