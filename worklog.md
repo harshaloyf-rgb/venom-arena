@@ -518,3 +518,28 @@ Stage Summary:
 - Fix: game server now reads .env from project root on startup
 - Additional: removed listen callback to avoid Bun memory spike
 - Phase 0+1 optimizations from earlier are intact and correct
+---
+Task ID: 3
+Agent: Main
+Task: Fix online mode "invalid token" / "timeout" error when joining arenas
+
+Work Log:
+- Audited the complete auth chain: client → /api/auth/token → Socket.IO auth → game-server verifyToken() → /api/match/verify
+- Audited /api/auth/token, /api/match/verify, and /api/match/join routes — all correct
+- Audited game-server auth middleware (io.use) and join_arena handler — logic correct
+- Discovered ROOT CAUSE: `httpServer.listen(PORT)` on line 1148 throws an uncaughtException in Bun that kills the process entirely
+  - Bun's behavior differs from Node.js: after uncaughtException handler returns, Bun exits the process
+  - This meant the game server was dying on every startup, making all socket connections fail
+  - When the game server was down, the client got "timeout" (3s HTTP_TIMEOUT_MS in verifyToken)
+  - Previous sessions mistakenly believed this was a non-fatal Bun quirk — it IS fatal in this environment
+- Fixed by replacing `httpServer.listen(PORT)` with:
+  1. `httpServer.on('error', callback)` to catch the Bun listen error gracefully
+  2. `httpServer.listen(PORT, successCallback)` with a success callback
+  3. `setInterval(() => {}, 60000)` keepalive to prevent Bun from exiting when event loop drains
+- Verified end-to-end flow: guest login → /api/auth/token → Socket.IO connect → verifyToken → /api/match/verify → join_arena → /api/match/join → game running
+- Browser-verified: joined Scrap Alley (10c), played for 22s, died by wall collision, 10 stars dropped correctly
+
+Stage Summary:
+- Root cause: Bun's `httpServer.listen()` throws a fatal uncaughtException that kills the game server process
+- Fix: Added error handler + callback-based listen + keepalive interval in index.ts line 1148-1155
+- Online mode fully working — verified via agent-browser with no console errors

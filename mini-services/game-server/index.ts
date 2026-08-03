@@ -1145,5 +1145,11 @@ setTimeout(tickOnce, TICK_MS);
 setTimeout(broadcastOnce, BROADCAST_MS);
 setTimeout(heartbeat, 15000);
 
-httpServer.listen(PORT);
-log('info', `Game server booting on port ${PORT}`);
+httpServer.on('error', (err) => {
+  log('error', `HTTP server error: ${err.message}`);
+});
+httpServer.listen(PORT, () => {
+  log('info', `Game server listening on port ${PORT}`);
+});
+// Keep the process alive — Bun sometimes exits when no pending I/O refs.
+setInterval(() => {}, 60000);
