@@ -1,11 +1,11 @@
 'use client';
 
 import { Loader2, Search, X, Crosshair } from 'lucide-react';
-import { HALL_OF_FAME_TIERS, DEMO_MILESTONES, notify } from './_types';
+import { HALL_OF_FAME_TIERS, DEMO_MILESTONES } from './_types';
+import { notify, type ToastFn } from '../_panel-primitives';
 import { MilestonesFlatTable } from './milestones-table';
 import type { InducteeEntry } from './_types';
 import type { InspectedPlayer } from '@/lib/game-config';
-import type { ToastFn } from '../_panel-primitives';
 
 // ── Milestones Wing Tab ──────────────────────────────────────────────────
 
