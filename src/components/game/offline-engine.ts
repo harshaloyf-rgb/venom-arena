@@ -1429,11 +1429,12 @@ export class OfflineGameEngine {
       this.cam.y = head.y;
       this.camInit = true;
     } else {
-      this.cam.x += (head.x - this.cam.x) * 0.18;
-      this.cam.y += (head.y - this.cam.y) * 0.18;
+      const lerpSpeed = 0.18;
+      this.cam.x += (head.x - this.cam.x) * lerpSpeed;
+      this.cam.y += (head.y - this.cam.y) * lerpSpeed;
     }
     // Zoom: mobile = 0.58, desktop = 0.9; zoom out slightly as body grows.
-    const baseZoom = this.isMobile ? 0.58 : 0.9;
+    const baseZoom = this.isMobile ? 0.58 : 0.85;
     const len = p.points.length;
     const targetZoom = Math.max(baseZoom * 0.65, baseZoom - (len - this.cfg.initialBodyLength) * 0.005);
     this.cam.zoom += (targetZoom - this.cam.zoom) * 0.05;
@@ -1500,6 +1501,7 @@ export class OfflineGameEngine {
     }
 
     // Build render context.
+    const input = this.computePlayerInput();
     const rc: FrameRenderCtx = {
       ctx,
       w: cssW,
@@ -1514,6 +1516,7 @@ export class OfflineGameEngine {
       metallicCache: this.metallicCache,
       playerSkin: this.playerSkin,
       dpr,
+      pointerAngle: input.angle ?? this.player.angle,
     };
 
     // World transform.

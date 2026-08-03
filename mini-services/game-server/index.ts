@@ -869,7 +869,9 @@ async function handleJoinArena(socket: Socket, payload: unknown): Promise<void> 
       socket.disconnect(true);
       return;
     }
-    socket.emit('join_error', { reason: 'invalid_arena' });
+    // Pass through the actual reason so the client shows the right message
+    log('error', `joinMatch failed for ${identity.userTag} in ${arenaId}: reason=${reason}`);
+    socket.emit('join_error', { reason: reason || 'server_error' });
     return;
   }
 
