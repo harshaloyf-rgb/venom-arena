@@ -337,3 +337,26 @@ Stage Summary:
 - New FAQ for multiple clan creation
 - Admin guide fully updated with all 4 treasury outflow features
 - Activity Log bug fixed (payout/withdraw now refresh the log)
+---
+Task ID: 1-9
+Agent: Main
+Task: Build real Season Pass system with backend persistence and Shop integration
+
+Work Log:
+- Added 3 DB fields to Player: hasElitePass, passClaimedFree, passClaimedElite
+- Created 40 real cosmetics (20 free + 20 elite) as Skin objects in game-config.ts
+- Defined PASS_TIER_LEVEL array mapping 20 tiers to player levels (2,3,4,5,6,7,8,10,12,14,15,17,19,21,23,25,28,31,34,38)
+- Created POST /api/season-pass/unlock-elite (deducts 100K chips, sets hasElitePass)
+- Created POST /api/season-pass/claim (validates level, adds cosmetic to unlockedSkins, auto-equips)
+- Updated types.ts with hasElitePass, passClaimedFree, passClaimedElite
+- Updated player-helpers.ts toProfile with safeParseArray helper
+- Completely rewrote season-pass.tsx — real XP bar, real claims, real API calls, Claim All buttons
+- Updated dashboard bento card (removed fake claims, shows X/20 Unlocked)
+- Added 25 XP bonus to daily challenge claims (helps progress Pass)
+- Verified in browser: Pass tab renders correctly with 20 tiers, correct level requirements, no console errors
+
+Stage Summary:
+- Season Pass is now 100% functional with backend persistence
+- Claimed rewards are real cosmetics that appear in Shop & Lab
+- Elite Pass purchase actually deducts 100K chips
+- Two XP paths: match play + challenge completion

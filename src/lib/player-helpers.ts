@@ -2,6 +2,16 @@ import { db } from './db';
 import type { Player } from '@prisma/client';
 import type { PlayerProfile } from './types';
 
+function safeParseArray(val: string | null | undefined): number[] {
+  if (!val) return [];
+  try {
+    const arr = JSON.parse(val);
+    return Array.isArray(arr) ? arr.map(Number).filter(n => !isNaN(n)) : [];
+  } catch {
+    return [];
+  }
+}
+
 /** Generate a unique VIPER-XXXX referral code */
 export function generateReferralCode(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -69,6 +79,9 @@ export function toProfile(p: Player): PlayerProfile {
     currentDeath: p.currentDeath,
     currentFlag: p.currentFlag,
     currentBanner: p.currentBanner,
+    hasElitePass: p.hasElitePass,
+    passClaimedFree: safeParseArray(p.passClaimedFree),
+    passClaimedElite: safeParseArray(p.passClaimedElite),
     clanTag: p.clanTag,
     clanRank: p.clanRank,
     securityPin: !!p.securityPin,
