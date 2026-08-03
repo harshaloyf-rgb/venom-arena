@@ -5,7 +5,7 @@ import { Shield, Users, Castle, BookOpen, Search, UserPlus, Settings, LayoutDash
 import { PlayersTab } from '@/components/panels/admin/players-tab';
 import GuideTab from '@/components/panels/admin/guide-tab';
 import ClansTab from '@/components/panels/admin/clans-tab';
-import type { ToastFn } from '../_panel-primitives';
+import type { ToastFn } from './_panel-primitives';
 
 const tabs = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
