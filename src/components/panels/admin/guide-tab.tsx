@@ -427,10 +427,33 @@ function SectionEconomyOverview() {
         rows={[
           { label: 'Match Buy-In', value: 'Entry fee deducted before match starts', note: 'primary drain' },
           { label: 'Cosmetics', value: 'Skins, trails, death effects purchased in shop', note: 'NOT counted as losses' },
+          { label: 'Elite Cyber Pass', value: '100,000c one-time purchase to unlock elite track', note: 'server-validated, persistent', icon: <Crown className="h-3 w-3 text-amber-400" /> },
           { label: 'Gifts', value: 'Chips spent sending gifts to other players', note: 'sender loses, receiver gains', icon: <Gift className="h-3 w-3 text-pink-400" /> },
           { label: 'Clan Deposits', value: 'Player-initiated deposits to clan treasury', note: 'withdrawable + payouts exist' },
         ]}
       />
+
+      <SubHeading>Season Pass (Cyber Pass)</SubHeading>
+      <ul className="space-y-1.5 ml-1">
+        <Bullet>
+          <strong className="text-slate-200">Fully server-enforced.</strong> DB fields: <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">hasElitePass</code>, <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">passClaimedFree</code>, <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">passClaimedElite</code>.
+        </Bullet>
+        <Bullet>
+          <strong className="text-emerald-400">20 tiers</strong> tied to player levels (Lv 2 → 38). Each tier unlocks a free + elite cosmetic reward.
+        </Bullet>
+        <Bullet>
+          <strong className="text-amber-400">Elite unlock:</strong> <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">POST /api/season-pass/unlock-elite</code> — deducts 100K chips atomically.
+        </Bullet>
+        <Bullet>
+          <strong className="text-cyan-400">Claim:</strong> <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">POST /api/season-pass/claim</code> — validates level, track, prevents double-claim, adds cosmetic to <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">unlockedSkins</code>.
+        </Bullet>
+        <Bullet>
+          <strong className="text-purple-400">40 pass-exclusive cosmetics</strong> (20 free + 20 elite) defined in <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">game-config.ts</code> — never available in the regular Shop.
+        </Bullet>
+        <Bullet>
+          Pass cosmetic purchases do <strong className="text-emerald-400">NOT count as losses</strong> (same rule as regular cosmetics).
+        </Bullet>
+      </ul>
 
       <SubHeading>Important Economy Rules</SubHeading>
       <ul className="space-y-1.5 ml-1">
