@@ -1,7 +1,8 @@
 'use client';
 
 import { Loader2, Zap, Star } from 'lucide-react';
-import { fmtChipsIndian as fmtChips, SPIN_PRIZES, SPIN_COST } from '@/lib/game-config';
+import { fmtChipsIndian as fmtChips } from '@/lib/format-chips';
+import { SPIN_PRIZES, SPIN_COST } from '@/lib/game-config';
 
 interface SpinTabProps {
   spinning: boolean;
