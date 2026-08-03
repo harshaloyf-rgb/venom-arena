@@ -543,3 +543,24 @@ Stage Summary:
 - Root cause: Bun's `httpServer.listen()` throws a fatal uncaughtException that kills the game server process
 - Fix: Added error handler + callback-based listen + keepalive interval in index.ts line 1148-1155
 - Online mode fully working — verified via agent-browser with no console errors
+
+---
+Task ID: 1-5
+Agent: Main
+Task: Port snake visuals, hats, face details, and admin panel from user snake game to Venom Arena
+
+Work Log:
+- Analyzed user 3089-line single-file snake game (Slither.io clone)
+- Created render-snake-visuals.ts (806 lines): hexToRgb, make3DGradient, 6 hat types, drawSnakeFace, SnakeShape system, GradientCache
+- Rewrote render-snakes.ts (558 lines): individual 3D segments instead of polyline, face details, hats, performance tiers
+- Updated types.ts: added playerHat, playerShape, pointerAngle to FrameRenderCtx
+- Created admin-game-tuning.tsx (602 lines): 62 sliders across 11 sections with localStorage persistence
+- Wired admin panel into page.tsx: desktop header button + mobile menu item
+- Fixed GradientCache position bug (CanvasGradient has baked-in absolute coordinates)
+- Verified: lint passes clean, browser loads without runtime errors
+
+Stage Summary:
+- 3 new files: render-snake-visuals.ts, admin-game-tuning.tsx, rewritten render-snakes.ts
+- 3 modified files: types.ts, page.tsx, render-helpers.ts (auto)
+- Both online and offline modes get new rendering via barrel export
+- Admin panel accessible via amber Tuning button in header
