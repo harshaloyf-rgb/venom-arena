@@ -498,4 +498,23 @@ Stage Summary:
 - Phase 0: Zero memory waste at boot (lazy arenas), auto-cleanup of empty rooms, dynamic bot count
 - Phase 1: Eliminated ~6+ array allocations per tick via snake caching, eliminated filter+map food allocation via swap-and-pop, reduced snapshot builds from N×room to 1×room per broadcast cycle
 - Zero TypeScript errors, server boots correctly
-- Players are informed about XP from challenges
+- Players are informed about XP from challenges---
+Task ID: 3-4-5-6-7-8-9-10-fix
+Agent: main
+Task: Audit and fix invalid_token bug in online mode
+
+Work Log:
+- Audited full auth chain: client /api/auth/token → socket auth → game server verifyToken → /api/match/verify
+- Discovered INTERNAL_SECRET mismatch: .env has prod secret, game server defaulted to dev secret
+- Game server sent wrong x-internal-secret header → Next.js returned 403 → game server mapped to "invalid_token"
+- Added .env file reader to game-server/index.ts that loads INTERNAL_SECRET from project root .env
+- Fixed Bun OOM issue: httpServer.listen() callback triggers extra allocation; removed callback, use .listen(PORT) without callback
+- Verified fix with curl: verify endpoint now returns {ok:false,reason:"invalid_token"} instead of {error:"Forbidden"}
+- End-to-end browser test: Guest login → Battle Gate → Online → Scrap Alley → Buy In → Game canvas loads (no invalid_token error)
+- Server OOM kills only happen when Chrome (agent-browser ~450MB) is also running in the 4GB sandbox
+
+Stage Summary:
+- Root cause: INTERNAL_SECRET mismatch between Next.js (reads .env) and game server (hardcoded default)
+- Fix: game server now reads .env from project root on startup
+- Additional: removed listen callback to avoid Bun memory spike
+- Phase 0+1 optimizations from earlier are intact and correct
