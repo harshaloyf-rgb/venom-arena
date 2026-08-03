@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
         data: {
           playerId: player.id,
           itemId: cosmetic.id,
-          itemType: 'skin',
+          itemType: 'pass-cosmetic',
           amountChips: 0,
         },
       });

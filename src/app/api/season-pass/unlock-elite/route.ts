@@ -29,7 +29,7 @@ export async function POST() {
         data: {
           playerId: player.id,
           itemId: 'elite-pass-genesis',
-          itemType: 'skin',
+          itemType: 'elite-pass',
           amountChips: -ELITE_PASS_COST,
         },
       });

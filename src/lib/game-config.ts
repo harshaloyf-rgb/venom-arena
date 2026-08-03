@@ -176,7 +176,11 @@ export const ALL_COSMETICS: Skin[] = [
 ];
 
 export function getCosmeticById(id: string): Skin | undefined {
-  return ALL_COSMETICS.find((c) => c.id === id);
+  return (
+    ALL_COSMETICS.find((c) => c.id === id) ??
+    PASS_FREE_COSMETICS.find((c) => c.id === id) ??
+    PASS_ELITE_COSMETICS.find((c) => c.id === id)
+  );
 }
 
 // ----------------------------------------------------------------------------
