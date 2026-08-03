@@ -93,13 +93,13 @@ import {
   EXTRACT_DURATION_MS,
   MAX_SNAPSHOT_POINTS,
 } from './offline/offline-constants';
-import { buildHUD, teardownHUD, updateHUD, showEndScreen } from './offline/offline-hud';
+import { buildHUD, teardownHUD, updateHUD, showEndScreen as showEndScreenFn } from './offline/offline-hud';
 import {
   enterPostDeathRecording,
   captureReplaySnapshot,
   finishPostDeathRecording,
-  enterReplayMode,
-  exitReplayMode,
+  enterReplayMode as enterReplayModeFn,
+  exitReplayMode as exitReplayModeFn,
 } from './offline/offline-replay';
 
 // ============================================================================
@@ -290,7 +290,7 @@ export class OfflineGameEngine {
 
   stop(): void {
     this.stopped = true;
-    exitReplayMode(this);
+    this.exitReplayMode();
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
@@ -756,7 +756,7 @@ export class OfflineGameEngine {
     this.finalKills = p.kills;
     this.finalDurationSeconds = Math.floor((performance.now() - this.startTime) / 1000);
     this.setState('extracted');
-    showEndScreen(this, 'extract');
+    this.showEndScreen('extract');
   }
 
   // --------------------------------------------------------------------------
@@ -1970,6 +1970,22 @@ export class OfflineGameEngine {
   }
 
   // --------------------------------------------------------------------------
+  // OfflineEngineRef bridge methods — satisfy the interface for sub-modules.
+  // --------------------------------------------------------------------------
+
+  showEndScreen(outcome: 'death' | 'extract'): void {
+    showEndScreenFn(this, outcome);
+  }
+
+  enterReplayMode(): void {
+    enterReplayModeFn(this);
+  }
+
+  exitReplayMode(): void {
+    exitReplayModeFn(this);
+  }
+
+  // --------------------------------------------------------------------------
   // End-screen actions
   // --------------------------------------------------------------------------
 
@@ -1986,7 +2002,7 @@ export class OfflineGameEngine {
     this.postDeathTicksRemaining = 0;
     this.replayFrames = [];
     this.replayDeathFrameIdx = 0;
-    exitReplayMode(this);
+    this.exitReplayMode();
     this.resetWorld();
     this.startTime = performance.now();
     this.accumulator = 0;
