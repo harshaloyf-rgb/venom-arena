@@ -30,6 +30,9 @@
 
 import { createServer } from 'http';
 import { Server, type Socket } from 'socket.io';
+import { readFileSync } from 'fs';
+import { join as pathJoin, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import {
   TICK_MS,
   WORLD_SIZE,
@@ -61,6 +64,31 @@ import {
   tickBot,
   tickSnakeMovement,
 } from './game-state.js';
+
+// ----------------------------------------------------------------------------
+// Load .env from project root (same secret as Next.js)
+// ----------------------------------------------------------------------------
+function loadEnv(): void {
+  if (process.env.INTERNAL_SECRET) return; // already set
+  try {
+    const projectRoot = pathJoin(dirname(fileURLToPath(import.meta.url)), '..', '..');
+    const envPath = pathJoin(projectRoot, '.env');
+    const content = readFileSync(envPath, 'utf-8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx < 1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      const val = trimmed.slice(eqIdx + 1).trim();
+      // Only set INTERNAL_SECRET (avoid overwriting PORT or other game-server vars)
+      if (key === 'INTERNAL_SECRET') process.env.INTERNAL_SECRET = val;
+    }
+  } catch {
+    // .env not found — use defaults
+  }
+}
+loadEnv();
 
 // ----------------------------------------------------------------------------
 // Config
@@ -1117,6 +1145,5 @@ setTimeout(tickOnce, TICK_MS);
 setTimeout(broadcastOnce, BROADCAST_MS);
 setTimeout(heartbeat, 15000);
 
-httpServer.listen(PORT, () => {
-  log('info', `Venom Arena game server listening on port ${PORT}`);
-});
+httpServer.listen(PORT);
+log('info', `Game server booting on port ${PORT}`);
