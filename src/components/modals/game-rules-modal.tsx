@@ -1165,19 +1165,18 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                 <ul className="list-disc pl-4 space-y-0.5">
                   <li><strong>Member Expansion</strong> (15,000c) — +5 max member slots. Repeatable. Default is 30 members.</li>
                   <li><strong>XP Windfall</strong> (8,000c) — Instantly grants Level × 500 XP. Repeatable.</li>
-                  <li><strong>War Shield</strong> (5,000c) — Blocks war declarations against your clan for 7 days. One-time.</li>
+                  <li><strong>War Shield</strong> (5,000c) — 7-day peace mode. No other clan can declare war on you while active. One-time purchase.</li>
                 </ul>
               </InfoCard>
-              <InfoCard title="⚔️ Clan Wars" accent="text-rose-300">
-                <ul className="list-disc pl-4 space-y-0.5">
-                  <li>Leader declares war on another clan, <strong>wagering chips</strong> from both treasuries (min 1,000c each)</li>
-                  <li>Both treasuries are <strong>locked immediately</strong> — the wager is held in escrow</li>
-                  <li>War ends when either clan reaches <strong>50 kills</strong> by its members during the war</li>
-                  <li>Kills from any clan member&apos;s match count toward the war score automatically</li>
-                  <li>Winner takes <strong>both wagers</strong> (total pot = wager × 2)</li>
-                  <li>A clan with an active <strong>War Shield</strong> cannot be declared against</li>
-                  <li>A clan can only have <strong>one active war</strong> at a time</li>
-                </ul>
+              <InfoCard title="⚔️ Clan Wars — How It Works" accent="text-rose-300">
+                <p className="mb-1.5"><strong>No separate clan arenas needed.</strong> Members play <strong>normal matches</strong> as usual — their kills automatically count toward the war score.</p>
+                <ol className="list-decimal pl-4 space-y-0.5">
+                  <li><strong>Declare:</strong> Leader picks a target clan, enters a wager (min 1,000c). Both clans&apos; treasuries are <strong>deducted immediately</strong> (escrow). Total pot = wager × 2.</li>
+                  <li><strong>Fight:</strong> ALL members of BOTH clans play their <strong>normal matches</strong>. Every kill by any member automatically adds to their clan&apos;s war score. No special mode or lobby needed.</li>
+                  <li><strong>Score:</strong> War tab shows live score bars (e.g. KILL: 32/50 vs APEX: 28/50). Scores update after each member finishes a match.</li>
+                  <li><strong>Win:</strong> First clan to reach <strong>50 kills</strong> wins the <strong>entire pot</strong>. War ends automatically — chips are added to the winner&apos;s treasury.</li>
+                </ol>
+                <p className="mt-1.5 text-[10px] text-slate-500"><strong>Rules:</strong> One active war per clan. Can&apos;t declare on a clan that already has a war. Can&apos;t declare on a clan with an active War Shield. Both clans must have enough treasury for the wager.</p>
               </InfoCard>
             </div>
 
@@ -1206,7 +1205,7 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                     <div className="text-[10px] text-slate-500">Legendary Syndicate</div>
                   </div>
                 </div>
-                <p className="mt-1.5 text-[10px] text-slate-500">All syndicates support up to 30 members regardless of level. XP requirements increase per level (Level × 1,000 XP). Higher levels = harder challenges with bigger rewards.</p>
+                <p className="mt-1.5 text-[10px] text-slate-500">Syndicates start with 30 member slots. The Leader can buy Member Expansion from the Clan Shop to add +5 slots per purchase. XP requirements increase per level (Level × 1,000 XP). Higher levels = harder challenges with bigger rewards.</p>
               </InfoCard>
             </div>
 
@@ -1603,8 +1602,9 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
               <FaqItem q="Why is my submitted clip not showing up?" a="Video clips require admin review before becoming visible. Check the Highlights tab with &quot;My Clips&quot; toggled on — if your clip shows &quot;Pending&quot; status, it's still waiting for review (target: 24 hours). If it shows &quot;Rejected&quot;, it didn't meet community guidelines. Match Cards are auto-approved and appear instantly." />
               <FaqItem q="How do I withdraw chips from the clan treasury?" a="Enter the amount in the same deposit input field on the clan Overview tab and click the red &quot;Withdraw&quot; button. You can only withdraw up to what you personally deposited (your deposited amount is tracked individually). The treasury must have enough chips. If you leave the clan, your unwithdrawn deposits are forfeited." />
               <FaqItem q="How does the payout system work?" a="Leader or Co-Leader enters an amount in the treasury input and clicks the green payout icon (Coins button) on a member's row. Those chips are deducted from the treasury and added directly to the member's personal bank. Use this to reward active members or distribute winnings." />
-              <FaqItem q="What does the Clan Shop sell?" a="Three items: (1) Member Expansion (15,000c) — adds 5 member slots, repeatable. (2) XP Windfall (8,000c) — instant Level × 500 XP, repeatable. (3) War Shield (5,000c) — blocks war declarations for 7 days, one-time. Only the Leader can purchase, using treasury chips. The Shop appears on the Overview tab." />
-              <FaqItem q="How do Clan Wars work?" a="The Leader declares war on another clan and wagers chips (min 1,000c). Both clans&apos; treasuries are locked immediately. Every kill by any clan member during the war adds to their clan&apos;s war score. The war ends when one side reaches 50 kills — they win the entire pot (wager × 2). Each clan can only have one active war. War Shield blocks declarations against your clan." />
+              <FaqItem q="What does the Clan Shop sell?" a="Three items: (1) Member Expansion (15,000c) — adds 5 member slots, repeatable. (2) XP Windfall (8,000c) — instant Level × 500 XP, repeatable. (3) War Shield (5,000c) — 7-day peace mode, no other clan can declare war on you, one-time. Only the Leader can purchase, using treasury chips. The Shop appears on the Overview tab." />
+              <FaqItem q="How do Clan Wars work?" a="No separate arenas — members play normal matches. Step by step: (1) Leader declares war on a target clan and enters a wager (min 1,000c). (2) Both clans&apos; treasuries are deducted the wager immediately — held in escrow. (3) Every member of BOTH clans plays their normal matches. After each match, the kills are automatically added to their clan&apos;s war score. (4) Check the Wars tab to see live score bars. (5) First clan to reach 50 total kills wins the entire pot (wager × 2). Only one active war per clan. War Shield (5,000c from shop) blocks declarations against your clan for 7 days." />
+              <FaqItem q="Can I create multiple clans?" a="You can only be in one syndicate at a time. If you leave or disband your current clan, you can create a new one. There is no lifetime limit on how many clans you can create across your account." />
             </div>
           </Section>
 
