@@ -1,40 +1,153 @@
 /**
- * Venom Arena — snake body + head + eyes + label rendering.
+ * Venom Arena — snake body + head + face + hat + label rendering.
+ *
+ * Each body segment is drawn as an individual 3D-shaded circle/shape
+ * instead of a thick stroked polyline.
  */
 
 import type { FrameRenderCtx } from './types';
+import type { SkinPattern } from '@/lib/game-config';
 import type { SnakeSnapshot } from '@/lib/types';
-import { computeVisibleRect, rectContainsPoint, snakeIsVisible } from './render-grid';
+import { computeVisibleRect, snakeIsVisible } from './render-grid';
+import {
+  GradientCache,
+  drawHat,
+  drawSnakeFace,
+  hexToRgb,
+  pickSegmentShape,
+} from './render-snake-visuals';
+import type { HatType, SnakeShape } from './render-snake-visuals';
 
 // ---------------------------------------------------------------------------
-// Metallic gradient helper (used only by drawSnake)
+// Module-level gradient cache
 // ---------------------------------------------------------------------------
+
+const _gradCache = new GradientCache();
+
+// ---------------------------------------------------------------------------
+// Performance tier thresholds (world-space pixels from camera to head)
+// ---------------------------------------------------------------------------
+
+const CLOSE_DIST = 800;
+const FAR_DIST = 2000;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Returns the shortest angular delta from `from` to `to` (radians, -PI..PI). */
+function shortestAngleDelta(from: number, to: number): number {
+  let d = to - from;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+/** Lighten a hex colour by an amount 0–255. */
+function lightenHex(hex: string, amount: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgb(${Math.min(255, r + amount)},${Math.min(255, g + amount)},${Math.min(255, b + amount)})`;
+}
+
+/** Darken a hex colour by an amount 0–255. */
+function darkenHex(hex: string, amount: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgb(${Math.max(0, r - amount)},${Math.max(0, g - amount)},${Math.max(0, b - amount)})`;
+}
 
 /**
- * Cache a metallic radial gradient. Bucketed by 2-pixel radius so we don't
- * cache a gradient for every floating-point size value.
+ * Returns the colour for a given body segment index based on the skin pattern.
+ * Returns `undefined` when the pattern requires special handling (metallic, glow).
  */
-function getMetallicGradient(
-  rc: FrameRenderCtx,
-  radius: number,
-  color: string,
-  secondary: string | undefined,
-): CanvasGradient | string {
-  const bucket = Math.max(4, Math.round(radius));
-  const key = `${color}:${secondary ?? ''}:${bucket}`;
-  const cached = rc.metallicCache.get(key);
-  if (cached) return cached;
-  const { ctx } = rc;
-  const g = ctx.createRadialGradient(-bucket * 0.35, -bucket * 0.35, bucket * 0.1, 0, 0, bucket);
-  g.addColorStop(0, '#f8fafc');
-  g.addColorStop(0.35, secondary || color);
-  g.addColorStop(1, color);
-  rc.metallicCache.set(key, g);
-  return g;
+function getSegmentColor(
+  snake: SnakeSnapshot,
+  pattern: SkinPattern | undefined,
+  segIndex: number,
+  now: number,
+  lowQuality: boolean,
+): string {
+  // No pattern → use base color (caller handles stripe via secondaryColor)
+  if (!pattern) return snake.color;
+
+  switch (pattern) {
+    case 'rainbow': {
+      if (lowQuality) return snake.color;
+      const hue = (now * 0.05 + segIndex * 14) % 360;
+      return `hsl(${hue}, 90%, 55%)`;
+    }
+    case 'neon': {
+      if (lowQuality) return snake.color;
+      const ratio = (Math.sin(now * 0.009 - segIndex * 0.28) + 1) / 2;
+      return ratio > 0.5 ? '#06b6d4' : '#a855f7';
+    }
+    case 'camo': {
+      const camoColors = ['#15803d', '#854d0e', '#78350f', '#166534'];
+      return camoColors[Math.floor(segIndex / 4) % camoColors.length];
+    }
+    case 'metallic': {
+      // Metallic uses a special gradient — return base color as fallback;
+      // the caller uses a separate gradient path for metallic.
+      return snake.color;
+    }
+    case 'glow': {
+      // Glow: base colour but the caller adds a glow shadow
+      return snake.color;
+    }
+    case 'pulse': {
+      // Pulse: brightness oscillates per segment
+      const pulse = (Math.sin(now * 0.006 + segIndex * 0.25) + 1) / 2;
+      const bright = Math.round(pulse * 50);
+      return lightenHex(snake.color, bright);
+    }
+    case 'zebra': {
+      // Zebra: strict alternating stripes
+      const stripe = Math.floor(segIndex / 4) % 2 === 0;
+      return stripe ? snake.color : (snake.secondaryColor || snake.color);
+    }
+    case 'cyber': {
+      // Cyber: alternating primary + dark variant
+      const cyb = Math.floor(segIndex / 3) % 2 === 0;
+      return cyb ? snake.color : darkenHex(snake.color, 60);
+    }
+    default:
+      return snake.color;
+  }
+}
+
+/**
+ * Draws a single segment shape (circle, box, or triangle) at (px, py).
+ */
+function fillSegmentShape(
+  ctx: CanvasRenderingContext2D,
+  shape: 'circle' | 'box' | 'triangle',
+  px: number,
+  py: number,
+  r: number,
+): void {
+  ctx.beginPath();
+  switch (shape) {
+    case 'circle':
+      ctx.arc(px, py, Math.max(1, r), 0, Math.PI * 2);
+      break;
+    case 'box': {
+      const s = Math.max(1, r * 1.6);
+      ctx.rect(px - s / 2, py - s / 2, s, s);
+      break;
+    }
+    case 'triangle': {
+      const s = Math.max(1, r * 1.3);
+      ctx.moveTo(px, py - s);
+      ctx.lineTo(px - s * 0.866, py + s * 0.5);
+      ctx.lineTo(px + s * 0.866, py + s * 0.5);
+      ctx.closePath();
+      break;
+    }
+  }
+  ctx.fill();
 }
 
 // ---------------------------------------------------------------------------
-// Snake rendering
+// Chat bubble (preserved as-is)
 // ---------------------------------------------------------------------------
 
 /** Draws a small chat bubble above a snake head. */
@@ -79,13 +192,17 @@ function drawChatBubble(
   ctx.restore();
 }
 
+// ---------------------------------------------------------------------------
+// Snake rendering (segment-based 3D)
+// ---------------------------------------------------------------------------
+
 /**
- * Draws a single snake. The body is rendered as ONE thick stroked polyline
- * (with an outline underlay). The head is drawn separately with eyes and
- * (for the player's own snake, high-quality only) a glow halo.
+ * Draws a single snake using individual 3D-shaded segments.
  *
- * Player skin patterns (rainbow / neon / metallic / camo) are applied when
- * `rc.playerSkin.pattern` is set and the snake is the local player.
+ * Performance tiers:
+ *   - Close (head within 800px of camera): Full 3D + face + hat
+ *   - Medium (800–2000px): 3D segments, no face details
+ *   - Far (2000px+): Flat color circles, no 3D gradient
  *
  * @param opacity  Optional global alpha override (0..1). Default = 1.
  */
@@ -99,190 +216,295 @@ export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot, opacity?: nu
   const { ctx, zoom, lowQuality } = rc;
   const isMe = snake.id === rc.myId;
   const baseAlpha = opacity ?? 1;
+  const now = rc.now;
 
-  // Downsample long snakes
-  const stride = pts.length > 60 ? 2 : 1;
+  // Body radius in world units
+  const bodyR = Math.max(2, snake.visualRadius ?? snake.size);
+  const headR = bodyR * 1.05;
 
-  // Body width in world units
-  const radius = Math.max(2, snake.visualRadius ?? snake.size);
-  const width = radius * 2;
+  // Determine performance tier based on head distance to camera
+  const head = pts[0];
+  const headDist = Math.hypot(head.x - rc.camX, head.y - rc.camY);
+  const isClose = headDist < CLOSE_DIST;
+  const isFar = headDist > FAR_DIST;
+
+  // Skin pattern (only for the player's own snake)
+  const pattern: SkinPattern | undefined = isMe ? rc.playerSkin?.pattern : undefined;
+
+  // Player shape (for custom body shapes)
+  const snakeShape: SnakeShape = isMe && rc.playerShape ? rc.playerShape : 'circle';
+
+  // Striped mode: if the snake has a secondaryColor but NO skin pattern,
+  // alternate between primary and secondary every 4 segments
+  const isStriped = !pattern && !!snake.secondaryColor;
+
+  // Downsample stride for very long snakes (skip points for perf)
+  const stride = pts.length > 120 ? 2 : 1;
 
   ctx.save();
   ctx.globalAlpha = baseAlpha;
 
-  // --- Outline (underlay) ---
-  if (snake.secondaryColor) {
-    ctx.save();
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = width + 4 / zoom;
-    ctx.strokeStyle = snake.secondaryColor;
-    ctx.globalAlpha = baseAlpha * 0.55;
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = stride; i < pts.length; i += stride) {
-      ctx.lineTo(pts[i].x, pts[i].y);
+  // === BODY SEGMENTS (draw from tail to head so head is on top) ===
+  for (let i = pts.length - 1; i >= 1; i -= stride) {
+    const p = pts[i];
+    if (!isFinite(p.x) || !isFinite(p.y)) continue;
+
+    // Per-segment culling
+    const margin = bodyR + 10;
+    if (p.x < vis.left - margin || p.x > vis.right + margin ||
+        p.y < vis.top - margin || p.y > vis.bottom + margin) continue;
+
+    // Determine segment colour
+    let segColor: string;
+    if (isStriped) {
+      segColor = Math.floor(i / 4) % 2 === 0
+        ? snake.color
+        : (snake.secondaryColor ?? snake.color);
+    } else {
+      segColor = getSegmentColor(snake, pattern, i, now, lowQuality);
     }
-    ctx.stroke();
+
+    // Determine segment shape
+    const shape = pickSegmentShape(snakeShape, i);
+
+    // --- Secondary color outline (draw slightly larger first) ---
+    if (snake.secondaryColor && !isFar) {
+      ctx.save();
+      ctx.globalAlpha = baseAlpha * 0.55;
+      ctx.fillStyle = snake.secondaryColor;
+      const outlineR = bodyR + 2 / zoom;
+      fillSegmentShape(ctx, shape, p.x, p.y, outlineR);
+      ctx.restore();
+    }
+
+    // --- Segment fill ---
+    ctx.save();
+    ctx.globalAlpha = baseAlpha;
+
+    if (isFar) {
+      // Far tier: flat color, no gradient
+      ctx.fillStyle = segColor;
+      fillSegmentShape(ctx, shape, p.x, p.y, bodyR);
+    } else if (pattern === 'metallic' && snake.secondaryColor && isMe) {
+      // Metallic pattern: use the metallic gradient cache
+      const mGrad = getMetallicGradient(rc, bodyR, snake.color, snake.secondaryColor);
+      ctx.fillStyle = mGrad;
+      fillSegmentShape(ctx, shape, p.x, p.y, bodyR);
+    } else if (pattern === 'glow' && !lowQuality && isMe) {
+      // Glow pattern: 3D fill + outer glow shadow
+      ctx.shadowColor = snake.color;
+      ctx.shadowBlur = bodyR * 0.8;
+      ctx.fillStyle = segColor;
+      fillSegmentShape(ctx, shape, p.x, p.y, bodyR);
+      ctx.shadowBlur = 0;
+    } else {
+      // Standard 3D gradient fill
+      const grad = _gradCache.get(ctx, p.x, p.y, bodyR, segColor);
+      ctx.fillStyle = grad;
+      fillSegmentShape(ctx, shape, p.x, p.y, bodyR);
+    }
+
     ctx.restore();
   }
 
-  // --- Body ---
-  ctx.save();
-  ctx.globalAlpha = baseAlpha;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = width;
-
-  const pattern = isMe ? rc.playerSkin?.pattern : undefined;
-  if (pattern === 'metallic' && snake.secondaryColor) {
-    const g = getMetallicGradient(rc, radius, snake.color, snake.secondaryColor);
-    ctx.strokeStyle = g;
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = stride; i < pts.length; i += stride) {
-      ctx.lineTo(pts[i].x, pts[i].y);
-    }
-    ctx.stroke();
-  } else if (pattern === 'rainbow' && !lowQuality) {
-    const chunkSize = Math.max(4, Math.floor(pts.length / 12));
-    ctx.lineWidth = width;
-    for (let i = 0; i < pts.length - 1; i += chunkSize) {
-      const hue = (rc.now * 0.05 + i * 14) % 360;
-      ctx.strokeStyle = `hsl(${hue}, 90%, 55%)`;
-      ctx.beginPath();
-      ctx.moveTo(pts[i].x, pts[i].y);
-      const end = Math.min(pts.length - 1, i + chunkSize + 1);
-      for (let j = i + stride; j <= end; j += stride) {
-        ctx.lineTo(pts[j].x, pts[j].y);
-      }
-      ctx.stroke();
-    }
-  } else if (pattern === 'neon' && !lowQuality) {
-    const chunkSize = Math.max(4, Math.floor(pts.length / 10));
-    ctx.lineWidth = width;
-    let chunkIndex = 0;
-    for (let i = 0; i < pts.length - 1; i += chunkSize) {
-      const ratio = (Math.sin(rc.now * 0.009 - chunkIndex * 0.28) + 1) / 2;
-      ctx.strokeStyle = ratio > 0.5 ? '#06b6d4' : '#a855f7';
-      ctx.beginPath();
-      ctx.moveTo(pts[i].x, pts[i].y);
-      const end = Math.min(pts.length - 1, i + chunkSize + 1);
-      for (let j = i + stride; j <= end; j += stride) {
-        ctx.lineTo(pts[j].x, pts[j].y);
-      }
-      ctx.stroke();
-      chunkIndex += 1;
-    }
-  } else if (pattern === 'camo') {
-    const camoColors = ['#15803d', '#854d0e', '#78350f', '#166534'];
-    const chunkSize = Math.max(4, Math.floor(pts.length / 12));
-    let chunkIndex = 0;
-    for (let i = 0; i < pts.length - 1; i += chunkSize) {
-      ctx.strokeStyle = camoColors[chunkIndex % camoColors.length];
-      ctx.beginPath();
-      ctx.moveTo(pts[i].x, pts[i].y);
-      const end = Math.min(pts.length - 1, i + chunkSize + 1);
-      for (let j = i + stride; j <= end; j += stride) {
-        ctx.lineTo(pts[j].x, pts[j].y);
-      }
-      ctx.stroke();
-      chunkIndex += 1;
-    }
-  } else {
-    // Default: solid snake.color
-    ctx.strokeStyle = snake.color;
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = stride; i < pts.length; i += stride) {
-      ctx.lineTo(pts[i].x, pts[i].y);
-    }
-    ctx.stroke();
+  // === HEAD ===
+  if (!isFinite(head.x) || !isFinite(head.y)) {
+    ctx.restore();
+    return;
   }
-  ctx.restore();
 
-  // --- Head ---
-  const head = pts[0];
+  // Head colour (slightly lighter than body)
+  const headColor = lightenHex(snake.color, 20);
+
+  // Ground shadow
+  if (!isFar && !lowQuality) {
+    ctx.save();
+    ctx.globalAlpha = baseAlpha * 0.25;
+    ctx.fillStyle = '#000000';
+    ctx.shadowColor = 'rgba(0,0,0,0.25)';
+    ctx.shadowBlur = headR * 0.4;
+    ctx.shadowOffsetY = headR * 0.15;
+    ctx.beginPath();
+    ctx.arc(head.x, head.y, Math.max(1, headR * 0.9), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Boost glow (semi-transparent color circle when boosting)
+  if (snake.isBoosting && !lowQuality) {
+    ctx.save();
+    ctx.globalAlpha = baseAlpha * 0.3;
+    ctx.fillStyle = snake.color;
+    ctx.shadowColor = snake.color;
+    ctx.shadowBlur = headR * 1.2;
+    ctx.beginPath();
+    ctx.arc(head.x, head.y, Math.max(1, headR * 1.3), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Head secondary color outline
+  if (snake.secondaryColor && !isFar) {
+    ctx.save();
+    ctx.globalAlpha = baseAlpha * 0.55;
+    ctx.fillStyle = snake.secondaryColor;
+    ctx.beginPath();
+    ctx.arc(head.x, head.y, Math.max(1, headR + 2 / zoom), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Head fill
   ctx.save();
   ctx.globalAlpha = baseAlpha;
   if (isMe && !lowQuality) {
     ctx.shadowColor = snake.color;
     ctx.shadowBlur = 14;
   }
+
+  if (isFar) {
+    ctx.fillStyle = headColor;
+  } else {
+    const hGrad = _gradCache.get(ctx, head.x, head.y, headR, headColor);
+    ctx.fillStyle = hGrad;
+  }
+
   ctx.beginPath();
-  ctx.arc(head.x, head.y, radius, 0, Math.PI * 2);
-  ctx.fillStyle = snake.color;
+  ctx.arc(head.x, head.y, Math.max(1, headR), 0, Math.PI * 2);
   ctx.fill();
+
   if (isMe && !lowQuality) ctx.shadowBlur = 0;
 
-  // Eyes
-  const eyeOffset = radius * 0.45;
-  const eyeR = Math.max(1.5, radius * 0.32);
-  const pupilR = Math.max(0.8, radius * 0.18);
-  const angle = snake.angle;
-  const perp = angle + Math.PI / 2;
-  const ex1 = head.x + Math.cos(angle) * eyeOffset * 0.4 + Math.cos(perp) * eyeOffset;
-  const ey1 = head.y + Math.sin(angle) * eyeOffset * 0.4 + Math.sin(perp) * eyeOffset;
-  const ex2 = head.x + Math.cos(angle) * eyeOffset * 0.4 - Math.cos(perp) * eyeOffset;
-  const ey2 = head.y + Math.sin(angle) * eyeOffset * 0.4 - Math.sin(perp) * eyeOffset;
+  // Specular highlight on head
+  if (!isFar && !lowQuality) {
+    ctx.save();
+    ctx.globalAlpha = 0.30;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(
+      head.x - headR * 0.15,
+      head.y - headR * 0.30,
+      Math.max(0.5, headR * 0.14),
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+    ctx.restore();
+  }
 
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.arc(ex1, ey1, eyeR, 0, Math.PI * 2);
-  ctx.arc(ex2, ey2, eyeR, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.restore(); // head fill
 
-  ctx.fillStyle = '#0a0a0a';
-  ctx.beginPath();
-  ctx.arc(ex1 + Math.cos(angle) * pupilR, ey1 + Math.sin(angle) * pupilR, pupilR, 0, Math.PI * 2);
-  ctx.arc(ex2 + Math.cos(angle) * pupilR, ey2 + Math.sin(angle) * pupilR, pupilR, 0, Math.PI * 2);
-  ctx.fill();
+  // === FACE DETAILS (player + close snakes only) ===
+  if (!isFar && (isClose || isMe) && !lowQuality) {
+    // Pupil tracking
+    let pupilX = 0;
+    let pupilY = 0;
 
-  // Spawn-protection ring
+    if (isMe && rc.pointerAngle != null) {
+      // Player: pupils track the mouse/pointer direction
+      const delta = shortestAngleDelta(snake.angle, rc.pointerAngle);
+      const trackDist = bodyR * 0.18;
+      pupilX = Math.cos(snake.angle + delta) * trackDist;
+      pupilY = Math.sin(snake.angle + delta) * trackDist;
+    }
+    // For bots: pupils look forward (pupilX/pupilY = 0,0)
+
+    drawSnakeFace(
+      ctx,
+      head.x, head.y,
+      snake.angle,
+      bodyR, headR,
+      snake.isBoosting,
+      pupilX, pupilY,
+      isMe,
+    );
+  }
+
+  // === HAT (player only, if equipped) ===
+  if (isMe && rc.playerHat && rc.playerHat !== 'none' && !isFar) {
+    drawHat(ctx, head.x, head.y, snake.angle, headR, rc.playerHat, baseAlpha);
+  }
+
+  // === SPAWN PROTECTION RING ===
   if (snake.spawnProtected) {
+    ctx.save();
+    ctx.globalAlpha = baseAlpha;
     ctx.strokeStyle = 'rgba(255,255,255,0.6)';
     ctx.lineWidth = 2 / zoom;
     ctx.beginPath();
-    ctx.arc(head.x, head.y, radius + 4 / zoom, 0, Math.PI * 2);
+    ctx.arc(head.x, head.y, Math.max(1, headR + 4 / zoom), 0, Math.PI * 2);
     ctx.stroke();
+    ctx.restore();
   }
 
-  ctx.restore();
-
-  // --- Name label ---
+  // === NAME LABEL ===
   if (snake.name) {
     ctx.save();
     ctx.globalAlpha = baseAlpha;
     ctx.font = `${Math.max(10, 12 / zoom)}px monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    const labelY = head.y - radius - 6 / zoom;
-    // Bots get a distinct muted orange label with [BOT] tag; players get normal label
+    const labelY = head.y - headR - 6 / zoom;
+
     if (snake.isBot) {
-      ctx.fillStyle = 'rgba(251, 146, 60, 0.75)'; // orange-400 muted
+      ctx.fillStyle = 'rgba(251, 146, 60, 0.75)';
       const botLabel = `[BOT] ${snake.name}`;
       ctx.fillText(botLabel, head.x, labelY);
     } else {
       ctx.fillStyle = isMe ? '#22c55e' : 'rgba(226, 232, 240, 0.85)';
       ctx.fillText(snake.name, head.x, labelY);
     }
+
     if (snake.userTag) {
       ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
       ctx.font = `${Math.max(8, 9 / zoom)}px monospace`;
       ctx.fillText(snake.userTag, head.x, labelY - 12 / zoom);
     }
+
+    // Country flag emoji above the name
+    if (snake.country) {
+      ctx.font = `${Math.max(10, 12 / zoom)}px sans-serif`;
+      ctx.fillText(snake.country, head.x, labelY - 12 / zoom - (snake.userTag ? 12 / zoom : 0));
+    }
+
     ctx.restore();
   }
 
-  // --- Chat bubble ---
+  // === CHAT BUBBLE ===
   if (snake.chatMessage) {
     ctx.save();
     ctx.globalAlpha = baseAlpha;
-    drawChatBubble(rc, head.x, head.y - radius - 24 / zoom, snake.chatMessage);
+    drawChatBubble(rc, head.x, head.y - headR - 24 / zoom, snake.chatMessage);
     ctx.restore();
   }
 
   ctx.restore(); // outer globalAlpha save
+}
+
+// ---------------------------------------------------------------------------
+// Metallic gradient helper (used only by drawSnake for metallic pattern)
+// ---------------------------------------------------------------------------
+
+/**
+ * Cache a metallic radial gradient. Bucketed by 2-pixel radius.
+ */
+function getMetallicGradient(
+  rc: FrameRenderCtx,
+  radius: number,
+  color: string,
+  secondary: string | undefined,
+): CanvasGradient | string {
+  const bucket = Math.max(4, Math.round(radius));
+  const key = `${color}:${secondary ?? ''}:${bucket}`;
+  const cached = rc.metallicCache.get(key);
+  if (cached) return cached;
+  const { ctx } = rc;
+  const g = ctx.createRadialGradient(-bucket * 0.35, -bucket * 0.35, bucket * 0.1, 0, 0, bucket);
+  g.addColorStop(0, '#f8fafc');
+  g.addColorStop(0.35, secondary || color);
+  g.addColorStop(1, color);
+  rc.metallicCache.set(key, g);
+  return g;
 }
 
 // ---------------------------------------------------------------------------

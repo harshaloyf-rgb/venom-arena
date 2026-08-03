@@ -6,6 +6,7 @@
 
 import type { Skin } from '@/lib/game-config';
 import type { SnakeSnapshot } from '@/lib/types';
+import type { HatType, SnakeShape } from './render-snake-visuals';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -38,6 +39,12 @@ export interface FrameRenderCtx {
   playerSkin: Skin | undefined;
   /** Pixel ratio (for sizing glow radii in device pixels). */
   dpr: number;
+  /** The player's equipped hat cosmetic. */
+  playerHat?: HatType;
+  /** The player's equipped body shape. */
+  playerShape?: SnakeShape;
+  /** Mouse/pointer direction (radians) for player pupil tracking. */
+  pointerAngle?: number;
 }
 
 export interface Particle {
