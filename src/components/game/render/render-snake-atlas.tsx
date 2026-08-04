@@ -81,6 +81,7 @@ export function renderSnakeAtlas(
   displayW: number,
   displayH: number,
   atlasManager: SkinAtlasManager,
+  overlapIndices?: Set<number>,
 ): EmittedParticle[] {
   if (segments.length === 0) return [];
 
@@ -125,12 +126,16 @@ export function renderSnakeAtlas(
 
     if (screenR < 0.5) continue;
 
-    // Spawn protection shimmer
+    // Spawn protection shimmer / overlap transparency
+    const isOverlapping = overlapIndices?.has(i) ?? false;
     if (spawnProtected) {
       ctx.save();
       ctx.globalAlpha = 0.3 + Math.sin(time * 8) * 0.2;
       ctx.shadowColor = '#FFFFFF';
       ctx.shadowBlur = 15;
+    } else if (isOverlapping) {
+      ctx.save();
+      ctx.globalAlpha = config.overlapOpacity;
     }
 
     if (i === lastIdx) {
@@ -165,7 +170,7 @@ export function renderSnakeAtlas(
       );
     }
 
-    if (spawnProtected) {
+    if (spawnProtected || isOverlapping) {
       ctx.restore();
     }
   }

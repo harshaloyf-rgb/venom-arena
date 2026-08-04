@@ -380,16 +380,26 @@ export interface KillFeedEntry {
 
 // ── Bot AI ──────────────────────────────────────────────────────────────────
 
-export type BotBehavior = 'harvest' | 'self_destruct';
+export type BotBehavior = 'harvest' | 'hunt' | 'encircle' | 'self_destruct';
 
 export interface BotAIState {
   behavior: BotBehavior;
   targetFoodId: string | null;
+  /** For predator/apex: snake being hunted */
+  targetSnakeId: string | null;
   dangerAngle: number | null;
   inDanger: boolean;
   decisionCooldown: number;
   /** 0=rookie, 1=scout, 2=hunter, 3=predator, 4=apex */
   level: number;
+  /** Persistent wander direction (rookies drift this way) */
+  wanderAngle: number;
+  /** Ticks before bot can boost again */
+  boostCooldown: number;
+  /** Encircle orbit direction (1=CW, -1=CCW) */
+  orbitDir: number;
+  /** Ticks spent encircling (for timing the strike) */
+  encircleTicks: number;
 }
 
 // ── Extraction ──────────────────────────────────────────────────────────────
@@ -559,6 +569,8 @@ export interface HUDState {
   score: number;
   kills: number;
   rank: number;
+  /** Total alive snakes (player + bots) for rank display */
+  totalAlive: number;
   carriedChips: number;
   starsEarned: number;
   starsInArena: number;

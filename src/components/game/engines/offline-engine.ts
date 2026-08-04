@@ -3,7 +3,7 @@
 import type {
   SnakeState, SnakeIdentity, FoodOrb, MapState,
   InputState, BotAIState, KillFeedEntry, DeathEvent, GamePhase,
-  EndScreenState, KillCause,
+  EndScreenState, KillCause, FoodSize,
 } from '@/lib/snake/types';
 import { DEFAULT_SNAKE_CONFIG, type SnakeConfig } from '@/lib/snake/config';
 import {
@@ -34,7 +34,6 @@ function nextBotName(): string {
 
 function randomColor(): string {
   const hue = Math.floor(Math.random() * 360);
-  // Convert HSL to hex so atlas rendering doesn't break
   const s = 0.7, l = 0.55;
   const a = s * Math.min(l, 1 - l);
   const f = (n: number) => {
@@ -45,6 +44,16 @@ function randomColor(): string {
   const toHex = (v: number) => v.toString(16).padStart(2, '0');
   return '#' + toHex(f(0)) + toHex(f(8)) + toHex(f(4));
 }
+
+// ── Constants ─────────────────────────────────────────────────────────────
+
+const MAP_CENTER_X = 4000;
+const MAP_CENTER_Y = 4000;
+const MAP_SOFT_BOUNDARY = 5500; // Bots should stay within this radius
+const MAP_HARD_BOUNDARY = 6000; // Absolute max before forced turn-back
+
+// Food value weights per bot level (how much they prefer larger food)
+const FOOD_VALUE_WEIGHT: number[] = [0, 0.2, 0.5, 0.8, 1.0];
 
 // ── Offline Engine Class ─────────────────────────────────────────────────────
 
@@ -93,7 +102,7 @@ export class OfflineEngine {
     this.playerId = playerIdentity.id;
     this.map = {
       type: 'infinite',
-      center: vec2(4000, 4000),
+      center: vec2(MAP_CENTER_X, MAP_CENTER_Y),
       currentRadius: Infinity,
       baseRadius: Infinity,
       breathingAmplitude: 0,
@@ -102,7 +111,7 @@ export class OfflineEngine {
     };
 
     // Spawn player
-    const playerSnake = this.createSnake(playerIdentity, 4000, 4000);
+    const playerSnake = this.createSnake(playerIdentity, MAP_CENTER_X, MAP_CENTER_Y);
     this.snakes.push(playerSnake);
 
     // Spawn bots
@@ -165,8 +174,6 @@ export class OfflineEngine {
 
   private createBotIdentity(): SnakeIdentity {
     const id = `bot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const startLen = this.config.botMinStartLength +
-      Math.random() * (this.config.botMaxStartLength - this.config.botMinStartLength);
     return {
       id,
       name: nextBotName(),
@@ -188,32 +195,36 @@ export class OfflineEngine {
 
   private spawnBot() {
     const identity = this.createBotIdentity();
-    // Spawn in a ring around center, spread out
     const ang = Math.random() * Math.PI * 2;
-    const dist = 500 + Math.random() * 3000;
-    const x = 4000 + Math.cos(ang) * dist;
-    const y = 4000 + Math.sin(ang) * dist;
+    const dist = 500 + Math.random() * 3500;
+    const x = MAP_CENTER_X + Math.cos(ang) * dist;
+    const y = MAP_CENTER_Y + Math.sin(ang) * dist;
 
     const snake = this.createSnake(identity, x, y);
     this.snakes.push(snake);
-    // Assign bot level based on config difficulty
-    // Easy: 0-1, Medium: 1-3, Hard: 2-4
+
+    // 5-level distribution: 40% rookie, 25% scout, 17% hunter, 12% predator, 6% apex
     const maxLevel = this.config.botLevelTurnMult.length - 1;
     let botLevel: number;
     const r = Math.random();
-    if (r < 0.4) botLevel = 0;        // rookie
-    else if (r < 0.65) botLevel = 1;  // scout
-    else if (r < 0.82) botLevel = 2;  // hunter
-    else if (r < 0.94) botLevel = 3;  // predator
-    else botLevel = Math.min(maxLevel, 4); // apex
+    if (r < 0.40) botLevel = 0;
+    else if (r < 0.65) botLevel = 1;
+    else if (r < 0.82) botLevel = 2;
+    else if (r < 0.94) botLevel = 3;
+    else botLevel = Math.min(maxLevel, 4);
 
     this.botAIStates.set(identity.id, {
       behavior: 'harvest',
       targetFoodId: null,
+      targetSnakeId: null,
       dangerAngle: null,
       inDanger: false,
       decisionCooldown: 0,
       level: botLevel,
+      wanderAngle: Math.random() * Math.PI * 2,
+      boostCooldown: 0,
+      orbitDir: Math.random() < 0.5 ? 1 : -1,
+      encircleTicks: 0,
     });
   }
 
@@ -226,27 +237,20 @@ export class OfflineEngine {
   }
 
   private spawnOneFood() {
-    // Spawn in a large area around center
-    const x = 4000 + (Math.random() - 0.5) * 12000;
-    const y = 4000 + (Math.random() - 0.5) * 12000;
+    const x = MAP_CENTER_X + (Math.random() - 0.5) * 12000;
+    const y = MAP_CENTER_Y + (Math.random() - 0.5) * 12000;
     const id = `food-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     this.food.push(createFoodOrb(id, x, y, this.config));
   }
 
   // ── Main Tick ─────────────────────────────────────────────────────────────
 
-  /**
-   * Advance simulation by deltaMs milliseconds.
-   * Uses a tick accumulator to run the simulation at config.tickRateHz,
-   * decoupled from the render framerate (typically 60fps).
-   */
   tick(input: InputState, deltaMs: number = 16.67): void {
     if (this.phase !== 'playing') return;
 
     const tickIntervalMs = 1000 / this.config.tickRateHz;
     this.tickAccumulator += deltaMs;
 
-    // Cap to 3 ticks max per frame to avoid spiral-of-death
     const maxTicks = 3;
     let ticksThisFrame = 0;
 
@@ -257,13 +261,11 @@ export class OfflineEngine {
       if (this.phase !== 'playing') break;
     }
 
-    // Prevent accumulator from growing unbounded
     if (this.tickAccumulator > tickIntervalMs * 2) {
       this.tickAccumulator = 0;
     }
   }
 
-  /** Single simulation tick (called by tick accumulator) */
   private runOneTick(input: InputState): void {
     this.frameCount++;
 
@@ -280,24 +282,16 @@ export class OfflineEngine {
       }
     }
 
-    // Check collisions (all snakes)
     this.checkCollisions();
-
-    // Check food eating (all snakes)
     this.checkFoodCollisions();
 
-    // Replenish food
     while (this.food.length < this.config.foodCount) {
       this.spawnOneFood();
     }
 
-    // Respawn dead bots
     this.respawnBots();
-
-    // Update particles
     this.updateParticles();
 
-    // Clean old kill feed entries (older than 5s)
     const now = Date.now();
     this.killFeed = this.killFeed.filter(e => now - e.timestamp < 5000);
   }
@@ -305,10 +299,8 @@ export class OfflineEngine {
   // ── Player Update ────────────────────────────────────────────────────────
 
   private updatePlayer(snake: SnakeState, input: InputState) {
-    // Single zero-alloc call: turn, move, path, boost drain, spawn protection, emote, radii
     const flags = tickSnakeMovement(snake, input, this.config, this.frameCount);
 
-    // Boost food drop from tail (flag bit 0)
     if ((flags & 1) !== 0 && snake.path.length > 2) {
       const tailX = snake.path.tailX();
       const tailY = snake.path.tailY();
@@ -321,7 +313,25 @@ export class OfflineEngine {
     this.playerKills = snake.kills;
   }
 
-  // ── Bot AI ────────────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // 5-LEVEL BOT AI SYSTEM
+  // ══════════════════════════════════════════════════════════════════════════
+  //
+  // Level 0 — Rookie (40%): Slow turns, nearsighted, wanders blindly,
+  //   poor danger sense, no boundary awareness, clumsy food finding.
+  //
+  // Level 1 — Scout (25%): Moderate turns, wider scan, basic danger
+  //   avoidance, soft boundary awareness, prefers nearby food.
+  //
+  // Level 2 — Hunter (17%): Good turns, wide scan, predictive evasion,
+  //   good boundary avoidance, targets valuable (large) food clusters.
+  //
+  // Level 3 — Predator (12%): Fast turns, large scan, deep prediction,
+  //   excellent avoidance, actively hunts smaller snakes, boosts to chase.
+  //
+  // Level 4 — Apex (6%): Near-perfect turns, max scan, deepest prediction,
+  //   perfect avoidance, encircles prey before striking, strategic boosting.
+  // ══════════════════════════════════════════════════════════════════════════
 
   private updateBot(bot: SnakeState) {
     const ai = this.botAIStates.get(bot.identity.id);
@@ -330,10 +340,9 @@ export class OfflineEngine {
     const lvl = ai.level;
     const turnMult = this.config.botLevelTurnMult[lvl] ?? 1;
     const scanRadius = this.config.botLevelScanRadius[lvl] ?? 300;
-    const evadeTicks = this.config.botLevelEvadeTicks[lvl] ?? 8;
     const cdRange = this.config.botLevelCooldownRange[lvl] ?? [8, 18];
 
-    // Decision cooldown — varies by level (rookie=slow, apex=fast)
+    // ── Decision cycle (varies by level) ────────────────────────────────
     if (ai.decisionCooldown > 0) {
       ai.decisionCooldown--;
     } else {
@@ -341,108 +350,440 @@ export class OfflineEngine {
       this.botDecide(bot, ai, scanRadius);
     }
 
-    // Determine target angle from AI state
+    // ── Determine target angle from AI state ───────────────────────────
     let targetAngle = bot.angle;
+    let wantBoost = false;
 
+    // Priority 1: Danger (all levels flee, higher = more precise)
     if (ai.inDanger && ai.dangerAngle !== null) {
-      // Flee away from danger — higher levels flee more precisely
       const fleeAngle = ai.dangerAngle + Math.PI;
-      const jitter = (1 - lvl * 0.15) * (Math.random() - 0.5) * 0.6;
+      // Rookies flee with large jitter, apex flees precisely
+      const jitter = (1 - lvl * 0.18) * (Math.random() - 0.5) * 0.7;
       targetAngle = fleeAngle + jitter;
-    } else if (ai.targetFoodId) {
-      // Seek food
+      // Apex and predator boost while fleeing if they have score
+      if (lvl >= 3 && bot.score > this.config.boostMinScore * 5 && ai.boostCooldown <= 0) {
+        wantBoost = true;
+      }
+    }
+    // Priority 2: Hunting behavior (predator L3, apex L4)
+    else if (ai.behavior === 'hunt' && ai.targetSnakeId) {
+      const target = this.snakes.find(s => s.identity.id === ai.targetSnakeId);
+      if (target && target.alive) {
+        targetAngle = this.botHuntAngle(bot, target, ai);
+        // Boost when closing in (L3) or chasing (L4)
+        const dist = vec2Dist(bot.head, target.head);
+        if (dist < 300 && bot.score > this.config.boostMinScore * 3 && ai.boostCooldown <= 0) {
+          wantBoost = lvl >= 3;
+        }
+      } else {
+        ai.behavior = 'harvest';
+        ai.targetSnakeId = null;
+      }
+    }
+    // Priority 3: Encircle behavior (apex L4 only)
+    else if (ai.behavior === 'encircle' && ai.targetSnakeId) {
+      const target = this.snakes.find(s => s.identity.id === ai.targetSnakeId);
+      if (target && target.alive) {
+        targetAngle = this.botEncircleAngle(bot, target, ai);
+        ai.encircleTicks++;
+        // Strike after enough encircling (3-5 loops)
+        if (ai.encircleTicks > 90 + Math.random() * 60) {
+          ai.behavior = 'hunt';
+          ai.encircleTicks = 0;
+        }
+      } else {
+        ai.behavior = 'harvest';
+        ai.targetSnakeId = null;
+        ai.encircleTicks = 0;
+      }
+    }
+    // Priority 4: Seek food
+    else if (ai.targetFoodId) {
       const food = this.food.find(f => f.id === ai.targetFoodId);
       if (food) {
         targetAngle = angleBetween(bot.head, food);
       } else {
         ai.targetFoodId = null;
-        targetAngle = bot.angle + (Math.random() - 0.5) * 0.5;
       }
-    } else {
-      // Wander — rookies wander more randomly, apex drifts less
-      const wanderAmount = 0.4 - lvl * 0.06;
-      targetAngle = bot.angle + (Math.random() - 0.5) * wanderAmount;
+    }
+    // Priority 5: Wander (level-specific)
+    else {
+      targetAngle = this.botWander(bot, ai);
     }
 
-    // Turn toward target at level-appropriate rate
+    // ── Boundary avoidance (L1+, better at higher levels) ───────────────
+    if (lvl >= 1) {
+      const bndAngle = this.botBoundaryAvoidance(bot, lvl);
+      if (bndAngle !== null) {
+        // Blend boundary avoidance with target (higher level = stronger pull)
+        const strength = 0.3 + lvl * 0.15;
+        targetAngle = this.blendAngles(targetAngle, bndAngle, strength);
+      }
+    }
+
+    // ── Turn toward target at level-appropriate rate ────────────────────
     let angleDiff = targetAngle - bot.angle;
-    // Normalize to -PI..PI
     while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
     while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
     const maxTurn = this.config.turnThin * turnMult;
     const turn = Math.max(-maxTurn, Math.min(maxTurn, angleDiff));
     const finalAngle = bot.angle + turn;
 
-    // Single zero-alloc call for bot movement (bots never boost)
+    // ── Boost cooldown management ───────────────────────────────────────
+    if (ai.boostCooldown > 0) ai.boostCooldown--;
+    if (wantBoost) ai.boostCooldown = 60 + Math.floor(Math.random() * 40);
+
     const botInput: InputState = {
       targetAngle: finalAngle,
-      boosting: false,
+      boosting: wantBoost,
       extracting: false,
       emoteKey: null,
     };
     tickSnakeMovement(bot, botInput, this.config, this.frameCount);
 
-    // Check danger from nearby snakes (after movement so bot.head is updated)
-    ai.inDanger = false;
-    ai.dangerAngle = null;
+    // ── Danger scan (after movement so head is updated) ─────────────────
+    this.botDangerScan(bot, ai);
+  }
 
-    // Higher levels check more snakes for danger
-    const evadeRadius = this.config.botEvadeRadius;
+  // ── Bot Decision Trees (per level) ────────────────────────────────────
+
+  private botDecide(bot: SnakeState, ai: BotAIState, scanRadius: number) {
+    if (ai.inDanger) {
+      ai.targetFoodId = null;
+      ai.targetSnakeId = null;
+      ai.behavior = 'harvest';
+      return;
+    }
+
+    switch (ai.level) {
+      case 0: this.botDecideRookie(bot, ai, scanRadius); break;
+      case 1: this.botDecideScout(bot, ai, scanRadius); break;
+      case 2: this.botDecideHunter(bot, ai, scanRadius); break;
+      case 3: this.botDecidePredator(bot, ai, scanRadius); break;
+      case 4: this.botDecideApex(bot, ai, scanRadius); break;
+      default: this.botDecideRookie(bot, ai, scanRadius); break;
+    }
+  }
+
+  /** L0 Rookie: Wanders a lot, grabs nearby food, doesn't plan ahead. */
+  private botDecideRookie(bot: SnakeState, ai: BotAIState, scanRadius: number) {
+    // Slowly drift wander angle for organic movement
+    ai.wanderAngle += (Math.random() - 0.5) * 0.8;
+
+    // Sometimes pick a random new direction entirely
+    if (Math.random() < 0.15) {
+      ai.wanderAngle = Math.random() * Math.PI * 2;
+    }
+
+    // Grab nearest food only if very close (half scan radius)
+    const halfScan = scanRadius * 0.5;
+    let nearestFood: FoodOrb | null = null;
+    let nearestDist = halfScan;
+
+    for (const food of this.food) {
+      const dx = bot.head.x - food.x;
+      const dy = bot.head.y - food.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < nearestDist * nearestDist) {
+        nearestDist = Math.sqrt(distSq);
+        nearestFood = food;
+      }
+    }
+
+    ai.targetFoodId = nearestFood?.id ?? null;
+  }
+
+  /** L1 Scout: Moderate food seeking, basic awareness. */
+  private botDecideScout(bot: SnakeState, ai: BotAIState, scanRadius: number) {
+    ai.wanderAngle += (Math.random() - 0.5) * 0.4;
+
+    // Find nearest food within scan radius
+    let nearestFood: FoodOrb | null = null;
+    let nearestDist = scanRadius;
+
+    for (const food of this.food) {
+      const dx = bot.head.x - food.x;
+      const dy = bot.head.y - food.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < nearestDist * nearestDist) {
+        nearestDist = Math.sqrt(distSq);
+        nearestFood = food;
+      }
+    }
+
+    // Scouts prefer medium food slightly
+    if (nearestFood) {
+      ai.targetFoodId = nearestFood.id;
+    } else {
+      ai.targetFoodId = null;
+    }
+  }
+
+  /** L2 Hunter: Targets valuable food, avoids clusters of snakes. */
+  private botDecideHunter(bot: SnakeState, ai: BotAIState, scanRadius: number) {
+    // Find best food: value-weighted with distance penalty
+    let bestFood: FoodOrb | null = null;
+    let bestScore = -Infinity;
+
+    const valueWeight = FOOD_VALUE_WEIGHT[2];
+
+    for (const food of this.food) {
+      const dx = bot.head.x - food.x;
+      const dy = bot.head.y - food.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > scanRadius) continue;
+
+      // Score: value * weight - distance_penalty
+      const sizeValue = food.size === 'large' ? 5 : food.size === 'medium' ? 3 : 1;
+      const score = sizeValue * (1 + valueWeight) - dist * 0.02;
+      if (score > bestScore) {
+        bestScore = score;
+        bestFood = food;
+      }
+    }
+
+    ai.targetFoodId = bestFood?.id ?? null;
+  }
+
+  /** L3 Predator: Hunts smaller snakes, eats food when no prey. */
+  private botDecidePredator(bot: SnakeState, ai: BotAIState, scanRadius: number) {
+    // Look for smaller snakes to hunt
+    let prey: SnakeState | null = null;
+    let preyDist = scanRadius;
 
     for (const other of this.snakes) {
-      if (other.identity.id === bot.identity.id) continue;
-      if (!other.alive) continue;
+      if (other.identity.id === bot.identity.id || !other.alive) continue;
+      if (other.score >= bot.score * 0.9) continue; // Only hunt smaller
 
       const dist = vec2Dist(bot.head, other.head);
+      if (dist < preyDist) {
+        preyDist = dist;
+        prey = other;
+      }
+    }
 
-      // Danger detection: N ticks ahead prediction (varies by level)
-      if (dist < evadeRadius) {
-        const speed = other.boosting ? this.config.boostSpeed * evadeTicks : this.config.baseSpeed * evadeTicks;
-        const fx = other.head.x + Math.cos(other.angle) * speed;
-        const fy = other.head.y + Math.sin(other.angle) * speed;
-        const fdx = bot.head.x - fx;
-        const fdy = bot.head.y - fy;
-        const futureDist = Math.sqrt(fdx * fdx + fdy * fdy);
-        if (futureDist < evadeRadius * 0.8) {
-          ai.inDanger = true;
-          ai.dangerAngle = angleBetween(other.head, bot.head);
-          break;
+    if (prey && preyDist < scanRadius * 0.7) {
+      ai.behavior = 'hunt';
+      ai.targetSnakeId = prey.identity.id;
+      ai.targetFoodId = null;
+    } else {
+      ai.behavior = 'harvest';
+      ai.targetSnakeId = null;
+      // Fall back to hunter food logic
+      this.botDecideHunter(bot, ai, scanRadius);
+    }
+  }
+
+  /** L4 Apex: Encircles prey, perfect food targeting, dominates. */
+  private botDecideApex(bot: SnakeState, ai: BotAIState, scanRadius: number) {
+    // Look for prey to encircle or hunt
+    let prey: SnakeState | null = null;
+    let preyDist = scanRadius;
+
+    for (const other of this.snakes) {
+      if (other.identity.id === bot.identity.id || !other.alive) continue;
+      if (other.spawnProtected) continue;
+      // Apex hunts anything smaller than 1.2x its size
+      if (other.score >= bot.score * 1.2) continue;
+
+      const dist = vec2Dist(bot.head, other.head);
+      if (dist < preyDist) {
+        preyDist = dist;
+        prey = other;
+      }
+    }
+
+    if (prey && preyDist < scanRadius * 0.8) {
+      if (preyDist < 200 && ai.behavior !== 'encircle') {
+        // Close enough to start encircling
+        ai.behavior = 'encircle';
+        ai.targetSnakeId = prey.identity.id;
+        ai.encircleTicks = 0;
+        ai.orbitDir = Math.random() < 0.5 ? 1 : -1;
+        ai.targetFoodId = null;
+      } else if (ai.behavior !== 'encircle') {
+        // Approach prey
+        ai.behavior = 'hunt';
+        ai.targetSnakeId = prey.identity.id;
+        ai.targetFoodId = null;
+      }
+    } else {
+      if (ai.behavior === 'encircle') {
+        ai.encircleTicks = 0;
+      }
+      ai.behavior = 'harvest';
+      ai.targetSnakeId = null;
+      // Apex food targeting: best value-per-distance
+      let bestFood: FoodOrb | null = null;
+      let bestScore = -Infinity;
+
+      for (const food of this.food) {
+        const dx = bot.head.x - food.x;
+        const dy = bot.head.y - food.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > scanRadius) continue;
+
+        const sizeValue = food.size === 'large' ? 5 : food.size === 'medium' ? 3 : 1;
+        const score = sizeValue * 2 - dist * 0.01;
+        if (score > bestScore) {
+          bestScore = score;
+          bestFood = food;
         }
       }
 
-      // Avoid body segments (higher levels have larger range)
-      const bodyAvoidRange = 120 + lvl * 30;
+      ai.targetFoodId = bestFood?.id ?? null;
+    }
+  }
+
+  // ── Bot Movement Behaviors ────────────────────────────────────────────
+
+  /** Wander: level-specific drift. */
+  private botWander(bot: SnakeState, ai: BotAIState): number {
+    const lvl = ai.level;
+    // Rookies drift a lot, apex barely drifts
+    const wanderAmount = 0.5 - lvl * 0.08;
+    ai.wanderAngle += (Math.random() - 0.5) * wanderAmount;
+
+    if (lvl === 0) {
+      // Rookies: occasionally make sharp random turns
+      if (Math.random() < 0.08) {
+        ai.wanderAngle = Math.random() * Math.PI * 2;
+      }
+      return ai.wanderAngle;
+    }
+
+    // Higher levels drift toward center gently
+    const toCenter = Math.atan2(MAP_CENTER_Y - bot.head.y, MAP_CENTER_X - bot.head.x);
+    const distFromCenter = Math.sqrt(
+      (bot.head.x - MAP_CENTER_X) ** 2 + (bot.head.y - MAP_CENTER_Y) ** 2,
+    );
+    const centerPull = Math.min(0.3, distFromCenter * 0.00005 * (lvl + 1));
+
+    return this.blendAngles(ai.wanderAngle, toCenter, centerPull);
+  }
+
+  /** Hunt angle: intercept course toward target snake. */
+  private botHuntAngle(bot: SnakeState, target: SnakeState, ai: BotAIState): number {
+    // Aim at the target's future position (predict ahead)
+    const dist = vec2Dist(bot.head, target.head);
+    const ticksAhead = Math.min(20, Math.max(2, dist / this.config.baseSpeed));
+    const speed = target.boosting ? this.config.boostSpeed : this.config.baseSpeed;
+    const fx = target.head.x + Math.cos(target.angle) * speed * ticksAhead;
+    const fy = target.head.y + Math.sin(target.angle) * speed * ticksAhead;
+    return Math.atan2(fy - bot.head.y, fx - bot.head.x);
+  }
+
+  /** Encircle angle: orbit around target to trap it. */
+  private botEncircleAngle(bot: SnakeState, target: SnakeState, ai: BotAIState): number {
+    const dist = vec2Dist(bot.head, target.head);
+    const orbitRadius = 120 + bot.score * 0.3; // Wider orbit for bigger snakes
+
+    // Angle from target to bot
+    const angleToBot = Math.atan2(bot.head.y - target.head.y, bot.head.x - target.head.x);
+
+    // Desired position: orbit around target
+    const desiredAngle = angleToBot + ai.orbitDir * 0.08;
+    const desiredX = target.head.x + Math.cos(desiredAngle) * orbitRadius;
+    const desiredY = target.head.y + Math.sin(desiredAngle) * orbitRadius;
+
+    // If too far, close in; if too close, expand orbit
+    let targetX = desiredX;
+    let targetY = desiredY;
+    if (dist > orbitRadius * 1.5) {
+      // Too far — move toward target
+      targetX = target.head.x;
+      targetY = target.head.y;
+    } else if (dist < orbitRadius * 0.5) {
+      // Too close — move away slightly
+      targetX = bot.head.x + Math.cos(angleToBot) * 20;
+      targetY = bot.head.y + Math.sin(angleToBot) * 20;
+    }
+
+    return Math.atan2(targetY - bot.head.y, targetX - bot.head.x);
+  }
+
+  /** Boundary avoidance: returns angle toward center if near edge, null otherwise. */
+  private botBoundaryAvoidance(bot: SnakeState, level: number): number | null {
+    const dx = bot.head.x - MAP_CENTER_X;
+    const dy = bot.head.y - MAP_CENTER_Y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // Soft boundary: start turning at MAP_SOFT_BOUNDARY
+    const softBnd = MAP_SOFT_BOUNDARY - level * 200; // Higher levels react further out
+    if (dist < softBnd) return null;
+
+    const hardBnd = MAP_HARD_BOUNDARY - level * 100;
+    if (dist > hardBnd) {
+      // Emergency: full turn toward center
+      return Math.atan2(MAP_CENTER_Y - bot.head.y, MAP_CENTER_X - bot.head.x);
+    }
+
+    // Gradual turn toward center (stronger as closer to edge)
+    const urgency = (dist - softBnd) / (hardBnd - softBnd);
+    return Math.atan2(MAP_CENTER_Y - bot.head.y, MAP_CENTER_X - bot.head.x);
+  }
+
+  /** Danger scan: detect nearby threats. Level-specific depth. */
+  private botDangerScan(bot: SnakeState, ai: BotAIState) {
+    const lvl = ai.level;
+    const evadeTicks = this.config.botLevelEvadeTicks[lvl] ?? 8;
+    const evadeRadius = this.config.botEvadeRadius;
+
+    ai.inDanger = false;
+    ai.dangerAngle = null;
+
+    for (const other of this.snakes) {
+      if (other.identity.id === bot.identity.id || !other.alive) continue;
+
+      const dx = bot.head.x - other.head.x;
+      const dy = bot.head.y - other.head.y;
+      const distSq = dx * dx + dy * dy;
+
+      // Quick reject
+      if (distSq > evadeRadius * evadeRadius) continue;
+
+      const dist = Math.sqrt(distSq);
+
+      // Head-on prediction: where will the other snake be in N ticks?
+      const speed = other.boosting ? this.config.boostSpeed : this.config.baseSpeed;
+      const fx = other.head.x + Math.cos(other.angle) * speed * evadeTicks;
+      const fy = other.head.y + Math.sin(other.angle) * speed * evadeTicks;
+      const fdx = bot.head.x - fx;
+      const fdy = bot.head.y - fy;
+      const futureDist = Math.sqrt(fdx * fdx + fdy * fdy);
+
+      if (futureDist < evadeRadius * 0.8) {
+        ai.inDanger = true;
+        ai.dangerAngle = Math.atan2(dy, dx); // angle FROM other TO bot
+        // Rookies sometimes don't detect body threats (lower body avoid range)
+        break;
+      }
+
+      // Body segment avoidance (higher levels check further ahead)
+      const bodyAvoidRange = 100 + lvl * 40;
       if (dist < bodyAvoidRange) {
-        const toOther = vec2Sub(other.head, bot.head);
-        const dot = toOther.x * Math.cos(bot.angle) + toOther.y * Math.sin(bot.angle);
-        if (dot > 0) {
+        const toOtherX = other.head.x - bot.head.x;
+        const toOtherY = other.head.y - bot.head.y;
+        const dot = toOtherX * Math.cos(bot.angle) + toOtherY * Math.sin(bot.angle);
+        // Only if the other snake is roughly ahead
+        if (dot > 0 && dist < bodyAvoidRange * 0.6) {
           ai.inDanger = true;
-          ai.dangerAngle = angleBetween(other.head, bot.head);
+          ai.dangerAngle = Math.atan2(-toOtherY, -toOtherX);
           break;
         }
       }
     }
   }
 
-  private botDecide(bot: SnakeState, ai: BotAIState, scanRadius: number) {
-    if (ai.inDanger) {
-      ai.targetFoodId = null;
-      return;
-    }
-
-    // Find nearest food within scan radius (varies by level)
-    let nearestFood: FoodOrb | null = null;
-    let nearestDist = scanRadius;
-
-    for (const food of this.food) {
-      const dist = vec2Dist(bot.head, food);
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        nearestFood = food;
-      }
-    }
-
-    ai.targetFoodId = nearestFood?.id ?? null;
+  /** Blend two angles together with given strength (0=a, 1=b). */
+  private blendAngles(a: number, b: number, strength: number): number {
+    const ax = Math.cos(a);
+    const ay = Math.sin(a);
+    const bx = Math.cos(b);
+    const by = Math.sin(b);
+    const rx = ax * (1 - strength) + bx * strength;
+    const ry = ay * (1 - strength) + by * strength;
+    return Math.atan2(ry, rx);
   }
 
   // ── Collision Detection ──────────────────────────────────────────────────
@@ -459,18 +800,14 @@ export class OfflineEngine {
         snake.alive = false;
         deadIds.push(result.victimId);
 
-        // Determine cause
         let cause: KillCause = 'head_on';
         if (result.type === 'boundary') cause = 'boundary';
 
-        // Process death
         const deathEvent = createDeathEvent(snake, result.killerId, cause, this.config);
         this.deathEvent = snake.identity.id === this.playerId ? deathEvent : this.deathEvent;
 
-        // Drop food from body
         this.food.push(...deathEvent.droppedFood);
 
-        // Add kill feed entry
         const killer = result.killerId ? this.snakes.find(s => s.identity.id === result.killerId) : null;
         const entry: KillFeedEntry = {
           id: `kf-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
@@ -485,12 +822,10 @@ export class OfflineEngine {
         };
         this.killFeed.push(entry);
 
-        // Credit kill
         if (killer && result.killerId !== snake.identity.id) {
           killer.kills++;
         }
 
-        // Player death
         if (snake.identity.id === this.playerId) {
           this.playerAlive = false;
           this.endState = {
@@ -509,9 +844,10 @@ export class OfflineEngine {
           this.onDeath?.(this.endState);
         }
 
-        // Bot respawn timer
         if (snake.identity.isBot) {
           this.botRespawnTimers.set(snake.identity.id, this.config.botRespawnDelay);
+          // Clear AI state for dead bot
+          this.botAIStates.delete(snake.identity.id);
         }
       }
     }
@@ -525,10 +861,17 @@ export class OfflineEngine {
     for (const snake of this.snakes) {
       if (!snake.alive) continue;
 
+      const eatR = (snake._cachedVisualRadius > 0 ? snake._cachedVisualRadius : calcVisualRadius(snake.score, this.config))
+        + this.config.eatRadius;
+      const eatRSq = eatR * eatR;
+
       for (const food of this.food) {
         if (eatenIds.has(food.id)) continue;
 
-        if (checkFoodEat(snake, food, this.config)) {
+        // Inline distance check (avoid vec2Dist alloc)
+        const dx = snake.head.x - food.x;
+        const dy = snake.head.y - food.y;
+        if (dx * dx + dy * dy < eatRSq * eatRSq) {
           eatenIds.add(food.id);
           snake.score += food.value * this.config.growthMult;
         }
@@ -537,7 +880,6 @@ export class OfflineEngine {
 
     if (eatenIds.size > 0) {
       this.food = this.food.filter(f => !eatenIds.has(f.id));
-      // Update cached radii for snakes whose score changed
       for (const snake of this.snakes) {
         if (!snake.alive) continue;
         updateCachedRadii(snake, this.config);
@@ -551,13 +893,10 @@ export class OfflineEngine {
     for (const [botId, timer] of this.botRespawnTimers) {
       if (timer <= 1) {
         this.botRespawnTimers.delete(botId);
-        // Remove dead bot
         const idx = this.snakes.findIndex(s => s.identity.id === botId);
         if (idx >= 0) {
           this.snakes.splice(idx, 1);
-          this.botAIStates.delete(botId);
         }
-        // Spawn new bot
         this.spawnBot();
       } else {
         this.botRespawnTimers.set(botId, timer - 1);
@@ -612,9 +951,21 @@ export class OfflineEngine {
   }
 
   getPlayerRank(): number {
-    const sorted = this.snakes.filter(s => s.alive).sort((a, b) => b.score - a.score);
-    const idx = sorted.findIndex(s => s.identity.id === this.playerId);
-    return idx >= 0 ? idx + 1 : sorted.length;
+    let rank = 1;
+    for (const s of this.snakes) {
+      if (!s.alive) continue;
+      if (s.identity.id === this.playerId) continue;
+      if (s.score > this.playerScore) rank++;
+    }
+    return rank;
+  }
+
+  getTotalAlive(): number {
+    let count = 0;
+    for (const s of this.snakes) {
+      if (s.alive) count++;
+    }
+    return count;
   }
 
   // ── Emote (called from input) ────────────────────────────────────────────
