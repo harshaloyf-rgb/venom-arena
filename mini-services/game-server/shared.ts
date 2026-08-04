@@ -112,11 +112,14 @@ export interface IPathBuffer {
   readonly length: number;
   getX(i: number): number;
   getY(i: number): number;
+  setX(i: number, x: number): void;
+  setY(i: number, y: number): void;
   readonly headX: number;
   readonly headY: number;
   readonly tailX: number;
   readonly tailY: number;
   prepend(x: number, y: number): void;
+  appendTail(x: number, y: number): void;
   pop(): void;
   clear(): void;
   setLength(n: number): void;
@@ -175,6 +178,24 @@ export class PathBuffer implements IPathBuffer {
 
   setLength(n: number): void {
     this.length = Math.max(0, Math.min(n, this.capacity));
+  }
+
+  setX(index: number, x: number): void {
+    if (index < 0 || index >= this.length) return;
+    this.data[((this.headSegIdx + index) % this.capacity) * 2] = x;
+  }
+
+  setY(index: number, y: number): void {
+    if (index < 0 || index >= this.length) return;
+    this.data[((this.headSegIdx + index) % this.capacity) * 2 + 1] = y;
+  }
+
+  appendTail(x: number, y: number): void {
+    if (this.length >= this.capacity) this.grow();
+    const physIdx = (this.headSegIdx + this.length) % this.capacity;
+    this.data[physIdx * 2] = x;
+    this.data[physIdx * 2 + 1] = y;
+    this.length++;
   }
 
   clear(): void {

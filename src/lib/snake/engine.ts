@@ -144,11 +144,13 @@ function createSnake(
   // Pre-allocate path buffer
   const path = new PathBuffer(Math.max(targetLength * 2, 100));
 
-  // Fill initial path (head at [0], body trailing behind)
-  for (let i = 0; i < targetLength; i++) {
+  // Initialize: index 0 = head, body trailing behind at SEGMENT_SPACING intervals.
+  // Uses resetTo + appendTail so headSegIdx=0 and logical order is correct.
+  path.resetTo(posX, posY);
+  for (let i = 1; i < targetLength; i++) {
     const x = posX - Math.cos(angle) * i * SEGMENT_SPACING;
     const y = posY - Math.sin(angle) * i * SEGMENT_SPACING;
-    path.prepend(x, y);
+    path.appendTail(x, y);
   }
 
   return {
@@ -305,36 +307,97 @@ function moveSnake(
   // Extraction zone speed bonus
   if (state.extractionZone.active && snake.score >= EXTRACTION_SCORE_THRESHOLD) {
     const ez = state.extractionZone;
-    const dx = snake.path.headX - ez.x;
-    const dy = snake.path.headY - ez.y;
+    const dx = snake.path.getX(0) - ez.x;
+    const dy = snake.path.getY(0) - ez.y;
     if (dx * dx + dy * dy < ez.radius * ez.radius) {
       snake.speed *= EXTRACTION_SPEED_BONUS;
     }
   }
 
-  // Move head forward
-  const headX = snake.path.headX + Math.cos(snake.angle) * snake.speed;
-  const headY = snake.path.headY + Math.sin(snake.angle) * snake.speed;
-  snake.path.prepend(headX, headY);
+  // ── CHAIN PHYSICS MOVEMENT ───────────────────────────────────────────
+  // Instead of recording head history (old prepend approach), each body
+  // segment CHASES the segment ahead of it, maintaining at most
+  // SEGMENT_SPACING distance. This creates natural corner-cutting:
+  // when the head turns, body segments start turning later, tracing
+  // a tighter circle — producing a Fibonacci-like spiral pattern.
 
-  // Target length from score
+  // 1. Move head forward (overwrite index 0 in place)
+  const newHeadX = snake.path.getX(0) + Math.cos(snake.angle) * snake.speed;
+  const newHeadY = snake.path.getY(0) + Math.sin(snake.angle) * snake.speed;
+  snake.path.setX(0, newHeadX);
+  snake.path.setY(0, newHeadY);
+
+  // 2. Chain constraint: each segment follows the one ahead of it.
+  //    Only moves a segment if it's farther than SEGMENT_SPACING from
+  //    the previous segment. When turning, inner segments bunch up
+  //    (closer than SEGMENT_SPACING), which is the natural compression
+  //    that creates the tighter-circle Fibonacci spiral effect.
+  const len = snake.path.length;
+  const spacingSq = SEGMENT_SPACING * SEGMENT_SPACING;
+
+  for (let i = 1; i < len; i++) {
+    const px = snake.path.getX(i - 1);  // segment ahead (closer to head)
+    const py = snake.path.getY(i - 1);
+    const cx = snake.path.getX(i);     // current segment
+    const cy = snake.path.getY(i);
+
+    const dx = cx - px;
+    const dy = cy - py;
+    const dSq = dx * dx + dy * dy;
+
+    if (dSq > spacingSq) {
+      // Too far — pull closer to exactly SEGMENT_SPACING distance
+      const dist = Math.sqrt(dSq);
+      const ratio = SEGMENT_SPACING / dist;
+      snake.path.setX(i, px + dx * ratio);
+      snake.path.setY(i, py + dy * ratio);
+    }
+    // If dSq <= spacingSq: segment is already close enough (bunched up
+    // from a turn). Leave it — this is the natural compression that
+    // creates the Fibonacci spiral tightening effect.
+  }
+
+  // ── Growth / Shrink ────────────────────────────────────────────────
   const targetLength = Math.min(Math.floor(START_LENGTH + snake.score * GROWTH_RATE), MAX_SNAKE_LENGTH);
 
   // Boost: drop food from tail, shrink
   if (canBoost && now - snake.lastBoostDrop >= BOOST_DROP_INTERVAL) {
     snake.lastBoostDrop = now;
-    const tailX = snake.path.tailX;
-    const tailY = snake.path.tailY;
+    const tailIdx = snake.path.length - 1;
     state.foods.push({
-      id: state.nextFoodId++, x: tailX, y: tailY,
+      id: state.nextFoodId++,
+      x: snake.path.getX(tailIdx),
+      y: snake.path.getY(tailIdx),
       size: 'small', value: 1, radius: FOOD_RADII[0],
       color: FOOD_COLORS[0], glowColor: FOOD_GLOW_COLORS[0],
     });
-    // Extra shrink from boost
     if (snake.path.length > 1) snake.path.pop();
   }
 
-  // Trim segments to target length
+  // Grow: add segments at tail if needed
+  while (snake.path.length < targetLength) {
+    const tailIdx = snake.path.length - 1;
+    const prevIdx = tailIdx > 0 ? tailIdx - 1 : 0;
+    const tx = snake.path.getX(tailIdx);
+    const ty = snake.path.getY(tailIdx);
+    const ppx = snake.path.getX(prevIdx);
+    const ppy = snake.path.getY(prevIdx);
+    // Continue in the direction from prev→tail
+    const dx = tx - ppx;
+    const dy = ty - ppy;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    let nx: number, ny: number;
+    if (d > 0.01) {
+      nx = tx + (dx / d) * SEGMENT_SPACING;
+      ny = ty + (dy / d) * SEGMENT_SPACING;
+    } else {
+      nx = tx - Math.cos(snake.angle) * SEGMENT_SPACING;
+      ny = ty - Math.sin(snake.angle) * SEGMENT_SPACING;
+    }
+    snake.path.appendTail(nx, ny);
+  }
+
+  // Shrink if too long
   while (snake.path.length > targetLength) {
     snake.path.pop();
   }
