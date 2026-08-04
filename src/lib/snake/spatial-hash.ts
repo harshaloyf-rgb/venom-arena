@@ -3,7 +3,7 @@
 // Handles 1200 food + 1000 snakes efficiently.
 // ============================================================================
 
-import { SPATIAL_CELL_SIZE } from './constants';
+import { SPATIAL_CELL_SIZE } from './config';
 
 /** An entity stored in the spatial hash */
 export interface SpatialEntity {

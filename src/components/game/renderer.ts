@@ -1,9 +1,10 @@
 // ============================================================================
 // Renderer — Pure Canvas API rendering functions. No React dependencies.
+// Migrated from Vec2[] segments to PathBuffer (zero-alloc getX/getY access).
 // ============================================================================
 
-import type { Camera, FoodOrb, Snake, Viewport } from '@/lib/snake/types';
-import { SNAKE_RADIUS, SPAWN_PROTECTION_MS } from '@/lib/snake/constants';
+import type { Camera, FoodOrb, GameState, Snake, StarChip, Viewport } from '@/lib/snake/types';
+import { SNAKE_RADIUS, SPAWN_PROTECTION_MS } from '@/lib/snake/config';
 import { worldToScreen } from '@/lib/snake/camera';
 
 const GRID_SIZE = 80;
@@ -17,7 +18,7 @@ const BG_COLOR = '#0a0a0f';
 /** Render the entire game frame */
 export function renderFrame(
   ctx: CanvasRenderingContext2D,
-  state: { foods: FoodOrb[]; snakes: Map<string, Snake>; player: Snake | null },
+  state: GameState,
   camera: Camera,
   viewport: Viewport,
   fps: number,
@@ -32,8 +33,18 @@ export function renderFrame(
   // Grid
   drawGrid(ctx, camera, viewport);
 
+  // Extraction zone (faint circle, drawn under everything)
+  if (state.extractionZone.active) {
+    drawExtractionZone(ctx, state.extractionZone, camera, viewport);
+  }
+
   // Food
   drawFood(ctx, state.foods, camera, viewport);
+
+  // Star chips (golden glow circles)
+  if (state.starChips.length > 0) {
+    drawStarChips(ctx, state.starChips, camera, viewport, now);
+  }
 
   // Snakes (bots first, then player on top)
   for (const [, s] of state.snakes) {
@@ -120,6 +131,101 @@ function drawFood(
 }
 
 // ==========================================================================
+// Star Chips (golden glow collectibles)
+// ==========================================================================
+
+function drawStarChips(
+  ctx: CanvasRenderingContext2D,
+  chips: StarChip[],
+  camera: Camera,
+  viewport: Viewport,
+  now: number,
+): void {
+  const zoom = camera.zoom;
+  const cw = viewport.width;
+  const ch = viewport.height;
+
+  for (let i = 0; i < chips.length; i++) {
+    const c = chips[i];
+
+    // Cull off-screen
+    if (c.x < viewport.left - 30 || c.x > viewport.right + 30) continue;
+    if (c.y < viewport.top - 30 || c.y > viewport.bottom + 30) continue;
+
+    const { x: sx, y: sy } = worldToScreen(c.x, c.y, camera, cw, ch);
+    const r = c.radius * zoom;
+    if (r < 1) continue;
+
+    // Pulsing golden glow
+    const pulse = 0.7 + 0.3 * Math.sin((now - c.spawnTime) * 0.004);
+    ctx.globalAlpha = 0.35 * pulse;
+    ctx.fillStyle = c.glowColor;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r * 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Outer ring
+    ctx.globalAlpha = 0.2 * pulse;
+    ctx.strokeStyle = c.glowColor;
+    ctx.lineWidth = 1.5 * zoom;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r * 2, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.globalAlpha = 1;
+
+    // Core circle
+    ctx.fillStyle = c.color;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner highlight
+    if (r > 3) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.beginPath();
+      ctx.arc(sx - r * 0.15, sy - r * 0.2, r * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+// ==========================================================================
+// Extraction Zone
+// ==========================================================================
+
+function drawExtractionZone(
+  ctx: CanvasRenderingContext2D,
+  zone: { x: number; y: number; radius: number; active: boolean },
+  camera: Camera,
+  viewport: Viewport,
+): void {
+  const cw = viewport.width;
+  const ch = viewport.height;
+  const { x: sx, y: sy } = worldToScreen(zone.x, zone.y, camera, cw, ch);
+  const sr = zone.radius * camera.zoom;
+
+  // Faint filled circle
+  ctx.globalAlpha = 0.06;
+  ctx.fillStyle = '#fbbf24';
+  ctx.beginPath();
+  ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Dashed border ring
+  ctx.globalAlpha = 0.2;
+  ctx.strokeStyle = '#fbbf24';
+  ctx.lineWidth = 2 * camera.zoom;
+  ctx.setLineDash([8 * camera.zoom, 6 * camera.zoom]);
+  ctx.beginPath();
+  ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.globalAlpha = 1;
+}
+
+// ==========================================================================
 // Snakes
 // ==========================================================================
 
@@ -130,8 +236,8 @@ function drawSnake(
   viewport: Viewport,
   now: number,
 ): void {
-  const segs = snake.segments;
-  if (segs.length === 0) return;
+  const pathLen = snake.path.length;
+  if (pathLen === 0) return;
 
   const zoom = camera.zoom;
   const cw = viewport.width;
@@ -151,51 +257,61 @@ function drawSnake(
   const vt = viewport.top - 30;
   const vb = viewport.bottom + 30;
 
+  // Head position (index 0)
+  const headWorldX = snake.path.headX;
+  const headWorldY = snake.path.headY;
+  const headScreen = worldToScreen(headWorldX, headWorldY, camera, cw, ch);
+  const headVisible = headWorldX >= vl && headWorldX <= vr && headWorldY >= vt && headWorldY <= vb;
+
+  // Body segments (starting from index 1)
   const screenSegs: { x: number; y: number; idx: number }[] = [];
-  for (let i = 0; i < segs.length; i++) {
-    const seg = segs[i];
-    if (seg.x < vl || seg.x > vr || seg.y < vt || seg.y > vb) continue;
-    const s = worldToScreen(seg.x, seg.y, camera, cw, ch);
+  for (let i = 1; i < pathLen; i++) {
+    const wx = snake.path.getX(i);
+    const wy = snake.path.getY(i);
+    if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
+    const s = worldToScreen(wx, wy, camera, cw, ch);
     screenSegs.push({ x: s.x, y: s.y, idx: i });
   }
 
   // Draw body circles from tail to head
   for (let i = screenSegs.length - 1; i >= 0; i--) {
     const ss = screenSegs[i];
-    const r = ss.idx === 0 ? headRadius : segRadius;
-    ctx.fillStyle = ss.idx === 0 ? snake.headColor : snake.color;
+    ctx.fillStyle = snake.color;
     ctx.beginPath();
-    ctx.arc(ss.x, ss.y, r, 0, Math.PI * 2);
+    ctx.arc(ss.x, ss.y, segRadius, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // Light highlight for depth
+  // Draw head separately (on top of body)
+  if (headVisible) {
+    ctx.fillStyle = snake.headColor;
+    ctx.beginPath();
+    ctx.arc(headScreen.x, headScreen.y, headRadius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Light highlight for depth (body only)
   if (segRadius > 3) {
     ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
     for (let i = screenSegs.length - 1; i >= 0; i--) {
       const ss = screenSegs[i];
-      const r = ss.idx === 0 ? headRadius : segRadius;
       ctx.beginPath();
-      ctx.arc(ss.x, ss.y - r * 0.2, r * 0.6, 0, Math.PI * 2);
+      ctx.arc(ss.x, ss.y - segRadius * 0.2, segRadius * 0.6, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 
-  // Eyes (head is screenSegs[0] if idx=0 was visible)
-  let headScreenX = 0;
-  let headScreenY = 0;
-  let headVisible = false;
-  for (let i = 0; i < screenSegs.length; i++) {
-    if (screenSegs[i].idx === 0) {
-      headScreenX = screenSegs[i].x;
-      headScreenY = screenSegs[i].y;
-      headVisible = true;
-      break;
-    }
+  // Head highlight
+  if (headVisible && segRadius > 3) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.beginPath();
+    ctx.arc(headScreen.x, headScreen.y - headRadius * 0.2, headRadius * 0.55, 0, Math.PI * 2);
+    ctx.fill();
   }
 
+  // Eyes, boost lines, name label (only if head is visible)
   if (headVisible) {
-    drawEyes(ctx, headScreenX, headScreenY, snake.angle, headRadius);
+    drawEyes(ctx, headScreen.x, headScreen.y, snake.angle, headRadius);
 
     // Boost speed lines
     if (snake.boosting && segRadius > 3) {
@@ -204,8 +320,8 @@ function drawSnake(
       for (let j = 0; j < 3; j++) {
         const a = snake.angle + Math.PI + (j - 1) * 0.3;
         const len = (15 + j * 5) * zoom;
-        const sx = headScreenX - Math.cos(snake.angle) * headRadius;
-        const sy = headScreenY - Math.sin(snake.angle) * headRadius;
+        const sx = headScreen.x - Math.cos(snake.angle) * headRadius;
+        const sy = headScreen.y - Math.sin(snake.angle) * headRadius;
         ctx.beginPath();
         ctx.moveTo(sx, sy);
         ctx.lineTo(sx + Math.cos(a) * len, sy + Math.sin(a) * len);
@@ -219,7 +335,7 @@ function drawSnake(
       ctx.font = `${Math.max(10, 12 * zoom)}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      ctx.fillText(snake.name, headScreenX, headScreenY - headRadius - 4 * zoom);
+      ctx.fillText(snake.name, headScreen.x, headScreen.y - headRadius - 4 * zoom);
     }
   }
 
@@ -283,10 +399,10 @@ function drawHUD(
   ctx.font = 'bold 16px monospace';
   ctx.fillText(`Score: ${player.score}`, p + 12, p + 10);
 
-  // Length
+  // Length (via path.length instead of segments.length)
   ctx.font = '13px monospace';
   ctx.fillStyle = '#a0a0a0';
-  ctx.fillText(`Length: ${player.segments.length}`, p + 12, p + 10 + lh);
+  ctx.fillText(`Length: ${player.path.length}`, p + 12, p + 10 + lh);
 
   // FPS
   ctx.textAlign = 'right';
@@ -372,22 +488,21 @@ export function drawMinimap(
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  if (!player || !player.alive || !player.segments[0]) return;
+  if (!player || !player.alive || player.path.length === 0) return;
 
   const scale = 0.02;
   const cx = mx + size / 2;
   const cy = my + size / 2;
-  const px = player.segments[0].x;
-  const py = player.segments[0].y;
+  const px = player.path.headX;
+  const py = player.path.headY;
   const halfSize = size / 2 - 4;
 
   ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
   for (const [, snake] of snakes) {
     if (!snake.alive || snake.isPlayer) continue;
-    const head = snake.segments[0];
-    if (!head) continue;
-    const dx = (head.x - px) * scale;
-    const dy = (head.y - py) * scale;
+    if (snake.path.length === 0) continue;
+    const dx = (snake.path.headX - px) * scale;
+    const dy = (snake.path.headY - py) * scale;
     if (Math.abs(dx) > halfSize || Math.abs(dy) > halfSize) continue;
     ctx.fillRect(cx + dx - 1, cy + dy - 1, 2, 2);
   }

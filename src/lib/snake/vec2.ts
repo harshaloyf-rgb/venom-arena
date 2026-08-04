@@ -4,6 +4,29 @@
 
 import type { Vec2 } from './types';
 
+// ─── Zero-alloc direct access (no object creation) ────────────────────────
+
+/** Squared distance using raw coordinates — no object allocation */
+export function distSq(x1: number, y1: number, x2: number, y2: number): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  return dx * dx + dy * dy;
+}
+
+/** Distance using raw coordinates — no object allocation */
+export function dist(x1: number, y1: number, x2: number, y2: number): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+/** Angle from (x1,y1) to (x2,y2) using raw coordinates — no object allocation */
+export function angleDirect(x1: number, y1: number, x2: number, y2: number): number {
+  return Math.atan2(y2 - y1, x2 - x1);
+}
+
+// ─── Vec2 object-based utilities (for non-hot paths) ──────────────────────
+
 /** Euclidean distance between two points */
 export function distance(a: Vec2, b: Vec2): number {
   const dx = b.x - a.x;

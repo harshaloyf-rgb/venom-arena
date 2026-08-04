@@ -1,22 +1,25 @@
 // ============================================================================
 // Camera — Follows player head with smooth lerp. Zooms out as snake grows.
+// Phase A: Updated to use PathBuffer direct access.
 // ============================================================================
 
 import type { Camera, Snake, Viewport } from './types';
 import { lerp } from './vec2';
-import { CAMERA_LERP, CAMERA_ZOOM_MIN, START_LENGTH } from './constants';
+import { CAMERA_LERP, CAMERA_ZOOM_MIN, START_LENGTH } from './config';
 
 /** Update camera to follow a snake, with smooth interpolation and dynamic zoom */
 export function updateCamera(camera: Camera, snake: Snake, canvasWidth: number, canvasHeight: number): void {
-  const head = snake.segments[0];
-  if (!head) return;
+  if (snake.path.length === 0) return;
+
+  const headX = snake.path.headX;
+  const headY = snake.path.headY;
 
   // Smooth follow
-  camera.x = lerp(camera.x, head.x, CAMERA_LERP);
-  camera.y = lerp(camera.y, head.y, CAMERA_LERP);
+  camera.x = lerp(camera.x, headX, CAMERA_LERP);
+  camera.y = lerp(camera.y, headY, CAMERA_LERP);
 
   // Dynamic zoom: zoom out as snake grows
-  const targetLength = snake.segments.length;
+  const targetLength = snake.path.length;
   const baseLength = START_LENGTH;
   // Zoom decreases as snake gets bigger (logarithmic scale)
   const growthFactor = Math.log2(Math.max(targetLength / baseLength, 1));
