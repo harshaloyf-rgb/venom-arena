@@ -17,12 +17,18 @@ export interface IPathBuffer {
   getX(i: number): number;
   /** Y coordinate of segment at logical index `i` (0 = head). */
   getY(i: number): number;
+  /** Set X coordinate of segment at logical index `i` (0 = head). */
+  setX(i: number, x: number): void;
+  /** Set Y coordinate of segment at logical index `i` (0 = head). */
+  setY(i: number, y: number): void;
   /** X coordinate of the head (most recent segment). */
   readonly headX: number;
   /** Y coordinate of the head (most recent segment). */
   readonly headY: number;
   /** Prepend a new head segment. */
   prepend(x: number, y: number): void;
+  /** Append a segment at the tail (growth). */
+  appendTail(x: number, y: number): void;
   /** Remove the tail segment. */
   pop(): void;
   /** Clear all segments without reallocating. */
@@ -103,6 +109,27 @@ export class PathBuffer implements IPathBuffer {
   /** Y coordinate of the tail segment (oldest active segment). */
   get tailY(): number {
     return this.data[((this.headSegIdx + this.length - 1) % this.capacity) * 2 + 1];
+  }
+
+  /** Set X of segment at logical index `i`. Zero-alloc. */
+  setX(index: number, x: number): void {
+    if (index < 0 || index >= this.length) return;
+    this.data[((this.headSegIdx + index) % this.capacity) * 2] = x;
+  }
+
+  /** Set Y of segment at logical index `i`. Zero-alloc. */
+  setY(index: number, y: number): void {
+    if (index < 0 || index >= this.length) return;
+    this.data[((this.headSegIdx + index) % this.capacity) * 2 + 1] = y;
+  }
+
+  /** Append a segment at the tail end (logical index = length). Used for growth. */
+  appendTail(x: number, y: number): void {
+    if (this.length >= this.capacity) this.grow();
+    const physIdx = (this.headSegIdx + this.length) % this.capacity;
+    this.data[physIdx * 2] = x;
+    this.data[physIdx * 2 + 1] = y;
+    this.length++;
   }
 
   /** O(1) tail removal. Decrements length; stale data is left in place. */

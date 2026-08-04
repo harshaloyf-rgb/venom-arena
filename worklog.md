@@ -1614,3 +1614,23 @@ Stage Summary:
 - Camera snap fix in src/lib/snake/camera.ts eliminates head/name vibration
 - Dynamic zoom (zoom out as snake grows) preserved with its own slow lerp
 - Files changed: src/lib/snake/camera.ts
+---
+Task ID: chain-physics-implementation
+Agent: Main
+Task: Replace path-history movement with chain physics (segment following) for Fibonacci-like spiral tightening
+
+Work Log:
+- Added setX(i,x), setY(i,y), appendTail(x,y) to IPathBuffer interface and PathBuffer class
+- Also updated game-server/shared.ts copy of PathBuffer
+- Fixed createSnake initialization: used resetTo() + appendTail() so index 0 = head (was inverted before with prepend)
+- Rewrote moveSnake() core: head moves forward (setX/setY on index 0), then chain constraint loop pulls each segment toward the one ahead
+- Chain constraint: only pulls segments closer (dist > SEGMENT_SPACING), allows natural compression on turn inside
+- Growth: appendTail adds segments behind the tail in the tail's direction
+- Boost shrink: pop from tail as before
+- Verified with agent-browser + VLM: snake moves straight, body curves during turns (J-shape), no glitches
+
+Stage Summary:
+- Chain physics replaces old prepend-based path history
+- Body segments chase the segment ahead, creating natural corner-cutting
+- Segments compress on the inside of turns (Fibonacci-like spiral tightening)
+- Files changed: src/lib/snake/pool.ts, src/lib/snake/engine.ts, mini-services/game-server/shared.ts
