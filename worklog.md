@@ -230,38 +230,39 @@ SECTION A: COMPLETE GAME FEATURE INVENTORY
 SECTION B: FILES TO DELETE (Old Snake Code)
 ============================================================================
 
-These files will be DELETED before rewrite starts:
+These files were DELETED during the rewrite. The 4 offline/ files that were missed during rewrite were cleaned up in CLEANUP-OLD-ARCH:
 
-1.  src/lib/snake-engine.ts          — Old pure snake logic
-2.  src/components/game/game-types.ts — Old game types
-3.  src/components/game/game-canvas.tsx — Old main game canvas
-4.  src/components/game/offline-engine.ts — Old offline game loop
-5.  src/components/game/offline/offline-constants.ts — Old offline config
-6.  src/components/game/offline/offline-hud.ts — Old offline HUD
-7.  src/components/game/offline/offline-replay.ts — Old offline replay
-8.  src/components/game/offline/offline-types.ts — Old offline types
-9.  src/components/game/render/render-snakes.ts — Old snake renderer
-10. src/components/game/render/render-snake-visuals.ts — Old 3D/hat/face renderer
-11. src/components/game/render/render-food.ts — Old food renderer
-12. src/components/game/render/render-grid.ts — Old grid renderer
-13. src/components/game/render/render-minimap.ts — Old minimap renderer
-14. src/components/game/render/render-overlays.ts — Old overlay renderer
-15. src/components/game/render/types.ts — Old render types
-16. src/components/game/render-helpers.ts — Old render helpers
-17. src/components/game/use-render-loop.ts — Old render loop hook
-18. src/components/game/use-game-input.ts — Old input handling hook
-19. src/components/game/use-socket-lifecycle.ts — Old socket lifecycle hook
-20. src/components/game/end-overlay.tsx — Old death/end screen overlay
-21. src/components/game/admin-game-tuning.tsx — Old admin tuning panel
-22. src/components/game/online-replay-player.tsx — Old online replay player
-23. src/components/game/replay-player.tsx — Old replay player
-24. src/components/game/rewarded-ad-modal.tsx — Old rewarded ad modal
-25. mini-services/game-server/index.ts — Old game server
-26. mini-services/game-server/game-state.ts — Old game state
-27. mini-services/game-server/spatial-grid.ts — Old spatial grid
+1.  src/lib/snake-engine.ts          — ✅ DELETED (rewrite)
+2.  src/components/game/game-types.ts — ✅ DELETED (rewrite)
+3.  src/components/game/game-canvas.tsx — ✅ REWRITTEN (rewrite)
+4.  src/components/game/offline-engine.ts — ✅ REWRITTEN as engines/offline-engine.ts
+5.  src/components/game/offline/offline-constants.ts — ✅ DELETED (CLEANUP-OLD-ARCH)
+6.  src/components/game/offline/offline-hud.ts — ✅ DELETED (CLEANUP-OLD-ARCH)
+7.  src/components/game/offline/offline-replay.ts — ✅ DELETED (CLEANUP-OLD-ARCH)
+8.  src/components/game/offline/offline-types.ts — ✅ DELETED (CLEANUP-OLD-ARCH)
+9.  src/components/game/render/render-snakes.ts — ✅ REWRITTEN
+10. src/components/game/render/render-snake-visuals.ts — ✅ DELETED (rewrite)
+11. src/components/game/render/render-food.ts — ✅ REWRITTEN
+12. src/components/game/render/render-grid.ts — ✅ REWRITTEN
+13. src/components/game/render/render-minimap.ts — ✅ REWRITTEN
+14. src/components/game/render/render-overlays.ts — ✅ REWRITTEN
+15. src/components/game/render/types.ts — ✅ REWRITTEN
+16. src/components/game/render-helpers.ts — ✅ REWRITTEN
+17. src/components/game/use-render-loop.ts — ✅ REWRITTEN
+18. src/components/game/use-game-input.ts — ✅ REWRITTEN
+19. src/components/game/use-socket-lifecycle.ts — ✅ REWRITTEN
+20. src/components/game/end-overlay.tsx — ✅ DELETED (rewrite)
+21. src/components/game/admin-game-tuning.tsx — ✅ DELETED (rewrite)
+22. src/components/game/online-replay-player.tsx — ✅ REWRITTEN
+23. src/components/game/replay-player.tsx — ✅ REWRITTEN
+24. src/components/game/rewarded-ad-modal.tsx — ✅ DELETED (rewrite)
+25. mini-services/game-server/index.ts — ✅ REWRITTEN
+26. mini-services/game-server/game-state.ts — ✅ REWRITTEN
+27. mini-services/game-server/spatial-grid.ts — ✅ REWRITTEN
 
-TOTAL: 27 files deleted
-
+TOTAL: 27 files handled. ALL OLD ARCHITECTURE FULLY PURGED.
+⚠️ IMPORTANT: src/lib/snake-engine.ts NO LONGER EXISTS. Never import from it.
+  The new architecture is src/lib/snake/ (types.ts, config.ts, engine.ts, skin-types.ts, skin-resolver.ts, pool.ts, index.ts).
 ============================================================================
 SECTION C: FILES TO KEEP (Safe — NOT touched)
 ============================================================================
@@ -1116,3 +1117,25 @@ Findings Summary:
 23. ⚠️ Minimap toggle has no visual button (M key works)
 24. ⚠️ Snake shrink rate during boost is ~8 visual segments per drop, not 1
 25. ⚠️ boostMinScore=8 means ~1.6 visual segments, not >8 body segments
+
+---
+Task ID: CLEANUP-OLD-ARCH
+Agent: Main
+Task: Remove all remnants of the old July 28 snake-engine architecture to prevent future agent confusion
+
+Work Log:
+- Identified that src/components/game/offline/ directory (4 files) was dead code with broken imports to deleted @/lib/snake-engine
+- Verified zero imports existed pointing into src/components/game/offline/ — confirmed dead code
+- Deleted src/components/game/offline/offline-types.ts (broken import, dead SpatialHashGrid)
+- Deleted src/components/game/offline/offline-constants.ts (broken import, dead constants)
+- Deleted src/components/game/offline/offline-hud.ts (old HUD, never imported)
+- Deleted src/components/game/offline/offline-replay.ts (old replay, never imported)
+- Fixed stale comment in src/lib/game-config.ts: snake-engine.ts → snake/config.ts
+- Deleted audit-engine.md (entirely referenced old snake-engine.ts, invalid after rewrite)
+- Verified all remaining imports in src/ point to @/lib/snake/* (new architecture) — zero broken references remain
+
+Stage Summary:
+- 5 files/dirs deleted: 4 from src/components/game/offline/ + audit-engine.md
+- 1 comment fixed in game-config.ts
+- Old single-file snake-engine.ts architecture is now FULLY purged — only the modular src/lib/snake/ remains
+- No agent can accidentally import from the old @/lib/snake-engine path anymore

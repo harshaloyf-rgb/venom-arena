@@ -189,7 +189,7 @@ export function getCosmeticById(id: string): Skin | undefined {
 export const WORLD_SIZE = 8000;
 export const WORLD_RADIUS = 4000; // center of 8000x8000 world (used for offline infinite offset)
 // NOTE: Physics constants (speed, turn rate, collision, boost, etc.) are now in
-// src/lib/snake-engine.ts as DEFAULT_SNAKE_CONFIG. The values below are only
+// src/lib/snake/config.ts as DEFAULT_SNAKE_CONFIG. The values below are only
 // the ones still referenced by non-engine code.
 
 export const INITIAL_SPAWN_SCORE = 20; // Starting score — all food collected adds to this
