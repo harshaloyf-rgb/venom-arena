@@ -558,3 +558,104 @@ SECTION H: RISK MITIGATION
 - Offline mode can be tested before online mode
 - Cosmetics/shop/lab panels are NOT touched — they work via localStorage/DB API
 - page.tsx needs minimal change (just GameCanvas props if interface changes)
+
+============================================================================
+SECTION I: ADDITIONAL FINDINGS FROM PANEL DEEP-DIVE
+============================================================================
+
+(Added after reading lobby, station, play, shop, lab, pass panels)
+
+## I.1 FROM PLAY/ARENA PANEL
+- **XP Formula**: `floor((score * 5 + kills * 50) * rewardMultiplier)` — only on successful extraction
+- **Practice arenas = NO XP reward** (explicitly stated: "FREE, 0 XP, 1000 bots each")
+- **MatchResult interface** must include: outcome, arenaId, arenaName, chipsExtracted, commission,
+  bankedAmount, kills, score, deaths, xpGained, newLevel, newBankedChips, durationSeconds,
+  killerName, killerTag, isOffline
+- **Food totals**: exactly 1,200 food orbs per arena
+- **Online max players**: 1,000 per shard
+- **World size**: 8000×8000 centered at (4000,4000) — used as coordinate space base
+
+## I.2 FROM SHOP/LAB PANEL
+- **18-color palette** for Genetic Lab (exact hex values in cosmetics-types.ts)
+- **Max 24 color nodes** in custom stripe sequence
+- **CustomSegment interface**: {color, sizeScale, shape (circle|square|diamond|spike), glow}
+- **Shape resolution**: dragon=alternating circle+spike, armored=alternating circle+square,
+  crystal=alternating circle+diamond, obsidian=all spike, basilisk=all diamond, smooth=all circle
+- **Taper physics generates 16 segments** with per-segment sizeScale calculations
+- **TryOnPreview**: 450×180 canvas, 26 segments, mouse-steerable, auto-patrol fallback
+- **SkinsCanvasPreview**: 180×80 canvas, 10 segments, 60fps wiggle: `Math.sin(time - i*0.42) * 9`
+- **Skin persistence**: localStorage['venom_custom_skin_state'] = {useCustomSkin, currentSkin, customSkinSegments[]}
+- **Premium cosmetics**: 13 skins, 3 trails, 2 death novas, 6 flags, 3 banners = 27 manufactured items
+
+## I.3 FROM SEASON PASS PANEL
+- **20 Free + 20 Elite tiers**, level-based unlock: [2,3,4,5,6,7,8,10,12,14,15,17,19,21,23,25,28,31,34,38]
+- **Elite pass cost**: 100,000 chips
+- **Season pass cosmetics** feed into the same skin system (unlockedSkins in player profile)
+- Not affected by engine rewrite — just noted for completeness
+
+## I.4 FROM LOBBY/DASHBOARD PANEL
+- **Quick stats**: Matches = kills+deaths (not separate match count), streak, extracts, biggestExtract
+- **Level formula**: `xpForLevel(N) = (N-1) * 200` — meta-game, handled by API routes
+- **Last match banner**: Shows Extracted/Eliminated, arena name, chips, kills, XP
+- **Challenge system**: daily (3) + weekly (2), streak multiplier, chip rewards
+- All meta-game — NOT part of engine rewrite
+
+## I.5 FROM CHIP STORE PANEL
+- **Annual buy cap**: ₹15,000/year (2,500,000 chips max)
+- **Promo codes**: VENOM (+500c), CHAMPION (+1000c)
+- **Daily sponsor ads**: 12 max/day, 100c each (1,200c/day free)
+- **Referral**: 2,500c for both parties (after 5 matches)
+- All meta-game — NOT part of engine rewrite
+
+## I.6 IMPACT ON PHASES
+- Phase 1 types.ts: Add MatchResult interface with all fields from I.1
+- Phase 1 types.ts: Add CustomSegment, CustomSkinState with exact shape/glow fields from I.2
+- Phase 2 renderer: Must support 4 base shapes (circle/square/diamond/spike) with per-segment resolution
+- Phase 4 offline-engine: Must mark matches as isOffline=true, xpGained=0
+- Phase 5 game-server: Practice matches return xpGained=0, isOffline=true
+- Phase 5 game-server: XP formula computed server-side in match/result API: `floor((score*5 + kills*50) * rewardMultiplier)`
+- Phase 6 skin system: Must read CustomSkinState from localStorage, resolve shapes per I.2
+
+============================================================================
+SECTION J: REWRITE EXECUTION LOG
+============================================================================
+
+(Execution phases will be appended here as work progresses)
+
+
+---
+Task ID: 2
+Agent: Renderer Agent
+Task: Write all renderer files (Phase 2)
+
+Work Log:
+- Read /src/lib/snake/types.ts, config.ts, skin-types.ts, skin-resolver.ts to understand all types
+- Created /src/components/game/render/ directory
+- Wrote 15 renderer files:
+  1. types.ts — Render-only types (RenderSnake, ParticleSystem, ArenaLeader) + re-exports
+  2. camera.ts — followTarget, zoomToward, worldToScreen, isOnScreen, createDefaultCamera
+  3. gradient.ts — GradientCache class (2px buckets, LRU eviction), create3DGradient, hexToRgb/rgbToHex/brighten/darken
+  4. shapes.ts — 11 shape functions: drawCircle, drawBox, drawTriangle, drawSquare, drawDiamond, drawSpike, drawMix_ct/cb/bt/all, drawShape dispatcher, drawSnakeShape dispatcher
+  5. hats.ts — 6 hat functions: drawTophat, drawCrown, drawCap, drawSanta, drawParty, drawHorns + drawHat dispatcher
+  6. face.ts — drawFace with eyes, pupils, nose, mouth, specular highlight; angle-aware positioning
+  7. arrow.ts — drawDirectionArrow with boost extension and opacity
+  8. render-snake.ts — renderSnake full pipeline (skin resolve, glow pass, segment draw, hat, face, arrow)
+  9. render-food.ts — renderFood with size-based glow, renderFoods batch
+  10. render-stars.ts — renderStar with 5-point star, pulsing glow, value text
+  11. render-grid.ts — renderGrid with viewport culling, subtle dark lines
+  12. render-map.ts — renderMapBoundary with danger zone gradient, dashed circle
+  13. render-minimap.ts — renderMinimap circular radar, player highlight, viewport rect
+  14. render-overlays.ts — renderKillFeed (8 entries, 5s fade), renderEmoteBubble, renderNameLabel, particle system (add/update/render)
+  15. render-hud.ts — renderHUD with stats panel (chips/score/kills/rank), FPS/ping (color-coded), extraction bar, 5 emote buttons, BOOST/EXTRACT/EXIT pills, mini leaderboard
+- Fixed import paths: SnakeConfig from @/lib/snake/config (not types), ResolvedSkin from @/lib/snake/skin-types
+- Fixed SnakeState property access: isPlayer/isBot via snake.identity.*
+- Fixed SnakeIdentity.spawnProtected moved to renderSnake parameter
+- All 15 files compile clean (zero render-specific errors)
+
+Stage Summary:
+- All 15 renderer files created and compile clean
+- Full snake render pipeline: gradient → shapes → hats → face → arrow → glow
+- Food, stars, grid, map boundary, minimap all implemented
+- Complete HUD with stats, perf, emotes, action buttons, extraction bar
+- Overlay system: kill feed, emote bubbles, name labels, particle system
+- Ready for Phase 3 (game canvas / render loop integration)
