@@ -51,6 +51,13 @@ export function renderSnakeAtlas(
   const pathLen = snake.path.length;
   if (pathLen === 0) return;
 
+  // ── HEAD-LEVEL CULLING ──
+  const _headWx = snake.path.headX;
+  const _headWy = snake.path.headY;
+  const _cullMargin = Math.min(pathLen * 8, 500) + 100;
+  if (_headWx < viewport.left - _cullMargin || _headWx > viewport.right + _cullMargin) return;
+  if (_headWy < viewport.top - _cullMargin || _headWy > viewport.bottom + _cullMargin) return;
+
   const zoom = camera.zoom;
   const cw = viewport.width;
   const ch = viewport.height;
@@ -264,6 +271,14 @@ export function renderSnakeFallback(
   const pathLen = snake.path.length;
   if (pathLen === 0) return;
 
+  // ── HEAD-LEVEL CULLING: skip entire snake if head is far off-screen ──
+  // Margin = snake's visual extent (pathLen * SEGMENT_SPACING) + viewport padding
+  const headWx = snake.path.headX;
+  const headWy = snake.path.headY;
+  const cullMargin = Math.min(pathLen * 8, 500) + 100;
+  if (headWx < viewport.left - cullMargin || headWx > viewport.right + cullMargin) return;
+  if (headWy < viewport.top - cullMargin || headWy > viewport.bottom + cullMargin) return;
+
   const zoom = camera.zoom;
   const cw = viewport.width;
   const ch = viewport.height;
@@ -271,33 +286,31 @@ export function renderSnakeFallback(
   const segRadius = SNAKE_RADIUS * zoom;
   const headRadius = segRadius * 1.3;
 
-  const vl = viewport.left - 30;
-  const vr = viewport.right + 30;
-  const vt = viewport.top - 30;
-  const vb = viewport.bottom + 30;
+  const vl = viewport.left - 20;
+  const vr = viewport.right + 20;
+  const vt = viewport.top - 20;
+  const vb = viewport.bottom + 20;
 
-  // Pre-compute visible body screen positions
-  const screenSegs: { x: number; y: number }[] = [];
-  for (let i = 1; i < pathLen; i++) {
+  // ── Batched body draw: single beginPath, multiple arcs, one fill ──
+  ctx.fillStyle = snake.color;
+  ctx.beginPath();
+  let hasBodySegs = false;
+
+  for (let i = pathLen - 1; i >= 1; i--) {
     const wx = snake.path.getX(i);
     const wy = snake.path.getY(i);
     if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
     const s = worldToScreen(wx, wy, camera, cw, ch);
-    screenSegs.push({ x: s.x, y: s.y });
+    ctx.moveTo(s.x + segRadius, s.y);
+    ctx.arc(s.x, s.y, segRadius, 0, Math.PI * 2);
+    hasBodySegs = true;
   }
 
-  // Body circles tail → head
-  for (let i = screenSegs.length - 1; i >= 0; i--) {
-    const ss = screenSegs[i];
-    ctx.fillStyle = snake.color;
-    ctx.beginPath();
-    ctx.arc(ss.x, ss.y, segRadius, 0, Math.PI * 2);
+  if (hasBodySegs) {
     ctx.fill();
   }
 
-  // Head
-  const headWx = snake.path.headX;
-  const headWy = snake.path.headY;
+  // ── Head ──
   const headVisible = headWx >= vl && headWx <= vr && headWy >= vt && headWy <= vb;
 
   if (headVisible) {
@@ -307,25 +320,36 @@ export function renderSnakeFallback(
     ctx.arc(hs.x, hs.y, headRadius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Eyes
-    const eyeOffset = headRadius * 0.4;
-    const eyeR = headRadius * 0.25;
-    const pupilR = eyeR * 0.6;
-    const perpAngle = snake.angle + Math.PI / 2;
-    const eyeForward = headRadius * 0.3;
+    // Eyes (only when zoomed in enough to see them)
+    if (segRadius > 3) {
+      const eyeOffset = headRadius * 0.4;
+      const eyeR = headRadius * 0.25;
+      const pupilR = eyeR * 0.6;
+      const perpAngle = snake.angle + Math.PI / 2;
+      const eyeForward = headRadius * 0.3;
 
-    for (const side of [-1, 1]) {
-      const ex = hs.x + Math.cos(snake.angle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
-      const ey = hs.y + Math.sin(snake.angle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
+      // Batch both eye whites
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.arc(ex, ey, eyeR, 0, Math.PI * 2);
+      for (const side of [-1, 1]) {
+        const ex = hs.x + Math.cos(snake.angle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
+        const ey = hs.y + Math.sin(snake.angle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
+        ctx.moveTo(ex + eyeR, ey);
+        ctx.arc(ex, ey, eyeR, 0, Math.PI * 2);
+      }
       ctx.fill();
-      const ppx = ex + Math.cos(snake.angle) * pupilR * 0.3;
-      const ppy = ey + Math.sin(snake.angle) * pupilR * 0.3;
+
+      // Batch both pupils
       ctx.fillStyle = '#111111';
       ctx.beginPath();
-      ctx.arc(ppx, ppy, pupilR, 0, Math.PI * 2);
+      for (const side of [-1, 1]) {
+        const ex = hs.x + Math.cos(snake.angle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
+        const ey = hs.y + Math.sin(snake.angle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
+        const ppx = ex + Math.cos(snake.angle) * pupilR * 0.3;
+        const ppy = ey + Math.sin(snake.angle) * pupilR * 0.3;
+        ctx.moveTo(ppx + pupilR, ppy);
+        ctx.arc(ppx, ppy, pupilR, 0, Math.PI * 2);
+      }
       ctx.fill();
     }
 

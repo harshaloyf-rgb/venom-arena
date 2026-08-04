@@ -67,11 +67,18 @@ const FOOD_SIZES: Array<'small' | 'medium' | 'large'> = ['small', 'medium', 'lar
 /** Reusable spatial hashes (allocated once, cleared each tick) */
 const foodHash = new SpatialHash();
 const bodyHash = new SpatialHash();
+const headHash = new SpatialHash();
 
 /** Cached squared collision distance */
 const COLLISION_DIST_SQ = SNAKE_RADIUS * 2 * SNAKE_RADIUS * 2;
 const EAT_DIST_SQ = (SNAKE_RADIUS + 10) * (SNAKE_RADIUS + 10);
 const STAR_CHIP_DIST_SQ = (SNAKE_RADIUS + STAR_CHIP_RADIUS) * (SNAKE_RADIUS + STAR_CHIP_RADIUS);
+
+/** Pre-allocated food value cache: foodId → value (rebuilt each tick, avoids .find()) */
+const foodValueCache = new Map<number, number>();
+
+/** Scratch entity for spatial hash inserts (avoids object allocation) */
+const _insertScratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
 
 // ==========================================================================
 // Spiral turn detection (Phase A: detection only, math in Phase B)
@@ -458,7 +465,14 @@ function checkStarChips(state: GameState, _now: number): void {
   }
 
   if (collected.size > 0) {
-    state.starChips = state.starChips.filter(c => !collected.has(c.id));
+    // Swap-remove collected chips (no .filter() allocation)
+    let writeIdx = 0;
+    for (let i = 0; i < state.starChips.length; i++) {
+      if (!collected.has(state.starChips[i].id)) {
+        state.starChips[writeIdx++] = state.starChips[i];
+      }
+    }
+    state.starChips.length = writeIdx;
   }
 }
 
@@ -504,11 +518,16 @@ function spawnFoodBatch(state: GameState, count: number, cx: number, cy: number,
 // ==========================================================================
 
 function checkFoodEating(state: GameState, now: number): void {
-  // Build food spatial hash
+  // Build food spatial hash + value cache
   foodHash.clear();
-  for (let i = 0; i < state.foods.length; i++) {
-    const f = state.foods[i];
-    foodHash.insert({ x: f.x, y: f.y, radius: f.radius, id: f.id } as SpatialEntity);
+  foodValueCache.clear();
+  const foods = state.foods;
+  const scratch = _insertScratch;
+  for (let i = 0; i < foods.length; i++) {
+    const f = foods[i];
+    scratch.x = f.x; scratch.y = f.y; scratch.radius = f.radius; scratch.id = f.id;
+    foodHash.insert(scratch);
+    foodValueCache.set(f.id, f.value);
   }
 
   const eatenIds = new Set<number>();
@@ -529,13 +548,20 @@ function checkFoodEating(state: GameState, now: number): void {
 
       if (distSq(hx, hy, entity.x, entity.y) <= EAT_DIST_SQ) {
         eatenIds.add(fid);
-        snake.score += (state.foods.find(f => f.id === fid))?.value ?? 1;
+        snake.score += foodValueCache.get(fid) ?? 1;
       }
     }
   }
 
+  // Swap-remove eaten food (no .filter() allocation)
   if (eatenIds.size > 0) {
-    state.foods = state.foods.filter(f => !eatenIds.has(f.id));
+    let writeIdx = 0;
+    for (let i = 0; i < foods.length; i++) {
+      if (!eatenIds.has(foods[i].id)) {
+        foods[writeIdx++] = foods[i];
+      }
+    }
+    foods.length = writeIdx;
   }
 }
 
@@ -544,28 +570,41 @@ function checkFoodEating(state: GameState, now: number): void {
 // ==========================================================================
 
 function checkCollisions(state: GameState, now: number): void {
-  // Build body segment spatial hash
+  // ── Build body segment spatial hash ──
+  // Key optimization: entity.id = snake.id (the string, reused — no concat)
+  // No bodySegMap needed — just look up entity.id directly in state.snakes
   bodyHash.clear();
-  const bodySegCount = state.snakes.size * 50; // rough estimate
-  // Map from entityKey -> snakeId
-  const bodySegMap = new Map<string, string>();
+  const scratch = _insertScratch;
+  scratch.radius = SNAKE_RADIUS;
 
   for (const [, snake] of state.snakes) {
     if (!snake.alive) continue;
     const len = snake.path.length;
+    const sid = snake.id;
     for (let i = NECK_PROTECTION; i < len; i++) {
-      const sx = snake.path.getX(i);
-      const sy = snake.path.getY(i);
-      const key = `${snake.id}:${i}`;
-      bodySegMap.set(key, snake.id);
-      bodyHash.insert({ x: sx, y: sy, radius: SNAKE_RADIUS, id: key } as SpatialEntity);
+      scratch.x = snake.path.getX(i);
+      scratch.y = snake.path.getY(i);
+      scratch.id = sid;
+      bodyHash.insert(scratch);
     }
   }
 
-  const deadSnakes = new Set<string>();
-
-  // Head-to-body collision check
+  // ── Build head spatial hash for O(n) head-on-head check ──
+  headHash.clear();
   for (const [, snake] of state.snakes) {
+    if (!snake.alive) continue;
+    scratch.x = snake.path.headX;
+    scratch.y = snake.path.headY;
+    scratch.radius = SNAKE_RADIUS;
+    scratch.id = snake.id;
+    headHash.insert(scratch);
+  }
+
+  const deadSnakes = new Set<string>();
+  const snakesMap = state.snakes;
+
+  // ── Head-to-body collision check ──
+  for (const [, snake] of snakesMap) {
     if (!snake.alive || deadSnakes.has(snake.id)) continue;
     const hx = snake.path.headX;
     const hy = snake.path.headY;
@@ -576,12 +615,9 @@ function checkCollisions(state: GameState, now: number): void {
     const nearby = bodyHash.query(hx, hy, SNAKE_RADIUS * 2);
     for (let i = 0; i < nearby.length; i++) {
       const entity = nearby[i];
-      const key = entity.id as string;
-      const otherSnakeId = bodySegMap.get(key);
-      if (!otherSnakeId || otherSnakeId === snake.id) continue;
-
-      const otherSnake = state.snakes.get(otherSnakeId);
-      if (!otherSnake || !otherSnake.alive) continue;
+      const otherId = entity.id as string;
+      // Skip self-collision (body segments have same id as head)
+      if (otherId === snake.id) continue;
 
       if (distSq(hx, hy, entity.x, entity.y) <= COLLISION_DIST_SQ) {
         deadSnakes.add(snake.id);
@@ -590,56 +626,54 @@ function checkCollisions(state: GameState, now: number): void {
     }
   }
 
-  // Head-on-head collision check
-  const aliveArr: Snake[] = [];
-  for (const [, s] of state.snakes) {
-    if (s.alive && !deadSnakes.has(s.id) && s.path.length > 0) {
-      aliveArr.push(s);
-    }
-  }
+  // ── Head-on-head collision via spatial hash (O(n) instead of O(n²)) ──
+  for (const [, snake] of snakesMap) {
+    if (!snake.alive || deadSnakes.has(snake.id)) continue;
+    if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
-  for (let i = 0; i < aliveArr.length; i++) {
-    const a = aliveArr[i];
-    if (deadSnakes.has(a.id)) continue;
+    const hx = snake.path.headX;
+    const hy = snake.path.headY;
 
-    for (let j = i + 1; j < aliveArr.length; j++) {
-      const b = aliveArr[j];
-      if (deadSnakes.has(b.id)) continue;
+    const nearby = headHash.query(hx, hy, SNAKE_RADIUS * 2);
+    for (let i = 0; i < nearby.length; i++) {
+      const otherId = nearby[i].id as string;
+      if (otherId === snake.id) continue; // skip self
+      if (deadSnakes.has(otherId)) continue; // already dead
 
-      // Spawn protection
-      if (now - a.spawnTime < SPAWN_PROTECTION_MS) continue;
-      if (now - b.spawnTime < SPAWN_PROTECTION_MS) continue;
+      const otherSnake = snakesMap.get(otherId);
+      if (!otherSnake || !otherSnake.alive) continue;
+      if (now - otherSnake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
-      const dx = a.path.headX - b.path.headX;
-      const dy = a.path.headY - b.path.headY;
+      const dx = hx - otherSnake.path.headX;
+      const dy = hy - otherSnake.path.headY;
       if (dx * dx + dy * dy > COLLISION_DIST_SQ) continue;
 
       // Head-on-head collision resolved by length + boost rules
-      const lenA = a.path.length;
-      const lenB = b.path.length;
+      const lenA = snake.path.length;
+      const lenB = otherSnake.path.length;
 
       if (lenA > lenB) {
-        if (HEAD_ON_HEAD_BOOST_WINS && b.boosting && !a.boosting) {
-          deadSnakes.add(a.id);
+        if (HEAD_ON_HEAD_BOOST_WINS && otherSnake.boosting && !snake.boosting) {
+          deadSnakes.add(snake.id);
         } else {
-          deadSnakes.add(b.id);
+          deadSnakes.add(otherId);
         }
       } else if (lenB > lenA) {
-        if (HEAD_ON_HEAD_BOOST_WINS && a.boosting && !b.boosting) {
-          deadSnakes.add(b.id);
+        if (HEAD_ON_HEAD_BOOST_WINS && snake.boosting && !otherSnake.boosting) {
+          deadSnakes.add(otherId);
         } else {
-          deadSnakes.add(a.id);
+          deadSnakes.add(snake.id);
         }
       } else {
-        deadSnakes.add(a.id);
-        deadSnakes.add(b.id);
+        deadSnakes.add(snake.id);
+        deadSnakes.add(otherId);
       }
     }
   }
 
   // Process deaths
   for (const deadId of deadSnakes) {
-    const deadSnake = state.snakes.get(deadId);
+    const deadSnake = snakesMap.get(deadId);
     if (deadSnake) killSnake(state, deadSnake);
   }
 }
