@@ -20,6 +20,8 @@ export interface IPathBuffer {
   getX(i: number): number;
   getY(i: number): number;
   getAngle(i: number): number;
+  tailX(): number;
+  tailY(): number;
   prepend(x: number, y: number, angle: number): void;
   trimTail(n: number): void;
   reset(): void;
