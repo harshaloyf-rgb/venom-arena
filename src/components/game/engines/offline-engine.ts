@@ -195,10 +195,14 @@ export class OfflineEngine {
 
   private spawnBot() {
     const identity = this.createBotIdentity();
+    // Spawn near player (infinite map)
+    const player = this.snakes.find(s => s.identity.id === this.playerId);
+    const cx = player?.head.x ?? MAP_CENTER_X;
+    const cy = player?.head.y ?? MAP_CENTER_Y;
     const ang = Math.random() * Math.PI * 2;
-    const dist = 500 + Math.random() * 3500;
-    const x = MAP_CENTER_X + Math.cos(ang) * dist;
-    const y = MAP_CENTER_Y + Math.sin(ang) * dist;
+    const dist = 800 + Math.random() * 2500;
+    const x = cx + Math.cos(ang) * dist;
+    const y = cy + Math.sin(ang) * dist;
 
     const snake = this.createSnake(identity, x, y);
     this.snakes.push(snake);
@@ -237,8 +241,15 @@ export class OfflineEngine {
   }
 
   private spawnOneFood() {
-    const x = MAP_CENTER_X + (Math.random() - 0.5) * 12000;
-    const y = MAP_CENTER_Y + (Math.random() - 0.5) * 12000;
+    // Spawn food near the player (infinite map — food follows player)
+    const player = this.snakes.find(s => s.identity.id === this.playerId);
+    const cx = player?.head.x ?? MAP_CENTER_X;
+    const cy = player?.head.y ?? MAP_CENTER_Y;
+    // Spawn within 2500px radius of player, mostly within 1500px
+    const dist = 200 + Math.random() * 2300;
+    const ang = Math.random() * Math.PI * 2;
+    const x = cx + Math.cos(ang) * dist;
+    const y = cy + Math.sin(ang) * dist;
     const id = `food-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     this.food.push(createFoodOrb(id, x, y, this.config));
   }
@@ -287,6 +298,20 @@ export class OfflineEngine {
 
     while (this.food.length < this.config.foodCount) {
       this.spawnOneFood();
+    }
+
+    // Despawn food too far from player (keep world clean in infinite mode)
+    {
+      const player = this.snakes.find(s => s.identity.id === this.playerId);
+      if (player) {
+        const maxDist = 4000;
+        const maxDistSq = maxDist * maxDist;
+        this.food = this.food.filter(f => {
+          const dx = f.x - player.head.x;
+          const dy = f.y - player.head.y;
+          return dx * dx + dy * dy < maxDistSq;
+        });
+      }
     }
 
     this.respawnBots();
