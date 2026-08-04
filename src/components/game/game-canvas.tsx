@@ -215,7 +215,7 @@ export default function GameCanvas({
 
     // Tick / extrapolate engine
     if (engine instanceof OfflineEngine) {
-      engine.tick(inputRef.current);
+      engine.tick(inputRef.current, _delta > 0 ? _delta : 16.67);
     } else if (engine instanceof OnlineEngine) {
       engine.sendInput(inputRef.current);
       engine.extrapolate(_delta > 0 ? _delta / 1000 : 1 / 60);

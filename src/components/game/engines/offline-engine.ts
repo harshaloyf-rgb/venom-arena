@@ -76,6 +76,10 @@ export class OfflineEngine {
   endState: EndScreenState | null = null;
   deathEvent: DeathEvent | null = null;
 
+  // Tick accumulator — decouples simulation from render rate
+  private tickAccumulator: number = 0;
+  private lastTickTime: number = 0;
+
   // Callbacks
   onDeath?: (endState: EndScreenState) => void;
   onKillFeed?: (entry: KillFeedEntry) => void;
@@ -219,9 +223,36 @@ export class OfflineEngine {
 
   // ── Main Tick ─────────────────────────────────────────────────────────────
 
-  tick(input: InputState): void {
+  /**
+   * Advance simulation by deltaMs milliseconds.
+   * Uses a tick accumulator to run the simulation at config.tickRateHz,
+   * decoupled from the render framerate (typically 60fps).
+   */
+  tick(input: InputState, deltaMs: number = 16.67): void {
     if (this.phase !== 'playing') return;
 
+    const tickIntervalMs = 1000 / this.config.tickRateHz;
+    this.tickAccumulator += deltaMs;
+
+    // Cap to 3 ticks max per frame to avoid spiral-of-death
+    const maxTicks = 3;
+    let ticksThisFrame = 0;
+
+    while (this.tickAccumulator >= tickIntervalMs && ticksThisFrame < maxTicks) {
+      this.tickAccumulator -= tickIntervalMs;
+      this.runOneTick(input);
+      ticksThisFrame++;
+      if (this.phase !== 'playing') break;
+    }
+
+    // Prevent accumulator from growing unbounded
+    if (this.tickAccumulator > tickIntervalMs * 2) {
+      this.tickAccumulator = 0;
+    }
+  }
+
+  /** Single simulation tick (called by tick accumulator) */
+  private runOneTick(input: InputState): void {
     this.frameCount++;
 
     // Update player
@@ -577,6 +608,7 @@ export class OfflineEngine {
     this.botAIStates.clear();
     this.botRespawnTimers.clear();
     this.particles = [];
+    this.tickAccumulator = 0;
     this.phase = 'ended';
   }
 }

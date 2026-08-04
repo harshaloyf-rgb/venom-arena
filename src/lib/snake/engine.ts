@@ -146,12 +146,16 @@ export function calcCollisionRadius(visualRadius: number): number {
   return visualRadius * 0.85;
 }
 
-/** Calculate how many body segments to render */
+/** Calculate how many body segments to render.
+ *  pathLength = ceil(score * ptsPerSegment / segSpacing) — total path points
+ *  visual segments = ceil(pathLength / skinSegSpacing) — one segment per skinSegSpacing path points
+ */
 export function calcSegmentCount(
   score: number,
   config: SnakeConfig,
 ): number {
-  return Math.ceil((score * config.ptsPerSegment) / config.skinSegSpacing);
+  const pathLength = Math.ceil((score * config.ptsPerSegment) / config.segSpacing);
+  return Math.max(1, Math.ceil(pathLength / config.skinSegSpacing));
 }
 
 // ── Collision Detection ──────────────────────────────────────────────────────
