@@ -23,7 +23,6 @@ export function renderHUD(
 
   renderStatsPanel(ctx, hud, canvasW, canvasH);
   renderPerfPanel(ctx, hud, canvasW, canvasH);
-  renderExtractionBar(ctx, hud, canvasW, canvasH);
   renderEmoteButtons(ctx, canvasW, canvasH);
   renderActionButtons(ctx, canvasW, canvasH);
   if (leaders.length > 0) {
@@ -97,13 +96,14 @@ function renderStatsPanel(
   ctx.fillText(String(hud.kills), x + 90, y);
   y += lineHeight;
 
-  // Rank (white)
+  // Rank (white) — show rank/total for awareness of all bots
   ctx.font = `${labelFont}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle = 'rgba(255,255,255,0.5)';
   ctx.fillText('Rank', x, y);
   ctx.font = `bold ${smallFont + 2}px 'Segoe UI', system-ui, sans-serif`;
   ctx.fillStyle = '#FFFFFF';
-  ctx.fillText(`#${hud.rank}`, x + 90, y);
+  const rankText = hud.totalAlive > 0 ? `#${hud.rank}/${hud.totalAlive}` : `#${hud.rank}`;
+  ctx.fillText(rankText, x + 90, y);
 }
 
 // ── Top-Right: FPS/Ping + Commission + Leaders ───────────────────────────

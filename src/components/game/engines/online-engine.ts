@@ -131,7 +131,7 @@ export class OnlineEngine {
     this.hud = {
       fps: 60, ping: 0, lowQuality: false,
       showMinimap: false, showFullMap: false,
-      score: 0, kills: 0, rank: 1,
+      score: 0, kills: 0, rank: 1, totalAlive: 0,
       carriedChips: 0, starsEarned: 0, starsInArena: 0,
       bankedChips: 0, realPlayerCount: 0, botCount: 0,
       commissionRate: 0, rewardMultiplier, arenaName,

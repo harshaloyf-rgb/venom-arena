@@ -13,7 +13,7 @@ import { OfflineEngine } from './engines/offline-engine';
 import { OnlineEngine } from './engines/online-engine';
 import { useGameInput } from './hooks/use-game-input';
 import { useRenderLoop } from './hooks/use-render-loop';
-import { createDefaultCamera, followTarget, isOnScreen } from './render/camera';
+import { createDefaultCamera, followTarget, isOnScreen, worldToScreen } from './render/camera';
 import type { CameraState } from '@/lib/snake/types';
 import { renderGrid } from './render/render-grid';
 import { renderFoods } from './render/render-food';
@@ -117,7 +117,7 @@ export default function GameCanvas({
   const hudRef = useRef<HUDState>({
     fps: 60, ping: 0, lowQuality: false,
     showMinimap: false, showFullMap: false,
-    score: 0, kills: 0, rank: 1,
+    score: 0, kills: 0, rank: 1, totalAlive: 0,
     carriedChips: 0, starsEarned: 0, starsInArena: 0,
     bankedChips: 0, realPlayerCount: 0, botCount: 0,
     commissionRate: 0, rewardMultiplier, arenaName,
@@ -278,6 +278,7 @@ export default function GameCanvas({
       hud.score = player?.score ?? 0;
       hud.kills = player?.kills ?? 0;
       hud.rank = engine.getPlayerRank();
+      hud.totalAlive = engine.getTotalAlive();
       hud.botCount = engine.snakes.filter(s => s.identity.isBot && s.alive).length;
     } else {
       // HUD values already updated by OnlineEngine.processSnapshot
@@ -440,7 +441,12 @@ export default function GameCanvas({
     }
 
     // HUD
-    renderHUD(ctx, hud, w, h);
+    // Leaderboard data
+    const leaders = engine instanceof OfflineEngine
+      ? engine.getLeaderboard().map(l => ({ name: l.name, score: l.score, isPlayer: l.isPlayer }))
+      : [];
+
+    renderHUD(ctx, hud, w, h, leaders);
 
     } catch (err) {
       console.error('[VenomArena] render frame error:', err);

@@ -72,6 +72,7 @@ export function renderSnake(
       ctx, identity, segments, camera, config, time,
       isPlayer, lowQuality, headAngle, boosting, spawnProtected,
       displayW, displayH, atlasManager,
+      overlapIndices,
     );
     return;
   }

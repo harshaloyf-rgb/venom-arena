@@ -198,9 +198,15 @@ export class ArenaRoom {
       this.botAIs.set(botId, {
         behavior: 'harvest',
         targetFoodId: null,
+        targetSnakeId: null,
         dangerAngle: null,
         inDanger: false,
         decisionCooldown: Math.floor(8 + Math.random() * 8),
+        level: 0,
+        wanderAngle: Math.random() * Math.PI * 2,
+        boostCooldown: 0,
+        orbitDir: Math.random() < 0.5 ? 1 : -1,
+        encircleTicks: 0,
       });
     }
   }
@@ -217,6 +223,7 @@ export class ArenaRoom {
       this.botAIs.set(botId, {
         behavior: 'harvest',
         targetFoodId: null,
+        targetSnakeId: null,
         dangerAngle: null,
         inDanger: false,
         decisionCooldown: Math.floor(8 + Math.random() * 8),
@@ -225,6 +232,7 @@ export class ArenaRoom {
       const ai = this.botAIs.get(botId)!;
       ai.behavior = 'harvest';
       ai.targetFoodId = null;
+      ai.targetSnakeId = null;
       ai.inDanger = false;
       ai.decisionCooldown = Math.floor(8 + Math.random() * 8);
     }
