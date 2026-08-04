@@ -4,6 +4,7 @@
 // Venom Arena — Atlas-Based Snake Renderer
 // Uses SkinAtlasManager for fast drawImage() calls instead of procedural drawing.
 // Supports all rarity tiers: common, rare, epic (animated), legendary (particles).
+// Updated: body uses taperRadius, head drawn as ellipse, no direction arrow.
 // ============================================================================
 
 import type {
@@ -17,7 +18,26 @@ import { SkinAtlasManager } from './atlas';
 import { worldToScreen, isOnScreen } from './camera';
 import { drawHat } from './hats';
 import { drawFace } from './face';
-import { drawDirectionArrow } from './arrow';
+
+// ── Color helpers (local, for ellipse gradient) ───────────────────────────
+
+function brightenLocal(hex: string, amount: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  const cl = (v: number) => Math.min(255, Math.round(v + (255 - v) * amount));
+  return '#' + [cl(r), cl(g), cl(b)].map(v => v.toString(16).padStart(2, '0')).join('');
+}
+
+function darkenLocal(hex: string, amount: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  const cl = (v: number) => Math.round(v * (1 - amount));
+  return '#' + [cl(r), cl(g), cl(b)].map(v => v.toString(16).padStart(2, '0')).join('');
+}
 
 // ── Particle emitter output for legendary skins ────────────────────────────
 
@@ -40,7 +60,8 @@ export interface EmittedParticle {
 
 /**
  * Render a complete snake using the atlas system.
- * Falls back gracefully if atlas sprites aren't available for a skin.
+ * Body segments use taperRadius for size. Head is drawn as an elongated ellipse
+ * with 3D gradient. No direction arrow.
  *
  * @param displayW Display (CSS) width — NOT ctx.canvas.width.
  * @param displayH Display (CSS) height — NOT ctx.canvas.height.
@@ -96,46 +117,23 @@ export function renderSnakeAtlas(
     );
   }
 
-  // ── Draw segments (tail → head for correct layering) ──────────────
-  for (let i = segments.length - 1; i >= 0; i--) {
+  // ── Draw body segments (tail → head, skip i=0) ────────────────────
+  for (let i = segments.length - 1; i >= 1; i--) {
     const seg = segments[i];
     const screen = worldToScreen(seg.x, seg.y, camera, displayW, displayH);
-    const screenR = seg.visualRadius * camera.zoom;
+    const screenR = seg.taperRadius * camera.zoom;
 
     if (screenR < 0.5) continue;
 
-    // Spawn protection shimmer on head
-    if (spawnProtected && i === 0) {
+    // Spawn protection shimmer
+    if (spawnProtected) {
       ctx.save();
       ctx.globalAlpha = 0.3 + Math.sin(time * 8) * 0.2;
       ctx.shadowColor = '#FFFFFF';
       ctx.shadowBlur = 15;
     }
 
-    if (i === 0) {
-      // ── Head ───────────────────────────────────────────────────
-      atlasManager.drawHead(
-        ctx, skinId, screen.x, screen.y, screenR,
-        headAngle, isPlayer,
-        rarity as 'common' | 'rare' | 'epic' | 'legendary',
-        time,
-      );
-
-      // Legendary: emit head particles
-      if (rarity === 'legendary' && seg.emitParticles) {
-        const headP = atlasManager.getHeadParticleConfig(skinId);
-        if (headP) {
-          emittedParticles.push({
-            x: screen.x, y: screen.y,
-            type: headP.type, color: headP.color,
-            secondaryColor: headP.secondaryColor,
-            speed: headP.speed, spread: headP.spread,
-            lifetime: headP.lifetime, size: headP.size,
-            gravity: headP.gravity, glow: headP.glow,
-          });
-        }
-      }
-    } else if (i === lastIdx) {
+    if (i === lastIdx) {
       // ── Tail ───────────────────────────────────────────────────
       atlasManager.drawTail(
         ctx, skinId, screen.x, screen.y, screenR,
@@ -167,14 +165,68 @@ export function renderSnakeAtlas(
       );
     }
 
-    if (spawnProtected && i === 0) {
+    if (spawnProtected) {
       ctx.restore();
     }
   }
 
-  // ── Draw hat on head ──────────────────────────────────────────────
+  // ── Draw head as elongated ellipse ────────────────────────────────
   const headScreen = worldToScreen(headSeg.x, headSeg.y, camera, displayW, displayH);
-  const headScreenR = headSeg.visualRadius * camera.zoom;
+  const headTaperR = headSeg.taperRadius * camera.zoom;
+  const headColor = identity.primaryColor;
+
+  if (headTaperR >= 0.5) {
+    if (spawnProtected) {
+      ctx.save();
+      ctx.globalAlpha = 0.3 + Math.sin(time * 8) * 0.2;
+      ctx.shadowColor = '#FFFFFF';
+      ctx.shadowBlur = 15;
+    }
+
+    const radiusX = headTaperR * 1.35;
+    const radiusY = headTaperR * 1.0;
+
+    ctx.save();
+    ctx.translate(headScreen.x, headScreen.y);
+    ctx.rotate(headAngle);
+
+    ctx.beginPath();
+    ctx.ellipse(0, 0, radiusX, radiusY, 0, 0, Math.PI * 2);
+
+    // 3D gradient for ellipse (radial with offset)
+    const hx = -radiusX * 0.25;
+    const hy = -radiusY * 0.30;
+    const grad = ctx.createRadialGradient(hx, hy, headTaperR * 0.05, 0, 0, Math.max(radiusX, radiusY));
+    grad.addColorStop(0, brightenLocal(headColor, 0.35));
+    grad.addColorStop(0.5, headColor);
+    grad.addColorStop(1, darkenLocal(headColor, 0.30));
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.restore();
+
+    if (spawnProtected) {
+      ctx.restore();
+    }
+
+    // Legendary: emit head particles
+    if (rarity === 'legendary' && headSeg.emitParticles) {
+      const headP = atlasManager.getHeadParticleConfig(skinId);
+      if (headP) {
+        emittedParticles.push({
+          x: headScreen.x, y: headScreen.y,
+          type: headP.type, color: headP.color,
+          secondaryColor: headP.secondaryColor,
+          speed: headP.speed, spread: headP.spread,
+          lifetime: headP.lifetime, size: headP.size,
+          gravity: headP.gravity, glow: headP.glow,
+        });
+      }
+    }
+  }
+
+  // ── Draw hat on head ──────────────────────────────────────────────
+  const headScreenR = headSeg.taperRadius * camera.zoom;
 
   if (identity.hat !== 'none') {
     drawHat(ctx, identity.hat, headScreen.x, headScreen.y, headScreenR, headAngle);
@@ -187,18 +239,7 @@ export function renderSnakeAtlas(
     drawFace(ctx, headScreen.x, headScreen.y, headScreenR, headAngle, time);
   }
 
-  // ── Draw direction arrow (player only) ────────────────────────────
-  if (isPlayer) {
-    drawDirectionArrow(
-      ctx,
-      headScreen.x,
-      headScreen.y,
-      headAngle,
-      headScreenR,
-      boosting,
-      identity.primaryColor,
-    );
-  }
+  // No direction arrow — the elongated head shape shows direction
 
   return emittedParticles;
 }

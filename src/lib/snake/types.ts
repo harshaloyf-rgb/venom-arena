@@ -631,6 +631,8 @@ export interface RenderSegment {
   y: number;
   angle: number;
   visualRadius: number;
+  /** Visual radius after head-to-tail taper */
+  taperRadius: number;
   collisionRadius: number;
   color: string;
   shape: SegmentShape;

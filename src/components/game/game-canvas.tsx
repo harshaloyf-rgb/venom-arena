@@ -54,29 +54,41 @@ function buildRenderSegments(
   skinResolved: import('@/lib/snake/skin-types').ResolvedSkin,
 ): RenderSegment[] {
   const path = snake.path;
-  const segCount = Math.min(
-    calcSegmentCount(snake.score, config),
-    path.length,
-  );
+  // Use every path point for dense, smooth, connected body coverage.
+  // Adjacent circles overlap → no gaps even at the tapered tail.
+  const spacing = 1;
+  const segCount = path.length;
   const segments: RenderSegment[] = [];
+  const baseR = calcVisualRadius(snake.score, config);
 
   for (let i = 0; i < segCount; i++) {
-    const pathIdx = Math.min(i * config.skinSegSpacing, path.length - 1);
+    const pathIdx = i;
     const px = path.getX(pathIdx);
     const py = path.getY(pathIdx);
     const pa = path.getAngle(pathIdx);
     const resolved = skinResolved.segments[i] ?? skinResolved.segments[skinResolved.segments.length - 1];
     const isHead = i === 0;
-    const baseR = calcVisualRadius(snake.score, config);
-    const sizeScale = isHead ? config.headSize : (resolved?.sizeScale ?? 1);
-    const r = baseR * sizeScale;
+
+    // Compute taper
+    let taperRadius: number;
+    let sizeScale: number;
+    if (isHead) {
+      sizeScale = config.headSize * 1.25;
+      taperRadius = baseR * sizeScale;
+    } else {
+      sizeScale = resolved?.sizeScale ?? 1;
+      const t = 1 - i / (segCount - 1);
+      const taperMult = 0.35 + 0.65 * Math.pow(t, 0.6);
+      taperRadius = baseR * taperMult;
+    }
 
     segments.push({
       x: px,
       y: py,
       angle: pa,
-      visualRadius: r,
-      collisionRadius: calcCollisionRadius(r),
+      visualRadius: baseR * sizeScale,
+      taperRadius,
+      collisionRadius: calcCollisionRadius(taperRadius),
       color: resolved?.color ?? '#2ECC71',
       shape: resolved?.shape ?? 'circle',
       glow: resolved?.glow ?? false,

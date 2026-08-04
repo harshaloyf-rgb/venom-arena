@@ -18,17 +18,17 @@ export function drawFace(
   const r = Math.max(2, radius);
 
   // Eye parameters
-  const eyeOffset = r * 0.32;       // distance from center to each eye
-  const eyeRadius = r * 0.28;       // white of the eye
-  const pupilRadius = r * 0.16;     // dark pupil
-  const pupilShift = r * 0.06;      // how far pupil shifts toward direction
+  const eyeOffset = r * 0.35;       // distance from center to each eye
+  const eyeRadius = r * 0.30;       // white of the eye
+  const pupilRadius = r * 0.17;     // dark pupil
+  const pupilShift = r * 0.08;      // how far pupil shifts toward direction
 
   // Perpendicular offset for left/right eyes
   const perpAngle = angle + Math.PI / 2;
 
-  // Forward offset (eyes sit slightly forward of center)
-  const fwdX = Math.cos(angle) * r * 0.15;
-  const fwdY = Math.sin(angle) * r * 0.15;
+  // Forward offset (eyes sit further forward on elongated head)
+  const fwdX = Math.cos(angle) * r * 0.2;
+  const fwdY = Math.sin(angle) * r * 0.2;
 
   // Left eye center
   const lx = x + fwdX + Math.cos(perpAngle) * eyeOffset;
@@ -62,12 +62,12 @@ export function drawFace(
   ctx.arc(rx + pShiftX, ry + pShiftY, pupilRadius, 0, Math.PI * 2);
   ctx.fill();
 
-  // ── Nose (two small dots below eyes) ────────────────────────────────
-  const noseOffset = r * 0.18;
+  // ── Nose (two small dots at the tip of elongated head) ──────────
+  const noseOffset = r * 0.35;
   const noseX = x + Math.cos(angle) * noseOffset;
   const noseY = y + Math.sin(angle) * noseOffset;
-  const noseDotR = r * 0.05;
-  const noseSpread = r * 0.08;
+  const noseDotR = r * 0.06;
+  const noseSpread = r * 0.1;
 
   ctx.fillStyle = '#333333';
   ctx.beginPath();
@@ -90,11 +90,11 @@ export function drawFace(
   );
   ctx.fill();
 
-  // ── Mouth (smile arc) ───────────────────────────────────────────────
-  const mouthDist = r * 0.42;
+  // ── Mouth (smile arc at the very front) ──────────────────────────────
+  const mouthDist = r * 0.55;
   const mouthX = x + Math.cos(angle) * mouthDist;
   const mouthY = y + Math.sin(angle) * mouthDist;
-  const mouthW = r * 0.22;
+  const mouthW = r * 0.28;
 
   ctx.strokeStyle = '#333333';
   ctx.lineWidth = Math.max(1, r * 0.06);
@@ -113,7 +113,7 @@ export function drawFace(
   ctx.stroke();
 
   // ── Specular Highlight (top-left light) ─────────────────────────────
-  const specR = r * 0.12;
+  const specR = r * 0.15;
   const specX = x - r * 0.25;
   const specY = y - r * 0.3;
 

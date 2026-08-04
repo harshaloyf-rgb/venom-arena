@@ -1,6 +1,6 @@
 // ============================================================================
-// Venom Arena — Snake Renderer
-// Full render pipeline combining shapes, gradient, hats, face, arrow, glow.
+// Venom Arena — Snake Renderer (Procedural Fallback)
+// Smooth connected body with taper, elliptical head, 3D gradient, no arrow.
 // Delegates to atlas renderer when SkinAtlasManager is available.
 // ============================================================================
 
@@ -13,12 +13,31 @@ import type { SnakeConfig } from '@/lib/snake/config';
 import type { ResolvedSkin } from '@/lib/snake/skin-types';
 import { resolveSkin } from '@/lib/snake/skin-resolver';
 import { worldToScreen, isOnScreen } from './camera';
-import { drawShape } from './shapes';
 import { drawHat } from './hats';
 import { drawFace } from './face';
-import { drawDirectionArrow } from './arrow';
 import type { SkinAtlasManager } from './atlas';
 import { renderSnakeAtlas } from './render-snake-atlas';
+import { create3DGradient } from './gradient';
+
+// ── Color helpers (local, for ellipse gradient) ───────────────────────────
+
+function brightenLocal(hex: string, amount: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  const cl = (v: number) => Math.min(255, Math.round(v + (255 - v) * amount));
+  return '#' + [cl(r), cl(g), cl(b)].map(v => v.toString(16).padStart(2, '0')).join('');
+}
+
+function darkenLocal(hex: string, amount: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  const cl = (v: number) => Math.round(v * (1 - amount));
+  return '#' + [cl(r), cl(g), cl(b)].map(v => v.toString(16).padStart(2, '0')).join('');
+}
 
 /**
  * Render a complete snake with skin, hat, face, and effects.
@@ -72,37 +91,79 @@ export function renderSnake(
     renderGlowPass(ctx, segments, skin, camera, displayW, displayH, config);
   }
 
-  // ── Draw segments (tail → head for correct layering) ─────────────
-  for (let i = segments.length - 1; i >= 0; i--) {
+  // ── Draw body segments (tail → head for correct layering) ───────
+  for (let i = segments.length - 1; i >= 1; i--) {
     const seg = segments[i];
     const resolved = skin.segments[i] ?? skin.segments[skin.segments.length - 1];
 
     // Screen position
     const screen = worldToScreen(seg.x, seg.y, camera, displayW, displayH);
-    const screenR = seg.visualRadius * camera.zoom;
+    const screenR = seg.taperRadius * camera.zoom;
 
     // Skip tiny or off-screen segments
     if (screenR < 0.5) continue;
 
     // Spawn protection shimmer
-    if (spawnProtected && i === 0) {
+    if (spawnProtected) {
       ctx.save();
       ctx.globalAlpha = 0.3 + Math.sin(time * 8) * 0.2;
       ctx.shadowColor = '#FFFFFF';
       ctx.shadowBlur = 15;
     }
 
-    // Draw the segment shape
-    drawShape(ctx, resolved.shape, screen.x, screen.y, screenR, seg.angle, resolved.color, config);
+    // Draw 3D-shaded circle using taperRadius
+    ctx.beginPath();
+    ctx.arc(screen.x, screen.y, screenR, 0, Math.PI * 2);
+    ctx.fillStyle = create3DGradient(ctx, screen.x, screen.y, screenR, resolved.color, config);
+    ctx.fill();
 
-    if (spawnProtected && i === 0) {
+    if (spawnProtected) {
+      ctx.restore();
+    }
+  }
+
+  // ── Draw head as elongated ellipse ────────────────────────────────
+  const headScreen = worldToScreen(headSeg.x, headSeg.y, camera, displayW, displayH);
+  const headTaperR = headSeg.taperRadius * camera.zoom;
+  const headColor = skin.segments[0]?.color ?? identity.primaryColor;
+
+  if (headTaperR >= 0.5) {
+    if (spawnProtected) {
+      ctx.save();
+      ctx.globalAlpha = 0.3 + Math.sin(time * 8) * 0.2;
+      ctx.shadowColor = '#FFFFFF';
+      ctx.shadowBlur = 15;
+    }
+
+    const radiusX = headTaperR * 1.35;
+    const radiusY = headTaperR * 1.0;
+
+    ctx.save();
+    ctx.translate(headScreen.x, headScreen.y);
+    ctx.rotate(headAngle);
+
+    ctx.beginPath();
+    ctx.ellipse(0, 0, radiusX, radiusY, 0, 0, Math.PI * 2);
+
+    // 3D gradient for ellipse (radial with offset)
+    const hx = -radiusX * 0.25;
+    const hy = -radiusY * 0.30;
+    const grad = ctx.createRadialGradient(hx, hy, headTaperR * 0.05, 0, 0, Math.max(radiusX, radiusY));
+    grad.addColorStop(0, brightenLocal(headColor, 0.35));
+    grad.addColorStop(0.5, headColor);
+    grad.addColorStop(1, darkenLocal(headColor, 0.30));
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.restore();
+
+    if (spawnProtected) {
       ctx.restore();
     }
   }
 
   // ── Draw hat on head ──────────────────────────────────────────────
-  const headScreen = worldToScreen(headSeg.x, headSeg.y, camera, displayW, displayH);
-  const headScreenR = headSeg.visualRadius * camera.zoom;
+  const headScreenR = headSeg.taperRadius * camera.zoom;
 
   if (identity.hat !== 'none') {
     drawHat(ctx, identity.hat, headScreen.x, headScreen.y, headScreenR, headAngle);
@@ -114,18 +175,7 @@ export function renderSnake(
     drawFace(ctx, headScreen.x, headScreen.y, headScreenR, headAngle, time);
   }
 
-  // ── Draw direction arrow (player only) ────────────────────────────
-  if (isPlayer) {
-    drawDirectionArrow(
-      ctx,
-      headScreen.x,
-      headScreen.y,
-      headAngle,
-      headScreenR,
-      boosting,
-      identity.primaryColor,
-    );
-  }
+  // No direction arrow — the elongated head shape shows direction
 }
 
 // ── Glow Pass ────────────────────────────────────────────────────────────
@@ -147,7 +197,7 @@ function renderGlowPass(
     if (!resolved?.glow) continue;
 
     const screen = worldToScreen(seg.x, seg.y, camera, displayW, displayH);
-    const screenR = seg.visualRadius * camera.zoom;
+    const screenR = seg.taperRadius * camera.zoom;
     if (screenR < 0.5) continue;
 
     ctx.shadowColor = resolved.color;
