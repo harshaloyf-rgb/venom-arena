@@ -19,7 +19,7 @@ import {
 import { useAuth } from '@/components/providers/auth-provider';
 import { PASS_TIER_LEVEL } from '@/lib/game-config';
 import AuthGate from '@/components/auth/auth-gate';
-import { GameCanvas } from '@/components/game/game-canvas';
+import GameCanvas from '@/components/game/game-canvas';
 import { ArenaSelector } from '@/components/panels/arena-selector';
 import { CosmeticsShop } from '@/components/panels/cosmetics-shop';
 import { PlayerProfilePanel } from '@/components/panels/player-profile';
@@ -35,7 +35,8 @@ import { ClipShowcase } from '@/components/panels/clip-showcase';
 import { AdminPanel } from '@/components/panels/admin-panel';
 import { PlayerInspectorModal } from '@/components/panels/player-inspector-modal';
 import { GameRulesModal } from '@/components/modals/game-rules-modal';
-import { AdminGameTuning } from '@/components/game/admin-game-tuning';
+// AdminGameTuning will be restored in Phase 7
+// import { AdminGameTuning } from '@/components/game/admin-game-tuning';
 import { BottomTabBar } from '@/components/layout/bottom-tab-bar';
 import { ScrollTabStrip } from '@/components/layout/scroll-tab-strip';
 import { MoreMenu } from '@/components/layout/more-menu';
@@ -109,6 +110,7 @@ export default function Home() {
 
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [activeArenaId, setActiveArenaId] = useState<string | null>(null);
+  const [gameMode, setGameMode] = useState<'online' | 'offline'>('offline');
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [isTuningOpen, setIsTuningOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -194,7 +196,7 @@ export default function Home() {
   );
 
   const handlePlayArena = useCallback(
-    (arenaId: string, _isOnline?: boolean) => { if (!player) return; setActiveArenaId(arenaId); },
+    (arenaId: string, isOnline?: boolean) => { if (!player) return; setActiveArenaId(arenaId); setGameMode(isOnline ? 'online' : 'offline'); },
     [player],
   );
 
@@ -254,7 +256,32 @@ export default function Home() {
   if (activeArenaId) {
     return (
       <div className="w-screen h-screen overflow-hidden bg-slate-950">
-        <GameCanvas arenaId={activeArenaId} player={player} onExit={handleExitGame} />
+        <GameCanvas
+          mode={gameMode}
+          arenaId={activeArenaId}
+          arenaName={activeArenaId}
+          playerIdentity={{
+            id: player.id,
+            name: player.name || 'Player',
+            tag: player.userTag || '#0000',
+            isBot: false,
+            skinId: player.currentSkin || 'default',
+            skinPattern: 'solid',
+            bodyStyle: 'smooth',
+            taperStyle: 'natural',
+            hat: 'none',
+            shape: 'circle',
+            primaryColor: '#2ECC71',
+            secondaryColor: '#27AE60',
+            trailId: player.currentTrail || '',
+            deathBurstId: player.currentDeath || '',
+            isPlayer: true,
+          }}
+          rewardMultiplier={1.0}
+          isPractice={gameMode === 'offline'}
+          onExit={handleExitGame}
+          onMatchEnd={handleExitGame as any}
+        />
       </div>
     );
   }
@@ -613,7 +640,7 @@ export default function Home() {
 
       {/* ===================== MODALS ===================== */}
       <GameRulesModal isOpen={isRulesOpen} onClose={() => setIsRulesOpen(false)} />
-      <AdminGameTuning open={isTuningOpen} onClose={() => setIsTuningOpen(false)} />
+      {/* AdminGameTuning will be restored in Phase 7 */}
       <PlayerInspectorModal player={inspectedPlayer} onClose={() => setInspectedPlayer(null)} onToast={toastFn} />
     </div>
   );
