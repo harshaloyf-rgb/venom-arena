@@ -57,7 +57,7 @@ export const BOOST_SHRINK_RATE = 1;
 // ============================================================================
 
 /** Total food orbs to maintain in the arena */
-export const FOOD_COUNT_TARGET = 1200;
+export const FOOD_COUNT_TARGET = 100;
 
 /** Spawn weight probabilities for [small, medium, large] food */
 export const FOOD_SPAWN_WEIGHTS: [number, number, number] = [0.93, 0.04, 0.03];
@@ -132,7 +132,7 @@ export const BOOST_SPEED_MULTIPLIER = BOOST_SPEED / BASE_SPEED; // ≈ 1.778
 // ============================================================================
 
 /** Number of AI bots in the arena */
-export const BOT_COUNT = 1000;
+export const BOT_COUNT = 0; // TODO: re-enable after snake + food are stable
 
 /** Bot starting score minimum */
 export const BOT_START_SCORE_MIN = 10;
