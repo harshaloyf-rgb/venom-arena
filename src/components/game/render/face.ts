@@ -112,13 +112,6 @@ export function drawFace(
   );
   ctx.stroke();
 
-  // ── Specular Highlight (top-left light) ─────────────────────────────
-  const specR = r * 0.15;
-  const specX = x - r * 0.25;
-  const specY = y - r * 0.3;
-
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-  ctx.beginPath();
-  ctx.arc(specX, specY, specR, 0, Math.PI * 2);
-  ctx.fill();
+  // ── Specular highlight removed (was a fixed-position white dot that
+  //     didn't rotate with the head, looking like a floating artifact) ─
 }

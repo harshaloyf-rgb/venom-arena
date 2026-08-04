@@ -116,7 +116,7 @@ export function create3DGradient(
   const hx = x - r * lightOffset;
   const hy = y - r * lightOffset;
 
-  const gradient = ctx.createRadialGradient(hx, hy, r * 0.05, x, y, r);
+  const gradient = ctx.createRadialGradient(hx, hy, r * 0.15, x, y, r);
 
   const highlightColor = brighten(baseColor, brightBoost / 255);
   const shadowColor = darken(baseColor, shadowDark / 255);

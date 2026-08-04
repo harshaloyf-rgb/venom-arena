@@ -55,7 +55,7 @@ function buildRenderSegments(
 ): RenderSegment[] {
   const path = snake.path;
   // Use every path point for dense, smooth, connected body coverage.
-  // Adjacent circles overlap → no gaps even at the tapered tail.
+  // Adjacent circles overlap → no gaps. Uniform width, no taper.
   const spacing = 1;
   const segCount = path.length;
   const segments: RenderSegment[] = [];
@@ -69,17 +69,17 @@ function buildRenderSegments(
     const resolved = skinResolved.segments[i] ?? skinResolved.segments[skinResolved.segments.length - 1];
     const isHead = i === 0;
 
-    // Compute taper
+    // Head: slightly larger than body (1.05x, not 1.44x)
+    // Body: uniform width, no tapering
     let taperRadius: number;
     let sizeScale: number;
     if (isHead) {
-      sizeScale = config.headSize * 1.25;
+      sizeScale = config.headSize;
       taperRadius = baseR * sizeScale;
     } else {
       sizeScale = resolved?.sizeScale ?? 1;
-      const t = 1 - i / (segCount - 1);
-      const taperMult = 0.35 + 0.65 * Math.pow(t, 0.6);
-      taperRadius = baseR * taperMult;
+      // Uniform body width — no tapering
+      taperRadius = baseR;
     }
 
     segments.push({
