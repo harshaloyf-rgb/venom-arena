@@ -1,6 +1,7 @@
 // ============================================================================
 // Venom Arena — Snake Renderer
 // Full render pipeline combining shapes, gradient, hats, face, arrow, glow.
+// Delegates to atlas renderer when SkinAtlasManager is available.
 // ============================================================================
 
 import type {
@@ -16,9 +17,13 @@ import { drawShape } from './shapes';
 import { drawHat } from './hats';
 import { drawFace } from './face';
 import { drawDirectionArrow } from './arrow';
+import type { SkinAtlasManager } from './atlas';
+import { renderSnakeAtlas } from './render-snake-atlas';
 
 /**
  * Render a complete snake with skin, hat, face, and effects.
+ * If an atlasManager is provided and the snake has a known skinId,
+ * delegates to the atlas-based renderer for better performance.
  */
 export function renderSnake(
   ctx: CanvasRenderingContext2D,
@@ -32,8 +37,21 @@ export function renderSnake(
   headAngle: number,
   boosting: boolean,
   spawnProtected: boolean,
+  atlasManager?: SkinAtlasManager | null,
 ): void {
   if (segments.length === 0) return;
+
+  // ── Atlas delegation: use fast sprite rendering when available ───────
+  if (atlasManager && identity.skinId) {
+    renderSnakeAtlas(
+      ctx, identity, segments, camera, config, time,
+      isPlayer, lowQuality, headAngle, boosting, spawnProtected,
+      atlasManager,
+    );
+    return;
+  }
+
+  // ── Fallback: procedural renderer (backward compatible) ──────────────
 
   // Resolve skin for this frame
   const skin = resolveSkin(identity, segments.length, time);
