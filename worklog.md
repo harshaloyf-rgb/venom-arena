@@ -1654,3 +1654,25 @@ Stage Summary:
 - Fix: always enforce exact SEGMENT_SPACING from each segment to the one ahead
 - File changed: src/lib/snake/engine.ts (lines 330-360)
 - Verification: VLM confirmed smooth tail following, no gaps, no pileups during turns
+---
+Task ID: path-buffer-rewrite
+Agent: Main
+Task: Fix tail freezing when body overlaps by switching from chain physics to path buffer approach
+
+Work Log:
+- Diagnosed that chain physics fundamentally breaks on self-overlap (segments tangle, direction vectors flip, motion can't propagate to tail)
+- Replaced chain physics with path buffer (head history) approach
+- Every tick: prepend new head position, pop tail to maintain target length
+- Scaled path buffer length by SPACING_RATIO (SEGMENT_SPACING/BASE_SPEED ≈ 1.78) to maintain same visual length
+- Updated initialization to use BASE_SPEED spacing instead of SEGMENT_SPACING
+- Scaled NECK_PROTECTION and BOOST_MIN_BODY by SPACING_RATIO for correct physical distances
+- Added step-2 optimization in collision spatial hash insert (adjacent entries only 4.5px apart)
+- Updated HUD Length display to show logical segment count (from score formula) instead of raw path entries
+- Verified: snake renders, moves smoothly, shows Length: 20 correctly, no visual glitches
+
+Stage Summary:
+- Root cause: chain physics is fundamentally incompatible with self-overlapping bodies
+- Solution: path buffer approach (standard for slither.io-style games) - body is head's position history
+- Files changed: src/lib/snake/engine.ts, src/components/game/renderer.ts, src/components/game/SnakeGame.tsx
+- Growth handled naturally: buffer grows from prepend, trimmed by pop to target length
+- Tail is mathematically guaranteed to always move (it's a historical head position)

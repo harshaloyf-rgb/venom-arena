@@ -37,6 +37,19 @@ import {
   STAR_CHIP_GLOW, STAR_CHIP_COLORS,
 } from './config';
 
+/**
+ * Path buffer stores one head position per tick at BASE_SPEED spacing.
+ * Original game logic uses SEGMENT_SPACING for segment counts.
+ * This ratio scales path-length-dependent values accordingly.
+ */
+const SPACING_RATIO = SEGMENT_SPACING / BASE_SPEED;
+
+/** Scaled neck protection: covers same physical distance as NECK_PROTECTION * SEGMENT_SPACING */
+const NECK_PROTECTION_SCALED = Math.ceil(NECK_PROTECTION * SPACING_RATIO);
+
+/** Scaled boost min body: covers same physical distance as BOOST_MIN_BODY * SEGMENT_SPACING */
+const BOOST_MIN_BODY_SCALED = Math.ceil(BOOST_MIN_BODY * SPACING_RATIO);
+
 // ==========================================================================
 // Constants & pools
 // ==========================================================================
@@ -141,15 +154,18 @@ function createSnake(
   // Prevents violent spin on game start.
   const angle = 0;
 
-  // Pre-allocate path buffer
-  const path = new PathBuffer(Math.max(targetLength * 2, 100));
+  // Path buffer will store head history (one position per tick at BASE_SPEED spacing).
+  // Scale the buffer size to match the visual length of SEGMENT_SPACING-based segments.
+  const spacingRatio = SEGMENT_SPACING / BASE_SPEED;
+  const pathTarget = Math.max(Math.ceil(targetLength * spacingRatio), 10);
+  const path = new PathBuffer(Math.max(pathTarget * 2, 100));
 
-  // Initialize: index 0 = head, body trailing behind at SEGMENT_SPACING intervals.
-  // Uses resetTo + appendTail so headSegIdx=0 and logical order is correct.
+  // Initialize: index 0 = head, body trailing behind at BASE_SPEED intervals
+  // (matches the runtime spacing from prepend-every-tick)
   path.resetTo(posX, posY);
-  for (let i = 1; i < targetLength; i++) {
-    const x = posX - Math.cos(angle) * i * SEGMENT_SPACING;
-    const y = posY - Math.sin(angle) * i * SEGMENT_SPACING;
+  for (let i = 1; i < pathTarget; i++) {
+    const x = posX - Math.cos(angle) * i * BASE_SPEED;
+    const y = posY - Math.sin(angle) * i * BASE_SPEED;
     path.appendTail(x, y);
   }
 
@@ -299,7 +315,7 @@ function moveSnake(
   // Boost eligibility
   const canBoost = wantBoost &&
     snake.score > BOOST_MIN_SCORE &&
-    snake.path.length > BOOST_MIN_BODY;
+    snake.path.length > BOOST_MIN_BODY_SCALED;
 
   snake.boosting = canBoost;
   snake.speed = canBoost ? BOOST_SPEED : BASE_SPEED;
@@ -314,52 +330,29 @@ function moveSnake(
     }
   }
 
-  // ── CHAIN PHYSICS MOVEMENT ───────────────────────────────────────────
-  // Instead of recording head history (old prepend approach), each body
-  // segment CHASES the segment ahead of it, maintaining at most
-  // SEGMENT_SPACING distance. This creates natural corner-cutting:
-  // when the head turns, body segments start turning later, tracing
-  // a tighter circle — producing a Fibonacci-like spiral pattern.
+  // ── PATH BUFFER MOVEMENT ────────────────────────────────────────────
+  // Each tick, the new head position is prepended to the path buffer.
+  // The body is simply the head's past position history — segment i is
+  // where the head was i ticks ago. This guarantees the tail ALWAYS
+  // moves forward because it reads from an advancing path. No chain
+  // physics tangling, no self-overlap freezing.
 
-  // 1. Move head forward (overwrite index 0 in place)
+  // 1. Compute new head position
   const newHeadX = snake.path.getX(0) + Math.cos(snake.angle) * snake.speed;
   const newHeadY = snake.path.getY(0) + Math.sin(snake.angle) * snake.speed;
-  snake.path.setX(0, newHeadX);
-  snake.path.setY(0, newHeadY);
 
-  // 2. Chain constraint: each segment follows the one ahead of it.
-  //    ALWAYS enforce SEGMENT_SPACING distance — both pull (too far) and
-  //    push (too close). This is critical: when turning, inner segments
-  //    bunch up from chord shortcuts. Without the push, they freeze and
-  //    block motion propagation to the tail.
-  const len = snake.path.length;
-
-  for (let i = 1; i < len; i++) {
-    const px = snake.path.getX(i - 1);  // segment ahead (closer to head)
-    const py = snake.path.getY(i - 1);
-    const cx = snake.path.getX(i);     // current segment
-    const cy = snake.path.getY(i);
-
-    const dx = cx - px;
-    const dy = cy - py;
-    const dSq = dx * dx + dy * dy;
-
-    if (dSq < 0.0001) {
-      // Degenerate: segments are coincident — push in head direction
-      snake.path.setX(i, px - Math.cos(snake.angle) * SEGMENT_SPACING);
-      snake.path.setY(i, py - Math.sin(snake.angle) * SEGMENT_SPACING);
-    } else {
-      // Always place at exactly SEGMENT_SPACING from the segment ahead.
-      // This handles both "too far" (pull) and "too close" (push).
-      const dist = Math.sqrt(dSq);
-      const ratio = SEGMENT_SPACING / dist;
-      snake.path.setX(i, px + dx * ratio);
-      snake.path.setY(i, py + dy * ratio);
-    }
-  }
+  // 2. Prepend new head position (shifts all indices +1)
+  snake.path.prepend(newHeadX, newHeadY);
 
   // ── Growth / Shrink ────────────────────────────────────────────────
-  const targetLength = Math.min(Math.floor(START_LENGTH + snake.score * GROWTH_RATE), MAX_SNAKE_LENGTH);
+  // Path entries are spaced at BASE_SPEED (one per tick).
+  // To maintain the same visual length as SEGMENT_SPACING-based segments,
+  // we scale the path buffer length by the spacing ratio.
+  const spacingRatio = SEGMENT_SPACING / BASE_SPEED;
+  const targetLength = Math.min(
+    Math.floor((START_LENGTH + snake.score * GROWTH_RATE) * spacingRatio),
+    Math.floor(MAX_SNAKE_LENGTH * spacingRatio),
+  );
 
   // Boost: drop food from tail, shrink
   if (canBoost && now - snake.lastBoostDrop >= BOOST_DROP_INTERVAL) {
@@ -375,30 +368,9 @@ function moveSnake(
     if (snake.path.length > 1) snake.path.pop();
   }
 
-  // Grow: add segments at tail if needed
-  while (snake.path.length < targetLength) {
-    const tailIdx = snake.path.length - 1;
-    const prevIdx = tailIdx > 0 ? tailIdx - 1 : 0;
-    const tx = snake.path.getX(tailIdx);
-    const ty = snake.path.getY(tailIdx);
-    const ppx = snake.path.getX(prevIdx);
-    const ppy = snake.path.getY(prevIdx);
-    // Continue in the direction from prev→tail
-    const dx = tx - ppx;
-    const dy = ty - ppy;
-    const d = Math.sqrt(dx * dx + dy * dy);
-    let nx: number, ny: number;
-    if (d > 0.01) {
-      nx = tx + (dx / d) * SEGMENT_SPACING;
-      ny = ty + (dy / d) * SEGMENT_SPACING;
-    } else {
-      nx = tx - Math.cos(snake.angle) * SEGMENT_SPACING;
-      ny = ty - Math.sin(snake.angle) * SEGMENT_SPACING;
-    }
-    snake.path.appendTail(nx, ny);
-  }
-
-  // Shrink if too long
+  // Trim to target length (pop from tail)
+  // Growth happens naturally: if targetLength increased, we pop less,
+  // and the buffer grows from prepend without trimming.
   while (snake.path.length > targetLength) {
     snake.path.pop();
   }
@@ -569,7 +541,10 @@ function checkCollisions(state: GameState, now: number): void {
     if (!snake.alive) continue;
     const len = snake.path.length;
     const sid = snake.id;
-    for (let i = NECK_PROTECTION; i < len; i++) {
+    // Step by 2: adjacent path entries are only BASE_SPEED (4.5px) apart,
+    // but collision radius is SNAKE_RADIUS*2 (16px). Stepping by 2 halves
+    // spatial hash inserts with negligible accuracy loss.
+    for (let i = NECK_PROTECTION_SCALED; i < len; i += 2) {
       scratch.x = snake.path.getX(i);
       scratch.y = snake.path.getY(i);
       scratch.id = sid;
