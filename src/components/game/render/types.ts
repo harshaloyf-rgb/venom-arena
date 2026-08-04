@@ -21,6 +21,7 @@ import type {
 } from '@/lib/snake/types';
 import type { SnakeConfig } from '@/lib/snake/config';
 import type { ResolvedSkin, ResolvedSegment } from '@/lib/snake/skin-types';
+import type { SkinAtlasManager } from './atlas';
 
 // Re-export everything needed by render consumers
 export type {
@@ -85,4 +86,26 @@ export interface ArenaLeader {
   name: string;
   score: number;
   isPlayer: boolean;
+}
+
+/** Shared render state passed through the render pipeline */
+export interface RenderState {
+  /** Canvas 2D rendering context */
+  ctx: CanvasRenderingContext2D;
+  /** Canvas width in pixels */
+  width: number;
+  /** Canvas height in pixels */
+  height: number;
+  /** Camera transform state */
+  camera: CameraState;
+  /** Game config (admin-adjustable parameters) */
+  config: SnakeConfig;
+  /** Current time in seconds */
+  time: number;
+  /** Whether low-quality mode is active */
+  lowQuality: boolean;
+  /** HUD state for overlay rendering */
+  hud: HUDState;
+  /** Texture atlas manager for sprite-based skin rendering */
+  atlasManager: SkinAtlasManager | null;
 }
