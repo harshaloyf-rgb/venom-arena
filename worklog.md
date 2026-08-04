@@ -1157,3 +1157,41 @@ Work Log:
 Stage Summary:
 - Self-collision removed from client engine. Players can no longer die by hitting their own body.
 - This was a hallucinated feature from the REWRITE-PHASES-A-F session that was never in the rules.
+---
+Task ID: PHASE-ZERO
+Agent: full-stack-developer
+Task: Build Phase Zero — clean slither.io-style snake game with 1000 AI bots
+
+Work Log:
+- Created 12 files from scratch (8 lib files + 3 component files + page.tsx rewrite)
+- src/lib/snake/constants.ts: All 35+ game constants from rules document
+- src/lib/snake/types.ts: Pure TypeScript interfaces (Vec2, FoodOrb, Snake, GameState, InputState, Camera, Viewport)
+- src/lib/snake/vec2.ts: Pure math utilities (distance, distanceSq, normalize, angleBetween, lerp, rotate, add, sub, scale, magnitude)
+- src/lib/snake/spatial-hash.ts: Grid-based spatial hash (cell=100px) for O(1) collision queries on 1200 food + 1000 snakes
+- src/lib/snake/bot-ai.ts: Harvesting AI — evade bodies (predictive 8 ticks), seek food (300px), wander randomly. Never boosts.
+- src/lib/snake/engine.ts: Full game tick — move player/bots, food eating via spatial hash, food spawn maintenance (1200 target), head-to-body collision (neck protection=5 segs), head-on-head with boost rules, death food formula (L/M/S distribution), respawn. Uses Map-based O(1) lookups instead of Array.find().
+- src/lib/snake/camera.ts: Smooth lerp follow + dynamic zoom out (log2 scale) + worldToScreen/screenToWorld + viewport culling
+- src/lib/snake/index.ts: Re-exports all modules
+- src/components/game/input.ts: InputHandler class — mouse (angle from center, click=boost), keyboard (WASD/arrows, Space/Shift=boost), touch (drag joystick, far=boost). Prevents default scroll.
+- src/components/game/renderer.ts: Pure Canvas API — dark bg, subtle grid, food with glow (3 sizes/colors), snake body circles with highlight + eyes + name labels, boost speed lines, spawn blink, HUD (score/length/FPS), death overlay, controls hint, minimap
+- src/components/game/SnakeGame.tsx: React component — canvas ref, fixed timestep game loop (1/60s), DPR-aware rendering, FPS counter, leaderboard state (top 5, updated every 30 frames), death detection + click/key respawn, controls auto-dismiss
+- src/app/page.tsx: Rewritten to minimal dark fullscreen container + SnakeGame component
+- Fixed lint errors (variable-before-declaration, unused imports, setState-in-effect)
+- Cleaned up engine: removed dead tick/moveSnake functions, used Map for O(1) body segment lookups, proper head-on-head boost rules
+- Optimized renderer: single worldToScreen call per segment, direct head lookup instead of .find(), removed redundant leaderboard canvas draw
+
+Stage Summary:
+- Fully working slither.io-style snake game running at / on dark background
+- 1000 AI bots with varied starting sizes (score 10-80, length 20-40 segments)
+- 1200 food orbs (93% small/green, 4% medium/blue, 3% large/pink) with glow effects
+- Player controls: mouse/WASD to steer, Space/click to boost (requires score > 20)
+- Boost mechanics: speed 4.5→8.0, drops small food trail, shrinks by 1 segment per drop (3x/sec)
+- Collision system: head-to-body (your head hits other's body = you die), head-on-head (larger wins, boost exception), neck protection (5 segs), spawn protection (4s)
+- Death food formula: score÷5=large, remainder÷3=medium, rest=small — distributed along body path
+- Infinite map, no boundaries, no wall death
+- Spatial hash for efficient collision detection across 1000+ entities
+- Viewport culling for rendering performance
+- Minimap showing nearby bot positions
+- HTML leaderboard overlay (top 5 by score)
+- Mobile touch support (drag to steer, far drag to boost)
+- Zero external game libraries — pure Canvas API + TypeScript
