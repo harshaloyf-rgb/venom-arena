@@ -1,0 +1,73 @@
+// ============================================================================
+// Camera — Follows player head with smooth lerp. Zooms out as snake grows.
+// ============================================================================
+
+import type { Camera, Snake, Viewport } from './types';
+import { lerp } from './vec2';
+import { CAMERA_LERP, CAMERA_ZOOM_MIN, START_LENGTH } from './constants';
+
+/** Update camera to follow a snake, with smooth interpolation and dynamic zoom */
+export function updateCamera(camera: Camera, snake: Snake, canvasWidth: number, canvasHeight: number): void {
+  const head = snake.segments[0];
+  if (!head) return;
+
+  // Smooth follow
+  camera.x = lerp(camera.x, head.x, CAMERA_LERP);
+  camera.y = lerp(camera.y, head.y, CAMERA_LERP);
+
+  // Dynamic zoom: zoom out as snake grows
+  const targetLength = snake.segments.length;
+  const baseLength = START_LENGTH;
+  // Zoom decreases as snake gets bigger (logarithmic scale)
+  const growthFactor = Math.log2(Math.max(targetLength / baseLength, 1));
+  const targetZoom = Math.max(CAMERA_ZOOM_MIN, 1.0 - growthFactor * 0.08);
+  camera.zoom = lerp(camera.zoom, targetZoom, 0.02);
+}
+
+/** Compute the viewport bounds in world coordinates for culling */
+export function getViewport(camera: Camera, canvasWidth: number, canvasHeight: number): Viewport {
+  const halfW = (canvasWidth / 2) / camera.zoom;
+  const halfH = (canvasHeight / 2) / camera.zoom;
+
+  return {
+    left: camera.x - halfW,
+    top: camera.y - halfH,
+    right: camera.x + halfW,
+    bottom: camera.y + halfH,
+    width: canvasWidth,
+    height: canvasHeight,
+  };
+}
+
+/** Create a new camera at a given position */
+export function createCamera(x: number, y: number): Camera {
+  return { x, y, zoom: 1.0 };
+}
+
+/** Convert world coordinates to screen coordinates */
+export function worldToScreen(
+  wx: number,
+  wy: number,
+  camera: Camera,
+  canvasWidth: number,
+  canvasHeight: number,
+): { x: number; y: number } {
+  return {
+    x: (wx - camera.x) * camera.zoom + canvasWidth / 2,
+    y: (wy - camera.y) * camera.zoom + canvasHeight / 2,
+  };
+}
+
+/** Convert screen coordinates to world coordinates */
+export function screenToWorld(
+  sx: number,
+  sy: number,
+  camera: Camera,
+  canvasWidth: number,
+  canvasHeight: number,
+): { x: number; y: number } {
+  return {
+    x: (sx - canvasWidth / 2) / camera.zoom + camera.x,
+    y: (sy - canvasHeight / 2) / camera.zoom + camera.y,
+  };
+}
