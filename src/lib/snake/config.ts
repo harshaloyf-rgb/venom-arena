@@ -227,9 +227,9 @@ export const DEFAULT_SNAKE_CONFIG: SnakeConfig = {
   camFollowSpeed: 0.1,
 
   // SKIN APPEARANCE
-  headSize: 1.15,
+  headSize: 1.05,
   lightOffset: 0.35,
-  brightBoost: 70,
+  brightBoost: 30,
   shadowDark: 55,
   baseSize: 10,
   maxSize: 28,

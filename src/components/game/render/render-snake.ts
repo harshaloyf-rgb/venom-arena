@@ -145,13 +145,13 @@ export function renderSnake(
     ctx.beginPath();
     ctx.ellipse(0, 0, radiusX, radiusY, 0, 0, Math.PI * 2);
 
-    // 3D gradient for ellipse (radial with offset)
-    const hx = -radiusX * 0.25;
-    const hy = -radiusY * 0.30;
-    const grad = ctx.createRadialGradient(hx, hy, headTaperR * 0.05, 0, 0, Math.max(radiusX, radiusY));
-    grad.addColorStop(0, brightenLocal(headColor, 0.35));
-    grad.addColorStop(0.5, headColor);
-    grad.addColorStop(1, darkenLocal(headColor, 0.30));
+    // Subtle 3D gradient — soft highlight, no concentrated white dot
+    const hx = -radiusX * 0.2;
+    const hy = -radiusY * 0.2;
+    const grad = ctx.createRadialGradient(hx, hy, headTaperR * 0.2, 0, 0, Math.max(radiusX, radiusY));
+    grad.addColorStop(0, brightenLocal(headColor, 0.12));
+    grad.addColorStop(0.6, headColor);
+    grad.addColorStop(1, darkenLocal(headColor, 0.20));
     ctx.fillStyle = grad;
     ctx.fill();
 
