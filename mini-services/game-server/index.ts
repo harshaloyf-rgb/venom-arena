@@ -224,7 +224,15 @@ async function reportMatchResult(payload: ReportResultPayload): Promise<MatchRes
 
 // Create HTTP server with a pre-Socket.IO handler for the /stats endpoint.
 // This fires BEFORE Socket.IO's handler, so we can safely write the response.
+const BOOT_TIME = Date.now();
+
 const httpServer = createServer((req, res) => {
+  if (req.url === '/health' && req.method === 'GET' && !res.headersSent) {
+    const uptime = Math.floor((Date.now() - BOOT_TIME) / 1000);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok', rooms: rooms.size, uptime }));
+    return;
+  }
   if (req.url === '/stats' && req.method === 'GET' && !res.headersSent) {
     const stats: Record<string, { players: number; maxPlayers: number }> = {};
     for (const [roomKey, room] of rooms) {
@@ -232,6 +240,7 @@ const httpServer = createServer((req, res) => {
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(stats));
+    return;
   }
   // All other requests fall through to Socket.IO's handler.
 });
@@ -835,8 +844,11 @@ async function handleJoinArena(socket: Socket, payload: unknown): Promise<void> 
     return;
   }
   const arenaId = String((payload as { arenaId?: unknown }).arenaId || '');
+  log('info', `handleJoinArena: user=${identity.userTag} arenaId="${arenaId}"`);
+
   const arena = getArenaById(arenaId);
   if (!arena) {
+    log('warn', `handleJoinArena: arenaId="${arenaId}" not found in ARENA_TIERS`);
     socket.emit('join_error', { reason: 'invalid_arena' });
     return;
   }
@@ -851,9 +863,10 @@ async function handleJoinArena(socket: Socket, payload: unknown): Promise<void> 
   let joinResult;
   try {
     joinResult = await joinMatch(identity.userTag, arenaId);
+    log('info', `joinMatch result for ${identity.userTag}: ok=${joinResult?.ok} reason=${joinResult?.reason ?? 'none'}`);
   } catch (err) {
-    log('error', `joinMatch fetch failed: ${(err as Error).message}`);
-    socket.emit('join_error', { reason: 'invalid_arena' });
+    log('error', `joinMatch fetch failed for ${identity.userTag} arena="${arenaId}": ${(err as Error).message}`);
+    socket.emit('join_error', { reason: 'server_error' });
     return;
   }
 

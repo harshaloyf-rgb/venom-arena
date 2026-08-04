@@ -353,8 +353,9 @@ export function drawSnake(rc: FrameRenderCtx, snake: SnakeSnapshot, opacity?: nu
   ctx.restore();
 
   // === FACE DETAILS ===
-  // Player eyes ALWAYS render (even in low quality) — they're cheap and essential
-  const shouldDrawFace = !isFar && (isClose || isMe) && (isMe || !lowQuality);
+  // Player eyes ALWAYS render — they're cheap and essential.
+  // Other snakes only render face when close + not low quality.
+  const shouldDrawFace = isMe || (!isFar && isClose && !lowQuality);
   if (shouldDrawFace) {
     // Smooth pupil tracking (user's game approach)
     let pupilX = 0;

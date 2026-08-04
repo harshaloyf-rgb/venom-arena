@@ -191,6 +191,16 @@ export function useRenderLoop({
       const cssH = canvas.clientHeight;
       if (cssW === 0 || cssH === 0) return;
 
+      // Guard: if backing store doesn't match CSS size, re-resize immediately.
+      // This prevents a brief "stretchy" flash on initial mount.
+      const expectedW = Math.floor(cssW * dpr);
+      const expectedH = Math.floor(cssH * dpr);
+      if (canvas.width !== expectedW || canvas.height !== expectedH) {
+        canvas.width = expectedW;
+        canvas.height = expectedH;
+        metallicCacheRef.current.clear();
+      }
+
       // --- Clear ---
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssW, cssH);

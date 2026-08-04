@@ -1490,6 +1490,15 @@ export class OfflineGameEngine {
     const cssH = canvas.clientHeight;
     if (cssW === 0 || cssH === 0) return;
 
+    // Guard: if backing store doesn't match CSS size, re-resize immediately.
+    const expectedW = Math.floor(cssW * dpr);
+    const expectedH = Math.floor(cssH * dpr);
+    if (canvas.width !== expectedW || canvas.height !== expectedH) {
+      canvas.width = expectedW;
+      canvas.height = expectedH;
+      this.metallicCache.clear();
+    }
+
     // Clear + background.
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#020617';
