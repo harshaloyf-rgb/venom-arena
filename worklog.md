@@ -1,51 +1,560 @@
-# Worklog — Venom Arena Snake Engine Rebuild & Critical Bug Fixes
+# Worklog — Venom Arena Complete Snake Engine Rewrite Plan
 
 ---
-Task ID: 1
+Task ID: ARCH-PLAN
 Agent: Main
-Task: Fix online 'arena does not exist' error, fix offline rendering bugs, rebuild snake renderer
+Task: Comprehensive architecture plan for full snake engine rewrite — based on reading ALL rules, guides, shop, lab, arena selector, cosmetics, audio, game server, and existing engine code
 
 Work Log:
-- Investigated 'arena does not exist' error — found game server was hiding real errors (player_not_found, database_error) behind generic 'invalid_arena' message
-- Fixed game-server/index.ts line 860-875: pass through actual error reason instead of defaulting to 'invalid_arena', added error logging
-- Fixed use-socket-lifecycle.ts: expanded JoinErrorReason type to include player_not_found, database_error, server_error; added user-friendly messages for each
-- Investigated offline 'eyes disappear after 3 sec' bug — found lowQuality flag set to true after 2s of low FPS, and face rendering was gated on !lowQuality even for player
-- Fixed render-snakes.ts: changed face rendering condition to always draw for player snake (isMe || !lowQuality)
-- Fixed offline-engine.ts: added pointerAngle to FrameRenderCtx so pupils track mouse/touch direction
-- Fixed 'stretchy start' — reduced base zoom from 0.9 to 0.85 for better segment overlap
-- Completely rewrote render-snake-visuals.ts (~380 lines): new 3D gradient with configurable HIGHLIGHT_OFFSET/BRIGHT/SHADOW_DARK (from user's game), 6 hat types with user's cleaner drawing code, face with specular+eyes+pupil tracking+nose+smile (from user's game), direction arrow with smooth lerp (from user's game), 7 shape types with per-segment alternation, shortestAngleDelta helper, GradientCache
-- Completely rewrote render-snakes.ts (~350 lines): uses new make3DGrad for all segments, shape-aware rendering (boxes/triangles rotate with snake angle), smooth pupil tracking per-frame (from user's game), direction arrow for player, kept Venom Arena features (skin patterns, opacity layering, chat bubbles, name labels, metallic/glow patterns)
-- Fixed duplicate mySnake variable in use-render-loop.ts
-- Fixed database readonly issue (supervisor-spawned Next.js lost write access; restarted directly)
-- Browser verified: practice mode loads and renders without errors, canvas is active (1280x577)
+- Read all 21 rule sections (Section00–Section20) for complete game specification
+- Read admin guide (section-configuration.tsx) for admin tuning categories
+- Read arena-selector.tsx for online/offline mode launch flow
+- Read cosmetics-shop.tsx (884 lines) for skin/equipment shop system
+- Read cosmetics-types.ts for 20 presets, 18 palette colors, 6 body styles, 4 taper styles
+- Read cosmetics-utils.ts for shape resolution logic and localStorage persistence
+- Read skins-canvas-preview.tsx for 60fps wiggle preview
+- Read try-on-preview.tsx for mouse-steerable 26-segment interactive preview
+- Read cosmetics-cards.tsx for PresetCard, SkinCard, TrailCard, DeathCard, FlagCard, BannerCard
+- Read game-config.ts for 30 online tiers, 3 practice tiers, 50+ cosmetics (SkinPattern, CosmeticType)
+- Read snake-engine.ts (670 lines) for current pure logic module
+- Read game-types.ts for Phase, KillerInfo, JoystickState, EndScreenState
+- Read admin-game-tuning.tsx for 55+ sliders across 11 categories
+- Read game-server/index.ts (1171 lines) for full online server architecture
+- Read game-state.ts for arena room management
+- Read spatial-grid.ts for collision detection
+- Read render-snake-visuals.ts (450 lines) for 3D gradient, 7 shapes, 6 hats, face, eyes
+- Read render-snakes.ts for full snake renderer
+- Read render-food.ts, render-grid.ts, render-minimap.ts, render-overlays.ts
+- Read use-socket-lifecycle.ts (895 lines) for full online lifecycle
+- Read use-render-loop.ts for render loop
+- Read use-game-input.ts for input handling
+- Read game-canvas.tsx for main game component
+- Read offline-engine.ts for offline game loop
+- Read game-audio.ts for procedural sound system (8 sound effects)
+- Read page.tsx for arena launch integration
+- Verified git: all work committed and pushed to origin/main, working tree clean
 
 Stage Summary:
-- Online mode: error messages now accurate (was: all errors showed 'arena does not exist'; now: shows actual reason like 'Server error' or 'Player not found')
-- Offline mode: eyes no longer disappear (always render for player), pupils track pointer direction, reduced initial zoom for less stretchy look
-- Snake renderer: completely rebuilt with user's game approach — 3D gradient, 7 shapes, face details (specular, eyes, nose, mouth), direction arrow, 6 hat types
-- Both servers running (port 3000 + 3001), lint clean, browser verified
+- Complete game specification documented below
+- All files to delete, rewrite, and keep identified
+- 8-phase rewrite plan with every feature accounted for
+- Root cause of 'arena does not exist' identified (getArenaById returns undefined when arenaId doesn't match ANY_ARENAS)
+- All existing work is SAFE in git (origin/main, committed and pushed)
 
----
-Task ID: 2
-Agent: Main
-Task: Fresh engine rebuild — fix all remaining bugs, ensure both modes work end-to-end
+============================================================================
+SECTION A: COMPLETE GAME FEATURE INVENTORY
+============================================================================
 
-Work Log:
-- Deep analysis of full codebase (~52K lines, 264 files) to understand architecture
-- Verified game server imports work correctly (getArenaById, snake-engine physics)
-- Fixed game-server/index.ts: network errors in joinMatch() catch block now emit 'server_error' instead of misleading 'invalid_arena'
-- Added /health endpoint and diagnostic logging (logs arenaId on join, joinMatch result)
-- Fixed render-snakes.ts line 357: eyes now ALWAYS render for player snake (isMe || condition) regardless of distance/quality
-- Added canvas backing store validation guard in use-render-loop.ts: re-sizes immediately if mismatch detected (fixes 'stretchy' on start)
-- Added same guard in offline-engine.ts renderFrame()
-- Added 'connection_error' to client-side error messages in use-socket-lifecycle.ts
-- Started game server via supervisor.py (port 3001) and Next.js dev server (port 3000)
-- Browser-tested OFFLINE mode: Practice arena loads, game runs at 60fps, HUD displays correctly, no console errors
-- Browser-tested ONLINE mode: Successfully connected to tier-1 (Scrap Alley), bought in for 10c, game rendered with arena leaderboard, bot AI active, wall collision detected, death flow completed, post-death replay window worked
-- Game server log confirmed full flow: socket connect → auth → join_arena → match/join → snapshot broadcast → wall death → star drop → match settlement
+## A.1 CORE SNAKE PHYSICS (Snake Engine — pure math, no side effects)
+- Movement: moveHead(pos, angle, speed) → new Vec2
+- Turning: turnToward(current, desired, maxStep) with angle wrapping
+- Path-based body: buildInitialPath, extendPath, sampleSegments (smooth curves, gap navigation)
+- Growth formulas (diminishing returns / logarithmic):
+  - calcBodyLength: score → segments (20 base, max 200, log curve)
+  - calcVisualRadius: score → render radius (8px base, max +3px, log curve)
+  - calcCollisionRadius: score → hitbox radius (6px base, max +1px, barely grows for fair gaps)
+  - calcTurnRate: score → turn rate (0.35 base → 0.08 min, linear decay)
+  - calcSpeed: boosting/extraction/normal
+- Boost: speed 4.5→8.0, tail drops food ~3/sec, shrinks by 1 segment/drop
+  - Requirements: >8 body segments + earned mass (score > initialSpawnScore)
+- Neck protection: angle-based, first 5 segments, approach angle threshold (60°)
 
-Stage Summary:
-- ONLINE MODE FIXED: The 'arena does not exist' error was caused by two things: (1) game server not running in background, (2) network errors mapped to 'invalid_arena'. Both fixed.
-- OFFLINE MODE FIXED: Eyes always render for player, canvas stretchy guard added
-- Both modes verified working end-to-end in browser with zero console errors
-- Game server log confirms complete game lifecycle (connect → play → death → settle → cleanup)
+## A.2 COLLISION SYSTEM
+- Head-to-body: YOU die, body→food orbs along path, stars at death position
+- Head-on (head vs head): 4 rules based on boost state + size comparison
+  - Neither boosting: larger wins
+  - Smaller boosting, larger steady: smaller survives
+  - Both boosting: larger wins
+  - Tie: both die
+- Self-collision: configurable skip segments (skipSegs slider)
+- Spatial grid: O(n) collision detection via spatial hashing
+- Collision hit factor: configurable multiplier (0.75) to shrink hitboxes vs visual
+
+## A.3 FOOD SYSTEM
+- 3 sizes: Small (1pt, 93%, green, 3px), Medium (3pt, 4%, blue, 5px), Large (5pt, 3%, pink, 8px)
+- Growth: eating food increases score, body grows at 1/4 of food value
+- Target count: 1200 food orbs on map (configurable)
+- Boost drops: ~3 food orbs/sec while boosting, value based on burstValue config
+- Death food: collision death → body transforms into food orbs scattered along body path
+  - Math: Large (score÷5), Medium (remainder÷3), Small (rest)
+  - Example: score 23 → 4 large (20) + 1 medium (3) + 0 small = 23 ✓
+  - Wall death: NO food orbs (prevents edge farming)
+- Food does NOT affect carried chips
+
+## A.4 STAR CHIP SYSTEM (Online Only)
+- When real player dies: carried chips → 10 golden stars at death position
+- Each star value = carriedChips ÷ 10 (all equal)
+- Only real players can collect stars (bots cannot see/touch/collect)
+- Collecting star adds its chip value to YOUR carried chips (not score)
+- Bots never drop stars (vanish cleanly)
+- Wall death: YES stars drop if player had carried chips > 0
+
+## A.5 MAP SYSTEM
+- Online: Circular arena, breathes ±40px over 10s cycle
+  - Radius scales with player count: sqrt scaling, min 3000, max 16000
+  - Outside boundary = instant death
+- Offline: Infinite map, no boundaries, no wall death
+- Grid: configurable grid size (40px default)
+
+## A.6 BOT AI
+- Online: 30 bots per tier, self-destruct at score ≥100 (navigate to wall, never boost)
+- Offline: 1000 bots, no self-destruct (just harvest and dodge)
+- Harvesting mode: seek nearest food, dodge players (predictive 8 ticks ahead),
+  - avoid body segments (150px range), turn away from boundary, never boost
+- Configurable: count, food range, respawn time, min/max start length, warn/danger %
+
+## A.7 EXTRACTION (Online Only)
+- Hold E key or EXTRACT button (80px green circle)
+- 3-second progress bar, forward gliding allowed
+- ANY direction change (even slight) resets progress to 0%
+- Progress ring visible only to player (white-to-green, near head)
+- Commission: ≤3 real players = 0%, ≥4 = 35%
+- Extract anytime, anywhere — no zone restriction
+- UI: top-center hint, progress popup with amber gradient, movement flash warning
+
+## A.8 SPAWNING
+- 500px from every other snake
+- 500px inside map boundary (online only)
+- 4 seconds spawn protection (invulnerable)
+
+## A.9 DEATH & REPLAY
+- Body → food orbs along path (collision death only, wall = no food)
+- 10 golden stars at death position (if carried chips, online only)
+- Anyone can collect dropped food/stars
+- Death replay: 15s before + 15s after (circular buffer)
+- Camera: stays on death food, then follows first collector
+- Controls: Play/Pause, Speed, Zoom, Restart
+- Progress bar with death marker
+- Death vignette: 3-second red overlay before showing end screen
+
+## A.10 CONTROLS
+- Mouse/Touch: move cursor to steer, left-click/hold for boost
+  - Mobile: drag joystick, push far for boost
+- Keyboard: WASD/Arrows to steer, Space/Shift for boost, E for extract
+- 5 emotes: GG 🏆, Target 🎯, Flee 🏃💨, Ripped 💪, Extracting ⚡ (keys 1-5)
+- Emotes: chat bubbles above head for 4 seconds
+
+## A.11 HUD
+- Top-Left: Carried Chips (online), Stars Earned (online), Stars in Arena (online),
+  - Rank, Score, Kills, Boost reminder, Active Competitors
+- Top-Right: Banked Chips, FPS/Ping (color-coded, LQ badge), Chat/Minimap toggle,
+  - Arena Leaders (top-10, real players by carriedChips online / score offline)
+- Bottom-Left: 5 Quick Chat Emotes
+- Bottom-Right: BOOST button (64px amber), EXTRACT button (80px green), EXIT pill
+- Overlays: Reconnecting pill, Minimap (circular radar, toggle M),
+  - Full Map (press M), Commission indicator
+- Kill Feed: toast notifications when kills happen near you (last 8 entries, 5s auto-remove)
+
+## A.12 ARENA TIERS
+- 30 Online Competitive Tiers (10c → 1B buy-in)
+- 5 Difficulty Groups: Beginner (1-6), Medium (7-12), High Stakes (13-18),
+  - Extreme (19-24), Legendary (25-30)
+- Each tier: name, buyIn, description, difficulty, color, accentColor, borderAccent,
+  - botsCount (30), rewardMultiplier (1.0-3.0)
+- 3 Practice Tiers (Easy, Medium, Hard): FREE, 1000 bots each, no XP
+- Arena selector: live player count polling, difficulty filter tabs,
+  - highest affordable jump button, detail card with all info
+
+## A.13 RENDERING
+- 3D Radial Gradient Shading:
+  - Configurable: HIGHLIGHT_OFFSET (0.35), HIGHLIGHT_BRIGHT (70), SHADOW_DARK (55)
+  - Light from top-left, highlight at offset center, shadow at edge
+  - GradientCache: 2px buckets, avoids creating gradient objects every frame
+- 7 Body Shapes: circle, box, triangle, mix_ct, mix_cb, mix_bt, mix_all
+- 6 Body Styles (cosmetics): smooth, dragon, armored, crystal, obsidian, basilisk
+- 4 Taper Styles: natural, uniform, wave, heavy
+- 6 Hat Types: tophat, crown, cap, santa, party, horns (drawn with canvas paths)
+- Face: specular highlight, eyes (white circles), pupils (smooth tracking),
+  - nose (two dots), mouth (smile arc)
+- Direction Arrow: smooth lerp, extends on boost, only for player snake
+- Camera: follow snake head, smooth zoom, configurable min zoom / follow speed
+- Patterns (premium skins): rainbow, neon, glow, metallic, pulse, zebra, camo, cyber
+- Custom skin: 4 segment shapes (circle, square, diamond, spike), per-segment color/scale/glow
+
+## A.14 SKIN / COSMETICS SYSTEM
+- 20 Free Presets (SLITHER_PRESETS): Fish Snake, Lion Snake, Motorbike Snake,
+  - Coin Snake, Bumblebee, Patriot Streamer, Watermelon Slicer, Tiger Shifter,
+  - Mint Candy, Rainbow Unicorn, Germany Banner, Brazil Samba, France Tricolore,
+  - Pride Rainbow, Solar Flare, Cosmic Nebula, Lava Dreadnought, Tron Grid,
+  - Gundam Mech, Golden Dragon
+- 18 Palette Colors: Red Alert, Solar Orange, Midas Gold, Lime Venom, Acid Green,
+  - Emerald, Teal Void, Cyber Cyan, Sky Blue, Sapphire, Royal Indigo,
+  - Shadow Purple, Orchid Pink, Crimson, Pure White, Slate Gray, Deep Carbon, Pitch Black
+- 50+ Premium Cosmetics (ALL_COSMETICS): 13 skins, trails, death novas, flags, banners
+- Season Pass cosmetics: PASS_FREE_COSMETICS + PASS_ELITE_COSMETICS
+- Genetic Pattern Lab: 4-step editor (colors → body style → taper → glow)
+  - Custom segment editor with individual segment shape/color/scale/glow
+  - Custom image upload to localStorage
+  - TryOnPreview: 450×180 canvas, 26 segments, mouse-steerable with auto-patrol
+  - SkinsCanvasPreview: 180×80 canvas, 10 segments, 60fps wiggle animation
+- Persistence: localStorage['venom_custom_skin_state'] for custom skins
+  - DB-backed for premium cosmetics (buy/equip via /api/player/cosmetic)
+
+## A.15 SOUND SYSTEM (game-audio.ts)
+- Procedural Web Audio API — no audio files
+- 8 sound effects: playFoodCollect (small/medium/large/star), playKill, playDeath,
+  - playExtractStart, playExtractSuccess, playExtractRestart, playBoost, playWallHit
+- Global mute/unmute, init on first user interaction
+
+## A.16 ADMIN TUNING (55+ sliders, 11 categories)
+- MAP & GRID: mapRadius, gridSize
+- SNAKE BODY: startLength, minLength, maxLength, minThick, maxThick, segSpacing
+- SPEED & TURN: baseSpeed, boostSpeed, turnThin, turnFat, turnBoost
+- GROWTH & SCORE: ptsPerSegment, growthMult, scorePerPt, maxScore
+- FOOD SPAWN: foodCount, foodCapMult, eatRadius, S/M/L values/chances/radii
+- BOOST DRAIN: drainRate, dropValue, dropSpread, burstCount, burstValue,
+  - scoreDrainPerSec, minScore, tier2/3 threshold/value
+- DEATH DROP: deathDropLargeChance, deathDropMedChance, deathDropMaxOrbs
+- CAMERA: camMinZoom, camZoomSmooth, camFollowSpeed
+- SKIN APPEARANCE: headSize, lightOffset, brightBoost, shadowDark,
+  - baseSize, maxSize, growthCurve, skinSegSpacing
+- BOTS: botCount, botFoodRange, botRespawn, botMinStart, botMaxStart,
+  - botWarnPct, botDangerPct
+- COLLISION: skipSegs
+
+## A.17 META-GAME (NOT affected by rewrite — separate systems)
+- Leaderboards: World Summit, Global, National, Regional, Milestone Tiers
+- Championships: Annual, 4 scope tabs, HOF tiers, match caps
+- Hall of Fame: Inductees, stats, milestones
+- Season Pass: Free/Elite tracks, claim rewards
+- Challenges: Daily (3), Weekly (2), streak bonuses
+- Clans: Create, join, wars, chat, shop, payouts
+- Social: Friends, rivals, gifts, follow
+- Player Profile: Identity, security, appearance, tournament guardrails
+- Chip Store: Buy chip packs
+- Rewards: Daily, hourly, streak, spin
+- Highlights/Clips: Upload, upvote, featured
+- Auth: Login, register, guest, social, forgot password, change password
+
+============================================================================
+SECTION B: FILES TO DELETE (Old Snake Code)
+============================================================================
+
+These files will be DELETED before rewrite starts:
+
+1.  src/lib/snake-engine.ts          — Old pure snake logic
+2.  src/components/game/game-types.ts — Old game types
+3.  src/components/game/game-canvas.tsx — Old main game canvas
+4.  src/components/game/offline-engine.ts — Old offline game loop
+5.  src/components/game/offline/offline-constants.ts — Old offline config
+6.  src/components/game/offline/offline-hud.ts — Old offline HUD
+7.  src/components/game/offline/offline-replay.ts — Old offline replay
+8.  src/components/game/offline/offline-types.ts — Old offline types
+9.  src/components/game/render/render-snakes.ts — Old snake renderer
+10. src/components/game/render/render-snake-visuals.ts — Old 3D/hat/face renderer
+11. src/components/game/render/render-food.ts — Old food renderer
+12. src/components/game/render/render-grid.ts — Old grid renderer
+13. src/components/game/render/render-minimap.ts — Old minimap renderer
+14. src/components/game/render/render-overlays.ts — Old overlay renderer
+15. src/components/game/render/types.ts — Old render types
+16. src/components/game/render-helpers.ts — Old render helpers
+17. src/components/game/use-render-loop.ts — Old render loop hook
+18. src/components/game/use-game-input.ts — Old input handling hook
+19. src/components/game/use-socket-lifecycle.ts — Old socket lifecycle hook
+20. src/components/game/end-overlay.tsx — Old death/end screen overlay
+21. src/components/game/admin-game-tuning.tsx — Old admin tuning panel
+22. src/components/game/online-replay-player.tsx — Old online replay player
+23. src/components/game/replay-player.tsx — Old replay player
+24. src/components/game/rewarded-ad-modal.tsx — Old rewarded ad modal
+25. mini-services/game-server/index.ts — Old game server
+26. mini-services/game-server/game-state.ts — Old game state
+27. mini-services/game-server/spatial-grid.ts — Old spatial grid
+
+TOTAL: 27 files deleted
+
+============================================================================
+SECTION C: FILES TO KEEP (Safe — NOT touched)
+============================================================================
+
+These files are NOT part of the snake engine rewrite:
+
+- src/app/** — All API routes, pages, layouts (200+ files)
+- src/components/ui/** — All shadcn/ui components (50+ files)
+- src/components/panels/** — All lobby panels EXCEPT cosmetics integration with game
+  - arena-selector.tsx ✅ KEPT (passes arenaId to game-canvas)
+  - cosmetics-shop.tsx ✅ KEPT (skin selection, localStorage)
+  - cosmetics/*.tsx ✅ KEPT (types, utils, previews, cards)
+  - leaderboards.tsx ✅ KEPT
+  - player-profile/** ✅ KEPT
+  - clan-system.tsx ✅ KEPT
+  - championships.tsx ✅ KEPT
+  - hall-of-fame.tsx ✅ KEPT
+  - season-pass.tsx ✅ KEPT
+  - social-panel.tsx ✅ KEPT
+  - chip-store.tsx ✅ KEPT
+  - daily-rewards.tsx ✅ KEPT
+  - clip-showcase.tsx ✅ KEPT
+  - admin-panel.tsx ✅ KEPT
+  - All other panels ✅ KEPT
+- src/components/modals/** — All rule modals (20+ files)
+- src/components/layout/** — Bottom tab bar, etc.
+- src/components/providers/** — Auth provider
+- src/components/auth/** — Auth gate
+- src/components/share/** — Match card visual
+- src/lib/auth.ts, db.ts, constants.ts, types.ts, utils.ts, etc.
+- src/lib/game-config.ts ✅ KEPT (arena tiers, cosmetics, WORLD_SIZE, TICK_MS)
+- src/lib/game-config-db.ts ✅ KEPT
+- src/lib/game-audio.ts ✅ KEPT (procedural sounds)
+- src/lib/format-chips.ts ✅ KEPT
+- src/lib/date-utils.ts ✅ KEPT
+- src/lib/oauth.ts ✅ KEPT
+- src/lib/player-helpers.ts ✅ KEPT
+- src/lib/api-helpers.ts ✅ KEPT
+- src/hooks/** — All hooks
+- prisma/** — Database schema
+- src/app/page.tsx ✅ KEPT (will need minor prop adjustment for new GameCanvas)
+
+============================================================================
+SECTION D: NEW FILE ARCHITECTURE (Rewrite)
+============================================================================
+
+## D.1 SHARED TYPES — src/lib/snake/
+
+```
+src/lib/snake/types.ts              — All game types (Vec2, SnakeState, FoodOrb, StarChip,
+                                    BotState, GameSnapshot, CollisionResult, etc.)
+src/lib/snake/config.ts             — SnakeConfig interface, DEFAULT_SNAKE_CONFIG,
+                                    admin slider definitions (55+ params)
+src/lib/snake/engine.ts             — Pure snake math: movement, turning, growth formulas,
+                                    body path management, collision helpers
+src/lib/snake/skin-types.ts         — Skin system types: SnakeSkin, SkinPattern,
+                                    BodyStyle, TaperStyle, HatType, SnakeShape,
+                                    CustomSegment, CustomSkinState
+src/lib/snake/skin-resolver.ts      — resolveShapeStyle, generateCustomSegments,
+                                    getSegmentColor, readCustomSkinState
+```
+
+## D.2 RENDERER — src/components/game/render/
+
+```
+src/components/game/render/types.ts           — RenderContext, RenderState, Camera state
+src/components/game/render/camera.ts           — Camera follow, zoom, smooth lerp
+src/components/game/render/gradient.ts         — 3D radial gradient, GradientCache, hex helpers
+src/components/game/render/shapes.ts          — 7 shape drawers, shape picker
+src/components/game/render/hats.ts             — 6 hat drawers
+src/components/game/render/face.ts             — Eyes, pupils, nose, mouth, specular
+src/components/game/render/arrow.ts            — Direction arrow with smooth lerp
+src/components/game/render/render-snake.ts     — Main snake renderer (combines all above)
+src/components/game/render/render-food.ts      — Food orb renderer (3 sizes, glow)
+src/components/game/render/render-stars.ts      — Star chip renderer (golden, pulsing)
+src/components/game/render/render-grid.ts      — Background grid renderer
+src/components/game/render/render-map.ts       — Circular breathing map boundary
+src/components/game/render/render-minimap.ts   — Minimap (circular radar)
+src/components/game/render/render-overlays.ts  — Kill feed, chat bubbles, name labels, particles
+src/components/game/render/render-hud.ts       — In-game HUD (all cards, buttons, leaderboard)
+```
+
+## D.3 HOOKS — src/components/game/hooks/
+
+```
+src/components/game/hooks/use-game-input.ts     — Mouse/touch/keyboard input handling
+src/components/game/hooks/use-render-loop.ts    — requestAnimationFrame render loop
+src/components/game/hooks/use-camera.ts          — Camera state management
+```
+
+## D.4 ENGINES — src/components/game/engines/
+
+```
+src/components/game/engines/offline-engine.ts   — Complete offline game loop:
+                                                  - Local tick loop (snake movement, collision, food, bots)
+                                                  - 1000 bots with AI
+                                                  - Infinite map
+                                                  - No chips/stars
+                                                  - Death replay (15s+15s buffer)
+src/components/game/engines/online-engine.ts     — Online game client:
+                                                  - Socket connection management
+                                                  - State sync (receives snapshots from server)
+                                                  - Input forwarding (sends angle/boost/extract)
+                                                  - Extraction UI state
+                                                  - Kill feed, death handling, replay recording
+```
+
+## D.5 GAME CANVAS — src/components/game/
+
+```
+src/components/game/game-canvas.tsx       — Thin orchestration layer:
+                                          - Determines offline vs online mode
+                                          - Instantiates correct engine
+                                          - Passes state to renderer
+                                          - Manages canvas ref, sizing
+src/components/game/game-types.ts         — Phase, EndScreenState, KillerInfo, JoystickState
+src/components/game/end-overlay.tsx        — Death/extract end screen with replay
+src/components/game/admin-game-tuning.tsx   — 55+ slider admin panel
+```
+
+## D.6 GAME SERVER — mini-services/game-server/
+
+```
+mini-services/game-server/index.ts         — Socket.IO server:
+                                              - Auth middleware (JWT verify via /api/match/verify)
+                                              - Arena auto-creation (FIX: getOrCreateRoom)
+                                              - Sharding (max 1000 players/shard)
+                                              - Buy-in via /api/match/join (atomic DB transaction)
+                                              - Match result via /api/match/result
+                                              - Tick loop (server-authoritative movement)
+                                              - Broadcast at 20Hz with downsampled snapshots
+                                              - Bot AI (harvest + self-destruct)
+                                              - Spatial grid collision detection
+                                              - Star chip system
+                                              - Extraction system
+                                              - Kill feed broadcasting
+mini-services/game-server/game-state.ts    — Arena room, snake sessions, bot sessions,
+                                              food management, collision detection,
+                                              death processing, leaderboard computation
+mini-services/game-server/spatial-grid.ts   — Spatial hash grid for O(n) collision
+```
+
+============================================================================
+SECTION E: REWRITE PHASES
+============================================================================
+
+## Phase 1: Types & Config (Foundation)
+Files: src/lib/snake/types.ts, config.ts, skin-types.ts, skin-resolver.ts
+- Define ALL types upfront accounting for every feature
+- SnakeConfig with every admin slider parameter
+- GameSnapshot format (what server sends to client)
+- Skin types compatible with existing cosmetics system
+- This phase ensures no restructuring needed later
+
+## Phase 2: Snake Engine (Core Math)
+Files: src/lib/snake/engine.ts
+- Pure functions only — no side effects, no DOM, no canvas
+- Movement: moveHead, turnToward
+- Growth: calcBodyLength, calcVisualRadius, calcCollisionRadius, calcTurnRate
+- Body: buildInitialPath, extendPath, sampleSegments
+- Collision: circlesOverlap, pointInCircle, neck protection, head-on rules
+- Food math: calcDeathFood (L÷5, M÷3, S÷rest)
+- Star math: calcStarChipValues
+- Map math: getBreathingMapRadius, calcBaseMapRadius
+- Commission: calcCommissionRate
+- Import by BOTH offline-engine and game-server
+
+## Phase 3: Renderer (Visual Layer)
+Files: src/components/game/render/*
+- 3D gradient with GradientCache
+- 7 shapes, 6 body styles, 4 taper styles
+- 6 hats, face (eyes, pupils, nose, mouth, specular)
+- Direction arrow
+- Food orbs (3 sizes with glow)
+- Star chips (golden, pulsing)
+- Grid, map boundary, minimap
+- Camera system (follow, zoom, smooth)
+- HUD rendering (all cards, leaderboard, buttons)
+- Kill feed, chat bubbles, name labels, particles
+- Reads skinId from game state, resolves via skin-resolver.ts
+
+## Phase 4: Offline Engine (Test First)
+Files: src/components/game/engines/offline-engine.ts + hooks
+- Local game loop at target tick rate
+- 1000 bots with AI (harvest mode, no self-destruct)
+- Food system (spawn, eat, death drops)
+- Infinite map (no boundaries)
+- No chips, no stars, no extraction
+- Score-based leaderboard (you + nearby bots, top 10)
+- Death replay (15s before + 15s after circular buffer)
+- Bot respawn
+- Input handling (mouse/touch/keyboard)
+- Canvas rendering via Phase 3 renderer
+
+## Phase 5: Online Engine (Frontend Client)
+Files: src/components/game/engines/online-engine.ts + use-socket-lifecycle equivalent
+- Socket connection to game server via Caddy gateway
+- Auth: JWT token from auth provider
+- Join arena: emit join_arena with arenaId
+- Receive snapshots at 20Hz
+- Send input: angle, boost state, extract request
+- HUD: carried chips, stars earned, stars in arena, rank, commission rate
+- Arena leaderboard (real players by carriedChips)
+- Kill feed, death handling, death vignette (3s)
+- Extraction progress (receive from server, show UI)
+- Replay recording (circular buffer, 300 frames = 15s)
+- Reconnection handling
+- Ping measurement
+- Emotes (keys 1-5, emit to server)
+
+## Phase 6: Game Server (Backend)
+Files: mini-services/game-server/*
+- Socket.IO server on port 3001
+- Auth middleware: verify JWT via POST /api/match/verify
+- Arena creation: getOrCreateRoom with sharding (auto-create, no 'arena does not exist')
+- 30 bots per tier (or per practice tier: 1000)
+- Bot AI: harvest food, dodge players (8 ticks ahead), avoid body (150px)
+- Online bot self-destruct at score≥100 (navigate to wall, never boost)
+- Server-authoritative movement (clients send angle only)
+- Spatial grid collision detection
+- Food system (spawn, eat, death drops, replenish)
+- Star chip system (10 stars on player death, only players collect)
+- Circular breathing map (online), infinite (offline via isPractice flag)
+- Extraction system (3s, steering resets, commission)
+- Buy-in via /api/match/join (Next.js API route, atomic)
+- Match result via /api/match/result (idempotent, guarded)
+- Broadcast at 20Hz, downsampled snapshots (60 points per snake)
+- Kill feed broadcasting
+- Leaderboard computation (real players by carriedChips)
+- Arena stats endpoint for lobby polling
+
+## Phase 7: Game Canvas + Integration
+Files: game-canvas.tsx, game-types.ts, end-overlay.tsx, page.tsx adjustment
+- Thin orchestration: detect offline vs online, instantiate correct engine
+- Canvas sizing (full screen, backing store guard)
+- Phase management (connecting → playing → ended)
+- End screen: death (killer info, replay, profile/friend buttons)
+- Extract screen: chips extracted, commission, XP, duration
+- Connect existing cosmetics system (read skin from localStorage/DB)
+- Connect existing audio system (play sounds on events)
+- Minor page.tsx prop adjustment if GameCanvas interface changes
+
+## Phase 8: Admin Panel + Skin System Integration
+Files: admin-game-tuning.tsx
+- 55+ sliders, 11 categories (same categories as before)
+- Real-time config push to engines
+- Verify skin system works end-to-end:
+  - 20 presets selected in shop → applied in game
+  - Custom lab skin → saved to localStorage → applied in game
+  - Premium skins → bought/equipped via API → applied in game
+  - Hats, shapes selected → applied in game
+
+============================================================================
+SECTION F: ROOT CAUSE ANALYSIS
+============================================================================
+
+## F.1 'Arena Does Not Exist' Error
+- Root cause: game-server imports getArenaById from game-config.ts
+- getArenaById searches ALL_ARENAS (30 online + 3 practice tiers)
+- Client sends arenaId (e.g., 'tier-1')
+- If the game server is not running OR the import path is wrong → undefined → 'invalid_arena'
+- Also: network errors in joinMatch() were mapped to 'invalid_arena' (misleading)
+- Fix in rewrite: arena auto-creation in getOrCreateRoom, better error mapping
+
+## F.2 'Eyes Disappear After 3 Seconds'
+- Root cause: lowQuality flag set to true after 2s of low FPS
+- Face rendering was gated on !lowQuality
+- Fix in rewrite: always render player's face regardless of quality
+
+## F.3 'Stretchy Start'
+- Root cause: canvas backing store mismatch on initial render
+- Fix in rewrite: validate canvas dimensions at start of every render frame
+
+============================================================================
+SECTION G: ARCHITECTURE PRINCIPLES
+============================================================================
+
+1. Snake engine = PURE MATH. No DOM, no canvas, no side effects. Importable by both client and server.
+2. Online engine = separate file. Not scattered across game-canvas.
+3. Food/map/bots/stars = handled by offline-engine or game-server. NOT in snake-engine.
+4. Chips/economy = online-engine + game-server only. Snake engine doesn't know about chips.
+5. Renderer receives skinId + game state. Resolves skin via skin-resolver. Pure visual.
+6. Config = single source of truth. Admin sliders write, engines read.
+7. No food/map/bots initially in rewrite — but TYPES account for them from Phase 1.
+8. Every feature from rules/docs is represented in types even if implementation is phased.
+
+============================================================================
+SECTION H: RISK MITIGATION
+============================================================================
+
+- All old work is SAFE in git (origin/main, pushed before any changes)
+- Delete old files FIRST, then write new files (no overlap)
+- Each phase is independently testable
+- Offline mode can be tested before online mode
+- Cosmetics/shop/lab panels are NOT touched — they work via localStorage/DB API
+- page.tsx needs minimal change (just GameCanvas props if interface changes)
