@@ -7,21 +7,19 @@ import type { Camera, Snake, Viewport } from './types';
 import { lerp } from './vec2';
 import { CAMERA_LERP, CAMERA_ZOOM_MIN, START_LENGTH } from './config';
 
-/** Update camera to follow a snake, with smooth interpolation and dynamic zoom */
-export function updateCamera(camera: Camera, snake: Snake, canvasWidth: number, canvasHeight: number): void {
+/** Update camera to follow a snake. Snaps directly to head (no lag = no vibration). */
+export function updateCamera(camera: Camera, snake: Snake, _canvasWidth: number, _canvasHeight: number): void {
   if (snake.path.length === 0) return;
 
-  const headX = snake.path.headX;
-  const headY = snake.path.headY;
-
-  // Smooth follow
-  camera.x = lerp(camera.x, headX, CAMERA_LERP);
-  camera.y = lerp(camera.y, headY, CAMERA_LERP);
+  // Snap camera directly to head — eliminates head vibration caused by
+  // lerp lag with variable ticks-per-frame. The snake head is always
+  // exactly at screen center, just like slither.io.
+  camera.x = snake.path.headX;
+  camera.y = snake.path.headY;
 
   // Dynamic zoom: zoom out as snake grows
   const targetLength = snake.path.length;
   const baseLength = START_LENGTH;
-  // Zoom decreases as snake gets bigger (logarithmic scale)
   const growthFactor = Math.log2(Math.max(targetLength / baseLength, 1));
   const targetZoom = Math.max(CAMERA_ZOOM_MIN, 1.0 - growthFactor * 0.08);
   camera.zoom = lerp(camera.zoom, targetZoom, 0.02);

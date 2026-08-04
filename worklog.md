@@ -1597,3 +1597,20 @@ Stage Summary:
 - Snake now starts facing right (angle 0), moves straight, turns smoothly with WASD/mouse
 - No bots (BOT_COUNT=0) for clean testing
 - Files changed: src/lib/snake/engine.ts, src/components/game/SnakeGame.tsx, src/components/game/renderer.ts
+---
+Task ID: fix-head-vibration
+Agent: Main
+Task: Fix snake head and name label vibrating rapidly while moving
+
+Work Log:
+- Diagnosed root cause: camera used lerp(0.08) to follow head, causing it to constantly lag behind
+- With variable ticks-per-frame in the fixed timestep loop, the camera lag oscillated each frame
+- This made the head (and name label drawn relative to it) appear to vibrate on screen
+- Fix: changed camera to snap directly to head position (camera.x = headX, camera.y = headY)
+- This eliminates all lag — head is always at exact screen center, just like slither.io
+- Verified with 5 rapid-fire screenshots (100ms apart) — VLM confirmed STABLE across all frames
+
+Stage Summary:
+- Camera snap fix in src/lib/snake/camera.ts eliminates head/name vibration
+- Dynamic zoom (zoom out as snake grows) preserved with its own slow lerp
+- Files changed: src/lib/snake/camera.ts
