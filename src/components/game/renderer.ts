@@ -4,8 +4,74 @@
 // ============================================================================
 
 import type { Camera, FoodOrb, GameState, Snake, StarChip, Viewport } from '@/lib/snake/types';
-import { SNAKE_RADIUS, SPAWN_PROTECTION_MS, START_LENGTH, GROWTH_RATE, MAX_SNAKE_LENGTH } from '@/lib/snake/config';
+import { SNAKE_RADIUS, SPAWN_PROTECTION_MS, START_LENGTH, GROWTH_RATE, MAX_SNAKE_LENGTH, BASE_SPEED } from '@/lib/snake/config';
 import { worldToScreen } from '@/lib/snake/camera';
+
+// ── Inner curl (corner-cutting) visual offset ─────────────────────────
+// How many pixels to shift a segment toward the center of curvature
+// per radian of local turn angle. Higher = tighter inner curl.
+const CURL_CUT_FACTOR = 6.0;
+
+/**
+ * Compute the inner curl offset for a body segment at index i.
+ * Returns [offsetX, offsetY] to ADD to the base path position.
+ * This is purely visual — computed fresh each frame, never stored.
+ */
+function innerCurlOffset(
+  path: { getX: (i: number) => number; getY: (i: number) => number; length: number },
+  i: number,
+): [number, number] {
+  const len = path.length;
+  if (len < 3 || i < 1) return [0, 0];
+
+  // Three points: ahead (i-1), current (i), behind (i+1)
+  const ax = path.getX(i - 1);
+  const ay = path.getY(i - 1);
+  const cx = path.getX(i);
+  const cy = path.getY(i);
+
+  let bx: number, by: number;
+  if (i < len - 1) {
+    bx = path.getX(i + 1);
+    by = path.getY(i + 1);
+  } else {
+    const dx = cx - ax;
+    const dy = cy - ay;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d < 0.01) return [0, 0];
+    bx = cx + (dx / d) * BASE_SPEED;
+    by = cy + (dy / d) * BASE_SPEED;
+  }
+
+  const v1x = cx - bx;
+  const v1y = cy - by;
+  const v2x = ax - cx;
+  const v2y = ay - cy;
+
+  const cross = v1x * v2y - v1y * v2x;
+  if (Math.abs(cross) < 0.001) return [0, 0];
+
+  const dot = v1x * v2x + v1y * v2y;
+  const turnAngle = Math.atan2(Math.abs(cross), dot);
+
+  const travelX = ax - bx;
+  const travelY = ay - by;
+  const travelLen = Math.sqrt(travelX * travelX + travelY * travelY);
+  if (travelLen < 0.01) return [0, 0];
+
+  const invLen = 1 / travelLen;
+  let normX: number, normY: number;
+  if (cross > 0) {
+    normX = -travelY * invLen;
+    normY = travelX * invLen;
+  } else {
+    normX = travelY * invLen;
+    normY = -travelX * invLen;
+  }
+
+  const offset = turnAngle * CURL_CUT_FACTOR;
+  return [normX * offset, normY * offset];
+}
 
 const GRID_SIZE = 80;
 const GRID_COLOR = 'rgba(255, 255, 255, 0.04)';
@@ -266,14 +332,18 @@ function drawSnake(
   const headScreen = worldToScreen(headWorldX, headWorldY, camera, cw, ch);
   const headVisible = headWorldX >= vl && headWorldX <= vr && headWorldY >= vt && headWorldY <= vb;
 
-  // ── Batched body draw: single beginPath, multiple arcs, one fill ──
+  // ── Batched body draw with inner curl (corner-cutting) ──
+  // Inner curl is a purely visual offset computed fresh each frame.
+  // On curves, body segments shift toward the center of curvature,
+  // making the body follow a tighter arc than the head's path.
   ctx.fillStyle = snake.color;
   ctx.beginPath();
   let hasBodySegs = false;
 
   for (let i = pathLen - 1; i >= 1; i--) {
-    const wx = snake.path.getX(i);
-    const wy = snake.path.getY(i);
+    const [ox, oy] = innerCurlOffset(snake.path, i);
+    const wx = snake.path.getX(i) + ox;
+    const wy = snake.path.getY(i) + oy;
     if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
     const s = worldToScreen(wx, wy, camera, cw, ch);
     ctx.moveTo(s.x + segRadius, s.y);

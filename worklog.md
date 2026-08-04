@@ -1701,3 +1701,26 @@ Stage Summary:
 - Straight sections unaffected (curvature = 0 → offset = 0)
 - File changed: src/lib/snake/engine.ts (added applyInnerCurl function, ~80 lines)
 - Tunable via CURL_CUT_FACTOR constant (currently 8.0)
+
+---
+Task ID: FIX-INNER-CURL-SHATTER
+Agent: Main
+Task: Fix shattered/flickering snake body caused by inner curl offset accumulation
+
+Work Log:
+- Identified root cause: applyInnerCurl() in engine.ts was MUTATING the path buffer every tick
+- Path entries persist and shift indices on prepend, so the same physical point got offset again and again
+- This caused exponential accumulation of offsets → shattered/flickering body
+- Removed applyInnerCurl() call and function from engine.ts entirely
+- Moved inner curl to be a PURELY VISUAL effect computed fresh each frame
+- Added innerCurlOffset() function in renderer.ts — computes offset on-the-fly during drawing, never stored
+- Added curlOffset() function in snapshot.ts — same logic for online mode snapshots
+- Both functions use the same curvature math but return [ox, oy] tuples that are added to base positions
+- Verified in browser: body is solid and continuous, no shattering or flickering
+- Zero console errors, clean lint
+
+Stage Summary:
+- Root cause: path buffer mutation with persistent entries caused offset accumulation across ticks
+- Fix: inner curl is now computed as a read-only visual offset in renderer and snapshot builder
+- Files changed: engine.ts (removed applyInnerCurl), renderer.ts (added innerCurlOffset), snapshot.ts (added curlOffset)
+- Verified: solid body, no visual glitches
