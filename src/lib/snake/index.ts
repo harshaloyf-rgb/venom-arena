@@ -10,4 +10,6 @@ export * from './spatial-hash';
 export * from './camera';
 export * from './bot-ai';
 export * from './engine';
+export * from './extrapolation';
+export * from './snapshot';
 export * from './constants'; // backward compat shim → re-exports config

@@ -1,8 +1,9 @@
 // ============================================================================
-// Game Engine — Phase A: Zero-Allocation Core
+// Game Engine — Phase A+B: Zero-Allocation Core + Spiral Movement
 // 
 // Uses PathBuffer (Float32Array) for snake paths — no Vec2[] allocation.
-// Adds Fibonacci turn detection, extraction zone, star chips.
+// Phase A: Fibonacci turn detection, extraction zone, star chips.
+// Phase B: Fibonacci spiral path computation during tight turns.
 // Mutates state in-place for performance with 1000 bots.
 // ============================================================================
 
@@ -145,7 +146,7 @@ export function createInitialState(): GameState {
 
   // Spawn bots with varied sizes
   for (let i = 0; i < BOT_COUNT; i++) {
-    const score = BOT_START_SCORE_MIN + Math.random() * (BOT_START_SCORE_MAX - BOT_START_SCORE_MIN);
+    const score = Math.floor(BOT_START_SCORE_MIN + Math.random() * (BOT_START_SCORE_MAX - BOT_START_SCORE_MIN));
     const nameIdx = i % BOT_NAMES.length;
     const nameSuffix = i >= BOT_NAMES.length ? ` ${Math.floor(i / BOT_NAMES.length) + 1}` : '';
     const pos = findSafeSpawn(state.snakes, 0, 0);
@@ -308,24 +309,59 @@ function moveSnake(
   // Store previous angle for turn detection
   snake.prevAngle = snake.angle;
 
-  // Smooth turning with angle wrapping
+  // ── Angle computation ──────────────────────────────────────────────
+  // Phase B: When a Fibonacci spiral turn is active, compute the angle
+  // change from the logarithmic spiral formula instead of linear turning.
+
   let diff = targetAngle - snake.angle;
   while (diff > Math.PI) diff -= 2 * Math.PI;
   while (diff < -Math.PI) diff += 2 * Math.PI;
 
-  const maxTurn = snake.isBot ? BOT_MAX_TURN_RATE : MAX_TURN_RATE;
-  if (Math.abs(diff) <= maxTurn) {
-    snake.angle = targetAngle;
+  if (snake.spiral.active) {
+    // ── Spiral movement (Phase B) ───────────────────────────────────────
+    // r = a * e^(b * theta) → dTheta = speed / r
+    const spiral = snake.spiral;
+    const r = spiral.a * Math.exp(spiral.b * spiral.theta);
+    const safeR = Math.max(r, 0.1);
+
+    let dTheta = snake.speed / safeR;
+    // Clamp to a reasonable range [0.01, MAX_TURN_RATE * 2]
+    dTheta = Math.max(0.01, Math.min(dTheta, MAX_TURN_RATE * 2));
+
+    // Advance theta and apply angle in the spiral direction.
+    spiral.theta += dTheta;
+    snake.angle = spiral.startAngle + spiral.direction * spiral.theta;
+
+    // Normalize angle to [-PI, PI].
+    if (snake.angle > Math.PI) snake.angle -= 2 * Math.PI;
+    else if (snake.angle < -Math.PI) snake.angle += 2 * Math.PI;
+
+    // Recompute diff for spiral exit detection.
+    diff = snake.angle - snake.prevAngle;
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    while (diff < -Math.PI) diff += 2 * Math.PI;
+
+    // Check if spiral should end (exceeded expected theta or straightened).
+    spiral.ticksElapsed++;
+    if (Math.abs(diff) < MAX_SPIRAL_ANGLE_DELTA && spiral.ticksElapsed > SPIRAL_DETECT_WINDOW) {
+      spiral.active = false;
+    }
   } else {
-    snake.angle += Math.sign(diff) * maxTurn;
+    // ── Normal linear turning (Phase A) ──────────────────────────────────
+    const maxTurn = snake.isBot ? BOT_MAX_TURN_RATE : MAX_TURN_RATE;
+    if (Math.abs(diff) <= maxTurn) {
+      snake.angle = targetAngle;
+    } else {
+      snake.angle += Math.sign(diff) * maxTurn;
+    }
+
+    // Normalize angle to [-PI, PI]
+    if (snake.angle > Math.PI) snake.angle -= 2 * Math.PI;
+    else if (snake.angle < -Math.PI) snake.angle += 2 * Math.PI;
+
+    // Fibonacci spiral turn detection (Phase A)
+    updateSpiralTurn(snake, diff);
   }
-
-  // Normalize angle to [-PI, PI]
-  if (snake.angle > Math.PI) snake.angle -= 2 * Math.PI;
-  else if (snake.angle < -Math.PI) snake.angle += 2 * Math.PI;
-
-  // Fibonacci spiral turn detection (Phase A)
-  updateSpiralTurn(snake, diff);
 
   // Boost eligibility
   const canBoost = wantBoost &&
@@ -690,7 +726,7 @@ function respawnBots(state: GameState, now: number): void {
   const toRespawn = Math.min(deficit, 3);
 
   for (let i = 0; i < toRespawn; i++) {
-    const score = BOT_START_SCORE_MIN + Math.random() * (BOT_START_SCORE_MAX - BOT_START_SCORE_MIN);
+    const score = Math.floor(BOT_START_SCORE_MIN + Math.random() * (BOT_START_SCORE_MAX - BOT_START_SCORE_MIN));
     const nameIdx = (state.tickCount + i) % BOT_NAMES.length;
     const pos = findSafeSpawn(state.snakes, 0, 0);
     const bot = createSnake(
@@ -699,6 +735,12 @@ function respawnBots(state: GameState, now: number): void {
     state.snakes.set(bot.id, bot);
   }
 }
+
+// ==========================================================================
+// Re-exports
+// ==========================================================================
+
+export { buildSnapshot } from './snapshot';
 
 /** Respawn the player snake */
 export function respawnPlayer(state: GameState): void {
