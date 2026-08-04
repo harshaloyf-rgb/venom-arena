@@ -65,6 +65,8 @@ export class OnlineEngine {
   // Match timing
   matchStartTime = 0;
   matchDurationSeconds = 0;
+  connectStartTime = 0;
+  private static readonly MIN_CONNECT_DISPLAY_MS = 2000; // Show spinner for at least 2s
 
   // Replay buffer (circular, 300 frames at 20Hz = 15s before + 15s after)
   private replayBuffer: ReplayFrame[] = [];
@@ -144,6 +146,7 @@ export class OnlineEngine {
   /** Connect to the game server and join arena */
   async connect(authToken: string): Promise<void> {
     this.setPhase('connecting');
+    this.connectStartTime = Date.now();
 
     // Create extrapolation engine on connect
     this.extrapolation = new ExtrapolationEngine(this.config);
@@ -209,6 +212,12 @@ export class OnlineEngine {
 
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Connection failed';
+      // Ensure the spinner shows for at least MIN_CONNECT_DISPLAY_MS
+      const elapsed = Date.now() - this.connectStartTime;
+      const remaining = OnlineEngine.MIN_CONNECT_DISPLAY_MS - elapsed;
+      if (remaining > 0) {
+        await new Promise(r => setTimeout(r, remaining));
+      }
       this.onError?.(msg);
       this.setPhase('ended');
       this.endState = {

@@ -147,7 +147,7 @@ export default function GameCanvas({
       engine.onDeath = (state) => {
         setEndState(state);
         setPhase('ended');
-        onMatchEnd?.(state);
+        // Don't auto-exit — let user see the end screen and click Back to Lobby
       };
       engineRef.current = engine;
       return () => {
@@ -165,9 +165,18 @@ export default function GameCanvas({
     engine.onDeath = (state) => {
       setEndState(state);
       setPhase('ended');
-      onMatchEnd?.(state);
+      // Don't auto-exit — let user see end screen and click Back to Lobby
     };
     engine.onKillFeed = () => {};
+    engine.onError = (msg) => {
+      setEndState({
+        outcome: 'death',
+        score: 0, kills: 0, xpGained: 0,
+        durationSeconds: 0, isOffline: isPractice,
+        arenaName,
+      });
+      setPhase('ended');
+    };
     engineRef.current = engine;
     // Connect as guest
     engine.connect('guest').catch(() => {});
@@ -181,6 +190,7 @@ export default function GameCanvas({
   // ── Render Loop ───────────────────────────────────────────────────────────
 
   const renderCallback = useCallback((time: number, _delta: number) => {
+    try {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -353,6 +363,10 @@ export default function GameCanvas({
     // HUD
     renderHUD(ctx, hud, w, h);
 
+    } catch (err) {
+      console.error('[VenomArena] render frame error:', err);
+    }
+
   }, [config, playerIdentity.id, showMinimap, inputRef]);
 
   useRenderLoop(renderCallback, phase === 'playing');
@@ -378,22 +392,32 @@ export default function GameCanvas({
       {phase === 'ended' && endState && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-50">
           <div className="bg-slate-900/95 border border-slate-700 rounded-2xl p-8 max-w-md w-full mx-4 text-center">
-            <div className="text-4xl mb-4">{endState.outcome === 'death' ? '💀' : '🏆'}</div>
-            <h2 className="text-2xl font-bold text-white mb-2">
-              {endState.outcome === 'death' ? 'Eliminated' : 'Extracted'}
-            </h2>
-            {endState.killerName && (
-              <p className="text-slate-400 mb-4">
-                Killed by <span className="text-red-400 font-bold">{endState.killerName}</span>
-                {endState.killerTag && <span className="text-slate-500"> {endState.killerTag}</span>}
-              </p>
+            {endState.score === 0 && endState.kills === 0 && endState.durationSeconds === 0 ? (
+              <>
+                <div className="text-4xl mb-4">📡</div>
+                <h2 className="text-2xl font-bold text-white mb-2">Connection Failed</h2>
+                <p className="text-slate-400 mb-6">Could not connect to the game server. Please try again later.</p>
+              </>
+            ) : (
+              <>
+                <div className="text-4xl mb-4">{endState.outcome === 'death' ? '💀' : '🏆'}</div>
+                <h2 className="text-2xl font-bold text-white mb-2">
+                  {endState.outcome === 'death' ? 'Eliminated' : 'Extracted'}
+                </h2>
+                {endState.killerName && (
+                  <p className="text-slate-400 mb-4">
+                    Killed by <span className="text-red-400 font-bold">{endState.killerName}</span>
+                    {endState.killerTag && <span className="text-slate-500"> {endState.killerTag}</span>}
+                  </p>
+                )}
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                  <StatCard label="Score" value={endState.score.toString()} />
+                  <StatCard label="Kills" value={endState.kills.toString()} />
+                  <StatCard label="Duration" value={`${endState.durationSeconds}s`} />
+                  <StatCard label="Arena" value={endState.arenaName} />
+                </div>
+              </>
             )}
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              <StatCard label="Score" value={endState.score.toString()} />
-              <StatCard label="Kills" value={endState.kills.toString()} />
-              <StatCard label="Duration" value={`${endState.durationSeconds}s`} />
-              <StatCard label="Arena" value={endState.arenaName} />
-            </div>
             <button
               onClick={() => onExit?.()}
               className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-mono uppercase tracking-wider py-3 rounded-xl transition-colors"
