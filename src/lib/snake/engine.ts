@@ -141,9 +141,13 @@ export function calcVisualRadius(
   return config.baseSize + range * Math.pow(t, config.growthCurve);
 }
 
-/** Calculate collision radius (slightly smaller than visual) */
-export function calcCollisionRadius(visualRadius: number): number {
-  return visualRadius * 0.85;
+/**
+ * Calculate collision radius — slither.io style tight point.
+ * Uses a fixed small radius from config, NOT proportional to visual size.
+ * This allows big snakes to thread through tiny gaps.
+ */
+export function calcCollisionRadius(_visualRadius: number, config: SnakeConfig): number {
+  return config.collisionPointRadius;
 }
 
 /** Calculate how many body segments to render.
@@ -184,24 +188,28 @@ export function pointInCircle(
 }
 
 /**
- * Check head-on-body collision using IPathBuffer.
+ * Check head-on-body collision — slither.io tight point system.
+ * Uses tiny collisionPointRadius from config (default 2.5px).
+ * Head point vs body centerline points — allows threading through gaps.
  * First `skipSegs` segments (neck protection) are immune.
- * Returns the index of the hit segment, or -1 if no hit.
+ * Returns the index of the hit path point, or -1 if no hit.
  * ZERO-ALLOC: uses getX/getY instead of object indexing.
  */
 export function checkHeadOnBody(
   headX: number,
   headY: number,
-  headRadius: number,
+  _headRadius: number,
   bodyPath: IPathBuffer,
-  bodyRadius: number,
+  _bodyRadius: number,
   skipSegs: number,
   segSpacing: number,
+  config: SnakeConfig,
 ): number {
   const step = Math.max(1, Math.floor(segSpacing / 3));
   const startIdx = skipSegs * step;
   const len = bodyPath.length;
-  const rSum = headRadius + bodyRadius;
+  // Tight collision: both head and body use the tiny point radius
+  const rSum = config.collisionPointRadius * 2;
   const rSumSq = rSum * rSum;
 
   for (let i = startIdx; i < len; i += step) {
@@ -258,7 +266,7 @@ export function checkAllCollisions(
 
   const headRadius = snake._cachedCollisionRadius > 0
     ? snake._cachedCollisionRadius
-    : calcCollisionRadius(calcVisualRadius(snake.score, config));
+    : calcCollisionRadius(calcVisualRadius(snake.score, config), config);
 
   // Boundary collision (online — circular breathing map)
   if (map.type === 'circular_breathing') {
@@ -276,6 +284,24 @@ export function checkAllCollisions(
 
   const snakeId = snake.identity.id;
 
+  // ── Self-collision: head vs own body (after neck protection) ────────
+  const selfHitIdx = checkHeadOnBody(
+    snake.head.x, snake.head.y, headRadius,
+    snake.path, headRadius, config.skipSegs, config.segSpacing,
+    config,
+  );
+  if (selfHitIdx >= 0) {
+    scratchVec2.x = snake.path.getX(selfHitIdx);
+    scratchVec2.y = snake.path.getY(selfHitIdx);
+    return {
+      type: 'head_on_body',
+      victimId: snakeId,
+      killerId: snakeId,
+      point: { x: scratchVec2.x, y: scratchVec2.y },
+    };
+  }
+
+  // ── Check against all other snakes ────────────────────────────────
   for (let s = 0; s < allSnakes.length; s++) {
     const other = allSnakes[s];
     if (other.identity.id === snakeId) continue;
@@ -283,7 +309,7 @@ export function checkAllCollisions(
 
     const otherRadius = other._cachedCollisionRadius > 0
       ? other._cachedCollisionRadius
-      : calcCollisionRadius(calcVisualRadius(other.score, config));
+      : calcCollisionRadius(calcVisualRadius(other.score, config), config);
 
     // Head-on-head
     if (checkHeadOnHead(snake, other, headRadius, otherRadius)) {
@@ -297,10 +323,11 @@ export function checkAllCollisions(
       };
     }
 
-    // Head-on-body: current snake's head vs other's body
+    // Head-on-body: current snake's head vs other's body (tight point collision)
     const hitIdx = checkHeadOnBody(
       snake.head.x, snake.head.y, headRadius,
       other.path, otherRadius, config.skipSegs, config.segSpacing,
+      config,
     );
     if (hitIdx >= 0) {
       scratchVec2.x = other.path.getX(hitIdx);
@@ -648,7 +675,7 @@ export function calcNewLevel(totalXP: number): number {
 export function updateCachedRadii(snake: SnakeState, config: SnakeConfig): void {
   const vr = calcVisualRadius(snake.score, config);
   snake._cachedVisualRadius = vr;
-  snake._cachedCollisionRadius = calcCollisionRadius(vr);
+  snake._cachedCollisionRadius = calcCollisionRadius(vr, config);
 }
 
 // ── Fibonacci Spiral Turn System ─────────────────────────────────────────────

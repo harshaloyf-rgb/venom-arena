@@ -133,7 +133,7 @@ export class OfflineEngine {
     path.fillInitial(x, y, angle, initialCount, this.config.segSpacing);
 
     const vr = calcVisualRadius(s, this.config);
-    const cr = calcCollisionRadius(vr);
+    const cr = calcCollisionRadius(vr, this.config);
 
     return {
       identity,
@@ -196,12 +196,24 @@ export class OfflineEngine {
 
     const snake = this.createSnake(identity, x, y);
     this.snakes.push(snake);
+    // Assign bot level based on config difficulty
+    // Easy: 0-1, Medium: 1-3, Hard: 2-4
+    const maxLevel = this.config.botLevelTurnMult.length - 1;
+    let botLevel: number;
+    const r = Math.random();
+    if (r < 0.4) botLevel = 0;        // rookie
+    else if (r < 0.65) botLevel = 1;  // scout
+    else if (r < 0.82) botLevel = 2;  // hunter
+    else if (r < 0.94) botLevel = 3;  // predator
+    else botLevel = Math.min(maxLevel, 4); // apex
+
     this.botAIStates.set(identity.id, {
       behavior: 'harvest',
       targetFoodId: null,
       dangerAngle: null,
       inDanger: false,
       decisionCooldown: 0,
+      level: botLevel,
     });
   }
 
@@ -315,20 +327,28 @@ export class OfflineEngine {
     const ai = this.botAIStates.get(bot.identity.id);
     if (!ai) return;
 
-    // Decision cooldown
+    const lvl = ai.level;
+    const turnMult = this.config.botLevelTurnMult[lvl] ?? 1;
+    const scanRadius = this.config.botLevelScanRadius[lvl] ?? 300;
+    const evadeTicks = this.config.botLevelEvadeTicks[lvl] ?? 8;
+    const cdRange = this.config.botLevelCooldownRange[lvl] ?? [8, 18];
+
+    // Decision cooldown — varies by level (rookie=slow, apex=fast)
     if (ai.decisionCooldown > 0) {
       ai.decisionCooldown--;
     } else {
-      ai.decisionCooldown = 8 + Math.floor(Math.random() * 16);
-      this.botDecide(bot, ai);
+      ai.decisionCooldown = cdRange[0] + Math.floor(Math.random() * (cdRange[1] - cdRange[0]));
+      this.botDecide(bot, ai, scanRadius);
     }
 
     // Determine target angle from AI state
     let targetAngle = bot.angle;
 
     if (ai.inDanger && ai.dangerAngle !== null) {
-      // Flee away from danger
-      targetAngle = ai.dangerAngle + Math.PI;
+      // Flee away from danger — higher levels flee more precisely
+      const fleeAngle = ai.dangerAngle + Math.PI;
+      const jitter = (1 - lvl * 0.15) * (Math.random() - 0.5) * 0.6;
+      targetAngle = fleeAngle + jitter;
     } else if (ai.targetFoodId) {
       // Seek food
       const food = this.food.find(f => f.id === ai.targetFoodId);
@@ -339,13 +359,23 @@ export class OfflineEngine {
         targetAngle = bot.angle + (Math.random() - 0.5) * 0.5;
       }
     } else {
-      // Wander
-      targetAngle = bot.angle + (Math.random() - 0.5) * 0.3;
+      // Wander — rookies wander more randomly, apex drifts less
+      const wanderAmount = 0.4 - lvl * 0.06;
+      targetAngle = bot.angle + (Math.random() - 0.5) * wanderAmount;
     }
+
+    // Turn toward target at level-appropriate rate
+    let angleDiff = targetAngle - bot.angle;
+    // Normalize to -PI..PI
+    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+    const maxTurn = this.config.turnThin * turnMult;
+    const turn = Math.max(-maxTurn, Math.min(maxTurn, angleDiff));
+    const finalAngle = bot.angle + turn;
 
     // Single zero-alloc call for bot movement (bots never boost)
     const botInput: InputState = {
-      targetAngle,
+      targetAngle: finalAngle,
       boosting: false,
       extracting: false,
       emoteKey: null,
@@ -356,30 +386,33 @@ export class OfflineEngine {
     ai.inDanger = false;
     ai.dangerAngle = null;
 
+    // Higher levels check more snakes for danger
+    const evadeRadius = this.config.botEvadeRadius;
+
     for (const other of this.snakes) {
       if (other.identity.id === bot.identity.id) continue;
       if (!other.alive) continue;
 
       const dist = vec2Dist(bot.head, other.head);
 
-      // Danger detection: 8 ticks ahead prediction
-      if (dist < this.config.botEvadeRadius) {
-        const speed = other.boosting ? this.config.boostSpeed * 8 : this.config.baseSpeed * 8;
+      // Danger detection: N ticks ahead prediction (varies by level)
+      if (dist < evadeRadius) {
+        const speed = other.boosting ? this.config.boostSpeed * evadeTicks : this.config.baseSpeed * evadeTicks;
         const fx = other.head.x + Math.cos(other.angle) * speed;
         const fy = other.head.y + Math.sin(other.angle) * speed;
         const fdx = bot.head.x - fx;
         const fdy = bot.head.y - fy;
         const futureDist = Math.sqrt(fdx * fdx + fdy * fdy);
-        if (futureDist < this.config.botEvadeRadius * 0.8) {
+        if (futureDist < evadeRadius * 0.8) {
           ai.inDanger = true;
           ai.dangerAngle = angleBetween(other.head, bot.head);
           break;
         }
       }
 
-      // Avoid body segments
-      if (dist < 150) {
-        // Check if we're heading toward the body
+      // Avoid body segments (higher levels have larger range)
+      const bodyAvoidRange = 120 + lvl * 30;
+      if (dist < bodyAvoidRange) {
         const toOther = vec2Sub(other.head, bot.head);
         const dot = toOther.x * Math.cos(bot.angle) + toOther.y * Math.sin(bot.angle);
         if (dot > 0) {
@@ -391,15 +424,15 @@ export class OfflineEngine {
     }
   }
 
-  private botDecide(bot: SnakeState, ai: BotAIState) {
+  private botDecide(bot: SnakeState, ai: BotAIState, scanRadius: number) {
     if (ai.inDanger) {
       ai.targetFoodId = null;
       return;
     }
 
-    // Find nearest food within scan radius
+    // Find nearest food within scan radius (varies by level)
     let nearestFood: FoodOrb | null = null;
-    let nearestDist = this.config.botFoodScanRadius;
+    let nearestDist = scanRadius;
 
     for (const food of this.food) {
       const dist = vec2Dist(bot.head, food);

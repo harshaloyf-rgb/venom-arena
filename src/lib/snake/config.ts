@@ -87,8 +87,22 @@ export interface SnakeConfig {
   botMaxStartLength: number;
   botSelfDestructThreshold: number;
 
-  // COLLISION (1)
+  // BOT DIFFICULTY (10) — 5 levels × 2 params each
+  /** Turn rate multiplier per bot level [rookie, scout, hunter, predator, apex] */
+  botLevelTurnMult: number[];
+  /** Reaction distance (food scan) per bot level */
+  botLevelScanRadius: number[];
+  /** Evade prediction ticks per bot level */
+  botLevelEvadeTicks: number[];
+  /** Decision cooldown range [min, max] per bot level */
+  botLevelCooldownRange: number[][];
+
+  // COLLISION (3)
   skipSegs: number;
+  /** Tiny collision point radius (slither.io style). Actual collision = 2× this (head point + body point). */
+  collisionPointRadius: number;
+  /** Opacity applied to body segments that physically overlap another snake's body. */
+  overlapOpacity: number;
 
   // SPAWNING (2)
   spawnProtectionSeconds: number;
@@ -245,8 +259,16 @@ export const DEFAULT_SNAKE_CONFIG: SnakeConfig = {
   botMaxStartLength: 40,
   botSelfDestructThreshold: 100,
 
+  // BOT DIFFICULTY — 5 levels: rookie(0), scout(1), hunter(2), predator(3), apex(4)
+  botLevelTurnMult: [0.4, 0.6, 0.8, 1.0, 1.3],
+  botLevelScanRadius: [150, 250, 350, 500, 700],
+  botLevelEvadeTicks: [4, 6, 8, 10, 14],
+  botLevelCooldownRange: [[20, 35], [14, 26], [8, 18], [5, 14], [3, 10]],
+
   // COLLISION
   skipSegs: 5,
+  collisionPointRadius: 2.5,
+  overlapOpacity: 0.35,
 
   // SPAWNING
   spawnProtectionSeconds: 4,
@@ -387,6 +409,8 @@ export const ADMIN_SLIDERS: SliderDef[] = [
 
   // COLLISION
   { key: 'skipSegs', label: 'Neck Protection Segs', min: 1, max: 15, step: 1, category: 'COLLISION' },
+  { key: 'collisionPointRadius', label: 'Collision Point Radius', min: 1, max: 8, step: 0.5, category: 'COLLISION' },
+  { key: 'overlapOpacity', label: 'Overlap Opacity', min: 0.1, max: 0.8, step: 0.05, category: 'COLLISION' },
 
   // FIBONACCI SPIRAL TURN
   { key: 'tightTurnThreshold', label: 'Tight Turn Threshold', min: 0.05, max: 0.5, step: 0.01, category: 'SPIRAL TURN' },
