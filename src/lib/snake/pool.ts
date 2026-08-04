@@ -65,10 +65,13 @@ export class PathBuffer {
 
   /**
    * Trim N points from the tail. O(1). Zero allocation.
+   * IMPORTANT: In this circular buffer, `start` points to the HEAD (index 0).
+   * The tail is at index (count-1). To trim the tail, we only decrement count.
+   * We must NOT change `start` — that would trim the HEAD instead.
    */
   trimTail(n: number): void {
     const trim = Math.min(n, this.count);
-    this.start = (this.start + trim) % this.capacity;
+    // Only shrink the window — do NOT move start (that would trim head!)
     this.count = Math.max(0, this.count - trim);
   }
 

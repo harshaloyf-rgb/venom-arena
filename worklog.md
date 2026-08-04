@@ -802,3 +802,23 @@ Stage Summary:
 - No stars/chips in offline HUD
 - Correct DPR-aware coordinate system for snake rendering
 - All canvas renderers use display dimensions, not backing store dimensions
+---
+Task ID: 1
+Agent: Main (direct)
+Task: Fix snake stuck at one place, bots flashing/appearing for 1 sec, visual glitches, stars in HUD
+
+Work Log:
+- Read all core game files: game-canvas.tsx, offline-engine.ts, engine.ts, pool.ts, use-game-input.ts, render-snake.ts, render-snake-atlas.tsx, config.ts
+- Diagnosed CRITICAL BUG in PathBuffer.trimTail(): it was incrementing `start` (which points to HEAD), effectively removing the newly-prepended head point every tick. Net effect: snake body never moved.
+- Fixed trimTail() in pool.ts: removed the `start` mutation, now only decrements `count`
+- Fixed calcSegmentCount() in engine.ts: was returning 5x too many segments (20 instead of 4 for starting snake), causing visual pile-up at tail. Now correctly computes pathLength/skinSegSpacing.
+- Added tick accumulator to OfflineEngine: decouples simulation (30Hz) from render (60Hz). Previously ran at 60fps making everything 2x too fast.
+- Updated game-canvas.tsx to pass deltaMs to offline engine tick.
+- Verified with agent browser: snake renders with 71+ body pixels, moves and turns correctly, no console errors, no HUD bleed-through.
+
+Stage Summary:
+- Root cause: PathBuffer.trimTail() was a one-line bug that broke the entire snake movement system
+- All 3 fixes applied and browser-verified
+- Snake now moves, turns, and has proper body segments
+- Bots will now properly move (path is correct) and won't die instantly
+- Stars-in-HUD was a secondary symptom of the path bug (not a renderStars issue)
