@@ -328,12 +328,11 @@ function moveSnake(
   snake.path.setY(0, newHeadY);
 
   // 2. Chain constraint: each segment follows the one ahead of it.
-  //    Only moves a segment if it's farther than SEGMENT_SPACING from
-  //    the previous segment. When turning, inner segments bunch up
-  //    (closer than SEGMENT_SPACING), which is the natural compression
-  //    that creates the tighter-circle Fibonacci spiral effect.
+  //    ALWAYS enforce SEGMENT_SPACING distance — both pull (too far) and
+  //    push (too close). This is critical: when turning, inner segments
+  //    bunch up from chord shortcuts. Without the push, they freeze and
+  //    block motion propagation to the tail.
   const len = snake.path.length;
-  const spacingSq = SEGMENT_SPACING * SEGMENT_SPACING;
 
   for (let i = 1; i < len; i++) {
     const px = snake.path.getX(i - 1);  // segment ahead (closer to head)
@@ -345,16 +344,18 @@ function moveSnake(
     const dy = cy - py;
     const dSq = dx * dx + dy * dy;
 
-    if (dSq > spacingSq) {
-      // Too far — pull closer to exactly SEGMENT_SPACING distance
+    if (dSq < 0.0001) {
+      // Degenerate: segments are coincident — push in head direction
+      snake.path.setX(i, px - Math.cos(snake.angle) * SEGMENT_SPACING);
+      snake.path.setY(i, py - Math.sin(snake.angle) * SEGMENT_SPACING);
+    } else {
+      // Always place at exactly SEGMENT_SPACING from the segment ahead.
+      // This handles both "too far" (pull) and "too close" (push).
       const dist = Math.sqrt(dSq);
       const ratio = SEGMENT_SPACING / dist;
       snake.path.setX(i, px + dx * ratio);
       snake.path.setY(i, py + dy * ratio);
     }
-    // If dSq <= spacingSq: segment is already close enough (bunched up
-    // from a turn). Leave it — this is the natural compression that
-    // creates the Fibonacci spiral tightening effect.
   }
 
   // ── Growth / Shrink ────────────────────────────────────────────────

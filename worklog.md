@@ -1634,3 +1634,23 @@ Stage Summary:
 - Body segments chase the segment ahead, creating natural corner-cutting
 - Segments compress on the inside of turns (Fibonacci-like spiral tightening)
 - Files changed: src/lib/snake/pool.ts, src/lib/snake/engine.ts, mini-services/game-server/shared.ts
+---
+Task ID: tail-stuck-fix
+Agent: Main
+Task: Fix tail stuck/frozen during curling in chain physics implementation
+
+Work Log:
+- Read engine.ts chain physics code (lines 338-358)
+- Identified root cause: `if (dSq > spacingSq)` guard only PULLS segments that are too far
+- When head turns, segment 1 takes chord shortcut → gets CLOSER to segment 2 → segment 2 freezes
+- This "compression freeze" cascades from head to tail, making the tail appear stuck
+- Fixed by removing the guard: always enforce SEGMENT_SPACING distance (both pull AND push)
+- Added degenerate case handling for coincident segments
+- Cleaned up unused `spacingSq` variable
+- Verified with agent-browser + VLM: tail follows smoothly, no gaps, no bunching
+
+Stage Summary:
+- Root cause: one-way constraint (pull-only) blocked motion propagation during turns
+- Fix: always enforce exact SEGMENT_SPACING from each segment to the one ahead
+- File changed: src/lib/snake/engine.ts (lines 330-360)
+- Verification: VLM confirmed smooth tail following, no gaps, no pileups during turns
