@@ -931,3 +931,188 @@ Stage Summary:
 - Bot AI: [PARTIAL] — Harvest+evade work, boundary avoidance missing offline
 - Food/Economy: [WORKING] — Full food system, chips/extraction work online
 - MUST-FIX: (1) Self-collision, (2) WASD steering, (3) Audio wiring, (4) Leaderboard HUD, (5) Mobile joystick visual
+
+---
+Task ID: RULES-CHECK
+Agent: Explore
+Task: Cross-check all game rules against implementation
+
+Work Log:
+- Read config.ts (308 lines) — all default values
+- Read engine.ts (893 lines) — collision, food, boost, death, map, extraction
+- Read offline-engine.ts (614 lines) — offline game loop, bot AI
+- Read online-engine.ts (748 lines) — socket client, replay, extrapolation
+- Read game-canvas.tsx (456 lines) — render loop, HUD data, engine init
+- Read use-game-input.ts (148 lines) — keyboard/mouse/touch input
+- Read render-hud.ts (350 lines) — stats panel, perf panel, extraction bar, emotes, action buttons
+- Read render-overlays.ts (291 lines) — kill feed, emote bubbles, name labels, particles
+- Read game-state.ts (778 lines) — server bot AI, self-destruct, extraction, collision, food/stars
+- Cross-checked every rule detail from Sections 1,2,3,4,5,6,7,8,9,11 against actual code
+
+Findings Summary:
+
+## Section 1 — Controls
+| Rule | Expected | Actual | Status |
+|------|----------|--------|--------|
+| WASD/Arrow Keys steer | Implemented | NOT in use-game-input.ts; only mouse/touch for steering | ❌ MISSING |
+| Hold Space/Shift = Boost | Implemented | Space, ShiftLeft, ShiftRight → boosting=true | ✅ |
+| Hold E = Extract | Implemented | KeyE → extracting=true | ✅ |
+| Mouse/touch works | Implemented | mousemove → angle, touchmove → angle | ✅ |
+
+## Section 2 — Online vs Offline
+| Rule | Expected | Actual | Status |
+|------|----------|--------|--------|
+| Online: chip buy-in, real players | Implemented | OnlineEngine connects, arena joined | ✅ |
+| Online: 30 bots | 30 | config.botCount=30, server spawns 30 | ✅ |
+| Online: graduated commission 0%/35% | ≤3→0%, ≥4→35% | calcCommissionRate: realPlayerCount>=4?0.35:0 | ✅ |
+| Online: stars, XP, full death penalty | Implemented | XP on extraction, stars on death | ✅ |
+| Online: circular breathing map | Implemented | map.type='circular_breathing' | ✅ |
+| Online: bot self-destruct at score≥100 | Implemented | botSelfDestructThreshold=100 | ✅ |
+| Offline: FREE | Implemented | No buy-in, no auth | ✅ |
+| Offline: 1000 bots | 1000 | GameCanvas default prop botCount=30 → OfflineEngine gets 30 | ❌ MISMATCH |
+| Offline: infinite map, no wall death | Implemented | map.type='infinite', no boundary check | ✅ |
+| Offline: no bot self-destruct | Not implemented | Bot AI only has 'harvest' behavior | ✅ |
+| Online leaderboard: real players only | Filtered !isBot | getLeaderboard filters !s.isBot | ✅ |
+| Online leaderboard: sorted by carried chips | By carriedChips | sort(b.carriedChips - a.carriedChips) | ✅ |
+| Online leaderboard: country flags | Rendered | No flag rendering in leaderboard | ❌ MISSING |
+| Online leaderboard: YOU badge | Shown | Only color highlight (#00FF88), no 'YOU' text | ❌ MISSING |
+| Offline leaderboard: player+nearby bots top-10 | Nearby, sorted by score | All alive snakes (not nearby), sorted by score, top 10 | ⚠️ NOT FILTERED BY PROXIMITY |
+| Offline leaderboard: no flags | Not rendered | No flag rendering | ✅ |
+| 30 online tiers (10c–1Bc) + 3 practice | Defined | game-config.ts has 30+3 tiers | ✅ (data exists) |
+
+## Section 3 — Food & Stars
+| Rule | Expected | Actual | Status |
+|------|----------|--------|--------|
+| Small food: 1pt, green, 93% | 1, #66FF66, 0.93 | foodSmallValue=1, color='#66FF66', chance=0.93 | ✅ |
+| Medium food: 3pts, blue, 4% | 3, blue, 0.04 | foodMedValue=3, color='#3498DB', chance=0.04 | ✅ |
+| Large food: 5pts, pink, 3% | 5, pink, 0.03 | foodLargeValue=5, color='#FF69B4', chance=0.03 | ✅ |
+| Growth rate = 1/4 of food value | score += food_value/4 | score += food.value * 1.0 (growthMult=1, scorePerPt=1) | ❌ MISMATCH (code adds full value) |
+| Death food: L(5)/M(3)/S(1) along body | Distributed | calcDeathFood places L/M/S along body path | ✅ |
+| Wall death: NO food orbs | Empty | createDeathEvent: isCollisionDeath=false → droppedFood=[] | ✅ |
+| Stars: 10 at death position, NOT scattered | All at death pos | Stars placed in circle radius=60px around head | ⚠️ SCATTERED IN 60PX CIRCLE |
+| Each star = carriedChips/10 | floored division | Math.floor(carriedChips / 10) | ✅ |
+| Only real players collect stars | Bot check | Server: if(isBot) continue; if(isPractice) skip | ✅ |
+| Stars affect carried chips only | carriedChips++ | snake.carriedChips += star.value | ✅ |
+| Food affects score/size only | No chip change | snake.score += food.value (no carriedChips change) | ✅ |
+
+## Section 4 — Boost
+| Rule | Expected | Actual | Status |
+|------|----------|--------|--------|
+| Speed: 4.5 → 8.0 | baseSpeed=4.5, boostSpeed=8.0 | baseSpeed=3.0, boostSpeed=5.0 | ❌ MISMATCH |
+| ~3 times/sec tail drops food orb | Every 10 frames at 30fps | boostDropEveryNFrames=40 → 0.75/sec at 30fps | ❌ MISMATCH |
+| Snake shrinks by 1 segment per drop | 1 segment per drop | Score drains 30/sec, path trims continuously (40 pts per drop = 8 visual segments) | ❌ MISMATCH |
+| Need >8 body segments to boost | segment_count > 8 | score > boostMinScore=8 (score=8 ≈ 1.6 visual segments) | ❌ MISMATCH (threshold too low) |
+| Must have earned mass | score > startLength | boostMinScore=8, startLength=20 → can boost at starting score | ❌ MISMATCH |
+
+## Section 5 — Collision
+| Rule | Expected | Actual | Status |
+|------|----------|--------|--------|
+| Head hits body: you die, body→food, stars drop | Implemented | checkHeadOnBody, createDeathEvent | ✅ |
+| Neck protection: first 5 segments immune | skipSegs=5 | skipSegs=5, step=1 → first 5 path points skipped | ✅ |
+| Head-on-head: 4 resolution rules | Size-based resolution | All head-on-head → both die, no size/boost logic | ❌ MISSING |
+| Map boundary (online): death, NO food | death, no food | checkBoundaryCollision, createDeathEvent returns empty food | ✅ |
+| Map boundary (online): stars still drop | Stars created | createDeathStars always called regardless of cause | ✅ |
+| Bot wall death: 0 food, 0 stars | Clean vanish | carriedChips=0 for bots → 0 stars; cause=boundary → 0 food | ✅ |
+
+## Section 6 — Bot AI
+| Rule | Expected | Actual | Status |
+|------|----------|--------|--------|
+| Harvest: seek nearest food | Implemented | botDecide / tickBotAI scans food within botFoodScanRadius | ✅ |
+| Dodge: predictive 8 ticks ahead | 8-tick prediction | Both offline & server: speed*8 prediction | ✅ |
+| Avoid body segments: 150px range | 150px | Server: dSq < 150*150. Offline: dist < 150 | ✅ |
+| Turn away from boundary | Implemented | Server: turns toward center when <200px from edge. Offline: missing | ⚠️ OFFLINE BOTS HAVE NO BOUNDARY AVOIDANCE |
+| Never boost | boosting=false | Both engines: bot input boosting=false | ✅ |
+| Never collect stars | Bots skip stars | Server: if(isBot) continue in star collection loop | ✅ |
+| Self-destruct (online): score≥100 | Navigate to wall | behavior='self_destruct' at score>=100, aims away from center | ✅ |
+| Self-destruct: navigate slowly | Reduced speed | Moves at normal baseSpeed (no slow-down) | ❌ NOT SLOW |
+| Self-destruct: still collect food | Eats food in path | Food eating applies to all alive snakes including self-destructing bots | ✅ |
+| Self-destruct: NEVER boost | No boost | boosting=false explicitly returned | ✅ |
+
+## Section 7 — Map
+| Rule | Expected | Actual | Status |
+|------|----------|--------|--------|
+| Online: circular, breathes ±40px/10s | Implemented | breathingAmplitude=40, breathingPeriodSeconds=10 | ✅ |
+| Online: radius scales with player count | Dynamic radius | calcBaseMapRadius: min→max based on playerCount/maxArenaPlayers | ✅ |
+| Offline: infinite, no boundaries | Implemented | map.type='infinite', currentRadius=Infinity | ✅ |
+| Safe spawn: 500px from others | 500px min dist | safeSpawnMinDist=500 defined but NOT checked during spawn | ❌ NOT ENFORCED |
+| Safe spawn: 500px inside boundary (online) | Inside by 500px | spawnRadius = map.baseRadius - 500 | ✅ |
+| Spawn protection: 4 seconds | 4s | spawnProtectionSeconds=4, frames=4*30=120 | ✅ |
+
+## Section 8 — Extraction
+| Rule | Expected | Actual | Status |
+|------|----------|--------|--------|
+| Hold E, 3-sec progress bar | 3 seconds | extractSeconds=3, frames=90 at 30fps | ✅ |
+| Forward gliding allowed | Small angle OK | Cancel only if angleDelta > 0.3 rad (~17°) | ✅ |
+| Steering restarts to 0% | Full reset | extractProgress=0, extractFramesLeft=0 on direction change | ✅ |
+| White-to-green ring near head (only you) | Ring near head | No ring rendered near head; only top-center bar | ❌ MISSING |
+| Extract anytime/anywhere | No restrictions | Server: requires carriedChips>0 to start | ✅ (chips>0 is reasonable) |
+| Commission: ≤3→0%, ≥4→35% | Implemented | calcCommissionRate | ✅ |
+| Movement warning flash on steering | Flash effect | No flash/warning rendered | ❌ MISSING |
+| Extraction bar shows progress | Fills over 3s | renderExtractionBar: fillW = barW * 0.0 (HARDCODED ZERO) | ❌ BROKEN |
+
+## Section 9 — HUD
+| Rule | Expected | Actual | Status |
+|------|----------|--------|--------|
+| Top-left: Carried Chips (online) | Shown | Rendered when !isOffline | ✅ |
+| Top-left: Stars Earned (online) | Shown | Rendered when !isOffline | ✅ |
+| Top-left: Stars in Arena count | Shown | hud.starsInArena exists but NOT rendered in stats panel | ❌ MISSING |
+| Top-left: Rank | Shown | Rendered | ✅ |
+| Top-left: Score | Shown | Rendered | ✅ |
+| Top-left: Kills | Shown | Rendered | ✅ |
+| Top-left: Boost reminder | Shown | Not rendered anywhere in HUD | ❌ MISSING |
+| Top-left: Active Competitors count | Shown | realPlayerCount/botCount exist but not rendered as 'competitors' | ❌ MISSING |
+| Top-right: Banked Chips | Shown | hud.bankedChips exists but NOT rendered | ❌ MISSING |
+| Top-right: FPS/Ping | Shown | Rendered in renderPerfPanel | ✅ |
+| Top-right: Chat button | Shown | Not found in render code | ❌ MISSING |
+| Top-right: Minimap toggle | M key | M key works (use-game-input.ts), no visual button | ⚠️ KEY WORKS, NO BUTTON |
+| Top-right: Arena Leaders (collapsible top-10) | Top 10 | renderLeaderboard shows max 5, not 10, not collapsible | ⚠️ SHOWS 5, NOT 10 |
+| Bottom-left: 5 emotes (keys 1-5) | 5 buttons | 5 emote buttons with key hints | ✅ |
+| Bottom-left: 4-sec bubbles | 4 seconds | 120 frames at 30fps = 4 seconds | ✅ |
+| Bottom-right: BOOST (64px, amber) | 64px wide, amber | 64px wide, green (rgba(34,197,94,0.6)) | ❌ WRONG COLOR (green not amber) |
+| Bottom-right: EXTRACT (80px, green, shows %) | 80px, green, percentage | 64px wide, amber color, no % shown | ❌ WRONG SIZE & COLOR, NO % |
+| Bottom-right: EXIT pill | Shown | Rendered as red pill | ✅ |
+| Reconnecting pill | Shown on disconnect | Phase→'connecting' shows 'Loading Arena...' spinner | ⚠️ WRONG TEXT (not 'Reconnecting') |
+| Minimap toggle (M key) | Toggles minimap | M key handler in use-game-input.ts | ✅ |
+| Commission indicator | Shown | Rendered when commissionRate > 0 | ✅ |
+
+## Section 11 — Death
+| Rule | Expected | Actual | Status |
+|------|----------|--------|--------|
+| Body→food, values = total score | Score converted to food | calcDeathFood distributes along body path (not score-exact) | ⚠️ APPROXIMATE |
+| 10 stars at death position | 10 stars if chips>0 | starsPerDeath=10, created at head with 60px spread | ⚠️ 60PX SCATTER |
+| Kill feed shows killer | Killer name | renderKillFeed shows killerName + victimName | ✅ |
+| Replay: 15s before + 15s after | 30s total buffer | REPLAY_BUFFER_SIZE=600 (30s at 20Hz), but only 3s recorded after death | ❌ ONLY 3S AFTER DEATH |
+| Replay: camera stays on death food | Camera follows | Phase ends 3s after death, no replay UI visible | ❌ NO REPLAY PLAYBACK UI |
+| Replay: play/pause/speed/zoom/restart | Controls | No replay control UI implemented | ❌ MISSING |
+| Replay: progress bar with death marker | Progress bar | No replay progress bar | ❌ MISSING |
+
+## Critical Mismatches (Must Fix)
+1. ❌ WASD/Arrow key steering — completely absent from use-game-input.ts
+2. ❌ Boost speeds: 3.0/5.0 in config vs rules' 4.5/8.0
+3. ❌ Boost drop rate: 0.75/sec vs rules' ~3/sec (boostDropEveryNFrames=40, should be ~10)
+4. ❌ Head-on-head collision: no size/boost resolution, both always die
+5. ❌ Growth rate: adds full food value vs rules' 1/4 of food value
+6. ❌ Boost min score: 8 vs rules' >8 body segments (and can boost at starting score)
+7. ❌ Extraction progress ring near head — missing entirely
+8. ❌ Extraction bar fill: hardcoded to 0.0, never shows progress
+9. ❌ Offline bot count: default 30 vs rules' 1000
+10. ❌ Self-collision: not checked (head vs own body)
+
+## Important Mismatches (Should Fix)
+11. ❌ BOOST button color: green instead of amber
+12. ❌ EXTRACT button: 64px not 80px, amber not green, no % display
+13. ❌ Multiple HUD elements missing: Stars in Arena, Boost reminder, Active Competitors, Banked Chips, Chat button
+14. ❌ Online leaderboard: no country flags, no YOU badge text
+15. ❌ Replay: only 3s after death (should be 15s), no replay playback UI
+16. ❌ Safe spawn 500px-from-others: not enforced during spawn
+17. ❌ Stars scattered in 60px circle instead of at exact death position
+18. ❌ Self-destruct bots move at normal speed (not slowly)
+
+## Minor Issues (Nice to Have)
+19. ⚠️ Offline bots have no boundary avoidance
+20. ⚠️ Offline leaderboard shows all bots, not nearby-only
+21. ⚠️ Arena Leaders shows 5 entries not 10, not collapsible
+22. ⚠️ Reconnecting shows 'Loading Arena...' not 'Reconnecting'
+23. ⚠️ Minimap toggle has no visual button (M key works)
+24. ⚠️ Snake shrink rate during boost is ~8 visual segments per drop, not 1
+25. ⚠️ boostMinScore=8 means ~1.6 visual segments, not >8 body segments
