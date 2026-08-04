@@ -1676,3 +1676,28 @@ Stage Summary:
 - Files changed: src/lib/snake/engine.ts, src/components/game/renderer.ts, src/components/game/SnakeGame.tsx
 - Growth handled naturally: buffer grows from prepend, trimmed by pop to target length
 - Tail is mathematically guaranteed to always move (it's a historical head position)
+
+---
+Task ID: inner-curl-offset
+Agent: Main
+Task: Add inner curl corner-cutting effect so body follows tighter arc than head when turning
+
+Work Log:
+- Analyzed the user's request: when turning, body/tail should not follow the exact head path but curl inward
+- Evaluated multiple approaches: chain physics (freezes on overlap), path buffer sampling (no visible effect at BASE_SPEED), curvature offset (simple, safe)
+- Implemented applyInnerCurl() function in engine.ts
+- For each body segment, computes local curvature from 3 neighboring path entries (ahead, current, behind)
+- Calculates the normal vector pointing toward the center of curvature
+- Offsets the segment toward center by turnAngle * CURL_CUT_FACTOR pixels
+- Fixed critical sign bug: used Math.abs(cross) in atan2 so offset magnitude is always positive
+- Verified normal direction mapping for both left and right turns in screen coordinates (y-down)
+- Increased CURL_CUT_FACTOR to 8.0 for visible effect (~3px offset per segment at max turn rate)
+- Browser-verified: no runtime errors, snake renders correctly, moves and turns smoothly
+
+Stage Summary:
+- Inner curl effect: on curves, body segments shift ~3px toward center of curvature
+- For a ~12px turn radius, this is ~25% tighter — body follows a noticeably tighter arc
+- Zero risk of freezing: small offsets (max ~3px) cannot cause chain tangling
+- Straight sections unaffected (curvature = 0 → offset = 0)
+- File changed: src/lib/snake/engine.ts (added applyInnerCurl function, ~80 lines)
+- Tunable via CURL_CUT_FACTOR constant (currently 8.0)

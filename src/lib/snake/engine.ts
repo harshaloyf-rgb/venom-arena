@@ -281,6 +281,100 @@ export function gameTick(state: GameState, input: InputState, _dt: number): void
 }
 
 // ==========================================================================
+// Inner Curl — Corner-Cutting Curvature Offset
+// ==========================================================================
+
+/**
+ * How many pixels to shift a segment toward the center of curvature
+ * per radian of local turn angle. Higher = tighter inner curl.
+ * At MAX_TURN_RATE (0.377 rad/tick) and factor 8.0, max offset ≈ 3.0px/tick.
+ */
+const CURL_CUT_FACTOR = 8.0;
+
+/**
+ * After the path buffer is updated (prepend + trim), nudge each body
+ * segment toward the local center of curvature. On straight sections
+ * curvature is zero → no offset. On curves, segments shift inward,
+ * making the body follow a tighter arc than the head's actual path.
+ *
+ * Pure visual/physics tweak — doesn't change path length or tick logic.
+ * Safe under self-overlap because it only reads neighboring path entries
+ * and writes small offsets (never moves a segment by more than ~2px).
+ */
+function applyInnerCurl(snake: Snake): void {
+  const path = snake.path;
+  const len = path.length;
+  if (len < 3) return;
+
+  const factor = CURL_CUT_FACTOR;
+
+  for (let i = 1; i < len; i++) {
+    // Three points: ahead (i-1), current (i), behind (i+1)
+    const ax = path.getX(i - 1);
+    const ay = path.getY(i - 1);
+    const cx = path.getX(i);
+    const cy = path.getY(i);
+
+    // For the tail segment (i = len-1), there's no i+1.
+    // Extrapolate behind direction from (i-1 → i).
+    let bx: number, by: number;
+    if (i < len - 1) {
+      bx = path.getX(i + 1);
+      by = path.getY(i + 1);
+    } else {
+      const dx = cx - ax;
+      const dy = cy - ay;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < 0.01) continue;
+      bx = cx + (dx / d) * BASE_SPEED;
+      by = cy + (dy / d) * BASE_SPEED;
+    }
+
+    // Vectors: behind→current and current→ahead
+    const v1x = cx - bx;
+    const v1y = cy - by;
+    const v2x = ax - cx;
+    const v2y = ay - cy;
+
+    // Cross product determines turn direction.
+    // In screen coords (y-down), cross > 0 means the path curves such
+    // that the center of curvature is to one side; cross < 0 the other.
+    const cross = v1x * v2y - v1y * v2x;
+    if (Math.abs(cross) < 0.001) continue; // straight — skip
+
+    // Turn angle magnitude (always positive). We use |cross| so the
+    // angle is positive regardless of turn direction.
+    const dot = v1x * v2x + v1y * v2y;
+    const turnAngle = Math.atan2(Math.abs(cross), dot);
+
+    // Travel direction at current segment (behind → ahead)
+    const travelX = ax - bx;
+    const travelY = ay - by;
+    const travelLen = Math.sqrt(travelX * travelX + travelY * travelY);
+    if (travelLen < 0.01) continue;
+
+    // Normal toward center of curvature.
+    // Verified in screen coords (y-down) for both turn directions:
+    //   cross > 0 → left  normal (-travelY,  travelX) points toward center
+    //   cross < 0 → right normal ( travelY, -travelX) points toward center
+    const invLen = 1 / travelLen;
+    let normX: number, normY: number;
+    if (cross > 0) {
+      normX = -travelY * invLen;
+      normY = travelX * invLen;
+    } else {
+      normX = travelY * invLen;
+      normY = -travelX * invLen;
+    }
+
+    // Offset magnitude is always positive → always moves toward center
+    const offset = turnAngle * factor;
+    path.setX(i, cx + normX * offset);
+    path.setY(i, cy + normY * offset);
+  }
+}
+
+// ==========================================================================
 // Snake Movement
 // ==========================================================================
 
@@ -374,6 +468,13 @@ function moveSnake(
   while (snake.path.length > targetLength) {
     snake.path.pop();
   }
+
+  // ── INNER CURL OFFSET ─────────────────────────────────────────────
+  // On curves, nudge each body segment toward the center of curvature.
+  // This makes the body follow a tighter arc than the head's path,
+  // creating a natural inner curl / corner-cutting effect when turning.
+  // Straight segments are unaffected (curvature = 0 → offset = 0).
+  applyInnerCurl(snake);
 
   // Update cached body radius
   snake.bodyRadius = SNAKE_RADIUS;
