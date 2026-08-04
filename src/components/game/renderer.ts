@@ -239,6 +239,13 @@ function drawSnake(
   const pathLen = snake.path.length;
   if (pathLen === 0) return;
 
+  // ── HEAD-LEVEL CULLING: skip entire snake if head is far off-screen ──
+  const headWorldX = snake.path.headX;
+  const headWorldY = snake.path.headY;
+  const cullMargin = Math.min(pathLen * 8, 500) + 100;
+  if (headWorldX < viewport.left - cullMargin || headWorldX > viewport.right + cullMargin) return;
+  if (headWorldY < viewport.top - cullMargin || headWorldY > viewport.bottom + cullMargin) return;
+
   const zoom = camera.zoom;
   const cw = viewport.width;
   const ch = viewport.height;
@@ -251,38 +258,31 @@ function drawSnake(
   const segRadius = SNAKE_RADIUS * zoom;
   const headRadius = segRadius * 1.3;
 
-  // Pre-compute screen positions for visible segments
-  const vl = viewport.left - 30;
-  const vr = viewport.right + 30;
-  const vt = viewport.top - 30;
-  const vb = viewport.bottom + 30;
+  const vl = viewport.left - 20;
+  const vr = viewport.right + 20;
+  const vt = viewport.top - 20;
+  const vb = viewport.bottom + 20;
 
-  // Head position (index 0)
-  const headWorldX = snake.path.headX;
-  const headWorldY = snake.path.headY;
   const headScreen = worldToScreen(headWorldX, headWorldY, camera, cw, ch);
   const headVisible = headWorldX >= vl && headWorldX <= vr && headWorldY >= vt && headWorldY <= vb;
 
-  // Body segments (starting from index 1)
-  const screenSegs: { x: number; y: number; idx: number }[] = [];
-  for (let i = 1; i < pathLen; i++) {
+  // ── Batched body draw: single beginPath, multiple arcs, one fill ──
+  ctx.fillStyle = snake.color;
+  ctx.beginPath();
+  let hasBodySegs = false;
+
+  for (let i = pathLen - 1; i >= 1; i--) {
     const wx = snake.path.getX(i);
     const wy = snake.path.getY(i);
     if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
     const s = worldToScreen(wx, wy, camera, cw, ch);
-    screenSegs.push({ x: s.x, y: s.y, idx: i });
+    ctx.moveTo(s.x + segRadius, s.y);
+    ctx.arc(s.x, s.y, segRadius, 0, Math.PI * 2);
+    hasBodySegs = true;
   }
+  if (hasBodySegs) ctx.fill();
 
-  // Draw body circles from tail to head
-  for (let i = screenSegs.length - 1; i >= 0; i--) {
-    const ss = screenSegs[i];
-    ctx.fillStyle = snake.color;
-    ctx.beginPath();
-    ctx.arc(ss.x, ss.y, segRadius, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Draw head separately (on top of body)
+  // ── Head ──
   if (headVisible) {
     ctx.fillStyle = snake.headColor;
     ctx.beginPath();
@@ -290,30 +290,10 @@ function drawSnake(
     ctx.fill();
   }
 
-  // Light highlight for depth (body only)
-  if (segRadius > 3) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-    for (let i = screenSegs.length - 1; i >= 0; i--) {
-      const ss = screenSegs[i];
-      ctx.beginPath();
-      ctx.arc(ss.x, ss.y - segRadius * 0.2, segRadius * 0.6, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  // Head highlight
-  if (headVisible && segRadius > 3) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.beginPath();
-    ctx.arc(headScreen.x, headScreen.y - headRadius * 0.2, headRadius * 0.55, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Eyes, boost lines, name label (only if head is visible)
+  // ── Eyes, boost lines, name label ──
   if (headVisible) {
     drawEyes(ctx, headScreen.x, headScreen.y, snake.angle, headRadius);
 
-    // Boost speed lines
     if (snake.boosting && segRadius > 3) {
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
       ctx.lineWidth = 1.5 * zoom;
@@ -329,7 +309,6 @@ function drawSnake(
       }
     }
 
-    // Name label
     if (segRadius > 3) {
       ctx.fillStyle = snake.isPlayer ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.5)';
       ctx.font = `${Math.max(10, 12 * zoom)}px sans-serif`;

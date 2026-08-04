@@ -256,7 +256,12 @@ export default function Home() {
   if (activeArenaId) {
     return (
       <div className="w-screen h-screen overflow-hidden bg-slate-950">
-        <SnakeGame onExit={() => handleExitGame()} />
+        <SnakeGame
+          onExit={() => handleExitGame()}
+          mode={gameMode}
+          arenaId={activeArenaId}
+          authToken={undefined}
+        />
       </div>
     );
   }
