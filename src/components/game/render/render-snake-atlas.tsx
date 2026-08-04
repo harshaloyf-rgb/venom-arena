@@ -41,6 +41,9 @@ export interface EmittedParticle {
 /**
  * Render a complete snake using the atlas system.
  * Falls back gracefully if atlas sprites aren't available for a skin.
+ *
+ * @param displayW Display (CSS) width — NOT ctx.canvas.width.
+ * @param displayH Display (CSS) height — NOT ctx.canvas.height.
  */
 export function renderSnakeAtlas(
   ctx: CanvasRenderingContext2D,
@@ -54,6 +57,8 @@ export function renderSnakeAtlas(
   headAngle: number,
   boosting: boolean,
   spawnProtected: boolean,
+  displayW: number,
+  displayH: number,
   atlasManager: SkinAtlasManager,
 ): EmittedParticle[] {
   if (segments.length === 0) return [];
@@ -61,12 +66,9 @@ export function renderSnakeAtlas(
   const rarity: string = identity.skinRarity ?? 'common';
   const skinId = identity.skinId || `skin_${identity.id}`;
 
-  const canvasW = ctx.canvas.width;
-  const canvasH = ctx.canvas.height;
-
   // ── Head culling ──────────────────────────────────────────────────
   const headSeg = segments[0];
-  if (!isOnScreen(headSeg.x, headSeg.y, headSeg.visualRadius * 2, camera, canvasW, canvasH)) {
+  if (!isOnScreen(headSeg.x, headSeg.y, headSeg.visualRadius * 2, camera, displayW, displayH)) {
     return [];
   }
 
@@ -90,14 +92,14 @@ export function renderSnakeAtlas(
   // ── Legendary: glow underlay pass ─────────────────────────────────
   if (rarity === 'legendary') {
     atlasManager.drawGlowUnderlay(
-      ctx, skinId, segments, camera, canvasW, canvasH, time,
+      ctx, skinId, segments, camera, displayW, displayH, time,
     );
   }
 
   // ── Draw segments (tail → head for correct layering) ──────────────
   for (let i = segments.length - 1; i >= 0; i--) {
     const seg = segments[i];
-    const screen = worldToScreen(seg.x, seg.y, camera, canvasW, canvasH);
+    const screen = worldToScreen(seg.x, seg.y, camera, displayW, displayH);
     const screenR = seg.visualRadius * camera.zoom;
 
     if (screenR < 0.5) continue;
@@ -171,7 +173,7 @@ export function renderSnakeAtlas(
   }
 
   // ── Draw hat on head ──────────────────────────────────────────────
-  const headScreen = worldToScreen(headSeg.x, headSeg.y, camera, canvasW, canvasH);
+  const headScreen = worldToScreen(headSeg.x, headSeg.y, camera, displayW, displayH);
   const headScreenR = headSeg.visualRadius * camera.zoom;
 
   if (identity.hat !== 'none') {
