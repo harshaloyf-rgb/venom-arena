@@ -890,3 +890,44 @@ Stage Summary:
 - Direction arrow completely removed — elongated head shape shows direction naturally
 - Face features properly scaled for the new larger head
 - All 5 files modified, lint clean, no runtime errors
+
+---
+Task ID: VISUAL-FIX-3
+Agent: Main
+Task: Fix white dot artifact, reduce head size, remove body tapering
+
+Work Log:
+- Identified white dot as specular highlight in face.ts (fixed position, didn't rotate with head) → removed
+- Identified secondary white dot from head 3D gradient (brightenLocal 0.35 with r*0.05 inner radius) → reduced to 0.12 brightness, r*0.15 inner radius
+- Reduced body gradient brightBoost from 70 to 30, increased inner radius from 0.05 to 0.15
+- Reduced headSize config from 1.15 to 1.05, removed extra 1.25x multiplier in buildRenderSegments
+- Disabled body tapering: all body segments now use uniform baseR radius
+- Browser-verified: VLM confirms no white dot, proportional head, uniform body width, connected segments
+- Committed and pushed: 76419de
+
+Stage Summary:
+- White dot artifact eliminated (was 2 sources: face.ts specular + gradient highlight)
+- Head is now 1.05x body size (was 1.44x)
+- Body has uniform width from head to tail (taper code disabled)
+- All changes committed and pushed to git
+
+---
+Task ID: AUDIT
+Agent: Main
+Task: Full project audit to determine what's working vs missing
+
+Work Log:
+- Ran comprehensive Explore agent audit across all subsystems
+- Examined snake engine, offline/online engines, rendering, collision, bots, food/economy
+- Identified 5 must-fix items, 5 should-fix items, 5 nice-to-haves
+
+Stage Summary:
+- Snake Engine: [WORKING] — 893 lines pure math, complete
+- Offline Engine: [WORKING] — Full game loop, bots, food, scoring
+- Online Engine: [WORKING] — Socket.IO client with extrapolation
+- Rendering: [WORKING] — 17 files, full 2D canvas pipeline
+- Game Server: [WORKING] — 1123 lines, separate process on port 3001
+- Collision: [PARTIAL] — Head-on-body works, self-collision MISSING, head-on-head rules incomplete
+- Bot AI: [PARTIAL] — Harvest+evade work, boundary avoidance missing offline
+- Food/Economy: [WORKING] — Full food system, chips/extraction work online
+- MUST-FIX: (1) Self-collision, (2) WASD steering, (3) Audio wiring, (4) Leaderboard HUD, (5) Mobile joystick visual
