@@ -1195,3 +1195,88 @@ Stage Summary:
 - HTML leaderboard overlay (top 5 by score)
 - Mobile touch support (drag to steer, far drag to boost)
 - Zero external game libraries — pure Canvas API + TypeScript
+
+---
+Task ID: 1a-CONFIG
+Agent: Main
+Task: Create /src/lib/snake/config.ts with 85+ admin-tunable game parameters in 13 categories
+
+Work Log:
+- Read worklog Phase A details (lines 748-752) to understand config.ts rewrite context
+- Read existing constants.ts (35 exports) to preserve all current values exactly
+- Created config.ts with 90 named exports organized into 13 section-commented categories
+- Preserved all 35 original constants: BASE_SPEED=4.5, BOOST_SPEED=8.0, SEGMENT_SPACING=8, START_LENGTH=20, FOOD_COUNT_TARGET=1200, FOOD_SPAWN_WEIGHTS, FOOD_VALUES, FOOD_RADII, FOOD_COLORS, FOOD_GLOW_COLORS, BOOST_DROP_INTERVAL=333, BOOST_MIN_BODY=8, BOOST_MIN_SCORE=20, GROWTH_RATE=0.25, NECK_PROTECTION=5, SAFE_SPAWN_DIST=500, SAFE_SPAWN_ATTEMPTS=30, SPAWN_PROTECTION_MS=4000, BOT_COUNT=1000, SNAKE_RADIUS=8, SPATIAL_CELL_SIZE=100, BOT_FOOD_SCAN_RADIUS=300, BOT_EVADE_RADIUS=300, BOT_START_SCORE_MIN=10, BOT_START_SCORE_MAX=80, BOT_PREDICT_TICKS=8, BOT_AVOID_RANGE=150, CAMERA_LERP=0.08, CAMERA_ZOOM_MIN=0.3, FIXED_DT=1/60, FOOD_SPAWN_AREA_RADIUS=3000, INITIAL_SPAWN_RADIUS=3000, MAX_TURN_RATE=π*0.12, BOT_MAX_TURN_RATE=π*0.08, BOT_WANDER_RATE=0.05
+- Added 55 new constants across categories:
+  - ARENA (5): ARENA_RADIUS, ARENA_BOUNDARY_MARGIN, ARENA_GRID_SIZE, ARENA_BG_COLOR, ARENA_GRID_COLOR
+  - MOVEMENT (3 new): MAX_SNAKE_LENGTH, BOOST_SHRINK_RATE
+  - FOOD (2 new): FOOD_RESPAWN_BATCH, FOOD_DESPAWN_RADIUS
+  - COLLISION (3 new): HEAD_ON_HEAD_BOOST_WINS, DEATH_FOOD_LARGE_DIVISOR, DEATH_FOOD_MEDIUM_DIVISOR
+  - BOOST (1 new): BOOST_SPEED_MULTIPLIER (derived from BOOST_SPEED/BASE_SPEED)
+  - BOT (3 new): BOT_BOOST_CHANCE, BOT_SELF_DESTRUCT_SCORE, BOT_BOUNDARY_AVOID_RADIUS
+  - SPAWN (2 new): RESPAWN_DELAY, SPAWN_INVULN_BLINK_RATE
+  - SPIRAL_TURN (5 all new): TIGHT_TURN_THRESHOLD=0.5, SPIRAL_DETECT_WINDOW=5, MAX_SPIRAL_ANGLE_DELTA=0.15, SPIRAL_A=1.0, SPIRAL_B=0.05
+  - EXTRAPOLATION (4 new + 3 relocated): SERVER_TICK_RATE=20, CLIENT_RENDER_FPS=60, MAX_EXTRAPOLATION_MS=200, ANGLE_LERP_SPEED=0.3, POSITION_PREDICT_FACTOR=1.0, plus CAMERA_LERP/CAMERA_ZOOM_MIN/FIXED_DT
+  - CRAFTING (4 all new): SACRIFICE_SET_COUNT=1, RARITY_UPGRADE_CHANCE=15, CHEST_WEIGHTS (common:55 rare:30 epic:12 legendary:3), SET_PIECE_COUNTS (common:5 rare:4 epic:3 legendary:2)
+  - TEXTURE_ATLAS (7 all new): SPRITE_SIZE=64, BODY_SEGMENT_COUNT=8, HEAD_SPRITE_SIZE=80, TAIL_SPRITE_SIZE=56, PATTERN_UV_SCALE=1.0, ATLAS_PADDING=2, LEGENDARY_GLOW_SIZE=16
+  - SNAPSHOT_DOWNSAMPLING (4 all new): BROADCAST_RATE=20, MAX_SNAKES_PER_SNAPSHOT=100, BODY_DOWNSAMPLE_INTERVAL=3, FOOD_DOWNSAMPLE_RADIUS=500
+  - EXTRACTION (11 all new): EXTRACTION_ZONE_RADIUS=800, ZONE_SHRINK_RATE=0.5, EXTRACTION_SCORE_THRESHOLD=50, EXTRACTION_SPEED_BONUS=1.5, STAR_CHIP_VALUE=10, STAR_CHIP_SPAWN_INTERVAL=5000, STAR_CHIP_RADIUS=12, STAR_CHIP_GLOW='#fbbf24', EXTRACTION_ZONE_DURATION=60000, EXTRACTION_ZONE_SPAWN_INTERVAL=120000, STAR_CHIP_COLORS (5 golden/amber)
+- All exports are named (no default), no imports, all plain constants
+- Included STAR_CHIP_COLORS array of 5 golden/amber colors
+- Passed bun run lint with zero errors
+- Did NOT modify constants.ts (separate step will re-export from config.ts)
+
+Stage Summary:
+- Created /src/lib/snake/config.ts with 90 named exported constants across 13 admin-tunable categories
+- All 35 original constants.ts values preserved exactly
+- 55 new constants added for SPIRAL_TURN, EXTRAPOLATION, CRAFTING, TEXTURE_ATLAS, SNAPSHOT_DOWNSAMPLING, EXTRACTION plus supplementary params in existing categories
+- Ready for constants.ts to re-export from this file in a follow-up step
+- Zero lint errors
+
+---
+Task ID: 1b-POOL
+Agent: Main
+Task: Create zero-allocation object pool system for snake game engine (pool.ts)
+
+Work Log:
+- Created /src/lib/snake/pool.ts (~200 lines) with 5 exported types:
+  - IPathBuffer interface: minimal read/write contract (length, getX, getY, headX, headY, prepend, pop, clear)
+  - PathBuffer class: circular Float32Array buffer, zero-alloc hot path (prepend, pop, getX, getY), O(1) head insert / tail remove, grow() as only allocation point, toVec2Array() for non-hot paths, initFromArray() for backward compat, ensureCapacity(), resetTo(), setLength(), tailX/tailY getters
+  - ObjectPool<T>: generic pool with factory/reset pattern, acquire/release, pre-warm via initialSize
+  - scratchVec2: singleton reusable {x,y} for hot-path scratch math
+  - SnapshotPool: typed-array pool for server snapshots, zeroed on acquire/release
+- Strict TypeScript throughout, no 'any', full JSDoc on every class and export
+- Verified file structure: Float32Array(capacity*2) interleaved layout, circular headSegIdx, logical index 0 = head
+
+Stage Summary:
+- PathBuffer eliminates per-frame object allocation for snake path history
+- ObjectPool<T> and SnapshotPool handle non-hot-path reuse
+- scratchVec2 eliminates temporary vec2 allocations in collision/render math
+- Ready for engine integration (engine.ts hot-path migration)
+- Passed bun run lint with zero errors
+
+---
+Task ID: 1c-RENDERER
+Agent: Main
+Task: Migrate renderer.ts from Vec2[] segments to PathBuffer; update index.ts barrel exports
+
+Work Log:
+- Changed import source from `@/lib/snake/constants` to `@/lib/snake/config` for SNAKE_RADIUS and SPAWN_PROTECTION_MS
+- Updated `renderFrame` signature: now accepts `GameState` (has `starChips` and `extractionZone`) instead of inline type
+- Replaced all `snake.segments[i].x` / `.y` with `snake.path.getX(i)` / `snake.path.getY(i)`
+- Replaced all `snake.segments[0]` (head) access with `snake.path.headX` / `snake.path.headY`
+- Replaced `snake.segments.length` with `snake.path.length`
+- Refactored snake rendering: head (index 0) rendered separately on top, body iterated from index 1
+- Added `drawStarChips()` function: pulsing golden glow, outer ring, core circle with highlight
+- Added `drawExtractionZone()` function: faint amber filled circle with dashed border ring
+- Extraction zone renders under food/snakes; star chips render after food, before snakes
+- Updated `drawMinimap`: player head check uses `player.path.length === 0` guard and `player.path.headX/headY`; bot dots use `snake.path.headX/headY`
+- Updated HUD length display: `player.path.length` instead of `player.segments.length`
+- All existing rendering preserved: dark bg, grid, food with glow (3 sizes), snake body circles with highlight + eyes + name labels, boost speed lines, spawn blink, HUD (score/length/FPS), death overlay, controls hint, minimap
+- Updated `/src/lib/snake/index.ts` barrel exports: added `./config`, `./pool` re-exports; kept `./constants` at end as backward compat shim
+- Passed bun run lint with zero errors
+
+Stage Summary:
+- Renderer fully migrated to PathBuffer zero-alloc API (no more Vec2[] segment access)
+- Star chips and extraction zone rendering added for Phase A game features
+- Barrel exports updated to expose config and pool modules; constants remains as backward-compat shim
+- All visual features preserved: grid, food glow, snake body/head/eyes/boost/labels, HUD, death, controls, minimap
