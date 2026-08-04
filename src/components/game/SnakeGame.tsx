@@ -21,6 +21,9 @@ import {
   FIXED_DT,
   SNAKE_RADIUS,
   SPAWN_PROTECTION_MS,
+  START_LENGTH,
+  GROWTH_RATE,
+  MAX_SNAKE_LENGTH,
 } from '@/lib/snake';
 import { createInitialState, gameTick, respawnPlayer } from '@/lib/snake/engine';
 import { createCamera, updateCamera, getViewport, worldToScreen } from '@/lib/snake/camera';
@@ -591,7 +594,8 @@ function renderOfflineHUD(
   fps: number,
 ): void {
   if (state.player) {
-    drawHUDBase(ctx, state.player.score, state.player.path.length, fps, viewport);
+    const logicalLen = Math.min(Math.floor(START_LENGTH + state.player.score * GROWTH_RATE), MAX_SNAKE_LENGTH);
+    drawHUDBase(ctx, state.player.score, logicalLen, fps, viewport);
   }
 }
 

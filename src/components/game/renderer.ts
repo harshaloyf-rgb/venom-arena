@@ -4,7 +4,7 @@
 // ============================================================================
 
 import type { Camera, FoodOrb, GameState, Snake, StarChip, Viewport } from '@/lib/snake/types';
-import { SNAKE_RADIUS, SPAWN_PROTECTION_MS } from '@/lib/snake/config';
+import { SNAKE_RADIUS, SPAWN_PROTECTION_MS, START_LENGTH, GROWTH_RATE, MAX_SNAKE_LENGTH } from '@/lib/snake/config';
 import { worldToScreen } from '@/lib/snake/camera';
 
 const GRID_SIZE = 80;
@@ -378,10 +378,11 @@ function drawHUD(
   ctx.font = 'bold 16px monospace';
   ctx.fillText(`Score: ${player.score}`, p + 12, p + 10);
 
-  // Length (via path.length instead of segments.length)
+  // Length: show logical segment count, not raw path buffer entries
+  const logicalLength = Math.min(Math.floor(START_LENGTH + player.score * GROWTH_RATE), MAX_SNAKE_LENGTH);
   ctx.font = '13px monospace';
   ctx.fillStyle = '#a0a0a0';
-  ctx.fillText(`Length: ${player.path.length}`, p + 12, p + 10 + lh);
+  ctx.fillText(`Length: ${logicalLength}`, p + 12, p + 10 + lh);
 
   // FPS
   ctx.textAlign = 'right';
