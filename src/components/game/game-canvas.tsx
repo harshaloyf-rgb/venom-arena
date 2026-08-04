@@ -282,7 +282,7 @@ export default function GameCanvas({
 
     // Stars (online only)
     if (stars.length > 0) {
-      renderStars(ctx, stars, camera, w, h, timeSeconds);
+      renderStars(ctx, stars, timeSeconds, camera, w, h);
     }
 
     // Snakes

@@ -705,7 +705,7 @@ export class OnlineEngine {
       isExtracting: false,
       extractFramesLeft: 0,
       extractStartAngle: 0,
-      activeEmote: es.activeEmote,
+      activeEmote: es.activeEmote as import('@/lib/snake/types').EmoteType | null,
       emoteFramesLeft: es.emoteFramesLeft,
       ping: 0,
       commissionRate: this.commissionRate,
