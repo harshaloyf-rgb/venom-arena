@@ -24,6 +24,9 @@ import { renderSnakeAtlas } from './render-snake-atlas';
  * Render a complete snake with skin, hat, face, and effects.
  * If an atlasManager is provided and the snake has a known skinId,
  * delegates to the atlas-based renderer for better performance.
+ *
+ * @param displayW Display (CSS) width — NOT ctx.canvas.width (backing store).
+ * @param displayH Display (CSS) height — NOT ctx.canvas.height (backing store).
  */
 export function renderSnake(
   ctx: CanvasRenderingContext2D,
@@ -37,6 +40,8 @@ export function renderSnake(
   headAngle: number,
   boosting: boolean,
   spawnProtected: boolean,
+  displayW: number,
+  displayH: number,
   atlasManager?: SkinAtlasManager | null,
 ): void {
   if (segments.length === 0) return;
@@ -46,7 +51,7 @@ export function renderSnake(
     renderSnakeAtlas(
       ctx, identity, segments, camera, config, time,
       isPlayer, lowQuality, headAngle, boosting, spawnProtected,
-      atlasManager,
+      displayW, displayH, atlasManager,
     );
     return;
   }
@@ -56,18 +61,15 @@ export function renderSnake(
   // Resolve skin for this frame
   const skin = resolveSkin(identity, segments.length, time);
 
-  const canvasW = ctx.canvas.width;
-  const canvasH = ctx.canvas.height;
-
   // Check if head is on screen (rough cull)
   const headSeg = segments[0];
-  if (!isOnScreen(headSeg.x, headSeg.y, headSeg.visualRadius * 2, camera, canvasW, canvasH)) {
+  if (!isOnScreen(headSeg.x, headSeg.y, headSeg.visualRadius * 2, camera, displayW, displayH)) {
     return;
   }
 
   // ── Draw body glow (if any segment has glow) ─────────────────────
   if (skin.hasGlow) {
-    renderGlowPass(ctx, segments, skin, camera, canvasW, canvasH, config);
+    renderGlowPass(ctx, segments, skin, camera, displayW, displayH, config);
   }
 
   // ── Draw segments (tail → head for correct layering) ─────────────
@@ -76,7 +78,7 @@ export function renderSnake(
     const resolved = skin.segments[i] ?? skin.segments[skin.segments.length - 1];
 
     // Screen position
-    const screen = worldToScreen(seg.x, seg.y, camera, canvasW, canvasH);
+    const screen = worldToScreen(seg.x, seg.y, camera, displayW, displayH);
     const screenR = seg.visualRadius * camera.zoom;
 
     // Skip tiny or off-screen segments
@@ -99,7 +101,7 @@ export function renderSnake(
   }
 
   // ── Draw hat on head ──────────────────────────────────────────────
-  const headScreen = worldToScreen(headSeg.x, headSeg.y, camera, canvasW, canvasH);
+  const headScreen = worldToScreen(headSeg.x, headSeg.y, camera, displayW, displayH);
   const headScreenR = headSeg.visualRadius * camera.zoom;
 
   if (identity.hat !== 'none') {
@@ -133,8 +135,8 @@ function renderGlowPass(
   segments: RenderSegment[],
   skin: ResolvedSkin,
   camera: CameraState,
-  canvasW: number,
-  canvasH: number,
+  displayW: number,
+  displayH: number,
   config: SnakeConfig,
 ): void {
   ctx.save();
@@ -144,7 +146,7 @@ function renderGlowPass(
     const resolved = skin.segments[i];
     if (!resolved?.glow) continue;
 
-    const screen = worldToScreen(seg.x, seg.y, camera, canvasW, canvasH);
+    const screen = worldToScreen(seg.x, seg.y, camera, displayW, displayH);
     const screenR = seg.visualRadius * camera.zoom;
     if (screenR < 0.5) continue;
 

@@ -839,43 +839,16 @@ export function tickSnakeMovement(
   snake.targetAngle = input.targetAngle;
   snake.boosting = input.boosting && snake.score > config.boostMinScore;
 
-  // ── 2. Spiral state machine ──────────────────────────────────────────────
-  if (snake.spiral && snake.spiral.active) {
-    // Check exit conditions
-    const ticksInSpiral = tickCount - snake.spiral.startTick;
-    const stillTight = ticksInSpiral < config.spiralMinDuration
-      || detectTightTurn(snake, config);
+  // ── 2. Normal turning (spiral system disabled — detection logic needs full rework) ──
+  const vr = snake._cachedVisualRadius > 0
+    ? snake._cachedVisualRadius
+    : calcVisualRadius(snake.score, config);
+  snake.angle = turnToward(
+    snake.angle, snake.targetAngle, config, vr, snake.boosting,
+  );
 
-    if (!stillTight) {
-      exitSpiral(snake);
-      // Fall through to normal movement below
-    } else {
-      // Advance spiral
-      advanceSpiral(snake, config, tickCount);
-    }
-  }
-
-  if (!snake.spiral || !snake.spiral.active) {
-    // Check if should enter spiral
-    if (detectTightTurn(snake, config)) {
-      enterSpiralMode(snake, config);
-      if (snake.spiral) {
-        snake.spiral.startTick = tickCount;
-      }
-      advanceSpiral(snake, config, tickCount);
-    } else {
-      // Normal turning
-      const vr = snake._cachedVisualRadius > 0
-        ? snake._cachedVisualRadius
-        : calcVisualRadius(snake.score, config);
-      snake.angle = turnToward(
-        snake.angle, snake.targetAngle, config, vr, snake.boosting,
-      );
-
-      // Normal movement
-      moveHead(snake, config, 1.0);
-    }
-  }
+  // Normal movement
+  moveHead(snake, config, 1.0);
 
   // ── 3. Extend path: prepend new head, trim tail ───────────────────────────
   snake.path.prepend(snake.head.x, snake.head.y, snake.angle);

@@ -781,3 +781,24 @@ Stage Summary:
 - Total: ~42 files modified/created in this session
 - All old code safely in git history (commits d049757 → 3aa32ad → a5c5f33 → 65b08b3 → 624b889 → 81aad32)
 - Browser-tested and verified working
+---
+Task ID: 5
+Agent: Main
+Task: Fix offline mode glitches, stars in HUD, and related rendering bugs
+
+Work Log:
+- Diagnosed 4 critical bugs causing offline mode issues
+- Fixed #1: Disabled broken spiral turn system in engine.ts (detectTightTurn had inverted logic causing wild oscillations)
+- Fixed #2: HUD render-hud.ts now hides online-only elements (Carried Chips, Stars Earned) in offline mode
+- Fixed #3: DPR coordinate mismatch - render-snake.ts and render-snake-atlas.tsx now accept displayW/displayH params instead of using ctx.canvas.width/height (backing store)
+- Fixed #4: Reduced offline bot count from 1000 to 30 (O(n²) collision was too expensive)
+- Fixed #5: renderKillFeed in render-overlays.ts now uses display width instead of backing store width
+- Fixed #6: Restored missing panelW variable declaration in render-hud.ts (caused ReferenceError breaking all rendering)
+- Browser-verified: no console errors, HUD shows only Score/Kills/Rank offline, game renders grid/food/snakes correctly
+
+Stage Summary:
+- Offline mode now runs smoothly with 30 bots
+- No spiral oscillation glitches
+- No stars/chips in offline HUD
+- Correct DPR-aware coordinate system for snake rendering
+- All canvas renderers use display dimensions, not backing store dimensions

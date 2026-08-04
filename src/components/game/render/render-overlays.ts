@@ -23,6 +23,7 @@ export function renderKillFeed(
   ctx: CanvasRenderingContext2D,
   entries: KillFeedEntry[],
   time: number,
+  displayW?: number,
 ): void {
   const FADE_DURATION = 5; // seconds before fully faded
   const MAX_ENTRIES = 8;
@@ -42,7 +43,7 @@ export function renderKillFeed(
   const fontSize = 13;
   ctx.font = `${fontSize}px 'Segoe UI', system-ui, sans-serif`;
 
-  const x = ctx.canvas.width - 14;
+  const x = (displayW ?? ctx.canvas.width / (window.devicePixelRatio || 1)) - 14;
   let y = 52;
   const lineH = fontSize + 5;
 

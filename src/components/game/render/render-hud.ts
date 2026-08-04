@@ -47,32 +47,37 @@ function renderStatsPanel(
   const smallFont = 12;
   const labelFont = 11;
 
-  // Background panel
+  // Background panel — size depends on mode (online shows 5 rows, offline shows 3)
+  const isOffline = hud.isOffline;
+  const rowCount = isOffline ? 3 : 5;
   const panelW = 155;
-  const panelH = 110;
+  const panelH = 10 + rowCount * lineHeight;
   ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
   roundRect(ctx, x - 6, y - 6, panelW, panelH, 8);
   ctx.fill();
 
-  // Carried Chips (emerald)
-  ctx.font = `${labelFont}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-  ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  ctx.fillText('Carried Chips', x, y);
-  ctx.font = `bold ${smallFont + 2}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = '#2ECC71';
-  ctx.fillText(String(hud.carriedChips), x + 90, y);
-  y += lineHeight;
+  // Skip online-only stats in offline mode
+  if (!isOffline) {
+    // Carried Chips (emerald)
+    ctx.font = `${labelFont}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillText('Carried Chips', x, y);
+    ctx.font = `bold ${smallFont + 2}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillStyle = '#2ECC71';
+    ctx.fillText(String(hud.carriedChips), x + 90, y);
+    y += lineHeight;
 
-  // Stars Earned (amber)
-  ctx.font = `${labelFont}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  ctx.fillText('Stars Earned', x, y);
-  ctx.font = `bold ${smallFont + 2}px 'Segoe UI', system-ui, sans-serif`;
-  ctx.fillStyle = '#F59E0B';
-  ctx.fillText(String(hud.starsEarned), x + 90, y);
-  y += lineHeight;
+    // Stars Earned (amber)
+    ctx.font = `${labelFont}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillText('Stars Earned', x, y);
+    ctx.font = `bold ${smallFont + 2}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillStyle = '#F59E0B';
+    ctx.fillText(String(hud.starsEarned), x + 90, y);
+    y += lineHeight;
+  }
 
   // Score (amber)
   ctx.font = `${labelFont}px 'Segoe UI', system-ui, sans-serif`;

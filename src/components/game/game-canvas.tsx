@@ -90,7 +90,7 @@ function buildRenderSegments(
 
 export default function GameCanvas({
   mode, arenaId, arenaName, playerIdentity,
-  rewardMultiplier, botCount = 1000, isPractice = false,
+  rewardMultiplier, botCount = 30, isPractice = false,
   configOverrides, onExit, onMatchEnd,
 }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -329,6 +329,8 @@ export default function GameCanvas({
         snake.angle,
         snake.boosting,
         snake.spawnProtected,
+        w,
+        h,
         atlas,
       );
     }
@@ -350,7 +352,7 @@ export default function GameCanvas({
     }
 
     // Kill feed
-    renderKillFeed(ctx, killFeed, timeSeconds);
+    renderKillFeed(ctx, killFeed, timeSeconds, w);
 
     // Particles
     renderParticles(ctx, particleArray, camera, w, h);
