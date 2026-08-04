@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 import { InputHandler } from './input';
 import { renderFrame, drawDeathOverlay, drawControlsHint, drawMinimap } from './renderer';
 import {
@@ -12,7 +13,11 @@ import {
 import { createInitialState, gameTick, respawnPlayer } from '@/lib/snake/engine';
 import { createCamera, updateCamera, getViewport } from '@/lib/snake/camera';
 
-export default function SnakeGame() {
+interface SnakeGameProps {
+  onExit?: () => void;
+}
+
+export default function SnakeGame({ onExit }: SnakeGameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameStateRef = useRef<GameState | null>(null);
   const cameraRef = useRef<Camera>({ x: 0, y: 0, zoom: 1.0 });
@@ -204,6 +209,17 @@ export default function SnakeGame() {
         className="block w-full h-full"
         style={{ touchAction: 'none' }}
       />
+      {/* Exit button */}
+      {onExit && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onExit(); }}
+          className="absolute top-4 left-4 z-10 w-9 h-9 rounded-lg bg-black/60 hover:bg-red-950/60 border border-white/10 hover:border-red-500/30 flex items-center justify-center cursor-pointer transition-colors"
+          title="Exit to Lobby"
+        >
+          <X className="w-4 h-4 text-white/70 hover:text-red-400" />
+        </button>
+      )}
+      {/* Leaderboard */}
       <div className="absolute top-4 right-4 w-44 bg-black/50 backdrop-blur-sm rounded-lg p-2 pointer-events-none select-none">
         <div className="text-xs text-white/60 font-mono mb-1 text-center">Leaderboard</div>
         {leaderboard.map((entry, i) => (
