@@ -284,22 +284,8 @@ export function checkAllCollisions(
 
   const snakeId = snake.identity.id;
 
-  // ── Self-collision: head vs own body (after neck protection) ────────
-  const selfHitIdx = checkHeadOnBody(
-    snake.head.x, snake.head.y, headRadius,
-    snake.path, headRadius, config.skipSegs, config.segSpacing,
-    config,
-  );
-  if (selfHitIdx >= 0) {
-    scratchVec2.x = snake.path.getX(selfHitIdx);
-    scratchVec2.y = snake.path.getY(selfHitIdx);
-    return {
-      type: 'head_on_body',
-      victimId: snakeId,
-      killerId: snakeId,
-      point: { x: scratchVec2.x, y: scratchVec2.y },
-    };
-  }
+  // NOTE: Self-collision does NOT exist in this game (Section 5 rules).
+  // Only head-vs-other-body and head-on-head collisions.
 
   // ── Check against all other snakes ────────────────────────────────
   for (let s = 0; s < allSnakes.length; s++) {

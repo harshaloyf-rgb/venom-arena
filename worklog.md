@@ -1097,7 +1097,7 @@ Findings Summary:
 7. ❌ Extraction progress ring near head — missing entirely
 8. ❌ Extraction bar fill: hardcoded to 0.0, never shows progress
 9. ❌ Offline bot count: default 30 vs rules' 1000
-10. ❌ Self-collision: not checked (head vs own body)
+10. ❌ Self-collision: PRESENT IN CODE but NOT in game rules — agent hallucinated this feature. REMOVED in CLEANUP-SELF-COLLISION.
 
 ## Important Mismatches (Should Fix)
 11. ❌ BOOST button color: green instead of amber
@@ -1139,3 +1139,21 @@ Stage Summary:
 - 1 comment fixed in game-config.ts
 - Old single-file snake-engine.ts architecture is now FULLY purged — only the modular src/lib/snake/ remains
 - No agent can accidentally import from the old @/lib/snake-engine path anymore
+
+---
+Task ID: CLEANUP-SELF-COLLISION
+Agent: Main
+Task: Remove self-collision from engine.ts — it was NEVER in the game rules (Section 5 only covers head-vs-other-body, head-on-head, and map boundary)
+
+Work Log:
+- Read Section05_Collision.tsx rules: NO self-collision rule exists
+- Found self-collision code at engine.ts lines 287-302 (checkHeadOnBody against own path)
+- Verified game-server does NOT have self-collision (server was correct)
+- Removed 16 lines of self-collision code from checkAllCollisions()
+- Added explicit NOTE comment: "Self-collision does NOT exist in this game (Section 5 rules)"
+- Verified game-server/index.ts has no self-collision
+- Corrected RULES-CHECK finding #10: was "missing" → should be "wrongly present, now removed"
+
+Stage Summary:
+- Self-collision removed from client engine. Players can no longer die by hitting their own body.
+- This was a hallucinated feature from the REWRITE-PHASES-A-F session that was never in the rules.
