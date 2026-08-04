@@ -81,6 +81,10 @@ model Player {
   youtube         String?
   twitch          String?
 
+  // Crafting & Inventory
+  skinPieces           SkinPiece[]
+  craftingTransactions CraftingTransaction[]
+
   // Relations
   dailyClaims     DailyClaim[]
   hourlyClaims    HourlyClaim[]
@@ -527,4 +531,53 @@ model ClanWar {
 
   @@index([declarerTag, status])
   @@index([targetTag, status])
+}
+
+// Skin pieces collected from level chests
+// Run: bun run db:push
+model SkinPiece {
+  id          String   @id @default(cuid())
+  playerId    String
+  skinSetId  String
+  pieceIndex  Int      // 0-based index within the set
+  totalPieces Int      // total pieces in this set (e.g., 30)
+  rarity     String   // 'common' | 'rare' | 'epic' | 'legendary'
+  source      String   // 'level_chest' | 'challenge_reward' | 'trade' | 'event'
+  obtainedAt  Int      @default(0)
+
+  player      Player   @relation(fields: [playerId], references: [id])
+  set         CollectionSet @relation(fields: [skinSetId], references: [id])
+
+  @@unique([playerId, skinSetId, pieceIndex])
+}
+
+// Collection sets that can be completed and sacrificed for skins
+// Run: bun run db:push
+model CollectionSet {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  rewardSkinId  String   // the skin you get from completing
+  rewardRarity   String   // 'common' | 'rare' | 'epic' | 'legendary'
+  totalPieces    Int      @default(30)
+  requiredLevel  Int      @default(1)
+  piecesPerChest Int      @default(2)
+  icon           String   @default("")
+  color          String   @default("")
+
+  pieces         SkinPiece[]
+}
+
+// Crafting transactions (sacrifice history)
+// Run: bun run db:push
+model CraftingTransaction {
+  id               String   @id @default(cuid())
+  playerId         String
+  sacrificedSetId  String
+  resultSkinId     String
+  resultRarity    String
+  resultSkinName   String
+  timestamp        Int      @default(0)
+
+  player           Player   @relation(fields: [playerId], references: [id])
 }
