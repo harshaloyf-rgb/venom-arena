@@ -133,9 +133,10 @@ function create3DFill(
   const hy = cy - r * lightOffset;
 
   const gradient = ctx.createRadialGradient(hx, hy, r * 0.05, cx, cy, r);
-  gradient.addColorStop(0, brighten(baseColor, 70 / 255));
+  // Use baseColor directly as the middle stop (supports any CSS color: hex, hsl, rgb)
+  gradient.addColorStop(0, 'rgba(255,255,255,0.35)');
   gradient.addColorStop(0.5, baseColor);
-  gradient.addColorStop(1, darken(baseColor, 55 / 255));
+  gradient.addColorStop(1, 'rgba(0,0,0,0.25)');
 
   ctx.fillStyle = gradient;
 }

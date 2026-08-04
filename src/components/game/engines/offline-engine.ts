@@ -34,7 +34,16 @@ function nextBotName(): string {
 
 function randomColor(): string {
   const hue = Math.floor(Math.random() * 360);
-  return `hsl(${hue}, 70%, 55%)`;
+  // Convert HSL to hex so atlas rendering doesn't break
+  const s = 0.7, l = 0.55;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => {
+    const k = (n + hue / 30) % 12;
+    const c = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+    return Math.round(255 * Math.max(0, Math.min(1, c)));
+  };
+  const toHex = (v: number) => v.toString(16).padStart(2, '0');
+  return '#' + toHex(f(0)) + toHex(f(8)) + toHex(f(4));
 }
 
 // ── Offline Engine Class ─────────────────────────────────────────────────────
