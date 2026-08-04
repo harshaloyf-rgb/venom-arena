@@ -88,7 +88,7 @@ function buildRenderSegments(
       angle: pa,
       visualRadius: baseR * sizeScale,
       taperRadius,
-      collisionRadius: calcCollisionRadius(taperRadius),
+      collisionRadius: calcCollisionRadius(taperRadius, config),
       color: resolved?.color ?? '#2ECC71',
       shape: resolved?.shape ?? 'circle',
       glow: resolved?.glow ?? false,
@@ -309,6 +309,48 @@ export default function GameCanvas({
 
     // Snakes
     const lowQuality = hud.fps < 25;
+
+    // ── Pre-compute body overlap for close-call transparency ────────
+    // Only check player vs nearby snakes (bot-vs-bot skipped for performance)
+    const overlapMap = new Map<string, Set<number>>(); // snakeId → set of overlapping segment indices
+    if (player && player.alive && player.path.length > 0) {
+      const playerVR = player._cachedVisualRadius > 0 ? player._cachedVisualRadius : calcVisualRadius(player.score, config);
+      for (const other of snakes) {
+        if (!other.alive || other.identity.id === playerIdentity.id) continue;
+        // Quick distance check: skip if heads are far apart
+        const hdx = player.head.x - other.head.x;
+        const hdy = player.head.y - other.head.y;
+        if (hdx * hdx + hdy * hdy > 400 * 400) continue; // 400px max
+
+        const otherVR = other._cachedVisualRadius > 0 ? other._cachedVisualRadius : calcVisualRadius(other.score, config);
+        const overlapDist = (playerVR + otherVR) * 1.1; // 10% margin
+        const overlapDistSq = overlapDist * overlapDist;
+
+        // Check player segments vs other's path
+        const playerOverlaps = new Set<number>();
+        const otherOverlaps = new Set<number>();
+        const pLen = Math.min(player.path.length, 200); // cap check length
+        const oLen = Math.min(other.path.length, 200);
+        const oStep = Math.max(1, Math.floor(config.segSpacing / 2));
+
+        for (let pi = 0; pi < pLen; pi++) {
+          const px = player.path.getX(pi);
+          const py = player.path.getY(pi);
+          for (let oi = 0; oi < oLen; oi += oStep) {
+            const dx = px - other.path.getX(oi);
+            const dy = py - other.path.getY(oi);
+            if (dx * dx + dy * dy < overlapDistSq) {
+              playerOverlaps.add(pi);
+              otherOverlaps.add(oi);
+            }
+          }
+        }
+
+        if (playerOverlaps.size > 0) overlapMap.set(playerIdentity.id, playerOverlaps);
+        if (otherOverlaps.size > 0) overlapMap.set(other.identity.id, otherOverlaps);
+      }
+    }
+
     for (const snake of snakes) {
       if (!snake.alive) continue;
       if (!isOnScreen(snake.head.x, snake.head.y, 50, camera, w, h)) continue;
@@ -344,6 +386,7 @@ export default function GameCanvas({
         w,
         h,
         atlas,
+        overlapMap.get(snake.identity.id),
       );
     }
 
@@ -363,6 +406,28 @@ export default function GameCanvas({
       }
     }
 
+    // ── Extraction head ring (white-to-green, only for player) ───────
+    if (player && player.alive && player.isExtracting) {
+      const headScreen = worldToScreen(player.head.x, player.head.y, camera, w, h);
+      const headR = (player._cachedVisualRadius > 0 ? player._cachedVisualRadius : calcVisualRadius(player.score, config)) * camera.zoom * 1.4;
+      const progress = player.extractFramesLeft / (config.extractSeconds * config.tickRateHz);
+      const ringAngle = (1 - progress) * Math.PI * 2;
+
+      // White at 0%, green at 100%
+      const r = Math.round(255 * (1 - progress));
+      const g = 255;
+      const ringColor = `rgb(${r}, ${g}, ${Math.round(100 + progress * 100)})`;
+
+      ctx.save();
+      ctx.strokeStyle = ringColor;
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(headScreen.x, headScreen.y, headR, -Math.PI / 2, -Math.PI / 2 + ringAngle);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // Kill feed
     renderKillFeed(ctx, killFeed, timeSeconds, w);
 
@@ -370,8 +435,8 @@ export default function GameCanvas({
     renderParticles(ctx, particleArray, camera, w, h);
 
     // Minimap
-    if (showMinimap && !hud.isOffline) {
-      renderMinimap(ctx, snakes, player, engine.map, w, h, config);
+    if (showMinimap) {
+      renderMinimap(ctx, snakes, player, engine.map, w, h, config, food);
     }
 
     // HUD

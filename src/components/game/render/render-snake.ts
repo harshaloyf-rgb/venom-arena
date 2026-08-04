@@ -62,6 +62,7 @@ export function renderSnake(
   displayW: number,
   displayH: number,
   atlasManager?: SkinAtlasManager | null,
+  overlapIndices?: Set<number>,
 ): void {
   if (segments.length === 0) return;
 
@@ -109,6 +110,10 @@ export function renderSnake(
       ctx.globalAlpha = 0.3 + Math.sin(time * 8) * 0.2;
       ctx.shadowColor = '#FFFFFF';
       ctx.shadowBlur = 15;
+    } else if (overlapIndices && overlapIndices.has(i)) {
+      // Close-call overlap: reduce opacity for overlapping segments only
+      ctx.save();
+      ctx.globalAlpha = config.overlapOpacity;
     }
 
     // Draw 3D-shaded circle using taperRadius
@@ -118,6 +123,8 @@ export function renderSnake(
     ctx.fill();
 
     if (spawnProtected) {
+      ctx.restore();
+    } else if (overlapIndices && overlapIndices.has(i)) {
       ctx.restore();
     }
   }

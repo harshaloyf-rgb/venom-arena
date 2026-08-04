@@ -388,6 +388,8 @@ export interface BotAIState {
   dangerAngle: number | null;
   inDanger: boolean;
   decisionCooldown: number;
+  /** 0=rookie, 1=scout, 2=hunter, 3=predator, 4=apex */
+  level: number;
 }
 
 // ── Extraction ──────────────────────────────────────────────────────────────
