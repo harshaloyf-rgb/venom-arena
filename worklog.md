@@ -822,3 +822,71 @@ Stage Summary:
 - Snake now moves, turns, and has proper body segments
 - Bots will now properly move (path is correct) and won't die instantly
 - Stars-in-HUD was a secondary symptom of the path bug (not a renderStars issue)
+---
+Task ID: 1a-1d
+Agent: Visual Overhaul Agent
+Task: Phase 1 Snake Visual Overhaul — smooth connected body, taper, elliptical head, no arrow, better face
+
+Work Log:
+- Read worklog for full project context (825 lines of prior work)
+- Read all 7 target files: types.ts, game-canvas.tsx, render-snake.ts, render-snake-atlas.tsx, face.ts, gradient.ts, arrow.ts, config.ts
+- Added `taperRadius: number` field to `RenderSegment` interface in types.ts (line ~635)
+- Rewrote `buildRenderSegments()` in game-canvas.tsx:
+  - Changed path sampling from every `skinSegSpacing` (5) to every `ceil(skinSegSpacing/3)` (≈2) points — yields ~10 segments for starting snake instead of 4
+  - Added taper computation: head gets `taperRadius = baseR * headSize * 1.25`, body uses nonlinear taper `0.30 + 0.70 * pow(t, 0.6)` where t=1 at head
+  - Head segment gets `sizeScale = config.headSize * 1.25`
+  - collisionRadius now based on taperRadius
+- Rewrote render-snake.ts (procedural fallback):
+  - Removed import of `drawDirectionArrow` from `./arrow` and `drawShape` from `./shapes`
+  - Added local `brightenLocal()`/`darkenLocal()` color helpers for ellipse gradient
+  - Body segments (i >= 1): draw 3D-shaded circles using `seg.taperRadius` with `create3DGradient`, tail→head order
+  - Head (i=0): draw as elongated ellipse (`radiusX = taperR * 1.35`, `radiusY = taperR * 1.0`) with offset radial gradient
+  - Face and hat use `headSeg.taperRadius * camera.zoom` for correct sizing
+  - No direction arrow — elliptical head shape shows direction
+  - Glow pass updated to use `seg.taperRadius`
+- Rewrote render-snake-atlas.tsx (atlas renderer):
+  - Removed import of `drawDirectionArrow` from `./arrow`
+  - Added local `brightenLocal()`/`darkenLocal()` color helpers
+  - Body segments (i >= 1): pass `seg.taperRadius * camera.zoom` as `screenR` to `atlasManager.drawBody()/drawTail()`
+  - Head (i=0): draw procedurally as elongated ellipse with 3D gradient (not from atlas circle sprite)
+  - Face/hat use `headSeg.taperRadius * camera.zoom`
+  - Legendary particle emission preserved
+  - No direction arrow
+- Updated face.ts proportions for larger elongated head:
+  - eyeOffset: 0.32 → 0.35 (wider eyes)
+  - eyeRadius: 0.28 → 0.30 (bigger eyes)
+  - pupilRadius: 0.16 → 0.17 (bigger pupils)
+  - pupilShift: 0.06 → 0.08 (more noticeable tracking)
+  - fwdX/fwdY: 0.15 → 0.2 (eyes further forward)
+  - noseOffset: 0.18 → 0.35 (nose at tip)
+  - noseSpread: 0.08 → 0.1, noseDotR: 0.05 → 0.06
+  - mouthDist: 0.42 → 0.55, mouthW: 0.22 → 0.28 (mouth at very front)
+  - specR: 0.12 → 0.15 (bigger specular highlight)
+- Ran `bun run lint` — PASSING, zero errors
+
+Stage Summary:
+- 5 files modified: types.ts, game-canvas.tsx, render-snake.ts, render-snake-atlas.tsx, face.ts
+- Snake body now has ~2.5x more segments (denser sampling) with nonlinear taper
+- Head is an elongated ellipse (1.35x wider in movement direction) with 3D gradient
+- Direction arrow completely removed from both renderers
+- Face features repositioned for the larger elongated head
+- Lint clean, backward compatible (atlas delegation preserved)
+
+---
+Task ID: 1a-1d
+Agent: Main
+Task: Phase 1 Snake Visual Overhaul — smooth body, taper, elliptical head, no arrow, better face
+
+Work Log:
+- Added `taperRadius: number` to RenderSegment interface in types.ts
+- Rewrote buildRenderSegments() in game-canvas.tsx: uses every path point (spacing=1) for dense overlapping coverage, nonlinear taper (0.35+0.65*t^0.6), head gets headSize*1.25
+- Rewrote render-snake.ts: removed direction arrow import/call, body segments use taperRadius for 3D gradient circles, head drawn as elongated ellipse (1.35x forward, 1.0x perp), kept face/hat rendering
+- Rewrote render-snake-atlas.tsx: same changes for atlas path, body uses taperRadius, head is procedural ellipse, no direction arrow
+- Updated face.ts: eyes wider apart (0.35), bigger (0.30/0.17), further forward (0.2), nose at tip (0.35), mouth at front (0.55), larger specular (0.15)
+- Browser verified: 161 body pixels (was 40), 204px extent, taper confirmed (276px head ring vs 10px tail ring), zero console errors
+
+Stage Summary:
+- Snake now renders as smooth connected body with visible taper from head to tail
+- Direction arrow completely removed — elongated head shape shows direction naturally
+- Face features properly scaled for the new larger head
+- All 5 files modified, lint clean, no runtime errors
