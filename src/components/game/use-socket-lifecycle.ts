@@ -349,11 +349,12 @@ export function useSocketLifecycle({
         const messages: Record<string, string> = {
           insufficient_chips: 'Not enough chips to enter this arena.',
           banned: 'Your account has been banned.',
-          invalid_arena: 'This arena does not exist.',
+          invalid_arena: 'This arena does not exist. Please try again.',
           already_in_match: 'You are already in a match.',
           player_not_found: 'Player profile not found. Try re-logging.',
-          database_error: 'Server error — please try again.',
-          server_error: 'Server error — please try again.',
+          database_error: 'Database error — please try again.',
+          server_error: 'Server error — the game server may be starting up. Please try again.',
+          connection_error: 'Could not reach the game server. Please try again.',
         };
         const reason = data?.reason ?? 'server_error';
         const msg = messages[reason] || `Join failed (${reason}).`;
