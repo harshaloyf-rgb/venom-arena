@@ -419,11 +419,18 @@ export default function SnakeGame({
       animFrameRef.current = requestAnimationFrame(loop);
     };
 
-    const onDeathAction = () => {
-      handleRespawn();
+    // ── Death overlay: Space/click to respawn (only when dead) ──
+    const onRespawnKey = (e: KeyboardEvent) => {
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        if (isDeadRef.current) handleRespawn();
+      }
     };
-    window.addEventListener('keydown', onDeathAction);
-    canvas.addEventListener('click', onDeathAction);
+    const onRespawnClick = () => {
+      if (isDeadRef.current) handleRespawn();
+    };
+    window.addEventListener('keydown', onRespawnKey);
+    canvas.addEventListener('click', onRespawnClick);
 
     animFrameRef.current = requestAnimationFrame(loop);
 
@@ -432,8 +439,8 @@ export default function SnakeGame({
       cancelAnimationFrame(animFrameRef.current);
       input.detach();
       window.removeEventListener('resize', resize);
-      window.removeEventListener('keydown', onDeathAction);
-      canvas.removeEventListener('click', onDeathAction);
+      window.removeEventListener('keydown', onRespawnKey);
+      canvas.removeEventListener('click', onRespawnClick);
 
       // Cleanup online connections
       if (onlineEngine) {
