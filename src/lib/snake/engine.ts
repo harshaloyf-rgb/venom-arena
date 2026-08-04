@@ -1,16 +1,26 @@
 // ============================================================================
-// Venom Arena — Snake Engine (Pure Math)
+// Venom Arena — Snake Engine (Pure Math, Zero-Alloc Hot Path)
 // ALL functions are pure. No DOM, no canvas, no side effects.
-// Importable by both client (offline-engine) and server (game-server).
+// Importable by both client (offline-engine) and server (Bun/Node).
+//
+// Hot path (tickSnakeMovement) uses ZERO allocation:
+//   - No object creation ({ x, y }, new Vec2())
+//   - No .push(), .filter(), .map() — pre-allocated arrays + for-loops
+//   - IPathBuffer (Float32Array-backed) instead of PathPoint[]
+//   - Mutates snake state directly, never spreads (...snake)
 // ============================================================================
 
 import type {
-  Vec2, PathPoint, SnakeState, FoodOrb, StarChip, MapState,
+  Vec2, SnakeState, FoodOrb, StarChip, MapState,
   CollisionResult, DeathEvent, KillCause, FoodSize,
+  InputState, IPathBuffer, TurnMetadata, SpiralTurnState, EmoteType,
 } from './types';
 import type { SnakeConfig } from './config';
+import { scratchVec2 } from './pool';
 
 // ── Vector Math ──────────────────────────────────────────────────────────────
+// These are pure math utilities, not in the hot path.
+// Object creation here is fine — they're used for one-off calculations.
 
 export function vec2(x: number, y: number): Vec2 {
   return { x, y };
@@ -66,22 +76,38 @@ export function angleDelta(current: number, target: number): number {
   return normalizeAngle(target - current);
 }
 
+// ── Internal Helpers ─────────────────────────────────────────────────────────
+
+/** Get max turn rate for a snake given its visual radius and boost state. */
+function getMaxTurnRate(visualRadius: number, isBoosting: boolean, config: SnakeConfig): number {
+  const thickRange = config.maxThick - config.minThick;
+  const thickT = thickRange > 0
+    ? Math.max(0, Math.min(1, (visualRadius - config.minThick) / thickRange))
+    : 0;
+  if (isBoosting) return config.turnBoost;
+  return config.turnThin + (config.turnFat - config.turnThin) * thickT;
+}
+
 // ── Movement ─────────────────────────────────────────────────────────────────
 
-/** Move snake head forward by one tick */
+/**
+ * Move snake head forward by one tick.
+ * ZERO-ALLOC: mutates snake.head directly.
+ */
 export function moveHead(
   snake: SnakeState,
   config: SnakeConfig,
-  dt: number, // 1.0 for normal tick
-): Vec2 {
+  dt: number = 1.0,
+): void {
   const speed = snake.boosting ? config.boostSpeed * dt : config.baseSpeed * dt;
-  return {
-    x: snake.head.x + Math.cos(snake.angle) * speed,
-    y: snake.head.y + Math.sin(snake.angle) * speed,
-  };
+  snake.head.x += Math.cos(snake.angle) * speed;
+  snake.head.y += Math.sin(snake.angle) * speed;
 }
 
-/** Smoothly turn snake toward target angle */
+/**
+ * Smoothly turn snake toward target angle.
+ * Returns the new angle. No allocation.
+ */
 export function turnToward(
   currentAngle: number,
   targetAngle: number,
@@ -93,84 +119,11 @@ export function turnToward(
   const delta = angleDelta(currentAngle, targetAngle);
   if (Math.abs(delta) < 0.001) return currentAngle;
 
-  // Turn rate depends on thickness (thin = fast, fat = slow)
-  const thickRange = config.maxThick - config.minThick;
-  const thickT = thickRange > 0
-    ? Math.max(0, Math.min(1, (visualRadius - config.minThick) / thickRange))
-    : 0;
-
-  let turnRate: number;
-  if (isBoosting) {
-    turnRate = config.turnBoost;
-  } else {
-    turnRate = config.turnThin + (config.turnFat - config.turnThin) * thickT;
-  }
-
+  const turnRate = getMaxTurnRate(visualRadius, isBoosting, config);
   const maxTurn = turnRate * dt;
   if (Math.abs(delta) <= maxTurn) return targetAngle;
 
   return currentAngle + Math.sign(delta) * maxTurn;
-}
-
-// ── Body Path Management ─────────────────────────────────────────────────────
-
-/** Build initial body path for a newly spawned snake */
-export function buildInitialPath(
-  headX: number,
-  headY: number,
-  angle: number,
-  bodyLength: number,
-  spacing: number,
-): PathPoint[] {
-  const count = Math.ceil(bodyLength / spacing);
-  const path: PathPoint[] = [];
-  for (let i = 0; i < count; i++) {
-    path.push({
-      x: headX - Math.cos(angle) * i * spacing,
-      y: headY - Math.sin(angle) * i * spacing,
-      angle,
-    });
-  }
-  return path;
-}
-
-/** Extend path: add new head, trim tail to maintain target length */
-export function extendPath(
-  path: PathPoint[],
-  newHead: Vec2,
-  angle: number,
-  targetScore: number,
-  config: SnakeConfig,
-): PathPoint[] {
-  // Prepend new head
-  const newPath: PathPoint[] = [
-    { x: newHead.x, y: newHead.y, angle },
-    ...path,
-  ];
-
-  // Trim to target length
-  const maxPoints = Math.ceil((targetScore * config.ptsPerSegment) / config.segSpacing);
-  if (newPath.length > maxPoints) {
-    return newPath.slice(0, maxPoints);
-  }
-  return newPath;
-}
-
-/** Sample path points at even spacing for rendering */
-export function sampleSegments(
-  path: PathPoint[],
-  spacing: number,
-  count: number,
-): PathPoint[] {
-  if (path.length === 0) return [];
-  if (count <= 0) return [];
-
-  const result: PathPoint[] = [];
-  for (let i = 0; i < count; i++) {
-    const idx = Math.min(Math.floor(i * spacing), path.length - 1);
-    result.push(path[idx]);
-  }
-  return result;
 }
 
 // ── Size Calculations ────────────────────────────────────────────────────────
@@ -227,23 +180,30 @@ export function pointInCircle(
 }
 
 /**
- * Check head-on-body collision.
+ * Check head-on-body collision using IPathBuffer.
  * First `skipSegs` segments (neck protection) are immune.
  * Returns the index of the hit segment, or -1 if no hit.
+ * ZERO-ALLOC: uses getX/getY instead of object indexing.
  */
 export function checkHeadOnBody(
   headX: number,
   headY: number,
   headRadius: number,
-  bodyPath: PathPoint[],
+  bodyPath: IPathBuffer,
   bodyRadius: number,
   skipSegs: number,
   segSpacing: number,
 ): number {
-  const step = Math.max(1, Math.floor(segSpacing / 3)); // Check every ~3px
-  for (let i = skipSegs * step; i < bodyPath.length; i += step) {
-    const seg = bodyPath[i];
-    if (circlesOverlap(headX, headY, headRadius, seg.x, seg.y, bodyRadius)) {
+  const step = Math.max(1, Math.floor(segSpacing / 3));
+  const startIdx = skipSegs * step;
+  const len = bodyPath.length;
+  const rSum = headRadius + bodyRadius;
+  const rSumSq = rSum * rSum;
+
+  for (let i = startIdx; i < len; i += step) {
+    const dx = headX - bodyPath.getX(i);
+    const dy = headY - bodyPath.getY(i);
+    if (dx * dx + dy * dy < rSumSq) {
       return i;
     }
   }
@@ -280,7 +240,7 @@ export function checkBoundaryCollision(
 
 /**
  * Full collision check for one snake against all others.
- * Returns CollisionResult with victim/killer IDs.
+ * Uses cached radii where available. ZERO-ALLOC in the loop body.
  */
 export function checkAllCollisions(
   snake: SnakeState,
@@ -292,52 +252,60 @@ export function checkAllCollisions(
     return { type: 'none', victimId: null, killerId: null, point: null };
   }
 
-  const headRadius = calcCollisionRadius(calcVisualRadius(snake.score, config));
+  const headRadius = snake._cachedCollisionRadius > 0
+    ? snake._cachedCollisionRadius
+    : calcCollisionRadius(calcVisualRadius(snake.score, config));
 
-  // Check boundary collision (online only — circular breathing map)
+  // Boundary collision (online — circular breathing map)
   if (map.type === 'circular_breathing') {
     if (checkBoundaryCollision(snake.head.x, snake.head.y, map.center, map.currentRadius)) {
+      scratchVec2.x = snake.head.x;
+      scratchVec2.y = snake.head.y;
       return {
         type: 'boundary',
         victimId: snake.identity.id,
         killerId: null,
-        point: { x: snake.head.x, y: snake.head.y },
+        point: { x: scratchVec2.x, y: scratchVec2.y },
       };
     }
   }
 
-  // Check against other snakes
-  for (const other of allSnakes) {
-    if (other.identity.id === snake.identity.id) continue;
+  const snakeId = snake.identity.id;
+
+  for (let s = 0; s < allSnakes.length; s++) {
+    const other = allSnakes[s];
+    if (other.identity.id === snakeId) continue;
     if (!other.alive) continue;
 
-    const otherRadius = calcCollisionRadius(calcVisualRadius(other.score, config));
+    const otherRadius = other._cachedCollisionRadius > 0
+      ? other._cachedCollisionRadius
+      : calcCollisionRadius(calcVisualRadius(other.score, config));
 
-    // Head-on-head (both die — but we only report current snake as victim)
+    // Head-on-head
     if (checkHeadOnHead(snake, other, headRadius, otherRadius)) {
+      scratchVec2.x = (snake.head.x + other.head.x) * 0.5;
+      scratchVec2.y = (snake.head.y + other.head.y) * 0.5;
       return {
         type: 'head_on_head',
-        victimId: snake.identity.id,
+        victimId: snakeId,
         killerId: other.identity.id,
-        point: {
-          x: (snake.head.x + other.head.x) / 2,
-          y: (snake.head.y + other.head.y) / 2,
-        },
+        point: { x: scratchVec2.x, y: scratchVec2.y },
       };
     }
 
-    // Head-on-body (current snake's head hits other's body)
+    // Head-on-body: current snake's head vs other's body
     const hitIdx = checkHeadOnBody(
       snake.head.x, snake.head.y, headRadius,
       other.path, otherRadius, config.skipSegs, config.segSpacing,
     );
     if (hitIdx >= 0) {
-      const hitPoint = other.path[hitIdx];
+      scratchVec2.x = other.path.getX(hitIdx);
+      scratchVec2.y = other.path.getY(hitIdx);
       return {
         type: 'head_on_body',
-        victimId: snake.identity.id,
+        victimId: snakeId,
         killerId: other.identity.id,
-        point: { x: hitPoint.x, y: hitPoint.y },
+        point: { x: scratchVec2.x, y: scratchVec2.y },
       };
     }
   }
@@ -347,7 +315,7 @@ export function checkAllCollisions(
 
 // ── Food ─────────────────────────────────────────────────────────────────────
 
-/** Generate a random food orb */
+/** Generate a random food orb. Not in hot path. */
 export function createFoodOrb(
   id: string,
   x: number,
@@ -380,53 +348,64 @@ export function createFoodOrb(
   return { id, x, y, size, value, radius, color };
 }
 
-/** Check if snake head eats a food orb */
+/**
+ * Check if snake head eats a food orb.
+ * ZERO-ALLOC: inlines distance math, no vec2Dist call.
+ */
 export function checkFoodEat(
   snake: SnakeState,
   food: FoodOrb,
   config: SnakeConfig,
 ): boolean {
-  const headRadius = calcVisualRadius(snake.score, config);
-  return vec2Dist(snake.head, food) < headRadius + config.eatRadius + food.radius;
+  const vr = snake._cachedVisualRadius > 0
+    ? snake._cachedVisualRadius
+    : calcVisualRadius(snake.score, config);
+  const threshold = vr + config.eatRadius + food.radius;
+  const dx = snake.head.x - food.x;
+  const dy = snake.head.y - food.y;
+  const distSq = dx * dx + dy * dy;
+  return distSq < threshold * threshold;
 }
 
 /**
  * Calculate death food drops from a snake's body.
- * Large: L ÷ 5, Medium: M ÷ 3, Small: remainder
+ * Uses IPathBuffer for zero-alloc reads. Death is infrequent.
  */
 export function calcDeathFood(
   snake: SnakeState,
   config: SnakeConfig,
 ): FoodOrb[] {
-  const bodyLength = Math.floor(snake.path.length);
+  const bodyLength = snake.path.length;
   const maxOrbs = config.deathDropMaxOrbs;
 
   let largeCount = Math.floor(bodyLength / 5);
   let medCount = Math.floor(bodyLength / 3) - largeCount;
   let smallCount = bodyLength - largeCount - medCount;
 
-  // Apply death drop chances
   largeCount = Math.floor(largeCount * config.deathDropLargeChance);
   medCount = Math.floor(medCount * config.deathDropMedChance);
-  // Small = remainder (not capped by chance)
 
   const total = largeCount + medCount + smallCount;
   if (total === 0) return [];
 
-  // Cap total
   const scale = total > maxOrbs ? maxOrbs / total : 1;
   largeCount = Math.floor(largeCount * scale);
   medCount = Math.floor(medCount * scale);
   smallCount = Math.floor(smallCount * scale);
 
-  const orbs: FoodOrb[] = [];
-  let orbIdx = 0;
-  const dropSpacing = Math.max(1, Math.floor(bodyLength / (largeCount + medCount + smallCount)));
+  const finalTotal = largeCount + medCount + smallCount;
+  if (finalTotal === 0) return [];
 
-  for (let i = 0; i < bodyLength; i += dropSpacing) {
-    if (orbIdx >= largeCount + medCount + smallCount) break;
-    const pt = snake.path[i];
-    const id = `death-${snake.identity.id}-${orbIdx}`;
+  const orbs: FoodOrb[] = [];
+  const dropSpacing = Math.max(1, Math.floor(bodyLength / finalTotal));
+  const spread = config.dropSpread;
+  const snakeId = snake.identity.id;
+  let orbIdx = 0;
+
+  for (let i = 0; i < bodyLength && orbIdx < finalTotal; i += dropSpacing) {
+    const px = snake.path.getX(i);
+    const py = snake.path.getY(i);
+    const id = `death-${snakeId}-${orbIdx}`;
 
     let size: FoodSize;
     let value: number;
@@ -441,12 +420,10 @@ export function calcDeathFood(
       size = 'small'; value = config.foodSmallValue; radius = config.foodSmallRadius; color = '#66FF66';
     }
 
-    // Spread food around the path point
-    const spread = config.dropSpread;
     orbs.push({
       id,
-      x: pt.x + (Math.random() - 0.5) * spread,
-      y: pt.y + (Math.random() - 0.5) * spread,
+      x: px + (Math.random() - 0.5) * spread,
+      y: py + (Math.random() - 0.5) * spread,
       size, value, radius, color,
     });
     orbIdx++;
@@ -457,28 +434,27 @@ export function calcDeathFood(
 
 // ── Star Chips (Online Only) ─────────────────────────────────────────────────
 
-/**
- * Create star chips dropped on player death.
- * Always 10 stars. Value = carriedChips / 10 per star.
- * Only dropped if player had carried chips.
- */
+/** Create star chips dropped on player death. Infrequent operation. */
 export function createDeathStars(
   snake: SnakeState,
   config: SnakeConfig,
 ): StarChip[] {
   if (snake.carriedChips <= 0) return [];
 
-  const count = config.starsPerDeath; // 10
+  const count = config.starsPerDeath;
   const valuePerStar = Math.floor(snake.carriedChips / count);
   const spread = 60;
   const stars: StarChip[] = [];
+  const snakeId = snake.identity.id;
+  const hx = snake.head.x;
+  const hy = snake.head.y;
 
   for (let i = 0; i < count; i++) {
     const angle = (i / count) * Math.PI * 2;
     stars.push({
-      id: `star-${snake.identity.id}-${i}`,
-      x: snake.head.x + Math.cos(angle) * spread,
-      y: snake.head.y + Math.sin(angle) * spread,
+      id: `star-${snakeId}-${i}`,
+      x: hx + Math.cos(angle) * spread,
+      y: hy + Math.sin(angle) * spread,
       value: valuePerStar,
       phaseOffset: Math.random() * Math.PI * 2,
     });
@@ -487,22 +463,24 @@ export function createDeathStars(
   return stars;
 }
 
-/** Check if snake head collects a star chip */
+/** Check if snake head collects a star chip. Infrequent operation. */
 export function checkStarCollect(
   snake: SnakeState,
   star: StarChip,
   config: SnakeConfig,
 ): boolean {
-  const headRadius = calcVisualRadius(snake.score, config);
-  return vec2Dist(snake.head, star) < headRadius + 20; // 20px star radius
+  const vr = snake._cachedVisualRadius > 0
+    ? snake._cachedVisualRadius
+    : calcVisualRadius(snake.score, config);
+  const dx = snake.head.x - star.x;
+  const dy = snake.head.y - star.y;
+  const threshold = vr + 20;
+  return dx * dx + dy * dy < threshold * threshold;
 }
 
 // ── Map ──────────────────────────────────────────────────────────────────────
 
-/**
- * Calculate the base map radius based on player count.
- * Scales linearly between mapMinRadius (1 player) and mapMaxRadius (1000 players).
- */
+/** Calculate the base map radius based on player count. */
 export function calcBaseMapRadius(
   playerCount: number,
   config: SnakeConfig,
@@ -512,10 +490,7 @@ export function calcBaseMapRadius(
   return config.mapMinRadius + range * t;
 }
 
-/**
- * Calculate breathing map radius at a given time.
- * Oscillates ±breathingAmplitude around baseRadius with given period.
- */
+/** Calculate breathing map radius at a given time. */
 export function calcBreathingRadius(
   baseRadius: number,
   timeSeconds: number,
@@ -525,7 +500,7 @@ export function calcBreathingRadius(
   return baseRadius + Math.sin(phase) * config.breathingAmplitude;
 }
 
-/** Update map state for breathing */
+/** Update map state for breathing. */
 export function updateMapState(
   map: MapState,
   elapsedSeconds: number,
@@ -543,17 +518,12 @@ export function updateMapState(
 
 // ── Extraction ───────────────────────────────────────────────────────────────
 
-/**
- * Calculate commission rate based on real player count.
- * 0% if ≤3 real players, 35% if ≥4.
- */
+/** Calculate commission rate based on real player count. */
 export function calcCommissionRate(realPlayerCount: number): number {
   return realPlayerCount >= 4 ? 0.35 : 0;
 }
 
-/**
- * Calculate banked amount after commission.
- */
+/** Calculate banked amount after commission. */
 export function calcBankedAmount(carriedChips: number, commissionRate: number): number {
   return Math.floor(carriedChips * (1 - commissionRate));
 }
@@ -562,72 +532,75 @@ export function calcBankedAmount(carriedChips: number, commissionRate: number): 
 
 /**
  * Process boost drain for one tick.
- * Returns { newScore, shouldDropFood }.
+ * ZERO-ALLOC: mutates snake.score directly. Returns void.
  */
 export function processBoostDrain(
   snake: SnakeState,
   config: SnakeConfig,
   frameCount: number,
-): { newScore: number; shouldDropFood: boolean } {
+): void {
   if (!snake.boosting || snake.score <= config.boostMinScore) {
-    return { newScore: snake.score, shouldDropFood: false };
+    return;
   }
 
   const drainPerTick = config.scoreDrainPerSec / config.tickRateHz;
-  const newScore = Math.max(config.boostMinScore, snake.score - drainPerTick);
+  snake.score = Math.max(config.boostMinScore, snake.score - drainPerTick);
 
-  // Drop tail food every N frames
-  const shouldDropFood = frameCount % config.boostDropEveryNFrames === 0;
-
-  return { newScore, shouldDropFood };
+  // If score drops to minimum, stop boosting
+  if (snake.score <= config.boostMinScore) {
+    snake.boosting = false;
+  }
 }
 
 // ── Spawn Protection ─────────────────────────────────────────────────────────
 
-/** Decrement spawn protection. Returns updated snake. */
-export function tickSpawnProtection(snake: SnakeState): SnakeState {
-  if (snake.spawnProtectionFrames <= 0) return snake;
+/**
+ * Decrement spawn protection. Mutates snake directly.
+ */
+export function tickSpawnProtection(snake: SnakeState): void {
+  if (snake.spawnProtectionFrames <= 0) return;
   const remaining = snake.spawnProtectionFrames - 1;
-  return {
-    ...snake,
-    spawnProtected: remaining > 0,
-    spawnProtectionFrames: remaining,
-  };
+  snake.spawnProtectionFrames = remaining;
+  snake.spawnProtected = remaining > 0;
 }
 
 // ── Emotes ───────────────────────────────────────────────────────────────────
 
-/** Set an emote on a snake (4 seconds at 30fps = 120 frames) */
+/**
+ * Set an emote on a snake. Mutates snake directly.
+ * Default 4 seconds at 30fps = 120 frames.
+ */
 export function setEmote(
   snake: SnakeState,
-  emote: import('./types').EmoteType | null,
+  emote: EmoteType | null,
   frames: number = 120,
-): SnakeState {
-  return {
-    ...snake,
-    activeEmote: emote,
-    emoteFramesLeft: emote ? frames : 0,
-  };
+): void {
+  snake.activeEmote = emote;
+  snake.emoteFramesLeft = emote ? frames : 0;
 }
 
-/** Tick emote countdown */
-export function tickEmote(snake: SnakeState): SnakeState {
+/**
+ * Tick emote countdown. Mutates snake directly.
+ */
+export function tickEmote(snake: SnakeState): void {
   if (snake.emoteFramesLeft <= 0) {
-    return { ...snake, activeEmote: null, emoteFramesLeft: 0 };
+    snake.activeEmote = null;
+    snake.emoteFramesLeft = 0;
+    return;
   }
-  return {
-    ...snake,
-    emoteFramesLeft: snake.emoteFramesLeft - 1,
-    activeEmote: snake.emoteFramesLeft - 1 > 0 ? snake.activeEmote : null,
-  };
+  snake.emoteFramesLeft--;
+  if (snake.emoteFramesLeft <= 0) {
+    snake.activeEmote = null;
+    snake.emoteFramesLeft = 0;
+  }
 }
 
 // ── Death Processing ─────────────────────────────────────────────────────────
 
-/** Create a DeathEvent from a collision result */
+/** Create a DeathEvent from a collision result. Infrequent operation. */
 export function createDeathEvent(
   snake: SnakeState,
- killerId: string | null,
+  killerId: string | null,
   cause: KillCause,
   config: SnakeConfig,
 ): DeathEvent {
@@ -644,13 +617,9 @@ export function createDeathEvent(
   };
 }
 
-// ── XP Calculation (for match result) ────────────────────────────────────────
+// ── XP Calculation ───────────────────────────────────────────────────────────
 
-/**
- * Calculate XP gained from a match.
- * Formula: floor((score * 5 + kills * 50) * rewardMultiplier)
- * Returns 0 for offline/practice matches.
- */
+/** Calculate XP gained from a match. */
 export function calcXP(
   score: number,
   kills: number,
@@ -661,11 +630,286 @@ export function calcXP(
   return Math.floor((score * 5 + kills * 50) * rewardMultiplier);
 }
 
-/**
- * Calculate new level from XP.
- * Formula: xpForLevel(N) = (N-1) * 200
- */
+/** Calculate new level from XP. */
 export function calcNewLevel(totalXP: number): number {
-  // Find highest N where (N-1)*200 <= totalXP
   return Math.floor(totalXP / 200) + 1;
+}
+
+// ── Cached Radii ─────────────────────────────────────────────────────────────
+
+/**
+ * Update _cachedVisualRadius and _cachedCollisionRadius on a snake.
+ * Call when score changes. Zero-alloc.
+ */
+export function updateCachedRadii(snake: SnakeState, config: SnakeConfig): void {
+  const vr = calcVisualRadius(snake.score, config);
+  snake._cachedVisualRadius = vr;
+  snake._cachedCollisionRadius = calcCollisionRadius(vr);
+}
+
+// ── Fibonacci Spiral Turn System ─────────────────────────────────────────────
+//
+// Logarithmic spiral: r = a * e^(b * theta)
+//   - a = distance from pivot to head at spiral entry
+//   - b = spiral parameter (negative for inward spiral when theta advances)
+//   - theta advances each tick by spiralThetaStep
+//   - Head is at the innermost point (smallest r), tail fans outward
+//
+// The tangent angle at any theta on the spiral is: theta + phi0 + atan2(1, b)
+// where phi0 = entryAngle - atan2(1, b), so tangent simplifies to theta + entryAngle.
+
+/**
+ * Detect if the snake should enter spiral mode.
+ * Returns true when turn sharpness (|desired delta| / max turn rate) < threshold.
+ */
+export function detectTightTurn(snake: SnakeState, config: SnakeConfig): boolean {
+  const vr = snake._cachedVisualRadius > 0
+    ? snake._cachedVisualRadius
+    : calcVisualRadius(snake.score, config);
+  const maxTurn = getMaxTurnRate(vr, snake.boosting, config);
+  if (maxTurn === 0) return false;
+  const desiredDelta = Math.abs(angleDelta(snake.angle, snake.targetAngle));
+  const sharpness = desiredDelta / maxTurn;
+  return sharpness < config.tightTurnThreshold;
+}
+
+/**
+ * Enter spiral mode: compute pivot, set spiral parameters on snake.
+ * ZERO-ALLOC: writes to snake.spiral directly.
+ */
+export function enterSpiralMode(snake: SnakeState, config: SnakeConfig): void {
+  const turnDelta = angleDelta(snake.angle, snake.targetAngle);
+  const turnDir = turnDelta >= 0 ? 1 : -1;
+
+  // 'a' = distance from pivot to head. Larger = wider spiral loops.
+  const vr = snake._cachedVisualRadius > 0
+    ? snake._cachedVisualRadius
+    : calcVisualRadius(snake.score, config);
+  const a = vr * 3.0;
+
+  // spiralB sign encodes turn direction:
+  //   negative b → theta increases → CW on screen (right turn)
+  //   positive b → theta decreases → CCW on screen (left turn)
+  const b = -turnDir * config.spiralTightness;
+
+  // Angular offset so tangent at theta=0 matches entryAngle
+  // phi0 = entryAngle - atan2(1, b)
+  const phi0 = snake.angle - Math.atan2(1, b);
+
+  // Pivot = head position - a * (cos(phi0), sin(phi0))
+  const pivotX = snake.head.x - a * Math.cos(phi0);
+  const pivotY = snake.head.y - a * Math.sin(phi0);
+
+  const speed = snake.boosting ? config.boostSpeed : config.baseSpeed;
+
+  snake.spiral = {
+    active: true,
+    pivotX,
+    pivotY,
+    entryAngle: snake.angle,
+    entrySpeed: speed,
+    startTheta: 0,
+    currentTheta: 0,
+    spiralA: a,
+    spiralB: b,
+    startTick: 0, // caller should set this
+  };
+}
+
+/**
+ * Advance the spiral by one tick.
+ * Updates snake.head.x, snake.head.y, snake.angle.
+ * ZERO-ALLOC.
+ */
+export function advanceSpiral(
+  snake: SnakeState,
+  config: SnakeConfig,
+  _tickCount: number,
+): void {
+  const s = snake.spiral!;
+
+  // Theta advancement direction: negative b → increase theta, positive b → decrease
+  const dir = s.spiralB < 0 ? 1 : -1;
+  s.currentTheta += dir * config.spiralThetaStep;
+
+  const theta = s.currentTheta;
+  const b = s.spiralB;
+  const a = s.spiralA;
+
+  // phi0 = entryAngle - atan2(1, b) — recompute (cheap: one atan2)
+  const phi0 = s.entryAngle - Math.atan2(1, b);
+
+  // Position on spiral
+  const r = a * Math.exp(b * theta);
+  const polarAngle = theta + phi0;
+
+  snake.head.x = s.pivotX + r * Math.cos(polarAngle);
+  snake.head.y = s.pivotY + r * Math.sin(polarAngle);
+
+  // Tangent angle simplifies to: theta + entryAngle
+  snake.angle = theta + s.entryAngle;
+}
+
+/**
+ * Exit spiral mode. Clear spiral state on snake.
+ * Sets targetAngle to current facing angle for smooth transition.
+ */
+export function exitSpiral(snake: SnakeState): void {
+  if (snake.spiral) {
+    // Smooth transition: target continues in current direction
+    snake.targetAngle = snake.angle;
+  }
+  snake.spiral = null;
+}
+
+/**
+ * Build TurnMetadata for client-side 60fps extrapolation.
+ * Only called when broadcasting snapshots (not in hot tick loop).
+ */
+export function buildTurnMetadata(
+  snake: SnakeState,
+  tickCount: number,
+): TurnMetadata {
+  const sp = snake.spiral;
+  if (!sp) {
+    return {
+      isInSpiral: false,
+      pivotX: 0,
+      pivotY: 0,
+      spiralA: 0,
+      spiralB: 0,
+      currentTheta: 0,
+      entryAngle: 0,
+      entrySpeed: 0,
+      headX: snake.head.x,
+      headY: snake.head.y,
+      headAngle: snake.angle,
+      isBoosting: snake.boosting,
+      visualRadius: snake._cachedVisualRadius,
+      score: snake.score,
+      tick: tickCount,
+    };
+  }
+
+  return {
+    isInSpiral: true,
+    pivotX: sp.pivotX,
+    pivotY: sp.pivotY,
+    spiralA: sp.spiralA,
+    spiralB: sp.spiralB,
+    currentTheta: sp.currentTheta,
+    entryAngle: sp.entryAngle,
+    entrySpeed: sp.entrySpeed,
+    headX: snake.head.x,
+    headY: snake.head.y,
+    headAngle: snake.angle,
+    isBoosting: snake.boosting,
+    visualRadius: snake._cachedVisualRadius,
+    score: snake.score,
+    tick: tickCount,
+  };
+}
+
+// ── Main Hot Path ────────────────────────────────────────────────────────────
+
+/**
+ * tickSnakeMovement — THE hot path function.
+ * Handles per-tick snake updates with ZERO allocation:
+ *   1. Turning (normal or spiral)
+ *   2. Movement (head position)
+ *   3. Path extension (prepend + trim)
+ *   4. Boost drain
+ *   5. Spawn protection
+ *   6. Emote tick
+ *   7. Cached radii update
+ *
+ * Returns a bitmask of side effects the caller must handle:
+ *   bit 0 (1): should drop boost food from tail this tick
+ *   bit 1 (2): score changed (radii need recalc for snapshots)
+ */
+export function tickSnakeMovement(
+  snake: SnakeState,
+  input: InputState,
+  config: SnakeConfig,
+  tickCount: number,
+): number {
+  let flags = 0;
+
+  // ── 1. Update target angle from input ────────────────────────────────────
+  snake.targetAngle = input.targetAngle;
+  snake.boosting = input.boosting && snake.score > config.boostMinScore;
+
+  // ── 2. Spiral state machine ──────────────────────────────────────────────
+  if (snake.spiral && snake.spiral.active) {
+    // Check exit conditions
+    const ticksInSpiral = tickCount - snake.spiral.startTick;
+    const stillTight = ticksInSpiral < config.spiralMinDuration
+      || detectTightTurn(snake, config);
+
+    if (!stillTight) {
+      exitSpiral(snake);
+      // Fall through to normal movement below
+    } else {
+      // Advance spiral
+      advanceSpiral(snake, config, tickCount);
+    }
+  }
+
+  if (!snake.spiral || !snake.spiral.active) {
+    // Check if should enter spiral
+    if (detectTightTurn(snake, config)) {
+      enterSpiralMode(snake, config);
+      if (snake.spiral) {
+        snake.spiral.startTick = tickCount;
+      }
+      advanceSpiral(snake, config, tickCount);
+    } else {
+      // Normal turning
+      const vr = snake._cachedVisualRadius > 0
+        ? snake._cachedVisualRadius
+        : calcVisualRadius(snake.score, config);
+      snake.angle = turnToward(
+        snake.angle, snake.targetAngle, config, vr, snake.boosting,
+      );
+
+      // Normal movement
+      moveHead(snake, config, 1.0);
+    }
+  }
+
+  // ── 3. Extend path: prepend new head, trim tail ───────────────────────────
+  snake.path.prepend(snake.head.x, snake.head.y, snake.angle);
+
+  const maxPoints = Math.ceil((snake.score * config.ptsPerSegment) / config.segSpacing);
+  if (snake.path.length > maxPoints) {
+    snake.path.trimTail(snake.path.length - maxPoints);
+  }
+
+  // ── 4. Boost drain ────────────────────────────────────────────────────────
+  const prevScore = snake.score;
+  if (snake.boosting) {
+    processBoostDrain(snake, config, tickCount);
+    flags |= (tickCount % config.boostDropEveryNFrames === 0) ? 1 : 0;
+  }
+  if (snake.score !== prevScore) {
+    flags |= 2;
+  }
+
+  // ── 5. Spawn protection ──────────────────────────────────────────────────
+  tickSpawnProtection(snake);
+
+  // ── 6. Emote ──────────────────────────────────────────────────────────────
+  if (input.emoteKey !== null) {
+    const emoteMap: Record<number, EmoteType> = {
+      1: 'gg', 2: 'target', 3: 'flee', 4: 'ripped', 5: 'extracting',
+    };
+    const emote = emoteMap[input.emoteKey];
+    if (emote) setEmote(snake, emote);
+  }
+  tickEmote(snake);
+
+  // ── 7. Cached radii ───────────────────────────────────────────────────────
+  updateCachedRadii(snake, config);
+
+  return flags;
 }

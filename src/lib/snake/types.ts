@@ -1,5 +1,5 @@
 // ============================================================================
-// Venom Arena — Core Game Types
+// Venom Arena — Core Game Types (Complete)
 // Pure data structures. No side effects. No DOM. No canvas.
 // Importable by both client (browser) and server (Bun/Node).
 // ============================================================================
@@ -11,7 +11,23 @@ export interface Vec2 {
   y: number;
 }
 
-// ── Snake ───────────────────────────────────────────────────────────────────
+// ── Path Buffer Interface (implemented by pool.PathBuffer) ─────────────────
+// Zero-allocation circular buffer for snake body path.
+// Stored as Float32Array internally. No GC pressure.
+
+export interface IPathBuffer {
+  readonly length: number;
+  getX(i: number): number;
+  getY(i: number): number;
+  getAngle(i: number): number;
+  prepend(x: number, y: number, angle: number): void;
+  trimTail(n: number): void;
+  reset(): void;
+  fillInitial(headX: number, headY: number, angle: number, count: number, spacing: number): void;
+  downsample(outX: Float32Array, outY: Float32Array, maxPoints: number): number;
+}
+
+// ── Snake Appearance ─────────────────────────────────────────────────────────
 
 export type SnakeShape = 'circle' | 'box' | 'triangle' | 'mix_ct' | 'mix_cb' | 'mix_bt' | 'mix_all';
 export type BodyStyle = 'smooth' | 'dragon' | 'armored' | 'crystal' | 'obsidian' | 'basilisk';
@@ -22,27 +38,193 @@ export type SkinPattern = 'solid' | 'rainbow' | 'neon' | 'glow' | 'metallic' | '
 /** Base segment shape used in custom skin editor */
 export type SegmentShape = 'circle' | 'square' | 'diamond' | 'spike';
 
-/** A single point in the snake's body path */
-export interface PathPoint {
-  x: number;
-  y: number;
-  angle: number;
+// ── Fibonacci Spiral Turn System ────────────────────────────────────────────
+
+/** Active spiral turn state on a snake */
+export interface SpiralTurnState {
+  active: boolean;
+  /** Pivot point X where the spiral turn started */
+  pivotX: number;
+  /** Pivot point Y */
+  pivotY: number;
+  /** Snake's angle when spiral was triggered */
+  entryAngle: number;
+  /** Snake's speed when spiral was triggered */
+  entrySpeed: number;
+  /** Theta parameter at spiral start */
+  startTheta: number;
+  /** Current theta (advances each tick) */
+  currentTheta: number;
+  /** Spiral 'a' parameter: r = a * e^(b * theta). Distance from pivot to head at entry. */
+  spiralA: number;
+  /** Spiral 'b' parameter: controls tightness of loops */
+  spiralB: number;
+  /** Tick number when spiral started */
+  startTick: number;
 }
 
-/** A resolved segment ready for rendering */
-export interface RenderSegment {
-  x: number;
-  y: number;
-  angle: number;
+/** Turn metadata sent to client for local 60fps extrapolation */
+export interface TurnMetadata {
+  isInSpiral: boolean;
+  pivotX: number;
+  pivotY: number;
+  spiralA: number;
+  spiralB: number;
+  currentTheta: number;
+  entryAngle: number;
+  entrySpeed: number;
+  headX: number;
+  headY: number;
+  headAngle: number;
+  isBoosting: boolean;
   visualRadius: number;
-  collisionRadius: number;
-  color: string;
-  shape: SegmentShape;
-  glow: boolean;
-  sizeScale: number;
+  score: number;
+  tick: number;
 }
 
-/** Snake identity — shared by client and server */
+// ── Skin Rarity System ─────────────────────────────────────────────────────
+
+export type SkinRarity = 'common' | 'rare' | 'epic' | 'legendary';
+
+/** How a rarity tier renders */
+export interface RarityRenderConfig {
+  common:  { staticTexture: true; animated: false; particles: false; shaderType: 'none' };
+  rare:    { staticTexture: true; animated: false; particles: false; shaderType: 'color_blend' };
+  epic:    { staticTexture: true; animated: true;  particles: false; shaderType: 'uv_offset' };
+  legendary: { staticTexture: true; animated: true;  particles: true;  shaderType: 'particle_emitter' };
+}
+
+export const RARITY_CONFIG: Record<SkinRarity, { animated: boolean; particles: boolean; label: string; color: string; glowIntensity: number }> = {
+  common:    { animated: false, particles: false, label: 'Common',    color: '#9CA3AF', glowIntensity: 0 },
+  rare:      { animated: false, particles: false, label: 'Rare',      color: '#3B82F6', glowIntensity: 0.15 },
+  epic:      { animated: true,  particles: false, label: 'Epic',      color: '#A855F7', glowIntensity: 0.4 },
+  legendary: { animated: true,  particles: true,  label: 'Legendary', color: '#F59E0B', glowIntensity: 0.7 },
+};
+
+// ── Texture Atlas System ────────────────────────────────────────────────────
+
+/** A region within a texture atlas (pixel coordinates) */
+export interface AtlasRegion {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Modular skin asset regions in the atlas */
+export interface SkinAtlas {
+  head: AtlasRegion;
+  bodyTile: AtlasRegion;
+  tailCap: AtlasRegion;
+  /** For epic: animation type */
+  animType?: 'pulse' | 'flow' | 'glow' | 'lava' | 'cyberpulse';
+  /** For epic: UV offset speed */
+  animSpeed?: number;
+  /** For legendary: head particle emitter config */
+  headParticle?: ParticleEmitterConfig;
+  /** For legendary: tail particle emitter config */
+  tailParticle?: ParticleEmitterConfig;
+}
+
+/** Particle emitter config for legendary skins */
+export interface ParticleEmitterConfig {
+  type: 'glow' | 'bubbles' | 'sparkles' | 'fire' | 'void' | 'electric';
+  color: string;
+  secondaryColor?: string;
+  rate: number;          // Particles per second
+  speed: number;         // Initial velocity
+  lifetime: number;      // Seconds
+  size: number;          // Particle size in px
+  spread: number;        // Spread angle in radians
+  gravity?: number;      // Downward pull (0 = none)
+  glow?: number;         // Shadow blur for glow effect
+}
+
+// ── Skin Asset (full skin definition with atlas + rarity) ───────────────────
+
+export interface SkinAsset {
+  id: string;
+  name: string;
+  rarity: SkinRarity;
+  description?: string;
+  /** Index into the global texture atlas */
+  atlasIndex: number;
+  /** Modular atlas regions */
+  atlas: SkinAtlas;
+  /** Base colors for pattern generation */
+  primaryColor: string;
+  secondaryColor: string;
+  /** Pattern for color generation */
+  pattern: SkinPattern;
+  /** Body style this skin applies */
+  bodyStyle: BodyStyle;
+  /** Taper style */
+  taperStyle: TaperStyle;
+  /** Hat override (empty = use player's selected hat) */
+  hatOverride?: HatType;
+  /** Whether this is a premium/purchasable skin */
+  isPremium: boolean;
+  /** Chip cost to purchase */
+  cost?: number;
+  /** Collection set ID this skin belongs to (for crafting) */
+  collectionSetId?: string;
+}
+
+// ── Crafting & Inventory System ────────────────────────────────────────────
+
+/** A single skin piece (partial unlock) */
+export interface SkinPiece {
+  id: string;
+  playerId: string;
+  /** Which collection set this piece belongs to */
+  skinSetId: string;
+  /** Which piece in the set (0-based) */
+  pieceIndex: number;
+  /** Total pieces required to complete the set */
+  totalPiecesInSet: number;
+  /** Rarity of the resulting skin */
+  rarity: SkinRarity;
+  /** How the piece was obtained */
+  source: 'level_chest' | 'challenge_reward' | 'trade' | 'event';
+  obtainedAt: number;
+}
+
+/** A collection set that can be completed and sacrificed for a skin */
+export interface CollectionSet {
+  id: string;
+  name: string;
+  description: string;
+  /** The skin you get from completing this set */
+  rewardSkinId: string;
+  /** Rarity of the reward skin */
+  rewardRarity: SkinRarity;
+  /** Total pieces needed to complete */
+  totalPieces: number;
+  /** Minimum player level to start receiving pieces */
+  requiredLevel: number;
+  /** Pieces per level chest drop (1-3) */
+  piecesPerChest: number;
+  /** Icon/emoji for the set */
+  icon: string;
+  /** Display color */
+  color: string;
+}
+
+/** Crafting transaction record */
+export interface CraftingTransaction {
+  id: string;
+  playerId: string;
+  /** Which set was sacrificed */
+  sacrificedSetId: string;
+  /** Resulting skin ID (could be random roll) */
+  resultSkinId: string;
+  resultRarity: SkinRarity;
+  resultSkinName: string;
+  timestamp: number;
+}
+
+// ── Snake Identity ───────────────────────────────────────────────────────────
+
 export interface SnakeIdentity {
   id: string;
   name: string;
@@ -54,16 +236,19 @@ export interface SnakeIdentity {
   taperStyle: TaperStyle;
   hat: HatType;
   shape: SnakeShape;
-  /** Primary color (hex) for solid patterns, or base hue */
   primaryColor: string;
-  /** Secondary color for patterns like zebra */
   secondaryColor: string;
   trailId: string;
   deathBurstId: string;
   isPlayer: boolean;
+  /** Skin rarity (from SkinAsset) */
+  skinRarity?: SkinRarity;
+  /** Atlas index for sprite batch rendering */
+  atlasIndex?: number;
 }
 
-/** Full snake state — used by engine for simulation */
+// ── Snake State (Full — used by engine for simulation) ──────────────────────
+
 export interface SnakeState {
   identity: SnakeIdentity;
   /** Current head position */
@@ -72,8 +257,8 @@ export interface SnakeState {
   angle: number;
   /** Target angle (set by input, smoothly interpolated) */
   targetAngle: number;
-  /** Full body path (head at index 0) */
-  path: PathPoint[];
+  /** Body path stored in zero-alloc circular buffer */
+  path: IPathBuffer;
   /** Score (body length = score × pointsPerSegment) */
   score: number;
   /** Whether snake is currently boosting */
@@ -94,9 +279,9 @@ export interface SnakeState {
   extractProgress: number;
   /** Whether extraction is in progress */
   isExtracting: boolean;
-  /** Frames remaining until extract completes (at 30fps = extractSeconds * 30) */
+  /** Frames remaining until extract completes */
   extractFramesLeft: number;
-  /** Timestamp when extraction started (for reset on direction change) */
+  /** Angle when extraction started (resets on direction change) */
   extractStartAngle: number;
   /** Current emote being displayed, or null */
   activeEmote: EmoteType | null;
@@ -104,8 +289,14 @@ export interface SnakeState {
   emoteFramesLeft: number;
   /** Ping in ms (client-only) */
   ping: number;
-  /** Online only: commission rate for this arena (0 or 0.35) */
+  /** Online only: commission rate for this arena */
   commissionRate: number;
+  /** Fibonacci spiral turn state (null when not in spiral) */
+  spiral: SpiralTurnState | null;
+  /** Visual radius (cached, updated on score change) */
+  _cachedVisualRadius: number;
+  /** Collision radius (cached) */
+  _cachedCollisionRadius: number;
 }
 
 // ── Food ────────────────────────────────────────────────────────────────────
@@ -117,12 +308,11 @@ export interface FoodOrb {
   x: number;
   y: number;
   size: FoodSize;
-  /** Point value when eaten */
   value: number;
-  /** Visual radius in px */
   radius: number;
-  /** Color string */
   color: string;
+  /** Whether this orb is in the object pool (internal) */
+  _pooled?: boolean;
 }
 
 // ── Star Chips (Online Only) ────────────────────────────────────────────────
@@ -131,10 +321,9 @@ export interface StarChip {
   id: string;
   x: number;
   y: number;
-  /** Chip value of this star */
   value: number;
-  /** Pulsing animation phase offset */
   phaseOffset: number;
+  _pooled?: boolean;
 }
 
 // ── Map ─────────────────────────────────────────────────────────────────────
@@ -143,17 +332,11 @@ export type MapType = 'circular_breathing' | 'infinite';
 
 export interface MapState {
   type: MapType;
-  /** Center of the map */
   center: Vec2;
-  /** Current radius (changes with breathing) */
   currentRadius: number;
-  /** Base radius (before breathing oscillation) */
   baseRadius: number;
-  /** Breathing amplitude in px (±40) */
   breathingAmplitude: number;
-  /** Breathing period in seconds (10) */
   breathingPeriod: number;
-  /** Current breathing phase */
   breathingPhase: number;
 }
 
@@ -199,13 +382,9 @@ export type BotBehavior = 'harvest' | 'self_destruct';
 
 export interface BotAIState {
   behavior: BotBehavior;
-  /** Target food ID the bot is pursuing */
   targetFoodId: string | null;
-  /** Danger direction to flee from */
   dangerAngle: number | null;
-  /** Whether bot detects nearby danger */
   inDanger: boolean;
-  /** Frames until next decision */
   decisionCooldown: number;
 }
 
@@ -213,7 +392,7 @@ export interface BotAIState {
 
 export interface ExtractionState {
   inProgress: boolean;
-  progress: number; // 0–1
+  progress: number;
   framesLeft: number;
   startAngle: number;
   completed: boolean;
@@ -225,11 +404,8 @@ export type CollisionType = 'none' | 'head_on_body' | 'head_on_head' | 'wall' | 
 
 export interface CollisionResult {
   type: CollisionType;
-  /** The snake that died (if any) */
   victimId: string | null;
-  /** The snake that caused the kill (if any) */
   killerId: string | null;
-  /** Where the collision happened */
   point: Vec2 | null;
 }
 
@@ -240,9 +416,7 @@ export interface DeathEvent {
   killerId: string | null;
   cause: KillCause;
   position: Vec2;
-  /** Food orbs dropped from body */
   droppedFood: FoodOrb[];
-  /** Star chips dropped (online only, 10 stars if had chips) */
   droppedStars: StarChip[];
   timestamp: number;
 }
@@ -276,6 +450,12 @@ export interface SnakeSnapshot {
   emoteFramesLeft: number;
   spawnProtected: boolean;
   commissionRate: number;
+  /** Fibonacci spiral metadata for client extrapolation */
+  turnMeta: TurnMetadata | null;
+  /** Skin rarity for rendering tier effects */
+  skinRarity?: SkinRarity;
+  /** Visual radius (so client doesn't need to recalculate) */
+  visualRadius: number;
 }
 
 /** Full world snapshot broadcast by server at 20Hz */
@@ -289,15 +469,10 @@ export interface GameSnapshot {
     currentRadius: number;
   };
   playerExtractProgress: number | null;
-  /** Server tick number */
   tick: number;
-  /** Player rank among real players */
   playerRank: number;
-  /** Total real players in arena */
   realPlayerCount: number;
-  /** Total bots in arena */
   botCount: number;
-  /** Stars remaining in arena */
   starsInArena: number;
 }
 
@@ -347,13 +522,9 @@ export interface EndScreenState {
 // ── Input ───────────────────────────────────────────────────────────────────
 
 export interface InputState {
-  /** Target angle in radians (from mouse/touch/keyboard) */
   targetAngle: number;
-  /** Whether boost is active */
   boosting: boolean;
-  /** Whether extract key is held */
   extracting: boolean;
-  /** Active emote key (1-5), or null */
   emoteKey: number | null;
 }
 
@@ -399,39 +570,24 @@ export interface HUDState {
 // ── Replay ──────────────────────────────────────────────────────────────────
 
 export interface ReplayFrame {
-  /** Player snake state at this frame */
   player: SnakeSnapshot;
-  /** All other snakes at this frame */
   snakes: SnakeSnapshot[];
-  /** Food at this frame */
   food: FoodOrb[];
-  /** Stars at this frame */
   stars: StarChip[];
-  /** Kill feed at this frame */
   killFeed: KillFeedEntry[];
-  /** Whether this is the death frame */
   isDeathFrame: boolean;
-  /** Death event data (only on death frame) */
   deathEvent?: DeathEvent;
 }
 
 export interface ReplayState {
   frames: ReplayFrame[];
-  /** Circular buffer write index */
   writeIndex: number;
-  /** Total frames captured */
   totalFrames: number;
-  /** Whether death has occurred */
   deathOccurred: boolean;
-  /** Index of the death frame */
   deathFrameIndex: number;
-  /** Is replay currently playing */
   playing: boolean;
-  /** Current playback frame */
   currentFrame: number;
-  /** Playback speed multiplier */
   speed: number;
-  /** Total replay duration in frames */
   duration: number;
 }
 
@@ -466,6 +622,24 @@ export interface RenderContext {
   hud: HUDState;
 }
 
+// ── Render Segment (resolved for drawing) ───────────────────────────────────
+
+export interface RenderSegment {
+  x: number;
+  y: number;
+  angle: number;
+  visualRadius: number;
+  collisionRadius: number;
+  color: string;
+  shape: SegmentShape;
+  glow: boolean;
+  sizeScale: number;
+  /** Rarity-based glow intensity */
+  rarityGlow?: number;
+  /** Whether this segment should trigger legendary particles */
+  emitParticles?: boolean;
+}
+
 // ── Particle Effects ────────────────────────────────────────────────────────
 
 export interface Particle {
@@ -477,6 +651,9 @@ export interface Particle {
   maxLife: number;
   color: string;
   size: number;
+  /** For legendary skin particles */
+  type?: 'normal' | 'glow' | 'bubbles' | 'sparkles' | 'fire' | 'void' | 'electric';
+  glow?: number;
 }
 
 // ── Admin Slider Definitions ────────────────────────────────────────────────
@@ -501,4 +678,6 @@ export type SliderCategory =
   | 'CAMERA'
   | 'SKIN APPEARANCE'
   | 'BOTS'
-  | 'COLLISION';
+  | 'COLLISION'
+  | 'SPIRAL TURN'
+  | 'EXTRAPOLATION';
