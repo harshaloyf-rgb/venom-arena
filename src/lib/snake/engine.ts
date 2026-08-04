@@ -8,7 +8,7 @@
 // ============================================================================
 
 import type {
-  GameState, InputState, FoodOrb, Snake, StarChip, SpiralTurnState,
+  GameState, InputState, FoodOrb, Snake, StarChip,
 } from './types';
 import { PathBuffer, scratchVec2 } from './pool';
 import { SpatialHash, type SpatialEntity } from './spatial-hash';
@@ -31,9 +31,6 @@ import {
   BOT_COUNT, BOT_MAX_TURN_RATE, BOT_START_SCORE_MIN, BOT_START_SCORE_MAX,
   // SPAWN
   SAFE_SPAWN_DIST, SAFE_SPAWN_ATTEMPTS,
-  // SPIRAL_TURN
-  TIGHT_TURN_THRESHOLD, SPIRAL_DETECT_WINDOW, MAX_SPIRAL_ANGLE_DELTA,
-  SPIRAL_A, SPIRAL_B,
   // EXTRACTION
   EXTRACTION_ZONE_RADIUS, EXTRACTION_SCORE_THRESHOLD, EXTRACTION_SPEED_BONUS,
   STAR_CHIP_VALUE, STAR_CHIP_SPAWN_INTERVAL, STAR_CHIP_RADIUS,
@@ -81,50 +78,11 @@ const foodValueCache = new Map<number, number>();
 const _insertScratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
 
 // ==========================================================================
-// Spiral turn detection (Phase A: detection only, math in Phase B)
+// Spiral turn system DISABLED — was causing infinite spinning bug.
+// The exit condition could never trigger because the spiral's own turn
+// rate (clamped to MAX_TURN_RATE * 2 = 0.754 rad) always exceeded
+// MAX_SPIRAL_ANGLE_DELTA (0.15 rad). Will be re-implemented later.
 // ==========================================================================
-
-function createSpiralState(): SpiralTurnState {
-  return {
-    active: false,
-    startAngle: 0,
-    theta: 0,
-    ticksElapsed: 0,
-    a: SPIRAL_A,
-    b: SPIRAL_B,
-    direction: 1,
-  };
-}
-
-/**
- * Detect tight turns and update Fibonacci spiral state.
- * Phase A: detection + metadata generation only.
- * Phase B will use this state for actual spiral path math.
- */
-function updateSpiralTurn(snake: Snake, angleDelta: number): void {
-  const absDelta = Math.abs(angleDelta);
-  const spiral = snake.spiral;
-
-  if (!spiral.active) {
-    // Check if we entered a tight turn
-    if (absDelta > TIGHT_TURN_THRESHOLD) {
-      spiral.active = true;
-      spiral.startAngle = snake.prevAngle;
-      spiral.theta = 0;
-      spiral.ticksElapsed = 0;
-      spiral.direction = angleDelta > 0 ? 1 : -1;
-    }
-  } else {
-    // We're in a spiral turn
-    spiral.ticksElapsed++;
-    spiral.theta += absDelta;
-
-    // Check if spiral ended (angle delta returned to normal)
-    if (absDelta < MAX_SPIRAL_ANGLE_DELTA && spiral.ticksElapsed > SPIRAL_DETECT_WINDOW) {
-      spiral.active = false;
-    }
-  }
-}
 
 // ==========================================================================
 // Initialization
@@ -179,7 +137,9 @@ function createSnake(
 ): Snake {
   const targetLength = Math.min(Math.floor(START_LENGTH + startScore * GROWTH_RATE), MAX_SNAKE_LENGTH);
   const palette = SNAKE_PALETTES[Math.floor(Math.random() * SNAKE_PALETTES.length)];
-  const angle = Math.random() * Math.PI * 2;
+  // Start facing right (angle=0) to match InputHandler's initial targetAngle=0.
+  // Prevents violent spin on game start.
+  const angle = 0;
 
   // Pre-allocate path buffer
   const path = new PathBuffer(Math.max(targetLength * 2, 100));
@@ -208,7 +168,7 @@ function createSnake(
     headColor: palette[1],
     lastBoostDrop: 0,
     targetAngle: angle,
-    spiral: createSpiralState(),
+    spiral: { active: false, startAngle: 0, theta: 0, ticksElapsed: 0, a: 0, b: 0, direction: 1 },
     bodyRadius: SNAKE_RADIUS,
     skinId: 'skin-default',
     rarity: 'common',
@@ -317,58 +277,22 @@ function moveSnake(
   snake.prevAngle = snake.angle;
 
   // ── Angle computation ──────────────────────────────────────────────
-  // Phase B: When a Fibonacci spiral turn is active, compute the angle
-  // change from the logarithmic spiral formula instead of linear turning.
+  // Simple linear turning toward target angle.
 
   let diff = targetAngle - snake.angle;
   while (diff > Math.PI) diff -= 2 * Math.PI;
   while (diff < -Math.PI) diff += 2 * Math.PI;
 
-  if (snake.spiral.active) {
-    // ── Spiral movement (Phase B) ───────────────────────────────────────
-    // r = a * e^(b * theta) → dTheta = speed / r
-    const spiral = snake.spiral;
-    const r = spiral.a * Math.exp(spiral.b * spiral.theta);
-    const safeR = Math.max(r, 0.1);
-
-    let dTheta = snake.speed / safeR;
-    // Clamp to a reasonable range [0.01, MAX_TURN_RATE * 2]
-    dTheta = Math.max(0.01, Math.min(dTheta, MAX_TURN_RATE * 2));
-
-    // Advance theta and apply angle in the spiral direction.
-    spiral.theta += dTheta;
-    snake.angle = spiral.startAngle + spiral.direction * spiral.theta;
-
-    // Normalize angle to [-PI, PI].
-    if (snake.angle > Math.PI) snake.angle -= 2 * Math.PI;
-    else if (snake.angle < -Math.PI) snake.angle += 2 * Math.PI;
-
-    // Recompute diff for spiral exit detection.
-    diff = snake.angle - snake.prevAngle;
-    while (diff > Math.PI) diff -= 2 * Math.PI;
-    while (diff < -Math.PI) diff += 2 * Math.PI;
-
-    // Check if spiral should end (exceeded expected theta or straightened).
-    spiral.ticksElapsed++;
-    if (Math.abs(diff) < MAX_SPIRAL_ANGLE_DELTA && spiral.ticksElapsed > SPIRAL_DETECT_WINDOW) {
-      spiral.active = false;
-    }
+  const maxTurn = snake.isBot ? BOT_MAX_TURN_RATE : MAX_TURN_RATE;
+  if (Math.abs(diff) <= maxTurn) {
+    snake.angle = targetAngle;
   } else {
-    // ── Normal linear turning (Phase A) ──────────────────────────────────
-    const maxTurn = snake.isBot ? BOT_MAX_TURN_RATE : MAX_TURN_RATE;
-    if (Math.abs(diff) <= maxTurn) {
-      snake.angle = targetAngle;
-    } else {
-      snake.angle += Math.sign(diff) * maxTurn;
-    }
-
-    // Normalize angle to [-PI, PI]
-    if (snake.angle > Math.PI) snake.angle -= 2 * Math.PI;
-    else if (snake.angle < -Math.PI) snake.angle += 2 * Math.PI;
-
-    // Fibonacci spiral turn detection (Phase A)
-    updateSpiralTurn(snake, diff);
+    snake.angle += Math.sign(diff) * maxTurn;
   }
+
+  // Normalize angle to [-PI, PI]
+  if (snake.angle > Math.PI) snake.angle -= 2 * Math.PI;
+  else if (snake.angle < -Math.PI) snake.angle += 2 * Math.PI;
 
   // Boost eligibility
   const canBoost = wantBoost &&

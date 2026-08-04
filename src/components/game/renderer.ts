@@ -417,7 +417,7 @@ export function drawDeathOverlay(
 
   ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
   ctx.font = '16px sans-serif';
-  ctx.fillText('Click or press any key to respawn', width / 2, height / 2 + 50);
+  ctx.fillText('Press Space or Click to respawn', width / 2, height / 2 + 50);
 }
 
 // ==========================================================================

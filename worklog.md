@@ -1573,3 +1573,27 @@ Stage Summary:
 - Estimated 5-10x FPS improvement
 - Online/offline mode now properly wired (was always offline before)
 - All changes pushed to git
+---
+Task ID: snake-fix-3-bugs
+Agent: Main
+Task: Fix 3 critical snake bugs: infinite spinning, teleport on WASD/click, violent start spin
+
+Work Log:
+- Read and analyzed all snake code: engine.ts, pool.ts, input.ts, SnakeGame.tsx, config.ts, types.ts, renderer.ts
+- Identified Bug 1: Fibonacci spiral turn system has broken exit condition (spiral's dTheta clamped to 0.754 rad always exceeds MAX_SPIRAL_ANGLE_DELTA of 0.15 rad), causing infinite spinning once activated
+- Identified Bug 2: `onDeathAction` handler bound to ALL keydown+click events calls `handleRespawn()` unconditionally, recreating snake at random position with random color on every keypress
+- Identified Bug 3: Snake spawns with random angle but InputHandler's targetAngle starts at 0, causing violent initial turn
+- Removed spiral turn system from engine.ts (disabled with comment explaining the math bug)
+- Simplified moveSnake() to use only linear turning
+- Changed createSnake() initial angle from `Math.random() * Math.PI * 2` to `0` (matches InputHandler)
+- Replaced unconditional death handlers with Space/Enter key + click that only trigger when `isDeadRef.current` is true
+- Updated death overlay text from 'Click or press any key to respawn' to 'Press Space or Click to respawn'
+- Verified BOT_COUNT already set to 0
+- Lint passed clean
+- Verified with agent-browser + VLM: snake moves straight, WASD changes direction (no teleport), no spinning, no errors
+
+Stage Summary:
+- 3 critical bugs fixed: infinite spinning, teleport+color change, violent start spin
+- Snake now starts facing right (angle 0), moves straight, turns smoothly with WASD/mouse
+- No bots (BOT_COUNT=0) for clean testing
+- Files changed: src/lib/snake/engine.ts, src/components/game/SnakeGame.tsx, src/components/game/renderer.ts
