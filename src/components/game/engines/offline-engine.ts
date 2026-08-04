@@ -1,22 +1,19 @@
 'use client';
 
 import type {
-  Vec2, SnakeState, SnakeIdentity, FoodOrb, MapState,
+  SnakeState, SnakeIdentity, FoodOrb, MapState,
   InputState, BotAIState, KillFeedEntry, DeathEvent, GamePhase,
   EndScreenState, KillCause,
 } from '@/lib/snake/types';
-import { EMOTE_DISPLAY } from '@/lib/snake/types';
 import { DEFAULT_SNAKE_CONFIG, type SnakeConfig } from '@/lib/snake/config';
 import {
-  vec2, vec2Dist, vec2Sub, angleBetween, normalizeAngle, angleDelta,
-  moveHead, turnToward, buildInitialPath, extendPath,
-  calcVisualRadius, calcCollisionRadius, calcSegmentCount,
-  checkAllCollisions, circlesOverlap,
-  createFoodOrb, checkFoodEat, calcDeathFood,
-  createDeathEvent, tickSpawnProtection, tickEmote,
-  setEmote, processBoostDrain,
+  vec2, vec2Dist, vec2Sub, angleBetween,
+  tickSnakeMovement, updateCachedRadii,
+  checkAllCollisions, checkFoodEat, createFoodOrb,
+  createDeathEvent, calcVisualRadius, calcCollisionRadius,
+  setEmote,
 } from '@/lib/snake/engine';
-import { resolveSkin } from '@/lib/snake/skin-resolver';
+import { PathBuffer } from '@/lib/snake/pool';
 
 // ── Bot Name Generator ─────────────────────────────────────────────────────
 
@@ -93,7 +90,6 @@ export class OfflineEngine {
 
     // Spawn player
     const playerSnake = this.createSnake(playerIdentity, 4000, 4000);
-    // isPlayer is already set in playerIdentity
     this.snakes.push(playerSnake);
 
     // Spawn bots
@@ -117,11 +113,18 @@ export class OfflineEngine {
   ): SnakeState {
     const s = score ?? this.config.startLength;
     const angle = Math.random() * Math.PI * 2;
-    const path = buildInitialPath(x, y, angle, s * this.config.ptsPerSegment, this.config.segSpacing);
+
+    const maxPts = PathBuffer.maxPathPoints(this.config.maxScore, this.config.ptsPerSegment, this.config.segSpacing);
+    const path = new PathBuffer(maxPts);
+    const initialCount = Math.ceil((s * this.config.ptsPerSegment) / this.config.segSpacing);
+    path.fillInitial(x, y, angle, initialCount, this.config.segSpacing);
+
+    const vr = calcVisualRadius(s, this.config);
+    const cr = calcCollisionRadius(vr);
 
     return {
       identity,
-      head: vec2(x, y),
+      head: { x, y },
       angle,
       targetAngle: angle,
       path,
@@ -141,6 +144,9 @@ export class OfflineEngine {
       emoteFramesLeft: 0,
       ping: 0,
       commissionRate: 0,
+      spiral: null,
+      _cachedVisualRadius: vr,
+      _cachedCollisionRadius: cr,
     };
   }
 
@@ -170,10 +176,10 @@ export class OfflineEngine {
   private spawnBot() {
     const identity = this.createBotIdentity();
     // Spawn in a ring around center, spread out
-    const angle = Math.random() * Math.PI * 2;
+    const ang = Math.random() * Math.PI * 2;
     const dist = 500 + Math.random() * 3000;
-    const x = 4000 + Math.cos(angle) * dist;
-    const y = 4000 + Math.sin(angle) * dist;
+    const x = 4000 + Math.cos(ang) * dist;
+    const y = 4000 + Math.sin(ang) * dist;
 
     const snake = this.createSnake(identity, x, y);
     this.snakes.push(snake);
@@ -204,7 +210,7 @@ export class OfflineEngine {
 
   // ── Main Tick ─────────────────────────────────────────────────────────────
 
-  tick(input: InputState) {
+  tick(input: InputState): void {
     if (this.phase !== 'playing') return;
 
     this.frameCount++;
@@ -247,34 +253,17 @@ export class OfflineEngine {
   // ── Player Update ────────────────────────────────────────────────────────
 
   private updatePlayer(snake: SnakeState, input: InputState) {
-    const visualRadius = calcVisualRadius(snake.score, this.config);
+    // Single zero-alloc call: turn, move, path, boost drain, spawn protection, emote, radii
+    const flags = tickSnakeMovement(snake, input, this.config, this.frameCount);
 
-    // Turn toward target
-    snake.angle = turnToward(snake.angle, input.targetAngle, this.config, visualRadius, snake.boosting);
-    snake.targetAngle = input.targetAngle;
-
-    // Move
-    const newHead = moveHead(snake, this.config, 1.0);
-    snake.head = newHead;
-    snake.path = extendPath(snake.path, newHead, snake.angle, snake.score, this.config);
-
-    // Boost
-    snake.boosting = input.boosting && snake.score > this.config.boostMinScore;
-    const { newScore, shouldDropFood } = processBoostDrain(snake, this.config, this.frameCount);
-    snake.score = newScore;
-
-    if (shouldDropFood && snake.path.length > 2) {
-      const tail = snake.path[snake.path.length - 1];
+    // Boost food drop from tail (flag bit 0)
+    if ((flags & 1) !== 0 && snake.path.length > 2) {
+      const tailX = snake.path.tailX();
+      const tailY = snake.path.tailY();
       this.food.push(createFoodOrb(
-        `boost-${this.frameCount}`, tail.x, tail.y, this.config,
+        `boost-${this.frameCount}`, tailX, tailY, this.config,
       ));
     }
-
-    // Spawn protection
-    tickSpawnProtection(snake);
-
-    // Emote
-    tickEmote(snake);
 
     this.playerScore = snake.score;
     this.playerKills = snake.kills;
@@ -283,10 +272,8 @@ export class OfflineEngine {
   // ── Bot AI ────────────────────────────────────────────────────────────────
 
   private updateBot(bot: SnakeState) {
- const ai = this.botAIStates.get(bot.identity.id);
+    const ai = this.botAIStates.get(bot.identity.id);
     if (!ai) return;
-
-    const visualRadius = calcVisualRadius(bot.score, this.config);
 
     // Decision cooldown
     if (ai.decisionCooldown > 0) {
@@ -316,21 +303,16 @@ export class OfflineEngine {
       targetAngle = bot.angle + (Math.random() - 0.5) * 0.3;
     }
 
-    // Turn (bots don't boost)
-    bot.angle = turnToward(bot.angle, targetAngle, this.config, visualRadius, false);
+    // Single zero-alloc call for bot movement (bots never boost)
+    const botInput: InputState = {
+      targetAngle,
+      boosting: false,
+      extracting: false,
+      emoteKey: null,
+    };
+    tickSnakeMovement(bot, botInput, this.config, this.frameCount);
 
-    // Move
-    const newHead = moveHead(bot, this.config, 1.0);
-    bot.head = newHead;
-    bot.path = extendPath(bot.path, newHead, bot.angle, bot.score, this.config);
-
-    // Spawn protection
-    tickSpawnProtection(bot);
-
-    // Emote
-    tickEmote(bot);
-
-    // Check danger from nearby snakes
+    // Check danger from nearby snakes (after movement so bot.head is updated)
     ai.inDanger = false;
     ai.dangerAngle = null;
 
@@ -342,8 +324,12 @@ export class OfflineEngine {
 
       // Danger detection: 8 ticks ahead prediction
       if (dist < this.config.botEvadeRadius) {
-        const futureHead = moveHead(other, this.config, 8);
-        const futureDist = vec2Dist(bot.head, futureHead);
+        const speed = other.boosting ? this.config.boostSpeed * 8 : this.config.baseSpeed * 8;
+        const fx = other.head.x + Math.cos(other.angle) * speed;
+        const fy = other.head.y + Math.sin(other.angle) * speed;
+        const fdx = bot.head.x - fx;
+        const fdy = bot.head.y - fy;
+        const futureDist = Math.sqrt(fdx * fdx + fdy * fdy);
         if (futureDist < this.config.botEvadeRadius * 0.8) {
           ai.inDanger = true;
           ai.dangerAngle = angleBetween(other.head, bot.head);
@@ -478,6 +464,11 @@ export class OfflineEngine {
 
     if (eatenIds.size > 0) {
       this.food = this.food.filter(f => !eatenIds.has(f.id));
+      // Update cached radii for snakes whose score changed
+      for (const snake of this.snakes) {
+        if (!snake.alive) continue;
+        updateCachedRadii(snake, this.config);
+      }
     }
   }
 

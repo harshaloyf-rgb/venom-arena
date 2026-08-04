@@ -1,6 +1,6 @@
 // ============================================================================
 // Venom Arena — Snake Configuration
-// Single source of truth for all game parameters.
+// Single source of truth for ALL game parameters.
 // Admin sliders read/write these values.
 // ============================================================================
 
@@ -34,7 +34,7 @@ export interface SnakeConfig {
   scorePerPt: number;
   maxScore: number;
 
-  // FOOD SPAWN (9)
+  // FOOD SPAWN (12)
   foodCount: number;
   foodCapMult: number;
   eatRadius: number;
@@ -122,6 +122,46 @@ export interface SnakeConfig {
 
   // PATTERN ANIMATION (1)
   patternAnimSpeed: number;
+
+  // FIBONACCI SPIRAL TURN (4)
+  /** Turn sharpness threshold to trigger spiral (0-1, fraction of max turn rate). Admin-adjustable. */
+  tightTurnThreshold: number;
+  /** Spiral 'b' parameter tightness (0.01=tight, 0.2=loose) */
+  spiralTightness: number;
+  /** Minimum ticks in spiral before allowing exit */
+  spiralMinDuration: number;
+  /** Max theta per tick advancement in spiral */
+  spiralThetaStep: number;
+
+  // CLIENT EXTRAPOLATION (3)
+  /** Client render FPS target */
+  clientRenderFPS: number;
+  /** Max extrapolation time in ms before forcing resync */
+  extrapolationMaxDrift: number;
+  /** Smoothing factor for position interpolation (0-1, lower=smoother) */
+  extrapolationSmoothing: number;
+
+  // CRAFTING (4)
+  /** Pieces per level chest drop */
+  craftingPiecesPerChest: number;
+  /** Max pieces per collection set */
+  craftingMaxSetSize: number;
+  /** Chance of rare+ piece from chest (0-1) */
+  craftingRarePieceChance: number;
+  /** Chance of epic+ piece from chest (0-1) */
+  craftingEpicPieceChance: number;
+
+  // TEXTURE ATLAS (3)
+  /** Atlas tile size in pixels (each body segment tile) */
+  atlasTileSize: number;
+  /** Head sprite size in pixels */
+  atlasHeadSize: number;
+  /** Number of skins per atlas row */
+  atlasSkinsPerRow: number;
+
+  // SNAPSHOT DOWNSAMPLING (1)
+  /** Max path points per snake in network snapshot */
+  snapshotMaxPathPoints: number;
 }
 
 // ── Default Values ──────────────────────────────────────────────────────────
@@ -240,9 +280,34 @@ export const DEFAULT_SNAKE_CONFIG: SnakeConfig = {
 
   // PATTERN ANIMATION
   patternAnimSpeed: 0.1,
+
+  // FIBONACCI SPIRAL TURN
+  tightTurnThreshold: 0.20,   // Trigger spiral when turn sharpness < 20% of max turn rate
+  spiralTightness: 0.08,     // Controls how tight the spiral loops are
+  spiralMinDuration: 10,     // Minimum 10 ticks in spiral
+  spiralThetaStep: 0.15,     // Max theta advancement per tick
+
+  // CLIENT EXTRAPOLATION
+  clientRenderFPS: 60,
+  extrapolationMaxDrift: 200,     // Max 200ms drift before forced resync
+  extrapolationSmoothing: 0.15,  // Lower = smoother, higher = more responsive
+
+  // CRAFTING
+  craftingPiecesPerChest: 2,
+  craftingMaxSetSize: 30,
+  craftingRarePieceChance: 0.25,
+  craftingEpicPieceChance: 0.05,
+
+  // TEXTURE ATLAS
+  atlasTileSize: 32,
+  atlasHeadSize: 48,
+  atlasSkinsPerRow: 16,
+
+  // SNAPSHOT DOWNSAMPLING
+  snapshotMaxPathPoints: 60,
 };
 
-// ── Admin Slider Definitions (55+ sliders, 11 categories) ──────────────────
+// ── Admin Slider Definitions (65+ sliders, 13 categories) ──────────────────
 
 export const ADMIN_SLIDERS: SliderDef[] = [
   // MAP & GRID
@@ -272,7 +337,7 @@ export const ADMIN_SLIDERS: SliderDef[] = [
 
   // FOOD SPAWN
   { key: 'foodCount', label: 'Food Count', min: 100, max: 5000, step: 100, category: 'FOOD SPAWN' },
-  { key: 'foodCapMult', label: 'Food Cap Multiplier', min: 1.0, max: 3.0, step: 0.1, category: 'FOOD SPAWN' },
+  { key: 'foodCapMult', label: 'Food Cap Mult', min: 1.0, max: 3.0, step: 0.1, category: 'FOOD SPAWN' },
   { key: 'eatRadius', label: 'Eat Radius', min: 5, max: 40, step: 1, category: 'FOOD SPAWN' },
   { key: 'foodSmallValue', label: 'Small Food Value', min: 1, max: 5, step: 1, category: 'FOOD SPAWN' },
   { key: 'foodMedValue', label: 'Medium Food Value', min: 1, max: 10, step: 1, category: 'FOOD SPAWN' },
@@ -295,7 +360,7 @@ export const ADMIN_SLIDERS: SliderDef[] = [
   // DEATH DROP
   { key: 'deathDropLargeChance', label: 'Death Large %', min: 0.0, max: 1.0, step: 0.05, category: 'DEATH DROP' },
   { key: 'deathDropMedChance', label: 'Death Med %', min: 0.0, max: 1.0, step: 0.05, category: 'DEATH DROP' },
-  { key: 'deathDropMaxOrbs', min: 10, max: 200, step: 5, label: 'Max Death Orbs', category: 'DEATH DROP' },
+  { key: 'deathDropMaxOrbs', label: 'Max Death Orbs', min: 10, max: 200, step: 5, category: 'DEATH DROP' },
 
   // CAMERA
   { key: 'camMinZoom', label: 'Min Zoom', min: 0.1, max: 0.8, step: 0.05, category: 'CAMERA' },
@@ -315,13 +380,23 @@ export const ADMIN_SLIDERS: SliderDef[] = [
   { key: 'botCount', label: 'Bot Count', min: 0, max: 1000, step: 10, category: 'BOTS' },
   { key: 'botFoodScanRadius', label: 'Food Scan Range', min: 50, max: 800, step: 50, category: 'BOTS' },
   { key: 'botEvadeRadius', label: 'Evade Radius', min: 50, max: 800, step: 50, category: 'BOTS' },
-  { key: 'botRespawnDelay', label: 'Respawn Delay (frames)', min: 60, max: 600, step: 30, category: 'BOTS' },
+  { key: 'botRespawnDelay', label: 'Respawn Delay', min: 60, max: 600, step: 30, category: 'BOTS' },
   { key: 'botMinStartLength', label: 'Min Bot Start', min: 5, max: 30, step: 1, category: 'BOTS' },
   { key: 'botMaxStartLength', label: 'Max Bot Start', min: 20, max: 100, step: 5, category: 'BOTS' },
   { key: 'botSelfDestructThreshold', label: 'Self-Destruct Score', min: 50, max: 500, step: 10, category: 'BOTS' },
 
   // COLLISION
   { key: 'skipSegs', label: 'Neck Protection Segs', min: 1, max: 15, step: 1, category: 'COLLISION' },
+
+  // FIBONACCI SPIRAL TURN
+  { key: 'tightTurnThreshold', label: 'Tight Turn Threshold', min: 0.05, max: 0.5, step: 0.01, category: 'SPIRAL TURN' },
+  { key: 'spiralTightness', label: 'Spiral Tightness', min: 0.01, max: 0.3, step: 0.01, category: 'SPIRAL TURN' },
+  { key: 'spiralMinDuration', label: 'Spiral Min Duration', min: 3, max: 30, step: 1, category: 'SPIRAL TURN' },
+  { key: 'spiralThetaStep', label: 'Spiral Theta Step', min: 0.05, max: 0.3, step: 0.01, category: 'SPIRAL TURN' },
+
+  // CLIENT EXTRAPOLATION
+  { key: 'extrapolationSmoothing', label: 'Extrapolation Smooth', min: 0.05, max: 0.5, step: 0.01, category: 'EXTRAPOLATION' },
+  { key: 'extrapolationMaxDrift', label: 'Max Drift (ms)', min: 50, max: 500, step: 10, category: 'EXTRAPOLATION' },
 ];
 
 // ── Slider Category Order ───────────────────────────────────────────────────
@@ -338,6 +413,8 @@ export const SLIDER_CATEGORIES: SliderCategory[] = [
   'SKIN APPEARANCE',
   'BOTS',
   'COLLISION',
+  'SPIRAL TURN',
+  'EXTRAPOLATION',
 ];
 
 // ── Utility: Apply admin overrides to config ────────────────────────────────

@@ -54,7 +54,10 @@ function buildRenderSegments(
   const segments: RenderSegment[] = [];
 
   for (let i = 0; i < segCount; i++) {
-    const pt = path[Math.min(i * config.skinSegSpacing, path.length - 1)];
+    const pathIdx = Math.min(i * config.skinSegSpacing, path.length - 1);
+    const px = path.getX(pathIdx);
+    const py = path.getY(pathIdx);
+    const pa = path.getAngle(pathIdx);
     const resolved = skinResolved.segments[i] ?? skinResolved.segments[skinResolved.segments.length - 1];
     const isHead = i === 0;
     const baseR = calcVisualRadius(snake.score, config);
@@ -62,9 +65,9 @@ function buildRenderSegments(
     const r = baseR * sizeScale;
 
     segments.push({
-      x: pt.x,
-      y: pt.y,
-      angle: pt.angle,
+      x: px,
+      y: py,
+      angle: pa,
       visualRadius: r,
       collisionRadius: calcCollisionRadius(r),
       color: resolved?.color ?? '#2ECC71',
