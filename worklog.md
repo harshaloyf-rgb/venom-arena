@@ -737,3 +737,47 @@ Stage Summary:
 - Dev server: GET / 200, all APIs working
 - Lint: PASSING clean
 - Committed as d049757, pushed to origin/main
+
+---
+Task ID: REWRITE-PHASES-A-F
+Agent: Main
+Task: Complete rewrite with zero-alloc engine, Fibonacci spiral, texture atlas renderer, crafting system, game server
+
+Work Log:
+- Phase A: Rewrote engine.ts (915 lines) with zero-alloc hot path — Float32Array PathBuffer, no GC in tick loop, mutation-based API, cached radii
+- Phase A: Created pool.ts with PathBuffer (circular Float32Array), ObjectPool, SnapshotBufferPool, scratchVec2
+- Phase A: Rewrote types.ts with 65+ new types — SpiralTurnState, TurnMetadata, SkinRarity, SkinAsset, AtlasRegion, SkinAtlas, ParticleEmitterConfig, SkinPiece, CollectionSet, CraftingTransaction, IPathBuffer interface
+- Phase A: Rewrote config.ts with 85+ params — 13 admin slider categories (added SPIRAL TURN, EXTRAPOLATION, CRAFTING, TEXTURE ATLAS, SNAPSHOT DOWNSAMPLING)
+- Phase B: Created extrapolation.ts (280 lines) — ExtrapolationEngine class for 20Hz→60fps smooth rendering, handles Fibonacci spiral turns locally
+- Phase B: Linear extrapolation (angle lerp + position predict) for normal movement
+- Phase B: Fibonacci spiral extrapolation (r=a*e^(b*theta) with per-tick theta advancement)
+- Phase C: Created atlas.ts (310 lines) — SkinAtlasManager with offscreen canvas pre-rendering, 3D gradient sprites, animated epic patterns (pulse/flow/glow/lava/cyberpulse), legendary glow underlay
+- Phase C: Created render-snake-atlas.tsx (170 lines) — Atlas-based renderer with head/body/tail modular pipeline, legendary particle emission
+- Phase C: Updated render/types.ts with RenderState interface and atlasManager field
+- Phase C: Updated render-snake.ts with atlas delegation (backward compatible fallback)
+- Phase D: Updated prisma schema with SkinPiece, CollectionSet, CraftingTransaction models
+- Phase D: Created /api/player/inventory/route.ts — GET inventory with set completion status
+- Phase D: Created /api/player/inventory/claim-chest/route.ts — POST level chest drops, weighted rarity selection
+- Phase D: Created /api/craft/sacrifice/route.ts — POST sacrifice completed set, 15% rarity upgrade chance
+- Phase D: Created /api/craft/sets/route.ts — GET all sets with player progress
+- Phase E: Created spatial-grid.ts (90 lines) — O(n) spatial hash grid for collision detection
+- Phase E: Created game-state.ts (777 lines) — ArenaRoom with full tick loop: movement, collision, food, stars, extraction, bot AI (harvest + self-destruct), snapshot generation with zero-alloc downsampling
+- Phase E: Created index.ts (253 lines) — Socket.IO server on port 3001, auto-arena creation (fixes 'arena does not exist' bug), sharding at 1000 players, auth middleware, 30Hz tick, 20Hz broadcast, kill feed broadcasting
+- Phase F: Updated online-engine.ts — PathBuffer support, ExtrapolationEngine integration, extrapolate(dt) method, updated getRenderableSnakes() for smooth rendering
+- Phase F: Updated game-canvas.tsx — Online+offline mode support, SkinAtlasManager integration, atlas lazy initialization per snake
+- All 6 phases pass bun run lint with zero errors
+- Browser verified: login → guest → lobby → practice arena → game canvas renders with 1000 bots, zero console errors
+- Game server running on port 3001
+- Next.js dev server running on port 3000
+
+Stage Summary:
+- COMPLETE rewrite from scratch (not a patch)
+- 15 new/rewritten core files in src/lib/snake/
+- 17 new/rewritten renderer files in src/components/game/render/
+- 2 new engine files in src/components/game/engines/
+- 3 new game server files in mini-services/game-server/
+- 4 new API route files for crafting system
+- 1 updated Prisma schema
+- Total: ~42 files modified/created in this session
+- All old code safely in git history (commits d049757 → 3aa32ad → a5c5f33 → 65b08b3 → 624b889 → 81aad32)
+- Browser-tested and verified working
