@@ -8,6 +8,8 @@ import type {
   ReplayFrame, ReplayState, Particle, SnakeState,
 } from '@/lib/snake/types';
 import { DEFAULT_SNAKE_CONFIG, type SnakeConfig } from '@/lib/snake/config';
+import { PathBuffer } from '@/lib/snake/pool';
+import { ExtrapolationEngine, type ExtrapolatedSnake } from './extrapolation';
 
 // ── Online Engine ────────────────────────────────────────────────────────────
 // Handles all communication with the game server.
@@ -81,6 +83,12 @@ export class OnlineEngine {
   realPlayerCount = 0;
   starsInArena = 0;
 
+  // Extrapolation engine (created on connect)
+  extrapolation: ExtrapolationEngine | null = null;
+
+  // Last snapshot timestamp
+  private lastSnapshotTime: number = 0;
+
   // Callbacks
   onPhaseChange?: (phase: 'connecting' | 'playing' | 'ended') => void;
   onDeath?: (endState: EndScreenState) => void;
@@ -136,6 +144,9 @@ export class OnlineEngine {
   /** Connect to the game server and join arena */
   async connect(authToken: string): Promise<void> {
     this.setPhase('connecting');
+
+    // Create extrapolation engine on connect
+    this.extrapolation = new ExtrapolationEngine(this.config);
 
     try {
       this.socket = io('/?XTransformPort=3001', {
@@ -196,8 +207,9 @@ export class OnlineEngine {
       // Start ping measurement
       this.startPingLoop();
 
-    } catch (err: any) {
-      this.onError?.(err.message || 'Connection failed');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Connection failed';
+      this.onError?.(msg);
       this.setPhase('ended');
       this.endState = {
         outcome: 'death',
@@ -260,7 +272,7 @@ export class OnlineEngine {
     });
 
     // Disconnection
-    s.on('disconnect', (reason) => {
+    s.on('disconnect', () => {
       if (this.phase === 'playing') {
         this.wasPlayingBeforeDisconnect = true;
         this.disconnectTime = Date.now();
@@ -273,6 +285,9 @@ export class OnlineEngine {
   // ── Snapshot Processing ──────────────────────────────────────────────────
 
   private processSnapshot(snapshot: GameSnapshot) {
+    const now = Date.now();
+    this.lastSnapshotTime = now;
+
     // Update map
     this.map.currentRadius = snapshot.map.currentRadius;
     this.starsInArena = snapshot.starsInArena;
@@ -284,6 +299,20 @@ export class OnlineEngine {
     this.hud.botCount = snapshot.botCount;
     this.hud.rank = snapshot.playerRank;
     this.hud.starsInArena = snapshot.starsInArena;
+
+    // Feed all snakes into extrapolation engine
+    if (this.extrapolation) {
+      const snapIds = new Set<string>();
+      for (const snap of snapshot.snakes) {
+        snapIds.add(snap.id);
+        this.extrapolation.processSnapshot(snap, now);
+      }
+
+      // Remove snakes that left the snapshot (clean up)
+      // We check lazily — only remove if they existed before but not now
+      // Since we don't iterate all extrapolated snakes every frame,
+      // stale snakes will simply stop being extrapolated (alive=false in snapshot)
+    }
 
     // Find player in snapshot
     const playerSnap = snapshot.snakes.find(s => s.isPlayer);
@@ -305,25 +334,35 @@ export class OnlineEngine {
     this.recordReplayFrame(snapshot);
 
     // Clean old kill feed (older than 5s)
-    const now = Date.now();
     this.killFeed = this.killFeed.filter(e => now - e.timestamp < 5000);
+  }
+
+  /** Advance extrapolation by dt seconds. Call from render loop. */
+  extrapolate(dt: number): void {
+    if (this.extrapolation && this.phase === 'playing') {
+      this.extrapolation.tick(dt);
+    }
   }
 
   /** Convert a SnakeSnapshot back to a minimal SnakeState for rendering */
   private snapshotToSnakeState(snap: SnakeSnapshot): SnakeState {
-    // Build path from downsampled Vec2[] → PathPoint[]
-    const path = snap.path.map((p, i) => {
+    const maxPts = Math.ceil((snap.score * this.config.ptsPerSegment) / this.config.segSpacing) + 200;
+    const pathBuffer = new PathBuffer(maxPts);
+
+    const pathLen = snap.path.length;
+    for (let i = pathLen - 1; i >= 0; i--) {
+      const p = snap.path[i];
       let angle = snap.angle;
-      if (i > 0) {
-        const prev = snap.path[i - 1];
-        angle = Math.atan2(p.y - prev.y, p.x - prev.x);
+      if (i < pathLen - 1) {
+        const next = snap.path[i + 1];
+        angle = Math.atan2(next.y - p.y, next.x - p.x);
       }
-      return { x: p.x, y: p.y, angle };
-    });
+      pathBuffer.prepend(p.x, p.y, angle);
+    }
 
     // If no path points, create a minimal one
-    if (path.length === 0) {
-      path.push({ x: 0, y: 0, angle: snap.angle });
+    if (pathLen === 0) {
+      pathBuffer.prepend(0, 0, snap.angle);
     }
 
     return {
@@ -343,11 +382,12 @@ export class OnlineEngine {
         secondaryColor: snap.secondaryColor,
         trailId: '',
         deathBurstId: '',
+        skinRarity: snap.skinRarity,
       },
       head: snap.path[0] || { x: 0, y: 0 },
       angle: snap.angle,
       targetAngle: snap.angle,
-      path,
+      path: pathBuffer,
       score: snap.score,
       boosting: snap.boosting,
       alive: snap.alive,
@@ -364,6 +404,9 @@ export class OnlineEngine {
       emoteFramesLeft: snap.emoteFramesLeft,
       ping: this.hud.ping,
       commissionRate: this.commissionRate,
+      spiral: null,
+      _cachedVisualRadius: snap.visualRadius,
+      _cachedCollisionRadius: snap.visualRadius * 0.85,
     };
   }
 
@@ -625,58 +668,51 @@ export class OnlineEngine {
     }
   }
 
-  // ── Get snakes for rendering (from latest snapshot) ──────────────────────
+  // ── Get snakes for rendering (from extrapolation or snapshot) ────────────
 
-  /** Get all snake snapshots converted to renderable states */
+  /** Get all snake states for rendering. Uses extrapolation engine when available. */
   getRenderableSnakes(): SnakeState[] {
-    if (!this.latestSnapshot) return [];
-
-    return this.latestSnapshot.snakes.map(snap => {
-      const path = snap.path.map((p, i) => {
-        let angle = snap.angle;
-        if (i > 0) {
-          const prev = snap.path[i - 1];
-          angle = Math.atan2(p.y - prev.y, p.x - prev.x);
-        }
-        return { x: p.x, y: p.y, angle };
-      });
-
-      if (path.length === 0) {
-        path.push({ x: 0, y: 0, angle: snap.angle });
+    // Prefer extrapolation engine for smooth 60fps rendering
+    if (this.extrapolation) {
+      const extrapolated = this.extrapolation.getAllSnakes();
+      if (extrapolated.length > 0) {
+        return extrapolated.map(es => this.extrapolatedToSnakeState(es));
       }
+    }
 
-      return {
-        identity: {
-          id: snap.id, name: snap.name, tag: snap.tag,
-          isBot: snap.isBot, isPlayer: snap.isPlayer,
-          skinId: snap.skinId, skinPattern: snap.skinPattern,
-          bodyStyle: snap.bodyStyle, taperStyle: snap.taperStyle,
-          hat: snap.hat, shape: snap.shape,
-          primaryColor: snap.primaryColor, secondaryColor: snap.secondaryColor,
-          trailId: '', deathBurstId: '',
-        },
-        head: snap.path[0] || { x: 0, y: 0 },
-        angle: snap.angle,
-        targetAngle: snap.angle,
-        path,
-        score: snap.score,
-        boosting: snap.boosting,
-        alive: snap.alive,
-        spawnProtected: snap.spawnProtected,
-        spawnProtectionFrames: 0,
-        carriedChips: snap.carriedChips,
-        starsCollected: 0,
-        kills: snap.kills,
-        extractProgress: 0,
-        isExtracting: false,
-        extractFramesLeft: 0,
-        extractStartAngle: 0,
-        activeEmote: snap.activeEmote,
-        emoteFramesLeft: snap.emoteFramesLeft,
-        ping: 0,
-        commissionRate: this.commissionRate,
-      };
-    });
+    // Fallback: convert from latest snapshot
+    if (!this.latestSnapshot) return [];
+    return this.latestSnapshot.snakes.map(snap => this.snapshotToSnakeState(snap));
+  }
+
+  /** Convert an ExtrapolatedSnake to a renderable SnakeState */
+  private extrapolatedToSnakeState(es: ExtrapolatedSnake): SnakeState {
+    return {
+      identity: es.identity,
+      head: { x: es.headX, y: es.headY },
+      angle: es.angle,
+      targetAngle: es.targetAngle,
+      path: es.path,
+      score: es.score,
+      boosting: es.boosting,
+      alive: es.alive,
+      spawnProtected: es.spawnProtected,
+      spawnProtectionFrames: 0,
+      carriedChips: es.carriedChips,
+      starsCollected: 0,
+      kills: es.kills,
+      extractProgress: 0,
+      isExtracting: false,
+      extractFramesLeft: 0,
+      extractStartAngle: 0,
+      activeEmote: es.activeEmote,
+      emoteFramesLeft: es.emoteFramesLeft,
+      ping: 0,
+      commissionRate: this.commissionRate,
+      spiral: null,
+      _cachedVisualRadius: es.visualRadius,
+      _cachedCollisionRadius: es.visualRadius * 0.85,
+    };
   }
 
   // ── Cleanup ──────────────────────────────────────────────────────────────
@@ -691,6 +727,8 @@ export class OnlineEngine {
       this.socket.disconnect();
       this.socket = null;
     }
+    this.extrapolation?.clear();
+    this.extrapolation = null;
     this.setPhase('ended');
     this.latestSnapshot = null;
     this.playerState = null;

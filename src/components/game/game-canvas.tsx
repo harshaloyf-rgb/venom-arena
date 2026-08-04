@@ -3,25 +3,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   GamePhase, EndScreenState, SnakeIdentity, HUDState,
-  RenderSegment, SnakeState, Particle,
+  RenderSegment, SnakeState, Particle, FoodOrb, StarChip,
 } from '@/lib/snake/types';
 import { DEFAULT_SNAKE_CONFIG, type SnakeConfig } from '@/lib/snake/config';
 import {
   calcVisualRadius, calcCollisionRadius, calcSegmentCount,
 } from '@/lib/snake/engine';
 import { OfflineEngine } from './engines/offline-engine';
+import { OnlineEngine } from './engines/online-engine';
 import { useGameInput } from './hooks/use-game-input';
 import { useRenderLoop } from './hooks/use-render-loop';
 import { createDefaultCamera, followTarget, isOnScreen } from './render/camera';
 import type { CameraState } from '@/lib/snake/types';
 import { renderGrid } from './render/render-grid';
 import { renderFoods } from './render/render-food';
+import { renderStars } from './render/render-stars';
 import { renderSnake } from './render/render-snake';
 import { renderMapBoundary } from './render/render-map';
 import { renderMinimap } from './render/render-minimap';
 import { renderKillFeed, renderEmoteBubble, renderNameLabel, renderParticles } from './render/render-overlays';
 import { renderHUD } from './render/render-hud';
 import { resolveSkin } from '@/lib/snake/skin-resolver';
+import { SkinAtlasManager } from './render/atlas';
+
+// ── Shared engine interface for render loop ──────────────────────────────────
+
+type AnyEngine = OfflineEngine | OnlineEngine;
 
 // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -43,8 +50,8 @@ export interface GameCanvasProps {
 
 function buildRenderSegments(
   snake: SnakeState,
- config: SnakeConfig,
- skinResolved: import('@/lib/snake/skin-types').ResolvedSkin,
+  config: SnakeConfig,
+  skinResolved: import('@/lib/snake/skin-types').ResolvedSkin,
 ): RenderSegment[] {
   const path = snake.path;
   const segCount = Math.min(
@@ -87,9 +94,10 @@ export default function GameCanvas({
   configOverrides, onExit, onMatchEnd,
 }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const engineRef = useRef<OfflineEngine | null>(null);
+  const engineRef = useRef<AnyEngine | null>(null);
   const cameraRef = useRef<CameraState>(createDefaultCamera());
   const phaseRef = useRef<GamePhase>('playing');
+  const atlasRef = useRef(new SkinAtlasManager());
   const effectiveMode = (mode === 'offline' || isPractice) ? 'offline' : 'online';
   const [phase, setPhase] = useState<GamePhase>(effectiveMode === 'offline' ? 'playing' : 'connecting');
   const [endState, setEndState] = useState<EndScreenState | null>(null);
@@ -107,7 +115,12 @@ export default function GameCanvas({
   const config = useMemo(() => ({ ...DEFAULT_SNAKE_CONFIG, ...configOverrides }), [configOverrides]);
 
   const handleEmote = useCallback((key: number) => {
-    engineRef.current?.triggerPlayerEmote(key);
+    const engine = engineRef.current;
+    if (engine instanceof OfflineEngine) {
+      engine.triggerPlayerEmote(key);
+    } else if (engine instanceof OnlineEngine) {
+      engine.sendEmote(key);
+    }
   }, []);
 
   const handleToggleMinimap = useCallback(() => {
@@ -120,22 +133,50 @@ export default function GameCanvas({
     canvasRef, handleEmote, handleToggleMinimap, handleExit,
   );
 
+  // ── Keep phaseRef in sync ─────────────────────────────────────────────────
+
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+
   // ── Initialize Engine ─────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (effectiveMode !== 'offline') return;
-    const engine = new OfflineEngine(playerIdentity, configOverrides, botCount);
+    if (effectiveMode === 'offline') {
+      const engine = new OfflineEngine(playerIdentity, configOverrides, botCount);
+      engine.onDeath = (state) => {
+        setEndState(state);
+        setPhase('ended');
+        onMatchEnd?.(state);
+      };
+      engineRef.current = engine;
+      return () => {
+        engineRef.current?.destroy();
+        engineRef.current = null;
+      };
+    }
+
+    // Online engine
+    const engine = new OnlineEngine(
+      playerIdentity, arenaId, arenaName, isPractice,
+      rewardMultiplier, configOverrides,
+    );
+    engine.onPhaseChange = (p) => setPhase(p);
     engine.onDeath = (state) => {
       setEndState(state);
       setPhase('ended');
       onMatchEnd?.(state);
     };
+    engine.onKillFeed = () => {};
     engineRef.current = engine;
+    // Connect as guest
+    engine.connect('guest').catch(() => {});
+
     return () => {
-      engineRef.current?.destroy();
+      engine.destroy();
       engineRef.current = null;
     };
-  }, [effectiveMode, botCount, arenaId]);
+  }, [effectiveMode, arenaId]);
 
   // ── Render Loop ───────────────────────────────────────────────────────────
 
@@ -162,12 +203,47 @@ export default function GameCanvas({
     const engine = engineRef.current;
     if (!engine || phaseRef.current !== 'playing') return;
 
-    // Tick engine
-    engine.tick(inputRef.current);
+    // Tick / extrapolate engine
+    if (engine instanceof OfflineEngine) {
+      engine.tick(inputRef.current);
+    } else if (engine instanceof OnlineEngine) {
+      engine.sendInput(inputRef.current);
+      engine.extrapolate(_delta > 0 ? _delta / 1000 : 1 / 60);
+      engine.updateParticles();
+    }
+
+    const timeSeconds = time / 1000;
+    const atlas = atlasRef.current;
+
+    // ── Gather render data from engine ─────────────────────────────────────
+    let snakes: SnakeState[];
+    let food: FoodOrb[] = [];
+    let stars: StarChip[] = [];
+    let killFeed: import('@/lib/snake/types').KillFeedEntry[] = [];
+    let particleArray: Particle[] = [];
+    let player: SnakeState | null = null;
+
+    if (engine instanceof OfflineEngine) {
+      snakes = engine.snakes;
+      food = engine.food;
+      killFeed = engine.killFeed;
+      particleArray = engine.particles as unknown as Particle[];
+    } else {
+      // OnlineEngine
+      snakes = engine.getRenderableSnakes();
+      if (engine.latestSnapshot) {
+        food = engine.latestSnapshot.food;
+        stars = engine.latestSnapshot.stars;
+      }
+      killFeed = engine.killFeed;
+      particleArray = engine.particles;
+    }
+
+    // Find player snake
+    player = snakes.find(s => s.identity.id === playerIdentity.id && s.alive) ?? null;
 
     // Camera follow player
-    const player = engine.snakes.find(s => s.identity.id === playerIdentity.id) ?? null;
-    if (player && player.alive) {
+    if (player) {
       cameraRef.current = followTarget(cameraRef.current, player.head.x, player.head.y, config.camFollowSpeed);
       const targetZoom = Math.max(config.camMinZoom, 1.0 - (player.score / config.maxLength) * 0.5);
       cameraRef.current.zoom += (targetZoom - cameraRef.current.zoom) * config.camZoomSmooth;
@@ -176,14 +252,18 @@ export default function GameCanvas({
     // Update HUD
     const hud = hudRef.current;
     hud.fps = _delta > 0 ? Math.round(1000 / _delta) : 60;
-    hud.score = player?.score ?? 0;
-    hud.kills = player?.kills ?? 0;
-    hud.rank = engine.getPlayerRank();
-    hud.botCount = engine.snakes.filter(s => s.identity.isBot && s.alive).length;
+    if (engine instanceof OfflineEngine) {
+      hud.score = player?.score ?? 0;
+      hud.kills = player?.kills ?? 0;
+      hud.rank = engine.getPlayerRank();
+      hud.botCount = engine.snakes.filter(s => s.identity.isBot && s.alive).length;
+    } else {
+      // HUD values already updated by OnlineEngine.processSnapshot
+      Object.assign(hud, engine.hud);
+    }
     hud.showMinimap = showMinimap;
 
     const camera = cameraRef.current;
-    const timeSeconds = time / 1000;
 
     // Clear
     ctx.fillStyle = '#0a0a0f';
@@ -198,13 +278,30 @@ export default function GameCanvas({
     }
 
     // Food
-    renderFoods(ctx, engine.food, camera, w, h);
+    renderFoods(ctx, food, camera, w, h);
+
+    // Stars (online only)
+    if (stars.length > 0) {
+      renderStars(ctx, stars, camera, w, h, timeSeconds);
+    }
 
     // Snakes
     const lowQuality = hud.fps < 25;
-    for (const snake of engine.snakes) {
+    for (const snake of snakes) {
       if (!snake.alive) continue;
       if (!isOnScreen(snake.head.x, snake.head.y, 50, camera, w, h)) continue;
+
+      // Ensure atlas is initialized for this skin
+      if (!atlas.hasSkin(snake.identity.skinId)) {
+        atlas.initSkin(
+          snake.identity.skinId,
+          snake.identity.primaryColor,
+          snake.identity.secondaryColor,
+          snake.identity.skinRarity ?? 'common',
+          snake.identity.bodyStyle,
+          snake.identity.hat,
+        );
+      }
 
       const segCount = calcSegmentCount(snake.score, config);
       const skinResolved = resolveSkin(snake.identity, segCount, timeSeconds);
@@ -222,12 +319,13 @@ export default function GameCanvas({
         snake.angle,
         snake.boosting,
         snake.spawnProtected,
+        atlas,
       );
     }
 
     // Name labels & emotes for nearby snakes
     if (player && player.alive) {
-      for (const snake of engine.snakes) {
+      for (const snake of snakes) {
         if (!snake.alive) continue;
         if (snake.identity.id === playerIdentity.id) continue;
         const dx = player.head.x - snake.head.x;
@@ -242,15 +340,14 @@ export default function GameCanvas({
     }
 
     // Kill feed
-    renderKillFeed(ctx, engine.killFeed, timeSeconds);
+    renderKillFeed(ctx, killFeed, timeSeconds);
 
     // Particles
-    const particleArray = engine.particles as unknown as Particle[];
     renderParticles(ctx, particleArray, camera, w, h);
 
     // Minimap
     if (showMinimap && !hud.isOffline) {
-      renderMinimap(ctx, engine.snakes, player, engine.map, w, h, config);
+      renderMinimap(ctx, snakes, player, engine.map, w, h, config);
     }
 
     // HUD
