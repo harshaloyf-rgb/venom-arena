@@ -256,11 +256,21 @@ export function renderSnakeAtlas(
   ctx.globalAlpha = 1;
 }
 
-// ─── Fallback renderer (mirrors current renderer.ts snake drawing) ──────────
+// ─── Fallback renderer with leaky-integrator inner curl ──────────────────
+
+// Inner curl constants
+const CHAIN_STEP = 5;
+const CURL_STRENGTH = 3.5;
+const CURL_DECAY = 0.97;
+const SIZE_SHRINK = 0.025;
+const MAX_SIZE_SHRINK = 0.55;
+const CURL_FADE = 4;
 
 /**
- * Simple fallback renderer when no atlas is available.
- * Draws plain circles matching the current renderer behavior.
+ * Fallback renderer with inner curl (corner-cutting) and boost-stretch fix.
+ * Walks the path at fixed CHAIN_STEP intervals with interpolation.
+ * A leaky integrator accumulates curvature from head to tail,
+ * producing progressive perpendicular offset + size reduction.
  */
 export function renderSnakeFallback(
   ctx: CanvasRenderingContext2D,
@@ -268,59 +278,183 @@ export function renderSnakeFallback(
   camera: Camera,
   viewport: Viewport,
 ): void {
-  const pathLen = snake.path.length;
+  const path = snake.path;
+  const pathLen = path.length;
   if (pathLen === 0) return;
 
-  // ── HEAD-LEVEL CULLING: skip entire snake if head is far off-screen ──
-  // Margin = snake's visual extent (pathLen * SEGMENT_SPACING) + viewport padding
-  const headWx = snake.path.headX;
-  const headWy = snake.path.headY;
+  const headWorldX = path.headX;
+  const headWorldY = path.headY;
   const cullMargin = Math.min(pathLen * 8, 500) + 100;
-  if (headWx < viewport.left - cullMargin || headWx > viewport.right + cullMargin) return;
-  if (headWy < viewport.top - cullMargin || headWy > viewport.bottom + cullMargin) return;
+  if (headWorldX < viewport.left - cullMargin || headWorldX > viewport.right + cullMargin) return;
+  if (headWorldY < viewport.top - cullMargin || headWorldY > viewport.bottom + cullMargin) return;
 
   const zoom = camera.zoom;
   const cw = viewport.width;
   const ch = viewport.height;
 
-  const segRadius = SNAKE_RADIUS * zoom;
-  const headRadius = segRadius * 1.3;
+  // Spawn protection blink
+  if (performance.now() - snake.spawnTime < SPAWN_PROTECTION_MS && Math.floor(performance.now() / 150) % 2 === 0) {
+    ctx.globalAlpha = 0.5;
+  }
 
   const vl = viewport.left - 20;
   const vr = viewport.right + 20;
   const vt = viewport.top - 20;
   const vb = viewport.bottom + 20;
 
-  // ── Batched body draw: single beginPath, multiple arcs, one fill ──
+  const headScreen = worldToScreen(headWorldX, headWorldY, camera, cw, ch);
+  const headVisible = headWorldX >= vl && headWorldX <= vr && headWorldY >= vt && headWorldY <= vb;
+
+  // ── Chain-simulated body with leaky-integrator inner curl ──
   ctx.fillStyle = snake.color;
   ctx.beginPath();
   let hasBodySegs = false;
 
-  for (let i = pathLen - 1; i >= 1; i--) {
-    const wx = snake.path.getX(i);
-    const wy = snake.path.getY(i);
-    if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-    const s = worldToScreen(wx, wy, camera, cw, ch);
-    ctx.moveTo(s.x + segRadius, s.y);
-    ctx.arc(s.x, s.y, segRadius, 0, Math.PI * 2);
-    hasBodySegs = true;
+  if (pathLen >= 3) {
+    let pIdx = 0;
+    let pFrac = 0;
+    let pSegLen = 0;
+    let pSegDx = 0;
+    let pSegDy = 0;
+
+    pSegDx = path.getX(1) - headWorldX;
+    pSegDy = path.getY(1) - headWorldY;
+    pSegLen = Math.sqrt(pSegDx * pSegDx + pSegDy * pSegDy);
+
+    const advancePathSeg = () => {
+      pIdx++;
+      if (pIdx + 1 < pathLen) {
+        const sx = path.getX(pIdx);
+        const sy = path.getY(pIdx);
+        pSegDx = path.getX(pIdx + 1) - sx;
+        pSegDy = path.getY(pIdx + 1) - sy;
+        pSegLen = Math.sqrt(pSegDx * pSegDx + pSegDy * pSegDy);
+      } else {
+        pSegLen = 0;
+      }
+      pFrac = 0;
+    };
+
+    const getCursorPos = (out: number[]) => {
+      const sx = path.getX(pIdx);
+      const sy = path.getY(pIdx);
+      if (pIdx + 1 < pathLen && pFrac < 1 && pSegLen > 0.01) {
+        out[0] = sx + pSegDx * pFrac;
+        out[1] = sy + pSegDy * pFrac;
+      } else {
+        out[0] = sx;
+        out[1] = sy;
+      }
+    };
+
+    const getPathDir = (out: number[]) => {
+      let dx: number, dy: number;
+      if (pIdx + 1 < pathLen) {
+        dx = path.getX(pIdx + 1) - path.getX(pIdx);
+        dy = path.getY(pIdx + 1) - path.getY(pIdx);
+      } else if (pIdx >= 1) {
+        dx = path.getX(pIdx) - path.getX(pIdx - 1);
+        dy = path.getY(pIdx) - path.getY(pIdx - 1);
+      } else {
+        out[0] = Math.cos(snake.angle);
+        out[1] = Math.sin(snake.angle);
+        return;
+      }
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (len > 0.01) { dx /= len; dy /= len; }
+      out[0] = dx;
+      out[1] = dy;
+    };
+
+    const getCurvature = (): number => {
+      if (pIdx < 1 || pIdx + 1 >= pathLen) return 0;
+      const ax = path.getX(pIdx - 1), ay = path.getY(pIdx - 1);
+      const bx = path.getX(pIdx + 1), by = path.getY(pIdx + 1);
+      const sx = path.getX(pIdx), sy = path.getY(pIdx);
+      const v1x = sx - ax, v1y = sy - ay;
+      const v2x = bx - sx, v2y = by - sy;
+      return Math.atan2(v1x * v2y - v1y * v2x, v1x * v2x + v1y * v2y);
+    };
+
+    const step = CHAIN_STEP;
+    const maxSegs = Math.ceil(pathLen * 2) + 4;
+    const tmpPos = [0, 0];
+    const tmpDir = [0, 0];
+    let cumulativeCurl = 0;
+
+    for (let s = 1; s < maxSegs; s++) {
+      let toWalk = step;
+      let reachedEnd = false;
+
+      while (toWalk > 0.01) {
+        if (pSegLen < 0.01) { advancePathSeg(); if (pIdx + 1 >= pathLen) { reachedEnd = true; break; } continue; }
+        const avail = pSegLen * (1 - pFrac);
+        if (avail <= 0.01) { advancePathSeg(); if (pIdx + 1 >= pathLen) { reachedEnd = true; break; } continue; }
+        if (avail <= toWalk) { toWalk -= avail; advancePathSeg(); if (pIdx + 1 >= pathLen) { reachedEnd = true; break; } }
+        else { pFrac += toWalk / pSegLen; toWalk = 0; }
+      }
+
+      getCursorPos(tmpPos);
+      const pathX = tmpPos[0];
+      const pathY = tmpPos[1];
+
+      if (reachedEnd && pIdx < pathLen) {
+        const lx = path.getX(Math.min(pIdx, pathLen - 1));
+        const ly = path.getY(Math.min(pIdx, pathLen - 1));
+        getPathDir(tmpDir);
+        const rX = -tmpDir[1], rY = tmpDir[0];
+        const vx = lx + rX * cumulativeCurl;
+        const vy = ly + rY * cumulativeCurl;
+        const shrink = Math.min(Math.abs(cumulativeCurl) * SIZE_SHRINK, MAX_SIZE_SHRINK);
+        const tailSr = SNAKE_RADIUS * (1 - shrink) * zoom;
+        if (vx >= vl && vx <= vr && vy >= vt && vy <= vb) {
+          const scr = worldToScreen(vx, vy, camera, cw, ch);
+          ctx.moveTo(scr.x + tailSr, scr.y);
+          ctx.arc(scr.x, scr.y, tailSr, 0, Math.PI * 2);
+          hasBodySegs = true;
+        }
+        break;
+      }
+
+      const curvature = getCurvature();
+      const fade = Math.min(1, (s - 1) / CURL_FADE);
+
+      cumulativeCurl *= CURL_DECAY;
+      cumulativeCurl += curvature * CURL_STRENGTH * fade;
+
+      getPathDir(tmpDir);
+      const rightX = -tmpDir[1];
+      const rightY = tmpDir[0];
+      const visualX = pathX + rightX * cumulativeCurl;
+      const visualY = pathY + rightY * cumulativeCurl;
+
+      const shrink = Math.min(Math.abs(cumulativeCurl) * SIZE_SHRINK, MAX_SIZE_SHRINK);
+      const visualR = SNAKE_RADIUS * (1 - shrink);
+
+      if (visualX >= vl && visualX <= vr && visualY >= vt && visualY <= vb) {
+        const scr = worldToScreen(visualX, visualY, camera, cw, ch);
+        const sr = visualR * zoom;
+        ctx.moveTo(scr.x + sr, scr.y);
+        ctx.arc(scr.x, scr.y, sr, 0, Math.PI * 2);
+        hasBodySegs = true;
+      }
+
+      if (reachedEnd) break;
+    }
   }
 
-  if (hasBodySegs) {
-    ctx.fill();
-  }
+  if (hasBodySegs) ctx.fill();
 
   // ── Head ──
-  const headVisible = headWx >= vl && headWx <= vr && headWy >= vt && headWy <= vb;
-
+  const headRadius = SNAKE_RADIUS * zoom * 1.3;
   if (headVisible) {
-    const hs = worldToScreen(headWx, headWy, camera, cw, ch);
     ctx.fillStyle = snake.headColor;
     ctx.beginPath();
-    ctx.arc(hs.x, hs.y, headRadius, 0, Math.PI * 2);
+    ctx.arc(headScreen.x, headScreen.y, headRadius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Eyes (only when zoomed in enough to see them)
+    // Eyes
+    const segRadius = SNAKE_RADIUS * zoom;
     if (segRadius > 3) {
       const eyeOffset = headRadius * 0.4;
       const eyeR = headRadius * 0.25;
@@ -328,23 +462,21 @@ export function renderSnakeFallback(
       const perpAngle = snake.angle + Math.PI / 2;
       const eyeForward = headRadius * 0.3;
 
-      // Batch both eye whites
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
       for (const side of [-1, 1]) {
-        const ex = hs.x + Math.cos(snake.angle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
-        const ey = hs.y + Math.sin(snake.angle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
+        const ex = headScreen.x + Math.cos(snake.angle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
+        const ey = headScreen.y + Math.sin(snake.angle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
         ctx.moveTo(ex + eyeR, ey);
         ctx.arc(ex, ey, eyeR, 0, Math.PI * 2);
       }
       ctx.fill();
 
-      // Batch both pupils
       ctx.fillStyle = '#111111';
       ctx.beginPath();
       for (const side of [-1, 1]) {
-        const ex = hs.x + Math.cos(snake.angle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
-        const ey = hs.y + Math.sin(snake.angle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
+        const ex = headScreen.x + Math.cos(snake.angle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
+        const ey = headScreen.y + Math.sin(snake.angle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
         const ppx = ex + Math.cos(snake.angle) * pupilR * 0.3;
         const ppy = ey + Math.sin(snake.angle) * pupilR * 0.3;
         ctx.moveTo(ppx + pupilR, ppy);
@@ -359,9 +491,11 @@ export function renderSnakeFallback(
       ctx.font = `${Math.max(10, 12 * zoom)}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      ctx.fillText(snake.name, hs.x, hs.y - headRadius - 4 * zoom);
+      ctx.fillText(snake.name, headScreen.x, headScreen.y - headRadius - 4 * zoom);
     }
   }
+
+  ctx.globalAlpha = 1;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
