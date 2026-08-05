@@ -1,15 +1,27 @@
 // ============================================================================
-// Atlas-based Snake Renderer — Renders snakes using pre-built texture atlas
-// sprites. Falls back to simple circle rendering when no atlas is available.
-// Phase C of the snake game engine rewrite.
+// Atlas-based Snake Renderer + Fallback Renderer
+//
+// BOOST STRETCH FIX:
+//   The path buffer records one position per tick. During boost, entries are
+//   BOOST_SPEED (8px) apart instead of BASE_SPEED (4.5px). If we draw one
+//   sprite per path entry, the body stretches when boosting.
+//
+//   FIX: Walk the path at a FIXED visual step (BODY_DRAW_STEP), capped to
+//   the snake's logical length. The visual body length stays constant.
 // ============================================================================
 
 import type { Camera, Snake, Viewport } from '@/lib/snake/types';
-import { SNAKE_RADIUS, SPAWN_PROTECTION_MS, LEGENDARY_GLOW_SIZE } from '@/lib/snake/config';
+import { SNAKE_RADIUS, SEGMENT_SPACING, SPAWN_PROTECTION_MS, LEGENDARY_GLOW_SIZE, START_LENGTH, GROWTH_RATE, MAX_SNAKE_LENGTH } from '@/lib/snake/config';
 import { worldToScreen } from '@/lib/snake/camera';
 import { angleDirect } from '@/lib/snake/vec2';
 import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
+
+// ─── Constants ─────────────────────────────────────────────────────────────
+
+/** Fixed pixel spacing between drawn body segments (world space).
+ *  Less than SNAKE_RADIUS*2 for overlap → solid continuous look. */
+const BODY_DRAW_STEP = 7;
 
 // ─── Particle type (render-side) ────────────────────────────────────────────
 
@@ -27,13 +39,184 @@ interface RenderParticle {
 /** Per-snake live particle pool */
 const particlePools: Map<string, RenderParticle[]> = new Map();
 
-// ─── Main atlas renderer ────────────────────────────────────────────────────
+// ─── Path Walker ────────────────────────────────────────────────────────────
 
 /**
- * Render one snake using atlas sprites if available, otherwise fallback.
- * Returns live particles for this snake so the caller can keep them alive
- * across frames.
+ * Walk along a PathBuffer at a fixed pixel step, collecting positions + directions.
+ * Returns arrays of {x, y, angle} for each drawn segment.
+ * Capped at `maxSegs` segments so body length stays constant regardless of speed.
  */
+interface WalkResult {
+  xs: Float64Array;
+  ys: Float64Array;
+  angles: Float64Array;
+  count: number;
+}
+
+// Reusable walker state (avoids GC pressure)
+const _walker = {
+  pIdx: 0,
+  pFrac: 0,
+  pSegLen: 0,
+  pSegDx: 0,
+  pSegDy: 0,
+  prevDx: 0,
+  prevDy: 0,
+};
+
+function walkPathFixedStep(
+  path: { getX: (i: number) => number; getY: (i: number) => number; length: number; headX: number; headY: number },
+  step: number,
+  maxSegs: number,
+  headAngle: number,
+): WalkResult {
+  const pathLen = path.length;
+  const w = _walker;
+
+  // Pre-allocate result arrays
+  let xs = _walkResult.xs;
+  let ys = _walkResult.ys;
+  let angles = _walkResult.angles;
+  if (xs.length < maxSegs) {
+    xs = new Float64Array(maxSegs);
+    ys = new Float64Array(maxSegs);
+    angles = new Float64Array(maxSegs);
+    _walkResult.xs = xs;
+    _walkResult.ys = ys;
+    _walkResult.angles = angles;
+  }
+
+  if (pathLen < 2) {
+    _walkResult.count = 0;
+    return _walkResult;
+  }
+
+  const headX = path.headX;
+  const headY = path.headY;
+
+  // Initialize walker at head (path[0] → path[1])
+  w.pIdx = 0;
+  w.pFrac = 0;
+  w.pSegDx = path.getX(1) - headX;
+  w.pSegDy = path.getY(1) - headY;
+  w.pSegLen = Math.sqrt(w.pSegDx * w.pSegDx + w.pSegDy * w.pSegDy);
+  // Initial direction (from head toward path[1])
+  w.prevDx = w.pSegLen > 0.01 ? w.pSegDx / w.pSegLen : Math.cos(headAngle);
+  w.prevDy = w.pSegLen > 0.01 ? w.pSegDy / w.pSegLen : Math.sin(headAngle);
+
+  let count = 0;
+
+  for (let s = 1; s <= maxSegs; s++) {
+    let toWalk = step;
+    let reachedEnd = false;
+
+    while (toWalk > 0.01) {
+      if (w.pSegLen < 0.01) {
+        w.pIdx++;
+        w.pFrac = 0;
+        if (w.pIdx + 1 < pathLen) {
+          const sx = path.getX(w.pIdx);
+          const sy = path.getY(w.pIdx);
+          w.pSegDx = path.getX(w.pIdx + 1) - sx;
+          w.pSegDy = path.getY(w.pIdx + 1) - sy;
+          w.pSegLen = Math.sqrt(w.pSegDx * w.pSegDx + w.pSegDy * w.pSegDy);
+        } else {
+          w.pSegLen = 0;
+          reachedEnd = true;
+          break;
+        }
+        continue;
+      }
+
+      const avail = w.pSegLen * (1 - w.pFrac);
+      if (avail <= 0.01) {
+        // Save direction before advancing
+        if (w.pSegLen > 0.01) {
+          w.prevDx = w.pSegDx / w.pSegLen;
+          w.prevDy = w.pSegDy / w.pSegLen;
+        }
+        w.pIdx++;
+        w.pFrac = 0;
+        if (w.pIdx + 1 < pathLen) {
+          const sx = path.getX(w.pIdx);
+          const sy = path.getY(w.pIdx);
+          w.pSegDx = path.getX(w.pIdx + 1) - sx;
+          w.pSegDy = path.getY(w.pIdx + 1) - sy;
+          w.pSegLen = Math.sqrt(w.pSegDx * w.pSegDx + w.pSegDy * w.pSegDy);
+        } else {
+          w.pSegLen = 0;
+          reachedEnd = true;
+          break;
+        }
+        continue;
+      }
+
+      if (avail <= toWalk) {
+        toWalk -= avail;
+        // Save direction before advancing
+        if (w.pSegLen > 0.01) {
+          w.prevDx = w.pSegDx / w.pSegLen;
+          w.prevDy = w.pSegDy / w.pSegLen;
+        }
+        w.pIdx++;
+        w.pFrac = 0;
+        if (w.pIdx + 1 < pathLen) {
+          const sx = path.getX(w.pIdx);
+          const sy = path.getY(w.pIdx);
+          w.pSegDx = path.getX(w.pIdx + 1) - sx;
+          w.pSegDy = path.getY(w.pIdx + 1) - sy;
+          w.pSegLen = Math.sqrt(w.pSegDx * w.pSegDx + w.pSegDy * w.pSegDy);
+        } else {
+          w.pSegLen = 0;
+          reachedEnd = true;
+          break;
+        }
+      } else {
+        w.pFrac += toWalk / w.pSegLen;
+        toWalk = 0;
+      }
+    }
+
+    // Compute position
+    let wx: number, wy: number;
+    if (reachedEnd && w.pIdx < pathLen) {
+      wx = path.getX(Math.min(w.pIdx, pathLen - 1));
+      wy = path.getY(Math.min(w.pIdx, pathLen - 1));
+    } else if (w.pSegLen > 0.01) {
+      const sx = path.getX(w.pIdx);
+      const sy = path.getY(w.pIdx);
+      wx = sx + w.pSegDx * w.pFrac;
+      wy = sy + w.pSegDy * w.pFrac;
+    } else {
+      wx = path.getX(Math.min(w.pIdx, pathLen - 1));
+      wy = path.getY(Math.min(w.pIdx, pathLen - 1));
+    }
+
+    // Compute angle (direction of travel at this point)
+    let segAngle: number;
+    if (w.pSegLen > 0.01) {
+      segAngle = Math.atan2(w.pSegDy, w.pSegDx);
+    } else {
+      segAngle = Math.atan2(w.prevDy, w.prevDx);
+    }
+
+    xs[count] = wx;
+    ys[count] = wy;
+    angles[count] = segAngle;
+    count++;
+
+    if (reachedEnd) break;
+  }
+
+  _walkResult.count = count;
+  return _walkResult;
+}
+
+// Reusable walk result
+const _walkResult: WalkResult = { xs: new Float64Array(64), ys: new Float64Array(64), angles: new Float64Array(64), count: 0 };
+
+// ─── Main atlas renderer ────────────────────────────────────────────────────
+
 export function renderSnakeAtlas(
   ctx: CanvasRenderingContext2D,
   snake: Snake,
@@ -49,26 +232,34 @@ export function renderSnakeAtlas(
   }
 
   const pathLen = snake.path.length;
-  if (pathLen === 0) return;
+  if (pathLen < 2) return;
 
-  // ── HEAD-LEVEL CULLING ──
-  const _headWx = snake.path.headX;
-  const _headWy = snake.path.headY;
-  const _cullMargin = Math.min(pathLen * 8, 500) + 100;
-  if (_headWx < viewport.left - _cullMargin || _headWx > viewport.right + _cullMargin) return;
-  if (_headWy < viewport.top - _cullMargin || _headWy > viewport.bottom + _cullMargin) return;
+  const headWx = snake.path.headX;
+  const headWy = snake.path.headY;
+
+  // ── Calculate logical body length (segments) and cap ──
+  const logicalLen = Math.min(Math.floor(START_LENGTH + snake.score * GROWTH_RATE), MAX_SNAKE_LENGTH);
+  const visualLen = logicalLen * SEGMENT_SPACING;
+  const maxSegs = Math.ceil(visualLen / BODY_DRAW_STEP);
+
+  // Culling
+  const cullMargin = visualLen + 100;
+  if (headWx < viewport.left - cullMargin || headWx > viewport.right + cullMargin) return;
+  if (headWy < viewport.top - cullMargin || headWy > viewport.bottom + cullMargin) return;
 
   const zoom = camera.zoom;
   const cw = viewport.width;
   const ch = viewport.height;
   const segRadius = SNAKE_RADIUS * zoom;
 
-  // Spawn protection blink
-  if (time - snake.spawnTime < SPAWN_PROTECTION_MS && Math.floor(time / 150) % 2 === 0) {
-    ctx.globalAlpha = 0.5;
+  // Spawn protection: smooth fade-in (no blinking)
+  const spawnAge = time - snake.spawnTime;
+  if (spawnAge < SPAWN_PROTECTION_MS) {
+    const t = spawnAge / SPAWN_PROTECTION_MS;
+    const pulse = 0.7 + 0.3 * Math.sin(time * 0.008);
+    ctx.globalAlpha = 0.5 + 0.5 * t * pulse;
   }
 
-  // Viewport culling bounds
   const vl = viewport.left - 40;
   const vr = viewport.right + 40;
   const vt = viewport.top - 40;
@@ -91,41 +282,29 @@ export function renderSnakeAtlas(
     particlePools.set(snake.id, updated);
   }
 
-  // ── Draw body segments (tail → head, so head is on top) ──
-  for (let i = pathLen - 1; i >= 1; i--) {
-    const wx = snake.path.getX(i);
-    const wy = snake.path.getY(i);
+  // ── FIXED-SPACING BODY: Walk path at BODY_DRAW_STEP, capped to maxSegs ──
+  const walked = walkPathFixedStep(snake.path, BODY_DRAW_STEP, maxSegs, snake.angle);
+
+  // Draw body segments (tail → head for proper layering)
+  const drawSize = segRadius * 2;
+  for (let i = walked.count - 1; i >= 0; i--) {
+    const wx = walked.xs[i];
+    const wy = walked.ys[i];
     if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
 
     const { x: sx, y: sy } = worldToScreen(wx, wy, camera, cw, ch);
-
-    // Determine angle from this segment to the previous one (toward head)
-    let segAngle: number;
-    if (i === 1) {
-      segAngle = snake.angle;
-    } else {
-      segAngle = angleDirect(
-        snake.path.getX(i), snake.path.getY(i),
-        snake.path.getX(i - 1), snake.path.getY(i - 1),
-      );
-    }
+    const segAngle = walked.angles[i];
 
     // Pick body region (cycle through variants)
     const bodyIdx = i % atlas.body.length;
     const region = atlas.body[bodyIdx];
 
-    // Draw size: sprite rendered at segRadius * 2 diameter
-    const drawSize = segRadius * 2;
-
     ctx.save();
     ctx.translate(sx, sy);
     ctx.rotate(segAngle);
 
-    // Apply epic animation effect
     if (isEpic && animation) {
-      atlasManager.applyEpicEffect(
-        ctx, animation, time, 0, 0, drawSize, snake.color,
-      );
+      atlasManager.applyEpicEffect(ctx, animation, time, 0, 0, drawSize, snake.color);
     }
 
     ctx.drawImage(
@@ -138,37 +317,9 @@ export function renderSnakeAtlas(
     ctx.restore();
   }
 
-  // ── Tail (last segment) ──
-  if (pathLen > 1) {
-    const tailIdx = pathLen - 1;
-    const twx = snake.path.getX(tailIdx);
-    const twy = snake.path.getY(tailIdx);
-    if (twx >= vl && twx <= vr && twy >= vt && twy <= vb) {
-      const { x: tsx, y: tsy } = worldToScreen(twx, twy, camera, cw, ch);
-      const tailAngle = tailIdx > 1
-        ? angleDirect(
-            snake.path.getX(tailIdx), snake.path.getY(tailIdx),
-            snake.path.getX(tailIdx - 1), snake.path.getY(tailIdx - 1),
-          )
-        : snake.angle;
-      const tailDrawSize = segRadius * 2 * (TAIL_RATIO);
-
-      ctx.save();
-      ctx.translate(tsx, tsy);
-      ctx.rotate(tailAngle);
-      ctx.drawImage(
-        atlas.canvas,
-        atlas.tail.x, atlas.tail.y, atlas.tail.width, atlas.tail.height,
-        -tailDrawSize / 2, -tailDrawSize / 2, tailDrawSize, tailDrawSize,
-      );
-      ctx.restore();
-    }
-  }
-
   // ── Head ──
-  const headWx = snake.path.headX;
-  const headWy = snake.path.headY;
-  if (headWx >= vl && headWx <= vr && headWy >= vt && headWy <= vb) {
+  const headVisible = headWx >= vl && headWx <= vr && headWy >= vt && headWy <= vb;
+  if (headVisible) {
     const { x: hsx, y: hsy } = worldToScreen(headWx, headWy, camera, cw, ch);
     const headDrawSize = segRadius * 2 * 1.3;
 
@@ -194,9 +345,7 @@ export function renderSnakeAtlas(
     ctx.rotate(snake.angle);
 
     if (isLegendary && animation) {
-      atlasManager.applyEpicEffect(
-        ctx, animation, time, 0, 0, headDrawSize, snake.headColor,
-      );
+      atlasManager.applyEpicEffect(ctx, animation, time, 0, 0, headDrawSize, snake.headColor);
     }
 
     ctx.drawImage(
@@ -207,6 +356,12 @@ export function renderSnakeAtlas(
 
     atlasManager.resetEpicEffect(ctx);
     ctx.restore();
+
+    // Responsive eyes
+    drawResponsiveEyes(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2);
+
+    // Directional arrow
+    drawDirectionArrow(ctx, hsx, hsy, snake.angle, headDrawSize / 2, snake.boosting);
 
     // Boost speed lines
     if (snake.boosting && segRadius > 3) {
@@ -230,7 +385,7 @@ export function renderSnakeAtlas(
       ctx.font = `${Math.max(10, 12 * zoom)}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      ctx.fillText(snake.name, hsx, hsy - headDrawSize / 2 - 4 * zoom);
+      ctx.fillText(snake.name, hsx, hsy - headDrawSize / 2 - 8 * zoom);
     }
   }
 
@@ -256,22 +411,8 @@ export function renderSnakeAtlas(
   ctx.globalAlpha = 1;
 }
 
-// ─── Fallback renderer with leaky-integrator inner curl ──────────────────
+// ─── Fallback renderer (simple circles, fixed-spacing) ─────────────────────
 
-// Inner curl constants
-const CHAIN_STEP = 5;
-const CURL_STRENGTH = 3.5;
-const CURL_DECAY = 0.97;
-const SIZE_SHRINK = 0.025;
-const MAX_SIZE_SHRINK = 0.55;
-const CURL_FADE = 4;
-
-/**
- * Fallback renderer with inner curl (corner-cutting) and boost-stretch fix.
- * Walks the path at fixed CHAIN_STEP intervals with interpolation.
- * A leaky integrator accumulates curvature from head to tail,
- * producing progressive perpendicular offset + size reduction.
- */
 export function renderSnakeFallback(
   ctx: CanvasRenderingContext2D,
   snake: Snake,
@@ -280,21 +421,33 @@ export function renderSnakeFallback(
 ): void {
   const path = snake.path;
   const pathLen = path.length;
-  if (pathLen === 0) return;
+  if (pathLen < 2) return;
 
   const headWorldX = path.headX;
   const headWorldY = path.headY;
-  const cullMargin = Math.min(pathLen * 8, 500) + 100;
+
+  // ── Calculate logical body length and cap ──
+  const logicalLen = Math.min(Math.floor(START_LENGTH + snake.score * GROWTH_RATE), MAX_SNAKE_LENGTH);
+  const visualLen = logicalLen * SEGMENT_SPACING;
+  const maxSegs = Math.ceil(visualLen / BODY_DRAW_STEP);
+
+  // Culling
+  const cullMargin = visualLen + 100;
   if (headWorldX < viewport.left - cullMargin || headWorldX > viewport.right + cullMargin) return;
   if (headWorldY < viewport.top - cullMargin || headWorldY > viewport.bottom + cullMargin) return;
 
   const zoom = camera.zoom;
   const cw = viewport.width;
   const ch = viewport.height;
+  const segRadius = SNAKE_RADIUS * zoom;
 
-  // Spawn protection blink
-  if (performance.now() - snake.spawnTime < SPAWN_PROTECTION_MS && Math.floor(performance.now() / 150) % 2 === 0) {
-    ctx.globalAlpha = 0.5;
+  // Spawn protection: smooth fade-in (no blinking)
+  const now = performance.now();
+  const spawnAge = now - snake.spawnTime;
+  if (spawnAge < SPAWN_PROTECTION_MS) {
+    const t = spawnAge / SPAWN_PROTECTION_MS;
+    const pulse = 0.7 + 0.3 * Math.sin(now * 0.008);
+    ctx.globalAlpha = 0.5 + 0.5 * t * pulse;
   }
 
   const vl = viewport.left - 20;
@@ -305,185 +458,38 @@ export function renderSnakeFallback(
   const headScreen = worldToScreen(headWorldX, headWorldY, camera, cw, ch);
   const headVisible = headWorldX >= vl && headWorldX <= vr && headWorldY >= vt && headWorldY <= vb;
 
-  // ── Chain-simulated body with leaky-integrator inner curl ──
+  // ── FIXED-SPACING BODY: Walk path at BODY_DRAW_STEP, capped to maxSegs ──
+  const walked = walkPathFixedStep(path, BODY_DRAW_STEP, maxSegs, snake.angle);
+
+  // Draw body circles (tail → head for proper layering)
   ctx.fillStyle = snake.color;
   ctx.beginPath();
   let hasBodySegs = false;
 
-  if (pathLen >= 3) {
-    let pIdx = 0;
-    let pFrac = 0;
-    let pSegLen = 0;
-    let pSegDx = 0;
-    let pSegDy = 0;
-
-    pSegDx = path.getX(1) - headWorldX;
-    pSegDy = path.getY(1) - headWorldY;
-    pSegLen = Math.sqrt(pSegDx * pSegDx + pSegDy * pSegDy);
-
-    const advancePathSeg = () => {
-      pIdx++;
-      if (pIdx + 1 < pathLen) {
-        const sx = path.getX(pIdx);
-        const sy = path.getY(pIdx);
-        pSegDx = path.getX(pIdx + 1) - sx;
-        pSegDy = path.getY(pIdx + 1) - sy;
-        pSegLen = Math.sqrt(pSegDx * pSegDx + pSegDy * pSegDy);
-      } else {
-        pSegLen = 0;
-      }
-      pFrac = 0;
-    };
-
-    const getCursorPos = (out: number[]) => {
-      const sx = path.getX(pIdx);
-      const sy = path.getY(pIdx);
-      if (pIdx + 1 < pathLen && pFrac < 1 && pSegLen > 0.01) {
-        out[0] = sx + pSegDx * pFrac;
-        out[1] = sy + pSegDy * pFrac;
-      } else {
-        out[0] = sx;
-        out[1] = sy;
-      }
-    };
-
-    const getPathDir = (out: number[]) => {
-      let dx: number, dy: number;
-      if (pIdx + 1 < pathLen) {
-        dx = path.getX(pIdx + 1) - path.getX(pIdx);
-        dy = path.getY(pIdx + 1) - path.getY(pIdx);
-      } else if (pIdx >= 1) {
-        dx = path.getX(pIdx) - path.getX(pIdx - 1);
-        dy = path.getY(pIdx) - path.getY(pIdx - 1);
-      } else {
-        out[0] = Math.cos(snake.angle);
-        out[1] = Math.sin(snake.angle);
-        return;
-      }
-      const len = Math.sqrt(dx * dx + dy * dy);
-      if (len > 0.01) { dx /= len; dy /= len; }
-      out[0] = dx;
-      out[1] = dy;
-    };
-
-    const getCurvature = (): number => {
-      if (pIdx < 1 || pIdx + 1 >= pathLen) return 0;
-      const ax = path.getX(pIdx - 1), ay = path.getY(pIdx - 1);
-      const bx = path.getX(pIdx + 1), by = path.getY(pIdx + 1);
-      const sx = path.getX(pIdx), sy = path.getY(pIdx);
-      const v1x = sx - ax, v1y = sy - ay;
-      const v2x = bx - sx, v2y = by - sy;
-      return Math.atan2(v1x * v2y - v1y * v2x, v1x * v2x + v1y * v2y);
-    };
-
-    const step = CHAIN_STEP;
-    const maxSegs = Math.ceil(pathLen * 2) + 4;
-    const tmpPos = [0, 0];
-    const tmpDir = [0, 0];
-    let cumulativeCurl = 0;
-
-    for (let s = 1; s < maxSegs; s++) {
-      let toWalk = step;
-      let reachedEnd = false;
-
-      while (toWalk > 0.01) {
-        if (pSegLen < 0.01) { advancePathSeg(); if (pIdx + 1 >= pathLen) { reachedEnd = true; break; } continue; }
-        const avail = pSegLen * (1 - pFrac);
-        if (avail <= 0.01) { advancePathSeg(); if (pIdx + 1 >= pathLen) { reachedEnd = true; break; } continue; }
-        if (avail <= toWalk) { toWalk -= avail; advancePathSeg(); if (pIdx + 1 >= pathLen) { reachedEnd = true; break; } }
-        else { pFrac += toWalk / pSegLen; toWalk = 0; }
-      }
-
-      getCursorPos(tmpPos);
-      const pathX = tmpPos[0];
-      const pathY = tmpPos[1];
-
-      if (reachedEnd && pIdx < pathLen) {
-        const lx = path.getX(Math.min(pIdx, pathLen - 1));
-        const ly = path.getY(Math.min(pIdx, pathLen - 1));
-        getPathDir(tmpDir);
-        const rX = -tmpDir[1], rY = tmpDir[0];
-        const vx = lx + rX * cumulativeCurl;
-        const vy = ly + rY * cumulativeCurl;
-        const shrink = Math.min(Math.abs(cumulativeCurl) * SIZE_SHRINK, MAX_SIZE_SHRINK);
-        const tailSr = SNAKE_RADIUS * (1 - shrink) * zoom;
-        if (vx >= vl && vx <= vr && vy >= vt && vy <= vb) {
-          const scr = worldToScreen(vx, vy, camera, cw, ch);
-          ctx.moveTo(scr.x + tailSr, scr.y);
-          ctx.arc(scr.x, scr.y, tailSr, 0, Math.PI * 2);
-          hasBodySegs = true;
-        }
-        break;
-      }
-
-      const curvature = getCurvature();
-      const fade = Math.min(1, (s - 1) / CURL_FADE);
-
-      cumulativeCurl *= CURL_DECAY;
-      cumulativeCurl += curvature * CURL_STRENGTH * fade;
-
-      getPathDir(tmpDir);
-      const rightX = -tmpDir[1];
-      const rightY = tmpDir[0];
-      const visualX = pathX + rightX * cumulativeCurl;
-      const visualY = pathY + rightY * cumulativeCurl;
-
-      const shrink = Math.min(Math.abs(cumulativeCurl) * SIZE_SHRINK, MAX_SIZE_SHRINK);
-      const visualR = SNAKE_RADIUS * (1 - shrink);
-
-      if (visualX >= vl && visualX <= vr && visualY >= vt && visualY <= vb) {
-        const scr = worldToScreen(visualX, visualY, camera, cw, ch);
-        const sr = visualR * zoom;
-        ctx.moveTo(scr.x + sr, scr.y);
-        ctx.arc(scr.x, scr.y, sr, 0, Math.PI * 2);
-        hasBodySegs = true;
-      }
-
-      if (reachedEnd) break;
-    }
+  for (let i = walked.count - 1; i >= 0; i--) {
+    const wx = walked.xs[i];
+    const wy = walked.ys[i];
+    if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
+    const scr = worldToScreen(wx, wy, camera, cw, ch);
+    ctx.moveTo(scr.x + segRadius, scr.y);
+    ctx.arc(scr.x, scr.y, segRadius, 0, Math.PI * 2);
+    hasBodySegs = true;
   }
-
   if (hasBodySegs) ctx.fill();
 
   // ── Head ──
-  const headRadius = SNAKE_RADIUS * zoom * 1.3;
+  const headRadius = segRadius * 1.3;
   if (headVisible) {
     ctx.fillStyle = snake.headColor;
     ctx.beginPath();
     ctx.arc(headScreen.x, headScreen.y, headRadius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Eyes
-    const segRadius = SNAKE_RADIUS * zoom;
-    if (segRadius > 3) {
-      const eyeOffset = headRadius * 0.4;
-      const eyeR = headRadius * 0.25;
-      const pupilR = eyeR * 0.6;
-      const perpAngle = snake.angle + Math.PI / 2;
-      const eyeForward = headRadius * 0.3;
+    // Responsive eyes
+    drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius);
 
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      for (const side of [-1, 1]) {
-        const ex = headScreen.x + Math.cos(snake.angle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
-        const ey = headScreen.y + Math.sin(snake.angle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
-        ctx.moveTo(ex + eyeR, ey);
-        ctx.arc(ex, ey, eyeR, 0, Math.PI * 2);
-      }
-      ctx.fill();
-
-      ctx.fillStyle = '#111111';
-      ctx.beginPath();
-      for (const side of [-1, 1]) {
-        const ex = headScreen.x + Math.cos(snake.angle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
-        const ey = headScreen.y + Math.sin(snake.angle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
-        const ppx = ex + Math.cos(snake.angle) * pupilR * 0.3;
-        const ppy = ey + Math.sin(snake.angle) * pupilR * 0.3;
-        ctx.moveTo(ppx + pupilR, ppy);
-        ctx.arc(ppx, ppy, pupilR, 0, Math.PI * 2);
-      }
-      ctx.fill();
-    }
+    // Directional arrow
+    drawDirectionArrow(ctx, headScreen.x, headScreen.y, snake.angle, headRadius, snake.boosting);
 
     // Name
     if (segRadius > 3) {
@@ -491,22 +497,116 @@ export function renderSnakeFallback(
       ctx.font = `${Math.max(10, 12 * zoom)}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      ctx.fillText(snake.name, headScreen.x, headScreen.y - headRadius - 4 * zoom);
+      ctx.fillText(snake.name, headScreen.x, headScreen.y - headRadius - 8 * zoom);
     }
   }
 
   ctx.globalAlpha = 1;
 }
 
+// ─── Directional Arrow (slither.io-style pointer) ───────────────────────────
+
+function drawDirectionArrow(
+  ctx: CanvasRenderingContext2D,
+  hx: number,
+  hy: number,
+  angle: number,
+  headRadius: number,
+  boosting: boolean,
+): void {
+  const arrowLen = headRadius * 0.9;
+  const arrowWidth = headRadius * 0.45;
+
+  // Arrow tip (in front of the head)
+  const tipDist = headRadius + arrowLen;
+  const tipX = hx + Math.cos(angle) * tipDist;
+  const tipY = hy + Math.sin(angle) * tipDist;
+
+  // Arrow base (at head edge, wings spread perpendicular)
+  const baseDist = headRadius * 0.6;
+  const perpAngle = angle + Math.PI / 2;
+  const b1x = hx + Math.cos(angle) * baseDist + Math.cos(perpAngle) * arrowWidth;
+  const b1y = hy + Math.sin(angle) * baseDist + Math.sin(perpAngle) * arrowWidth;
+  const b2x = hx + Math.cos(angle) * baseDist - Math.cos(perpAngle) * arrowWidth;
+  const b2y = hy + Math.sin(angle) * baseDist - Math.sin(perpAngle) * arrowWidth;
+
+  ctx.fillStyle = boosting
+    ? 'rgba(255, 255, 255, 0.95)'
+    : 'rgba(255, 255, 255, 0.7)';
+
+  ctx.beginPath();
+  ctx.moveTo(tipX, tipY);
+  ctx.lineTo(b1x, b1y);
+  ctx.lineTo(b2x, b2y);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// ─── Responsive Eyes ────────────────────────────────────────────────────────
+
+function drawResponsiveEyes(
+  ctx: CanvasRenderingContext2D,
+  hx: number,
+  hy: number,
+  moveAngle: number,
+  targetAngle: number,
+  headRadius: number,
+): void {
+  const eyeOffset = headRadius * 0.42;
+  const eyeRadius = headRadius * 0.28;
+  const pupilRadius = eyeRadius * 0.55;
+  const perpAngle = moveAngle + Math.PI / 2;
+  const eyeForward = headRadius * 0.35;
+
+  // Pupils look toward targetAngle, clamped to stay inside eye
+  let lookAngle = targetAngle;
+  let diff = lookAngle - moveAngle;
+  while (diff > Math.PI) diff -= 2 * Math.PI;
+  while (diff < -Math.PI) diff += 2 * Math.PI;
+  const maxDev = 0.6;
+  if (Math.abs(diff) > maxDev) {
+    lookAngle = moveAngle + Math.sign(diff) * maxDev;
+  }
+
+  const pupilShift = eyeRadius * 0.35;
+
+  for (const side of [-1, 1]) {
+    const ex = hx + Math.cos(moveAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
+    const ey = hy + Math.sin(moveAngle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
+
+    // Eye white
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(ex, ey, eyeRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Pupil — shifted toward lookAngle
+    const px = ex + Math.cos(lookAngle) * pupilShift;
+    const py = ey + Math.sin(lookAngle) * pupilShift;
+    ctx.fillStyle = '#111111';
+    ctx.beginPath();
+    ctx.arc(px, py, pupilRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.beginPath();
+    ctx.arc(px - pupilRadius * 0.25, py - pupilRadius * 0.3, pupilRadius * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const TAIL_RATIO = 0.875; // TAIL_SPRITE_SIZE / SPRITE_SIZE = 56 / 64
+const TAIL_RATIO = 0.875;
 
 function clamp(v: number, min: number, max: number): number {
   return v < min ? min : v > max ? max : v;
 }
 
-/** Map skin ID to animation type string */
 function getAnimationForSkin(skinId: string): string {
   const map: Record<string, string> = {
     'skin-neon-pink': 'pulse',
@@ -517,7 +617,6 @@ function getAnimationForSkin(skinId: string): string {
   return map[skinId] ?? 'none';
 }
 
-/** Clean up particle pool for a dead snake */
 export function cleanupSnakeParticles(snakeId: string): void {
   particlePools.delete(snakeId);
 }
