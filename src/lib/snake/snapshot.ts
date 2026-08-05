@@ -11,74 +11,15 @@ import type {
 } from './types';
 import { PathBuffer } from './pool';
 import {
-  BASE_SPEED,
   BODY_DOWNSAMPLE_INTERVAL,
   FOOD_DOWNSAMPLE_RADIUS,
   MAX_SNAKES_PER_SNAPSHOT,
   SPATIAL_CELL_SIZE,
 } from './config';
 
-// ── Inner curl (corner-cutting) visual offset ─────────────────────────
-const SNAPSHOT_CURL_FACTOR = 6.0;
-
-/**
- * Compute inner curl offset for path index i. Pure function, no side effects.
- * Returns [offsetX, offsetY] to add to the base position.
- */
-function curlOffset(
-  path: { getX: (i: number) => number; getY: (i: number) => number; length: number },
-  i: number,
-): [number, number] {
-  const len = path.length;
-  if (len < 3 || i < 1) return [0, 0];
-
-  const ax = path.getX(i - 1);
-  const ay = path.getY(i - 1);
-  const cx = path.getX(i);
-  const cy = path.getY(i);
-
-  let bx: number, by: number;
-  if (i < len - 1) {
-    bx = path.getX(i + 1);
-    by = path.getY(i + 1);
-  } else {
-    const dx = cx - ax;
-    const dy = cy - ay;
-    const d = Math.sqrt(dx * dx + dy * dy);
-    if (d < 0.01) return [0, 0];
-    bx = cx + (dx / d) * BASE_SPEED;
-    by = cy + (dy / d) * BASE_SPEED;
-  }
-
-  const v1x = cx - bx;
-  const v1y = cy - by;
-  const v2x = ax - cx;
-  const v2y = ay - cy;
-
-  const cross = v1x * v2y - v1y * v2x;
-  if (Math.abs(cross) < 0.001) return [0, 0];
-
-  const dot = v1x * v2x + v1y * v2y;
-  const turnAngle = Math.atan2(Math.abs(cross), dot);
-
-  const travelX = ax - bx;
-  const travelY = ay - by;
-  const travelLen = Math.sqrt(travelX * travelX + travelY * travelY);
-  if (travelLen < 0.01) return [0, 0];
-
-  const invLen = 1 / travelLen;
-  let normX: number, normY: number;
-  if (cross > 0) {
-    normX = -travelY * invLen;
-    normY = travelX * invLen;
-  } else {
-    normX = travelY * invLen;
-    normY = -travelX * invLen;
-  }
-
-  const offset = turnAngle * SNAPSHOT_CURL_FACTOR;
-  return [normX * offset, normY * offset];
-}
+// Inner curl (corner-cutting) is a client-side visual effect.
+// The renderer uses chain simulation + progressive curvature offset.
+// Snapshots send raw path positions for simplicity and performance.
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -190,10 +131,8 @@ function buildSnakeSnapshot(snake: Snake, tickCount: number): SnakeSnapshot {
 
   let bodyIdx = 0;
   for (let i = 1; i < pathLen; i += BODY_DOWNSAMPLE_INTERVAL) {
-    // Apply inner curl offset (purely visual, computed fresh each snapshot)
-    const [ox, oy] = curlOffset(snake.path, i);
-    bodyX[bodyIdx] = snake.path.getX(i) + ox;
-    bodyY[bodyIdx] = snake.path.getY(i) + oy;
+    bodyX[bodyIdx] = snake.path.getX(i);
+    bodyY[bodyIdx] = snake.path.getY(i);
     bodyIdx++;
   }
 

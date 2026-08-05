@@ -1,77 +1,39 @@
 // ============================================================================
 // Renderer — Pure Canvas API rendering functions. No React dependencies.
-// Migrated from Vec2[] segments to PathBuffer (zero-alloc getX/getY access).
+// Uses chain-simulated body rendering with progressive inner curl.
 // ============================================================================
 
 import type { Camera, FoodOrb, GameState, Snake, StarChip, Viewport } from '@/lib/snake/types';
-import { SNAKE_RADIUS, SPAWN_PROTECTION_MS, START_LENGTH, GROWTH_RATE, MAX_SNAKE_LENGTH, BASE_SPEED } from '@/lib/snake/config';
+import { SNAKE_RADIUS, SPAWN_PROTECTION_MS, START_LENGTH, GROWTH_RATE, MAX_SNAKE_LENGTH } from '@/lib/snake/config';
 import { worldToScreen } from '@/lib/snake/camera';
 
-// ── Inner curl (corner-cutting) visual offset ─────────────────────────
-// How many pixels to shift a segment toward the center of curvature
-// per radian of local turn angle. Higher = tighter inner curl.
-const CURL_CUT_FACTOR = 6.0;
+// ── Chain-simulated body rendering ───────────────────────────────────
+//
+// Instead of drawing a circle at every path entry (which causes boost
+// stretching and no inner curl), we simulate a chain that walks the path
+// at a FIXED visual step. This solves two problems:
+//
+// 1. BOOST STRETCHING: Path entries are spaced at current speed (4.5px normal,
+//    8px boost). Drawing at fixed 5px intervals with interpolation keeps
+//    body density constant.
+//
+// 2. INNER CURL (CORNER-CUTTING): Each chain segment is constrained to be
+//    CHAIN_STEP from the previous one, in the direction of the path target.
+//    On curves, the chain takes a shorter path than the head (chord vs arc).
+//    Additionally, a progressive curvature offset grows with sqrt(segment_index)
+//    to create visible spiral tightening during sustained turns.
 
-/**
- * Compute the inner curl offset for a body segment at index i.
- * Returns [offsetX, offsetY] to ADD to the base path position.
- * This is purely visual — computed fresh each frame, never stored.
- */
-function innerCurlOffset(
-  path: { getX: (i: number) => number; getY: (i: number) => number; length: number },
-  i: number,
-): [number, number] {
-  const len = path.length;
-  if (len < 3 || i < 1) return [0, 0];
+/** Fixed pixel spacing between drawn body circles. Less than SNAKE_RADIUS for overlap. */
+const CHAIN_STEP = 5;
 
-  // Three points: ahead (i-1), current (i), behind (i+1)
-  const ax = path.getX(i - 1);
-  const ay = path.getY(i - 1);
-  const cx = path.getX(i);
-  const cy = path.getY(i);
+/** Progressive inner curl amplification. Higher = more dramatic spiral tightening. */
+const CURL_AMP = 6.0;
 
-  let bx: number, by: number;
-  if (i < len - 1) {
-    bx = path.getX(i + 1);
-    by = path.getY(i + 1);
-  } else {
-    const dx = cx - ax;
-    const dy = cy - ay;
-    const d = Math.sqrt(dx * dx + dy * dy);
-    if (d < 0.01) return [0, 0];
-    bx = cx + (dx / d) * BASE_SPEED;
-    by = cy + (dy / d) * BASE_SPEED;
-  }
+/** Maximum inner curl offset in pixels (prevents extreme distortion). */
+const MAX_CURL_PX = 12;
 
-  const v1x = cx - bx;
-  const v1y = cy - by;
-  const v2x = ax - cx;
-  const v2y = ay - cy;
-
-  const cross = v1x * v2y - v1y * v2x;
-  if (Math.abs(cross) < 0.001) return [0, 0];
-
-  const dot = v1x * v2x + v1y * v2y;
-  const turnAngle = Math.atan2(Math.abs(cross), dot);
-
-  const travelX = ax - bx;
-  const travelY = ay - by;
-  const travelLen = Math.sqrt(travelX * travelX + travelY * travelY);
-  if (travelLen < 0.01) return [0, 0];
-
-  const invLen = 1 / travelLen;
-  let normX: number, normY: number;
-  if (cross > 0) {
-    normX = -travelY * invLen;
-    normY = travelX * invLen;
-  } else {
-    normX = travelY * invLen;
-    normY = -travelX * invLen;
-  }
-
-  const offset = turnAngle * CURL_CUT_FACTOR;
-  return [normX * offset, normY * offset];
-}
+/** Segments from head before inner curl reaches full strength (fade-in). */
+const CURL_FADE_SEGS = 8;
 
 const GRID_SIZE = 80;
 const GRID_COLOR = 'rgba(255, 255, 255, 0.04)';
@@ -292,7 +254,7 @@ function drawExtractionZone(
 }
 
 // ==========================================================================
-// Snakes
+// Snakes — Chain-Simulated Body with Progressive Inner Curl
 // ==========================================================================
 
 function drawSnake(
@@ -302,12 +264,13 @@ function drawSnake(
   viewport: Viewport,
   now: number,
 ): void {
-  const pathLen = snake.path.length;
+  const path = snake.path;
+  const pathLen = path.length;
   if (pathLen === 0) return;
 
-  // ── HEAD-LEVEL CULLING: skip entire snake if head is far off-screen ──
-  const headWorldX = snake.path.headX;
-  const headWorldY = snake.path.headY;
+  // ── HEAD-LEVEL CULLING ──
+  const headWorldX = path.headX;
+  const headWorldY = path.headY;
   const cullMargin = Math.min(pathLen * 8, 500) + 100;
   if (headWorldX < viewport.left - cullMargin || headWorldX > viewport.right + cullMargin) return;
   if (headWorldY < viewport.top - cullMargin || headWorldY > viewport.bottom + cullMargin) return;
@@ -332,24 +295,179 @@ function drawSnake(
   const headScreen = worldToScreen(headWorldX, headWorldY, camera, cw, ch);
   const headVisible = headWorldX >= vl && headWorldX <= vr && headWorldY >= vt && headWorldY <= vb;
 
-  // ── Batched body draw with inner curl (corner-cutting) ──
-  // Inner curl is a purely visual offset computed fresh each frame.
-  // On curves, body segments shift toward the center of curvature,
-  // making the body follow a tighter arc than the head's path.
+  // ── CHAIN-SIMULATED BODY ──
+  // Walk the path at fixed CHAIN_STEP intervals (interpolating between
+  // path entries). Apply chain constraint + progressive inner curl offset.
+  // This produces: (1) consistent body density at all speeds,
+  // (2) inner curl that tightens progressively from head to tail.
+
   ctx.fillStyle = snake.color;
   ctx.beginPath();
   let hasBodySegs = false;
 
-  for (let i = pathLen - 1; i >= 1; i--) {
-    const [ox, oy] = innerCurlOffset(snake.path, i);
-    const wx = snake.path.getX(i) + ox;
-    const wy = snake.path.getY(i) + oy;
-    if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-    const s = worldToScreen(wx, wy, camera, cw, ch);
-    ctx.moveTo(s.x + segRadius, s.y);
-    ctx.arc(s.x, s.y, segRadius, 0, Math.PI * 2);
-    hasBodySegs = true;
+  if (pathLen >= 3) {
+    // Chain state: starts at head
+    let chainX = headWorldX;
+    let chainY = headWorldY;
+
+    // Path cursor state
+    let pIdx = 0;          // current path segment start index
+    let pFrac = 0;         // fraction [0..1] from pIdx to pIdx+1
+    let pSegLen = 0;       // length of path[pIdx] → path[pIdx+1]
+    let pSegDx = 0;        // dx of current path segment
+    let pSegDy = 0;        // dy of current path segment
+
+    // Initialize first path segment
+    pSegDx = path.getX(1) - headWorldX;
+    pSegDy = path.getY(1) - headWorldY;
+    pSegLen = Math.sqrt(pSegDx * pSegDx + pSegDy * pSegDy);
+
+    // Advance cursor to next path segment
+    const advancePathSeg = () => {
+      pIdx++;
+      if (pIdx + 1 < pathLen) {
+        const sx = path.getX(pIdx);
+        const sy = path.getY(pIdx);
+        pSegDx = path.getX(pIdx + 1) - sx;
+        pSegDy = path.getY(pIdx + 1) - sy;
+        pSegLen = Math.sqrt(pSegDx * pSegDx + pSegDy * pSegDy);
+      } else {
+        pSegLen = 0;
+      }
+      pFrac = 0;
+    };
+
+    // Get interpolated position on path at current cursor
+    const getCursorPos = (outX: number[], outY: number[]) => {
+      const sx = path.getX(pIdx);
+      const sy = path.getY(pIdx);
+      if (pIdx + 1 < pathLen && pFrac < 1 && pSegLen > 0.01) {
+        outX[0] = sx + pSegDx * pFrac;
+        outY[0] = sy + pSegDy * pFrac;
+      } else {
+        outX[0] = sx;
+        outY[0] = sy;
+      }
+    };
+
+    const step = CHAIN_STEP;
+    const maxSegs = Math.ceil(pathLen * 2) + 4;
+    const cursorXY = [0, 0]; // reusable array to avoid allocation
+
+    for (let s = 1; s < maxSegs; s++) {
+      // ── Walk 'step' pixels along the path ──
+      let toWalk = step;
+      let reachedEnd = false;
+
+      while (toWalk > 0.01) {
+        // Skip zero-length path segments
+        if (pSegLen < 0.01) {
+          advancePathSeg();
+          if (pIdx + 1 >= pathLen) { reachedEnd = true; break; }
+          continue;
+        }
+
+        const avail = pSegLen * (1 - pFrac);
+        if (avail <= 0.01) {
+          advancePathSeg();
+          if (pIdx + 1 >= pathLen) { reachedEnd = true; break; }
+          continue;
+        }
+
+        if (avail <= toWalk) {
+          toWalk -= avail;
+          advancePathSeg();
+          if (pIdx + 1 >= pathLen) { reachedEnd = true; break; }
+        } else {
+          pFrac += toWalk / pSegLen;
+          toWalk = 0;
+        }
+      }
+
+      // Get the path position where the cursor ended up
+      getCursorPos(cursorXY, cursorXY);
+      let pathX = cursorXY[0];
+      let pathY = cursorXY[1];
+
+      // If we reached the end without walking the full step, use last path position
+      if (reachedEnd) {
+        if (pIdx < pathLen) {
+          pathX = path.getX(Math.min(pIdx, pathLen - 1));
+          pathY = path.getY(Math.min(pIdx, pathLen - 1));
+        }
+      }
+
+      // ── Chain constraint: place at CHAIN_STEP from previous chain point ──
+      const cdx = pathX - chainX;
+      const cdy = pathY - chainY;
+      const cdist = Math.sqrt(cdx * cdx + cdy * cdy);
+
+      if (cdist > 0.01) {
+        const invDist = step / cdist;
+        chainX = chainX + cdx * invDist;
+        chainY = chainY + cdy * invDist;
+      }
+
+      // ── Progressive inner curl offset ──
+      // Compute curvature from 3 path points around current position.
+      // Offset grows with sqrt(segment_index) and fades in near the head.
+      const ci = pIdx >= 1 && pIdx + 1 < pathLen ? pIdx : -1;
+      if (ci >= 0) {
+        const ax = path.getX(ci - 1);
+        const ay = path.getY(ci - 1);
+        const bx = path.getX(ci + 1);
+        const by = path.getY(ci + 1);
+        const sx = path.getX(ci);
+        const sy = path.getY(ci);
+
+        const v1x = sx - ax;
+        const v1y = sy - ay;
+        const v2x = bx - sx;
+        const v2y = by - sy;
+
+        const cross = v1x * v2y - v1y * v2x;
+        if (Math.abs(cross) > 0.005) {
+          const dot = v1x * v2x + v1y * v2y;
+          const turnAngle = Math.atan2(Math.abs(cross), dot);
+
+          const travelX = bx - ax;
+          const travelY = by - ay;
+          const travelLen = Math.sqrt(travelX * travelX + travelY * travelY);
+
+          if (travelLen > 0.01) {
+            const invLen = 1 / travelLen;
+            let normX: number, normY: number;
+            if (cross > 0) {
+              normX = -travelY * invLen;
+              normY = travelX * invLen;
+            } else {
+              normX = travelY * invLen;
+              normY = -travelX * invLen;
+            }
+
+            // Progressive: grows with sqrt(s), fades in near head
+            const fade = Math.min(1, (s - 1) / CURL_FADE_SEGS);
+            let offset = turnAngle * CURL_AMP * Math.sqrt(s) * fade;
+            if (offset > MAX_CURL_PX) offset = MAX_CURL_PX;
+
+            chainX += normX * offset;
+            chainY += normY * offset;
+          }
+        }
+      }
+
+      // ── Draw circle at chain position ──
+      if (chainX >= vl && chainX <= vr && chainY >= vt && chainY <= vb) {
+        const scr = worldToScreen(chainX, chainY, camera, cw, ch);
+        ctx.moveTo(scr.x + segRadius, scr.y);
+        ctx.arc(scr.x, scr.y, segRadius, 0, Math.PI * 2);
+        hasBodySegs = true;
+      }
+
+      if (reachedEnd) break;
+    }
   }
+
   if (hasBodySegs) ctx.fill();
 
   // ── Head ──
@@ -370,11 +488,11 @@ function drawSnake(
       for (let j = 0; j < 3; j++) {
         const a = snake.angle + Math.PI + (j - 1) * 0.3;
         const len = (15 + j * 5) * zoom;
-        const sx = headScreen.x - Math.cos(snake.angle) * headRadius;
-        const sy = headScreen.y - Math.sin(snake.angle) * headRadius;
+        const bx = headScreen.x - Math.cos(snake.angle) * headRadius;
+        const by = headScreen.y - Math.sin(snake.angle) * headRadius;
         ctx.beginPath();
-        ctx.moveTo(sx, sy);
-        ctx.lineTo(sx + Math.cos(a) * len, sy + Math.sin(a) * len);
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx + Math.cos(a) * len, by + Math.sin(a) * len);
         ctx.stroke();
       }
     }
