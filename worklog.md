@@ -1,25 +1,23 @@
 ---
 Task ID: 1
 Agent: Main
-Task: Implement Inner Curl (Corner-Cutting) and Boost Stretching fixes
+Task: Rebuild snake renderer — slither.io-style fixed-spacing path walker
 
 Work Log:
-- Discovered renderer.ts drawSnake was DEAD CODE (imported but never called)
-- Found actual rendering happens in render-snake-atlas.tsx via renderSnakeFallback
-- Fixed inverted perpendicular direction: changed (dy, -dx) to (-dy, dx) for correct screen-coords right normal
-- Replaced per-point curvature nudge (invisible) with leaky integrator approach
-- Applied chain-walk at fixed CHAIN_STEP=5px (fixes boost stretching)
-- Added progressive size reduction during turns (up to 55% shrink)
-- Also updated renderer.ts drawSnake (dead code but kept for consistency)
-- Cleaned up all debug code
+- Researched how slither.io/littlebigsnake actually render snake bodies via web search and page reading
+- Key finding: slither.io bodies simply trace the head's path history at fixed spacing. No curvature math, no chain physics.
+- Identified the old renderer's problem: leaky integrator curvature offset was overengineered, produced invisible results at 4.5px/tick spacing
+- Rewrote renderer.ts from scratch: stripped all curl constants (CHAIN_STEP, CURL_STRENGTH, CURL_DECAY, SIZE_SHRINK, MAX_SIZE_SHRINK, CURL_FADE), removed getCurvature(), getPathDir(), cumulative curl logic
+- New renderer: walks path buffer at fixed 6px intervals (interpolating between path entries), draws one SNAKE_RADIUS circle per step
+- Verified snapshot.ts was already clean (raw path positions, no curl offsets)
+- Browser tested: snake body renders as solid continuous shape, smooth curves, no gaps
+- Boost test: body remains solid during boost (FIXED boost stretching)
+- Boost+turn test: smooth curves with no gaps
+- Zero console errors
 
 Stage Summary:
-- Inner curl: Leaky integrator accumulates signed curvature from head→tail
-  - Equilibrium offset ≈ 24px at max turn rate (clearly visible)
-  - Circle radius reduces up to 55% toward tail during turns
-  - Fade-in over first 4 segments from head
-- Boost stretching: Fixed by walking path at fixed 5px intervals (interpolating)
-- Sharp turns: Already fixed (MAX_TURN_RATE halved to π*0.06)
-- Files modified: render-snake-atlas.tsx, renderer.ts
-- Lint: Clean, no errors
-- Runtime: No console errors
+- renderer.ts completely rewritten with simple slither.io-style algorithm
+- Boost stretching FIXED (fixed 6px visual spacing regardless of speed)
+- Inner curl removed (was broken/invisible anyway; pure path-following is how slither.io works)
+- Sharp turns already fixed in prior session (MAX_TURN_RATE halved)
+- All 3 original issues now resolved
