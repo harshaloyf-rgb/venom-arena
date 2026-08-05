@@ -514,16 +514,18 @@ function drawDirectionArrow(
   headRadius: number,
   boosting: boolean,
 ): void {
-  const arrowLen = headRadius * 0.9;
-  const arrowWidth = headRadius * 0.45;
+  // Arrow sits well in front of the head — base starts just past the head edge
+  const gap = headRadius * 0.3; // clear gap between head edge and arrow base
+  const arrowLen = headRadius * 1.4;
+  const arrowWidth = headRadius * 0.55;
 
-  // Arrow tip (in front of the head)
-  const tipDist = headRadius + arrowLen;
+  // Arrow tip — far in front
+  const tipDist = headRadius + gap + arrowLen;
   const tipX = hx + Math.cos(angle) * tipDist;
   const tipY = hy + Math.sin(angle) * tipDist;
 
-  // Arrow base (at head edge, wings spread perpendicular)
-  const baseDist = headRadius * 0.6;
+  // Arrow base wings — start just after head edge
+  const baseDist = headRadius + gap;
   const perpAngle = angle + Math.PI / 2;
   const b1x = hx + Math.cos(angle) * baseDist + Math.cos(perpAngle) * arrowWidth;
   const b1y = hy + Math.sin(angle) * baseDist + Math.sin(perpAngle) * arrowWidth;
@@ -532,7 +534,7 @@ function drawDirectionArrow(
 
   ctx.fillStyle = boosting
     ? 'rgba(255, 255, 255, 0.95)'
-    : 'rgba(255, 255, 255, 0.7)';
+    : 'rgba(255, 255, 255, 0.65)';
 
   ctx.beginPath();
   ctx.moveTo(tipX, tipY);
@@ -552,32 +554,32 @@ function drawResponsiveEyes(
   targetAngle: number,
   headRadius: number,
 ): void {
-  const eyeOffset = headRadius * 0.42;
-  const eyeRadius = headRadius * 0.28;
+  // Bigger eyes for visibility
+  const eyeOffset = headRadius * 0.45;
+  const eyeRadius = headRadius * 0.35;
   const pupilRadius = eyeRadius * 0.55;
   const perpAngle = moveAngle + Math.PI / 2;
-  const eyeForward = headRadius * 0.35;
+  const eyeForward = headRadius * 0.3;
 
-  // Pupils look toward targetAngle, clamped to stay inside eye
-  let lookAngle = targetAngle;
-  let diff = lookAngle - moveAngle;
+  // Pupils look toward targetAngle, clamped to stay inside the eye
+  let diff = targetAngle - moveAngle;
   while (diff > Math.PI) diff -= 2 * Math.PI;
   while (diff < -Math.PI) diff += 2 * Math.PI;
-  const maxDev = 0.6;
-  if (Math.abs(diff) > maxDev) {
-    lookAngle = moveAngle + Math.sign(diff) * maxDev;
-  }
+  const maxDev = 0.7;
+  const clampedDiff = Math.max(-maxDev, Math.min(maxDev, diff));
+  const lookAngle = moveAngle + clampedDiff;
 
-  const pupilShift = eyeRadius * 0.35;
+  // Pupil shifts significantly toward look direction
+  const pupilShift = eyeRadius * 0.5;
 
   for (const side of [-1, 1]) {
     const ex = hx + Math.cos(moveAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
     const ey = hy + Math.sin(moveAngle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
 
-    // Eye white
+    // Eye white with border
     ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.arc(ex, ey, eyeRadius, 0, Math.PI * 2);
     ctx.fill();
@@ -591,10 +593,10 @@ function drawResponsiveEyes(
     ctx.arc(px, py, pupilRadius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Highlight
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    // Tiny highlight for life-like look
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
     ctx.beginPath();
-    ctx.arc(px - pupilRadius * 0.25, py - pupilRadius * 0.3, pupilRadius * 0.3, 0, Math.PI * 2);
+    ctx.arc(px - pupilRadius * 0.3, py - pupilRadius * 0.35, pupilRadius * 0.3, 0, Math.PI * 2);
     ctx.fill();
   }
 }
