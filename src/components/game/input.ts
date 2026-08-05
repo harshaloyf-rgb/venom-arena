@@ -5,6 +5,7 @@
 //   The angle from the VIEWPORT CENTER to the MOUSE CURSOR determines the
 //   snake's target direction. This is intuitive — point where you want to go.
 //   Listens on `window` so it works across the full browser viewport.
+//   No mouseInView guard — mousemove on window is always valid.
 //
 // Keyboard steering:
 //   WASD / Arrow keys override mouse. Space / Shift = boost.
@@ -25,9 +26,9 @@ export class InputHandler {
   private canvas: HTMLCanvasElement;
   private keys: Set<string> = new Set();
   private mouseDown = false;
-  private mouseInView = false;
   private mouseClientX = 0;
   private mouseClientY = 0;
+  private hasMouseMoved = false;
   private touchActive = false;
   private touchStartX = 0;
   private touchStartY = 0;
@@ -48,10 +49,7 @@ export class InputHandler {
 
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
-    // Listen on WINDOW for mousemove — works anywhere in the viewport
     window.addEventListener('mousemove', this.onMouseMove);
-    window.addEventListener('mouseenter', this.onMouseEnter);
-    window.addEventListener('mouseleave', this.onMouseLeave);
     this.canvas.addEventListener('mousedown', this.onMouseDown);
     window.addEventListener('mouseup', this.onMouseUp);
     this.canvas.addEventListener('touchstart', this.onTouchStart, { passive: false });
@@ -67,8 +65,6 @@ export class InputHandler {
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('mousemove', this.onMouseMove);
-    window.removeEventListener('mouseenter', this.onMouseEnter);
-    window.removeEventListener('mouseleave', this.onMouseLeave);
     this.canvas.removeEventListener('mousedown', this.onMouseDown);
     window.removeEventListener('mouseup', this.onMouseUp);
     this.canvas.removeEventListener('touchstart', this.onTouchStart);
@@ -83,6 +79,15 @@ export class InputHandler {
     if (this.onDetached) return { ...this.state };
     this.updateAngle();
     return { ...this.state };
+  }
+
+  /** Get raw mouse position (for cursor rendering) */
+  getMousePos(): { x: number; y: number } | null {
+    if (!this.hasMouseMoved || !this.canvasRect) return null;
+    return {
+      x: this.mouseClientX - this.canvasRect.left,
+      y: this.mouseClientY - this.canvasRect.top,
+    };
   }
 
   /** Update canvas rect (call on resize) */
@@ -120,10 +125,12 @@ export class InputHandler {
     }
 
     // Mouse input (slither.io style): angle from viewport center to cursor
-    if (this.canvasRect && this.mouseInView) {
+    // No mouseInView guard — if mouse has moved at all, use its position.
+    // When mouse leaves the viewport, mousemove stops, and we keep the last
+    // known direction (snake keeps turning toward where mouse was).
+    if (this.canvasRect && this.hasMouseMoved) {
       const centerX = this.canvasRect.width / 2;
       const centerY = this.canvasRect.height / 2;
-      // mouseClientX/Y are relative to viewport, same as getBoundingClientRect
       const mx = this.mouseClientX - this.canvasRect.left;
       const my = this.mouseClientY - this.canvasRect.top;
       const dx = mx - centerX;
@@ -154,14 +161,7 @@ export class InputHandler {
   private onMouseMove = (e: MouseEvent): void => {
     this.mouseClientX = e.clientX;
     this.mouseClientY = e.clientY;
-  };
-
-  private onMouseEnter = (): void => {
-    this.mouseInView = true;
-  };
-
-  private onMouseLeave = (): void => {
-    this.mouseInView = false;
+    this.hasMouseMoved = true;
   };
 
   private onMouseDown = (e: MouseEvent): void => {

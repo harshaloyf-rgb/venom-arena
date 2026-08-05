@@ -316,6 +316,10 @@ export default function SnakeGame({
           drawControlsHint(ctx, viewport);
         }
         drawMinimap(ctx, state.snakes, state.player);
+
+        // Mouse cursor indicator (slither.io style crosshair)
+        drawMouseCursor(ctx, input);
+
         if (isDeadRef.current) {
           drawDeathOverlay(ctx, finalScore || state.player?.score || 0, viewport);
         }
@@ -401,6 +405,9 @@ export default function SnakeGame({
         // ── Minimap (online) ──
         drawOnlineMinimap(ctx, renderableSnakes, playerSnake ?? null);
 
+        // Mouse cursor indicator (slither.io style crosshair)
+        drawMouseCursor(ctx, input);
+
         // ── Death overlay ──
         if (isDeadOnlineRef.current) {
           drawDeathOverlay(ctx, finalScore, viewport);
@@ -461,7 +468,7 @@ export default function SnakeGame({
       <canvas
         ref={canvasRef}
         className="block w-full h-full"
-        style={{ touchAction: 'none' }}
+        style={{ touchAction: 'none', cursor: 'none' }}
       />
 
       {/* Exit button */}
@@ -1012,4 +1019,32 @@ function drawConnectionOverlay(
     ctx.font = '18px sans-serif';
     ctx.fillText('Connection error — see panel for details', width / 2, height / 2);
   }
+}
+
+// ============================================================================
+// Mouse cursor indicator (slither.io style — subtle crosshair)
+// ============================================================================
+
+function drawMouseCursor(
+  ctx: CanvasRenderingContext2D,
+  input: InputHandler,
+): void {
+  const pos = input.getMousePos();
+  if (!pos) return;
+
+  const r = 6;
+  const alpha = 0.5;
+
+  // Outer ring
+  ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Center dot
+  ctx.fillStyle = `rgba(255, 255, 255, ${alpha + 0.2})`;
+  ctx.beginPath();
+  ctx.arc(pos.x, pos.y, 1.5, 0, Math.PI * 2);
+  ctx.fill();
 }
