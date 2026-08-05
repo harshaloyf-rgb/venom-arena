@@ -1,0 +1,47 @@
+[
+  {
+    "url": "https://github.com/orgs/community/discussions/198760",
+    "name": "Looking for Help Improving a Slither.io Protocol 14 C++",
+    "snippet": "Body segments do not always follow the head smoothly. Body Segment Following Segments should follow the path the head traced, not follow the segment in front ...\nWhen a player spawns, the snake's body appears glitched or cut near the tail. Snake-to-snake collision is not accurate; sometimes snakes pass through each ...",
+    "host_name": "github.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=tEtLLj_58uw",
+    "name": "Programming Slither.io in Python - increasing snake length",
+    "snippet": "Though this is my longest tutorial so far, I finally cover increasing snake size in Slither . io .",
+    "host_name": "www.youtube.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://medium.com/meetcyber/reverse-engineering-slither-ios-network-protocol-bbc408485c45",
+    "name": "Reverse Engineering Slither.io's Network Protocol",
+    "snippet": "Each player controls a snake in a shared arena, eats glowing pellets to grow longer, and tries to survive by cutting off other players without ...\nEach player controls a snake in a shared arena, eats glowing pellets to grow longer, and tries to survive running into a body.",
+    "host_name": "medium.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://devactivity.com/posts/apps-tools/achieving-real-time-game-server-precision-lessons-from-a-slither-io-c-project",
+    "name": "Real-time Game Server Precision: Slither.io C++ &",
+    "snippet": "Jun 27, 2026 — A snake's body isn't just a series of disconnected segments ; it's a fluid entity following the head's path . The solution involves maintaining a ...",
+    "host_name": "devactivity.com",
+    "rank": 3,
+    "date": "Jun 27, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.reddit.com/r/Unity3D/comments/uk5kc1/how_to_make_slitherio_in_unitywithout_segmenting",
+    "name": "How to make Slither.io in unitywithout segmenting the",
+    "snippet": "I'm working on a game where players control comets as they fly around in a large 3d space . The controls would be similar to a 3d version of Slither.io.\nThe snake/comet's body/tail follows the head--wherever the head goes, every part of the body glides through exactly as the head did. Now ...",
+    "host_name": "www.reddit.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  }
+]
