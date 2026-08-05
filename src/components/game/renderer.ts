@@ -3,20 +3,17 @@
 //
 // SNAKE BODY RENDERING (slither.io-style):
 // The head records its position every tick into a path buffer.
-// The body simply reads positions from the head's history — segment i is
-// "where the head was N ticks ago". The renderer walks this path at a
-// FIXED visual spacing (independent of speed), drawing one circle per step.
-// This produces:
-//   1. Consistent body density at all speeds (fixes boost stretching)
-//   2. Body that exactly traces the head's path (like slither.io)
+// The body reads positions from the head's history. The renderer walks
+// the path at a FIXED visual spacing, capped to the snake's logical length.
+// This keeps the visual body length constant regardless of speed.
 // ============================================================================
 
 import type { Camera, FoodOrb, GameState, Snake, StarChip, Viewport } from '@/lib/snake/types';
-import { SNAKE_RADIUS, SPAWN_PROTECTION_MS, START_LENGTH, GROWTH_RATE, MAX_SNAKE_LENGTH } from '@/lib/snake/config';
+import { SNAKE_RADIUS, SEGMENT_SPACING, SPAWN_PROTECTION_MS, START_LENGTH, GROWTH_RATE, MAX_SNAKE_LENGTH } from '@/lib/snake/config';
 import { worldToScreen } from '@/lib/snake/camera';
 
 /** Fixed pixel spacing between drawn body circles.
- *  Less than SNAKE_RADIUS for slight overlap (clean look like slither.io). */
+ *  Less than SNAKE_RADIUS for overlap → solid continuous look. */
 const BODY_STEP = 6;
 
 const GRID_SIZE = 80;
@@ -160,7 +157,6 @@ function drawStarChips(
   for (let i = 0; i < chips.length; i++) {
     const c = chips[i];
 
-    // Cull off-screen
     if (c.x < viewport.left - 30 || c.x > viewport.right + 30) continue;
     if (c.y < viewport.top - 30 || c.y > viewport.bottom + 30) continue;
 
@@ -168,7 +164,6 @@ function drawStarChips(
     const r = c.radius * zoom;
     if (r < 1) continue;
 
-    // Pulsing golden glow
     const pulse = 0.7 + 0.3 * Math.sin((now - c.spawnTime) * 0.004);
     ctx.globalAlpha = 0.35 * pulse;
     ctx.fillStyle = c.glowColor;
@@ -176,7 +171,6 @@ function drawStarChips(
     ctx.arc(sx, sy, r * 3, 0, Math.PI * 2);
     ctx.fill();
 
-    // Outer ring
     ctx.globalAlpha = 0.2 * pulse;
     ctx.strokeStyle = c.glowColor;
     ctx.lineWidth = 1.5 * zoom;
@@ -186,13 +180,11 @@ function drawStarChips(
 
     ctx.globalAlpha = 1;
 
-    // Core circle
     ctx.fillStyle = c.color;
     ctx.beginPath();
     ctx.arc(sx, sy, r, 0, Math.PI * 2);
     ctx.fill();
 
-    // Inner highlight
     if (r > 3) {
       ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
       ctx.beginPath();
@@ -217,14 +209,12 @@ function drawExtractionZone(
   const { x: sx, y: sy } = worldToScreen(zone.x, zone.y, camera, cw, ch);
   const sr = zone.radius * camera.zoom;
 
-  // Faint filled circle
   ctx.globalAlpha = 0.06;
   ctx.fillStyle = '#fbbf24';
   ctx.beginPath();
   ctx.arc(sx, sy, sr, 0, Math.PI * 2);
   ctx.fill();
 
-  // Dashed border ring
   ctx.globalAlpha = 0.2;
   ctx.strokeStyle = '#fbbf24';
   ctx.lineWidth = 2 * camera.zoom;
@@ -255,7 +245,9 @@ function drawSnake(
   // ── HEAD-LEVEL CULLING ──
   const headWorldX = path.headX;
   const headWorldY = path.headY;
-  const cullMargin = Math.min(pathLen * BODY_STEP, 500) + 100;
+  const logicalLen = Math.min(Math.floor(START_LENGTH + snake.score * GROWTH_RATE), MAX_SNAKE_LENGTH);
+  const visualLen = logicalLen * SEGMENT_SPACING;
+  const cullMargin = visualLen + 100;
   if (headWorldX < viewport.left - cullMargin || headWorldX > viewport.right + cullMargin) return;
   if (headWorldY < viewport.top - cullMargin || headWorldY > viewport.bottom + cullMargin) return;
 
@@ -263,13 +255,17 @@ function drawSnake(
   const cw = viewport.width;
   const ch = viewport.height;
 
-  // Spawn protection blink
-  if (now - snake.spawnTime < SPAWN_PROTECTION_MS && Math.floor(now / 150) % 2 === 0) {
-    ctx.globalAlpha = 0.5;
+  // Spawn protection: smooth sine-wave pulse instead of hard blink
+  const spawnAge = now - snake.spawnTime;
+  if (spawnAge < SPAWN_PROTECTION_MS) {
+    const t = spawnAge / SPAWN_PROTECTION_MS; // 0→1 over protection duration
+    // Pulsing glow that fades out as protection ends
+    const pulse = 0.5 + 0.5 * Math.sin(now * 0.015);
+    ctx.globalAlpha = 0.4 + 0.6 * (1 - t * pulse);
   }
 
   const segRadius = SNAKE_RADIUS * zoom;
-  const headRadius = segRadius * 1.3;
+  const headRadius = segRadius * 1.8;
 
   const vl = viewport.left - 20;
   const vr = viewport.right + 20;
@@ -279,39 +275,36 @@ function drawSnake(
   const headScreen = worldToScreen(headWorldX, headWorldY, camera, cw, ch);
   const headVisible = headWorldX >= vl && headWorldX <= vr && headWorldY >= vt && headWorldY <= vb;
 
-  // ── BODY: Walk path at fixed BODY_STEP intervals ──
-  // The path buffer stores one position per tick at variable speed spacing
-  // (BASE_SPEED=4.5 normal, BOOST_SPEED=8.0 boost). We walk at a FIXED
-  // BODY_STEP=6px, interpolating between path entries. This gives:
-  //   - Consistent circle density regardless of speed
-  //   - Body that exactly traces the head's path
+  // ── BODY: Walk path at fixed BODY_STEP, CAPPED to logical length ──
+  // The path buffer may be longer during boost (entries spaced at BOOST_SPEED).
+  // We cap the number of drawn circles so the visual body length stays constant.
+  // visualLen = logicalLen * SEGMENT_SPACING (in world pixels)
+  // maxCircles = ceil(visualLen / BODY_STEP)
+
+  const maxCircles = Math.ceil(visualLen / BODY_STEP);
 
   ctx.fillStyle = snake.color;
   ctx.beginPath();
   let hasBodySegs = false;
 
   // Path walker state
-  let pIdx = 0;        // current path segment index (start of segment)
-  let pFrac = 0;       // fraction [0..1] from pIdx to pIdx+1
-  let pSegLen = 0;     // cached length of path[pIdx] → path[pIdx+1]
-  let pSegDx = 0;      // cached dx
-  let pSegDy = 0;      // cached dy
+  let pIdx = 0;
+  let pFrac = 0;
+  let pSegLen = 0;
+  let pSegDx = 0;
+  let pSegDy = 0;
 
   // Initialize first path segment
   pSegDx = path.getX(1) - headWorldX;
   pSegDy = path.getY(1) - headWorldY;
   pSegLen = Math.sqrt(pSegDx * pSegDx + pSegDy * pSegDy);
 
-  // Max number of body circles we might draw
-  const maxCircles = Math.ceil(pathLen * 3) + 4;
-
-  for (let s = 1; s < maxCircles; s++) {
-    // Walk BODY_STEP pixels along the path from current position
+  for (let s = 1; s <= maxCircles; s++) {
+    // Walk BODY_STEP pixels along the path
     let toWalk = BODY_STEP;
     let reachedEnd = false;
 
     while (toWalk > 0.01) {
-      // Skip zero-length path segments
       if (pSegLen < 0.01) {
         pIdx++;
         pFrac = 0;
@@ -369,7 +362,7 @@ function drawSnake(
     }
 
     if (reachedEnd) {
-      // Draw the tail circle at the last valid path position
+      // Draw tail circle at last valid position
       if (pIdx < pathLen) {
         const tx = path.getX(Math.min(pIdx, pathLen - 1));
         const ty = path.getY(Math.min(pIdx, pathLen - 1));
@@ -389,7 +382,6 @@ function drawSnake(
     const wx = pSegLen > 0.01 ? sx + pSegDx * pFrac : sx;
     const wy = pSegLen > 0.01 ? sy + pSegDy * pFrac : sy;
 
-    // Cull off-screen
     if (wx >= vl && wx <= vr && wy >= vt && wy <= vb) {
       const scr = worldToScreen(wx, wy, camera, cw, ch);
       ctx.moveTo(scr.x + segRadius, scr.y);
@@ -408,64 +400,142 @@ function drawSnake(
     ctx.fill();
   }
 
-  // ── Eyes, boost lines, name label ──
+  // ── Eyes (responsive — track target direction) ──
   if (headVisible) {
-    drawEyes(ctx, headScreen.x, headScreen.y, snake.angle, headRadius);
+    drawEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius);
+  }
 
-    if (snake.boosting && segRadius > 3) {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-      ctx.lineWidth = 1.5 * zoom;
-      for (let j = 0; j < 3; j++) {
-        const a = snake.angle + Math.PI + (j - 1) * 0.3;
-        const len = (15 + j * 5) * zoom;
-        const bx = headScreen.x - Math.cos(snake.angle) * headRadius;
-        const by = headScreen.y - Math.sin(snake.angle) * headRadius;
-        ctx.beginPath();
-        ctx.moveTo(bx, by);
-        ctx.lineTo(bx + Math.cos(a) * len, by + Math.sin(a) * len);
-        ctx.stroke();
-      }
-    }
+  // ── Directional arrow (slither.io style) — drawn ON TOP of head ──
+  if (headVisible) {
+    drawDirectionArrow(ctx, headScreen.x, headScreen.y, snake.angle, headRadius, snake.boosting);
+  }
 
-    if (segRadius > 3) {
-      ctx.fillStyle = snake.isPlayer ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.5)';
-      ctx.font = `${Math.max(10, 12 * zoom)}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText(snake.name, headScreen.x, headScreen.y - headRadius - 4 * zoom);
+  // ── Boost lines ──
+  if (headVisible && snake.boosting && segRadius > 3) {
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1.5 * zoom;
+    for (let j = 0; j < 3; j++) {
+      const a = snake.angle + Math.PI + (j - 1) * 0.3;
+      const len = (15 + j * 5) * zoom;
+      const bx = headScreen.x - Math.cos(snake.angle) * headRadius;
+      const by = headScreen.y - Math.sin(snake.angle) * headRadius;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + Math.cos(a) * len, by + Math.sin(a) * len);
+      ctx.stroke();
     }
+  }
+
+  // ── Name label ──
+  if (headVisible && segRadius > 3) {
+    ctx.fillStyle = snake.isPlayer ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.5)';
+    ctx.font = `${Math.max(10, 12 * zoom)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(snake.name, headScreen.x, headScreen.y - headRadius - 4 * zoom);
   }
 
   ctx.globalAlpha = 1;
 }
 
-function drawEyes(
+// ==========================================================================
+// Directional Arrow (slither.io-style pointer in front of mouth)
+// ==========================================================================
+
+function drawDirectionArrow(
   ctx: CanvasRenderingContext2D,
   hx: number,
   hy: number,
   angle: number,
   headRadius: number,
+  boosting: boolean,
 ): void {
-  const eyeOffset = headRadius * 0.4;
-  const eyeRadius = headRadius * 0.25;
-  const pupilRadius = eyeRadius * 0.6;
+  // Arrow extends well beyond the head circle for visibility
+  const arrowLen = headRadius * 1.2;
+  const arrowWidth = headRadius * 0.5;
+
+  // Arrow tip (in front of the head)
+  const tipDist = headRadius + arrowLen;
+  const tipX = hx + Math.cos(angle) * tipDist;
+  const tipY = hy + Math.sin(angle) * tipDist;
+
+  // Arrow base (at head edge, wings spread perpendicular)
+  const baseDist = headRadius * 0.7;
   const perpAngle = angle + Math.PI / 2;
-  const eyeForward = headRadius * 0.3;
+  const b1x = hx + Math.cos(angle) * baseDist + Math.cos(perpAngle) * arrowWidth;
+  const b1y = hy + Math.sin(angle) * baseDist + Math.sin(perpAngle) * arrowWidth;
+  const b2x = hx + Math.cos(angle) * baseDist - Math.cos(perpAngle) * arrowWidth;
+  const b2y = hy + Math.sin(angle) * baseDist - Math.sin(perpAngle) * arrowWidth;
+
+  // Color: bright white when boosting, subtle when normal
+  ctx.fillStyle = boosting
+    ? 'rgba(255, 255, 255, 0.95)'
+    : 'rgba(255, 255, 255, 0.7)';
+
+  ctx.beginPath();
+  ctx.moveTo(tipX, tipY);
+  ctx.lineTo(b1x, b1y);
+  ctx.lineTo(b2x, b2y);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// ==========================================================================
+// Eyes — Responsive pupils that track targetAngle (mouse direction)
+// ==========================================================================
+
+function drawEyes(
+  ctx: CanvasRenderingContext2D,
+  hx: number,
+  hy: number,
+  moveAngle: number,
+  targetAngle: number,
+  headRadius: number,
+): void {
+  const eyeOffset = headRadius * 0.42;
+  const eyeRadius = headRadius * 0.32;
+  const pupilRadius = eyeRadius * 0.55;
+  const perpAngle = moveAngle + Math.PI / 2;
+  const eyeForward = headRadius * 0.35;
+
+  // Pupils look toward targetAngle, clamped to stay inside the eye
+  let lookAngle = targetAngle;
+  let diff = lookAngle - moveAngle;
+  while (diff > Math.PI) diff -= 2 * Math.PI;
+  while (diff < -Math.PI) diff += 2 * Math.PI;
+  const maxPupilDev = 0.6;
+  if (Math.abs(diff) > maxPupilDev) {
+    lookAngle = moveAngle + Math.sign(diff) * maxPupilDev;
+  }
+
+  // How far the pupil shifts inside its socket
+  const pupilShift = eyeRadius * 0.4;
 
   for (const side of [-1, 1]) {
-    const ex = hx + Math.cos(angle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
-    const ey = hy + Math.sin(angle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
+    const ex = hx + Math.cos(moveAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
+    const ey = hy + Math.sin(moveAngle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
 
+    // Eye white with subtle border
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1;
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.arc(ex, ey, eyeRadius, 0, Math.PI * 2);
     ctx.fill();
+    ctx.stroke();
 
-    const px = ex + Math.cos(angle) * pupilRadius * 0.3;
-    const py = ey + Math.sin(angle) * pupilRadius * 0.3;
+    // Pupil — shifted toward lookAngle
+    const px = ex + Math.cos(lookAngle) * pupilShift;
+    const py = ey + Math.sin(lookAngle) * pupilShift;
     ctx.fillStyle = '#111111';
     ctx.beginPath();
     ctx.arc(px, py, pupilRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Tiny highlight on pupil for life-like look
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.beginPath();
+    ctx.arc(px - pupilRadius * 0.25, py - pupilRadius * 0.3, pupilRadius * 0.3, 0, Math.PI * 2);
     ctx.fill();
   }
 }
@@ -483,26 +553,22 @@ function drawHUD(
   const p = 16;
   const lh = 22;
 
-  // Background box
   ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
   ctx.beginPath();
   ctx.roundRect(p, p, 180, lh * 2 + p * 2, 8);
   ctx.fill();
 
-  // Score
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 16px monospace';
   ctx.fillText(`Score: ${player.score}`, p + 12, p + 10);
 
-  // Length: show logical segment count, not raw path buffer entries
   const logicalLength = Math.min(Math.floor(START_LENGTH + player.score * GROWTH_RATE), MAX_SNAKE_LENGTH);
   ctx.font = '13px monospace';
   ctx.fillStyle = '#a0a0a0';
   ctx.fillText(`Length: ${logicalLength}`, p + 12, p + 10 + lh);
 
-  // FPS
   ctx.textAlign = 'right';
   ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
   ctx.font = '12px monospace';
@@ -571,7 +637,6 @@ export function drawMinimap(
   const size = 120;
   const pad = 12;
 
-  // Get canvas dimensions from ctx
   const cw = ctx.canvas.width / (window.devicePixelRatio || 1);
   const ch = ctx.canvas.height / (window.devicePixelRatio || 1);
   const mx = cw - size - pad;
