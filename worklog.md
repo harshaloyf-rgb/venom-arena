@@ -84,3 +84,23 @@ Stage Summary:
 - Arrow: FIXED — locked to face, points toward steering direction, opacity indicates turn intensity
 - Eyes: FIXED — pupils shift proportionally to turn amount toward arrow direction
 - Files: config.ts, engine.ts, input.ts, render-snake-atlas.tsx, SnakeGame.tsx
+---
+Task ID: 4
+Agent: Main
+Task: Fix control difficulty and arrow too close — match slither.io approach
+
+Work Log:
+- Researched slither.io controls: position-based (angle from screen center to cursor), NO arrow, cursor IS the direction indicator
+- User confirmed movementX delta control was "very difficult" — reverted to slither.io-style position-based control
+- Rewrote input.ts: mousemove on window tracks e.clientX/e.clientY. updateAngle computes atan2(dy,dx) from viewport center to cursor position
+- Added mouseenter/mouseleave tracking so control only active when cursor is in viewport
+- Replaced chunky triangle arrow with thin curved pointer line (drawDirectionPointer). Line extends 4× headRadius from head, curves toward steer direction, has a dot at the tip. Only visible when turning or boosting. Fades to invisible when going straight.
+- Reverted SnakeGame.tsx to call input.getState() without angle parameter
+- Zero lint errors, zero console errors, browser verified
+
+Stage Summary:
+- Control: FIXED — slither.io position-based steering (point cursor where you want to go)
+- Arrow: FIXED — replaced with thin curved pointer extending far ahead, only shows when turning
+- Eyes: pupils look toward mouse/steering direction (unchanged from prior fix)
+- Boost score cost: unchanged (still works)
+- Files: input.ts, render-snake-atlas.tsx, SnakeGame.tsx

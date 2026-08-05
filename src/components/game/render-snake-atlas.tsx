@@ -357,8 +357,8 @@ export function renderSnakeAtlas(
     atlasManager.resetEpicEffect(ctx);
     ctx.restore();
 
-    // Directional arrow — points where the snake is steering (targetAngle)
-    drawDirectionArrow(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting);
+    // Direction pointer — thin line extending far ahead, shows where snake is steering
+    drawDirectionPointer(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting);
 
     // Responsive eyes — look toward the steering direction (targetAngle)
     drawResponsiveEyes(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2);
@@ -485,8 +485,8 @@ export function renderSnakeFallback(
     ctx.arc(headScreen.x, headScreen.y, headRadius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Directional arrow — points where the snake is steering (targetAngle)
-    drawDirectionArrow(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting);
+    // Direction pointer — thin line extending far ahead, shows where snake is steering
+    drawDirectionPointer(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting);
 
     // Responsive eyes — look toward the steering direction (targetAngle)
     drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius);
@@ -504,9 +504,12 @@ export function renderSnakeFallback(
   ctx.globalAlpha = 1;
 }
 
-// ─── Directional Arrow (slither.io-style pointer) ───────────────────────────
+// ─── Direction Pointer (thin needle extending far ahead) ──────────────────
+// Like slither.io, the mouse cursor IS the primary direction indicator.
+// This pointer is just a subtle visual aid — a thin line extending from the
+// head in the direction the snake is turning, so you can see the turn intent.
 
-function drawDirectionArrow(
+function drawDirectionPointer(
   ctx: CanvasRenderingContext2D,
   hx: number,
   hy: number,
@@ -515,52 +518,57 @@ function drawDirectionArrow(
   headRadius: number,
   boosting: boolean,
 ): void {
-  // The arrow is locked in front of the snake's face (positioned along faceAngle)
-  // but POINTS toward the steering direction (steerAngle = targetAngle).
-  // This creates a visual indicator of where the snake is being steered.
-
-  // Compute how much the steering deviates from the face direction
+  // How much the steering deviates from current facing
   let steerDiff = steerAngle - faceAngle;
   while (steerDiff > Math.PI) steerDiff -= 2 * Math.PI;
   while (steerDiff < -Math.PI) steerDiff += 2 * Math.PI;
 
-  // Position: always along the face direction (locked to nose)
-  const gap = headRadius * 0.25;
-  const baseDist = headRadius + gap;
-  const bx = hx + Math.cos(faceAngle) * baseDist;
-  const by = hy + Math.sin(faceAngle) * baseDist;
+  // Skip drawing when going perfectly straight (no visual need)
+  const absDiff = Math.abs(steerDiff);
+  if (absDiff < 0.02 && !boosting) return;
 
-  // Arrow dimensions
-  const arrowLen = headRadius * 1.2;
-  const arrowWidth = headRadius * 0.5;
+  // Line starts just past the head edge, extends far forward
+  const startDist = headRadius * 1.1;
+  const lineLen = headRadius * 4.0;
+  const endDist = startDist + lineLen;
 
-  // Arrow points in the steering direction, rotated by the deflection amount
-  // But capped so it doesn't point backwards
-  const maxDeflection = Math.PI * 0.6;
-  const deflectedAngle = faceAngle + Math.max(-maxDeflection, Math.min(maxDeflection, steerDiff));
+  // Line goes from head forward in the face direction, then curves
+  // toward the steering direction at the tip. This creates a smooth
+  // arc showing where the snake will turn.
+  const sx = hx + Math.cos(faceAngle) * startDist;
+  const sy = hy + Math.sin(faceAngle) * startDist;
 
-  // Tip position
-  const tipX = bx + Math.cos(deflectedAngle) * arrowLen;
-  const tipY = by + Math.sin(deflectedAngle) * arrowLen;
+  // Tip points in the steer direction (but not more than 60° off face)
+  const maxDeflection = Math.PI / 3;
+  const clampedDiff = Math.max(-maxDeflection, Math.min(maxDeflection, steerDiff));
+  const tipAngle = faceAngle + clampedDiff;
+  const ex = hx + Math.cos(tipAngle) * endDist;
+  const ey = hy + Math.sin(tipAngle) * endDist;
 
-  // Base wings
-  const perpAngle = deflectedAngle + Math.PI / 2;
-  const b1x = bx + Math.cos(perpAngle) * arrowWidth;
-  const b1y = by + Math.sin(perpAngle) * arrowWidth;
-  const b2x = bx - Math.cos(perpAngle) * arrowWidth;
-  const b2y = by - Math.sin(perpAngle) * arrowWidth;
+  // Midpoint — blend between face and steer direction
+  const midDist = startDist + lineLen * 0.5;
+  const midAngle = faceAngle + clampedDiff * 0.4;
+  const mx = hx + Math.cos(midAngle) * midDist;
+  const my = hy + Math.sin(midAngle) * midDist;
 
-  // Opacity: brighter when steering hard or boosting
-  const steerIntensity = Math.min(Math.abs(steerDiff) / 0.5, 1.0);
-  const alpha = boosting ? 0.95 : 0.45 + 0.35 * steerIntensity;
+  // Opacity: more visible when turning hard or boosting
+  const turnIntensity = Math.min(absDiff / 0.6, 1.0);
+  const alpha = boosting ? 0.7 : 0.2 + 0.4 * turnIntensity;
+  const lineW = boosting ? 2.5 : 1.8;
 
-  ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-
+  ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+  ctx.lineWidth = lineW;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
   ctx.beginPath();
-  ctx.moveTo(tipX, tipY);
-  ctx.lineTo(b1x, b1y);
-  ctx.lineTo(b2x, b2y);
-  ctx.closePath();
+  ctx.moveTo(sx, sy);
+  ctx.quadraticCurveTo(mx, my, ex, ey);
+  ctx.stroke();
+
+  // Small dot at tip for visibility
+  ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 1.2})`;
+  ctx.beginPath();
+  ctx.arc(ex, ey, lineW * 1.2, 0, Math.PI * 2);
   ctx.fill();
 }
 

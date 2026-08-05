@@ -249,9 +249,7 @@ export default function SnakeGame({
       const w = parent ? parent.clientWidth : canvas.width;
       const h = parent ? parent.clientHeight : canvas.height;
       const now = Date.now();
-      // Pass current snake angle for relative steering (movementX-based)
-      const playerAngle = gameStateRef.current?.player?.angle ?? 0;
-      const inputState = input.getState(playerAngle);
+      const inputState = input.getState();
 
       // Dismiss controls on first input (both modes)
       if (!controlsDismissedRef.current &&
