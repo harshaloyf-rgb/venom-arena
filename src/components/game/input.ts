@@ -1,8 +1,29 @@
 // ============================================================================
 // Input Handler — Tracks mouse, keyboard, and touch input for snake control.
+//
+// Mouse steering uses RELATIVE movement (movementX/movementY deltas) instead of
+// absolute cursor position. This means:
+//   - Moving the mouse left/right steers the snake left/right
+//   - No need for the cursor to be inside the canvas/window
+//   - Works like a steering wheel: move right = turn right, stop = go straight
+//
+// A "steer offset" accumulates from mouse deltas and decays toward 0 each frame,
+// so the snake gradually straightens when you stop moving the mouse.
 // ============================================================================
 
 import type { InputState } from '@/lib/snake/types';
+
+/** How strongly mouse movement affects steering (radians per pixel of movementX) */
+const MOUSE_STEER_SENSITIVITY = 0.004;
+
+/** Per-frame decay for the steer offset (closer to 1 = slower return to center) */
+const STEER_DECAY = 0.92;
+
+/** Dead zone: offsets smaller than this are snapped to 0 */
+const STEER_DEAD_ZONE = 0.002;
+
+/** Maximum steer offset in radians (prevents wild spinning) */
+const MAX_STEER_OFFSET = Math.PI * 0.8;
 
 /**
  * Creates and manages input state for the game.
@@ -16,8 +37,6 @@ export class InputHandler {
 
   private canvas: HTMLCanvasElement;
   private keys: Set<string> = new Set();
-  private mouseX = 0;
-  private mouseY = 0;
   private mouseDown = false;
   private touchActive = false;
   private touchStartX = 0;
@@ -27,6 +46,10 @@ export class InputHandler {
   private touchId: number | null = null;
   private canvasRect: DOMRect | null = null;
   private onDetached = false;
+
+  // ── Relative steering state ──
+  /** Accumulated steering offset (radians) from mouse movement */
+  private steerOffset = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -39,7 +62,8 @@ export class InputHandler {
 
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
-    this.canvas.addEventListener('mousemove', this.onMouseMove);
+    // Listen on WINDOW for mousemove so it works even when cursor is outside canvas
+    window.addEventListener('mousemove', this.onMouseMove);
     this.canvas.addEventListener('mousedown', this.onMouseDown);
     window.addEventListener('mouseup', this.onMouseUp);
     this.canvas.addEventListener('touchstart', this.onTouchStart, { passive: false });
@@ -54,7 +78,7 @@ export class InputHandler {
     this.onDetached = true;
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
-    this.canvas.removeEventListener('mousemove', this.onMouseMove);
+    window.removeEventListener('mousemove', this.onMouseMove);
     this.canvas.removeEventListener('mousedown', this.onMouseDown);
     window.removeEventListener('mouseup', this.onMouseUp);
     this.canvas.removeEventListener('touchstart', this.onTouchStart);
@@ -64,19 +88,13 @@ export class InputHandler {
     this.canvas.removeEventListener('contextmenu', this.onContextMenu);
   }
 
-  /** Get current input state */
-  getState(): InputState {
-    this.updateAngle();
-    return { ...this.state };
-  }
-
-  /** Update canvas rect (call on resize) */
-  updateRect(): void {
-    this.canvasRect = this.canvas.getBoundingClientRect();
-  }
-
-  private updateAngle(): void {
-    if (this.onDetached) return;
+  /**
+   * Get current input state.
+   * @param currentSnakeAngle - The snake's current facing angle. Used to compute
+   *   the absolute targetAngle from the relative steer offset.
+   */
+  getState(currentSnakeAngle = 0): InputState {
+    if (this.onDetached) return { ...this.state };
 
     // Keyboard overrides touch/mouse
     let kx = 0;
@@ -89,7 +107,7 @@ export class InputHandler {
     if (kx !== 0 || ky !== 0) {
       this.state.targetAngle = Math.atan2(ky, kx);
       this.state.boosting = this.keys.has(' ') || this.keys.has('shift');
-      return;
+      return { ...this.state };
     }
 
     // Touch input
@@ -99,24 +117,26 @@ export class InputHandler {
       const dist = Math.sqrt(dx * dx + dy * dy);
       if (dist > 10) {
         this.state.targetAngle = Math.atan2(dy, dx);
-        // Boost if dragged far enough from start
-        this.state.boosting = dist > 80;
       }
-      return;
+      this.state.boosting = dist > 80;
+      return { ...this.state };
     }
 
-    // Mouse input
-    if (this.canvasRect) {
-      const centerX = this.canvasRect.width / 2;
-      const centerY = this.canvasRect.height / 2;
-      const dx = this.mouseX - centerX;
-      const dy = this.mouseY - centerY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > 5) {
-        this.state.targetAngle = Math.atan2(dy, dx);
-      }
-      this.state.boosting = this.mouseDown;
-    }
+    // ── Mouse: RELATIVE steering via movementX deltas ──
+    // Decay the steer offset toward 0 (go straight when no mouse movement)
+    this.steerOffset *= STEER_DECAY;
+    if (Math.abs(this.steerOffset) < STEER_DEAD_ZONE) this.steerOffset = 0;
+
+    // Compute absolute target angle from current angle + offset
+    this.state.targetAngle = currentSnakeAngle + this.steerOffset;
+    this.state.boosting = this.mouseDown || this.keys.has(' ') || this.keys.has('shift');
+
+    return { ...this.state };
+  }
+
+  /** Update canvas rect (call on resize) */
+  updateRect(): void {
+    this.canvasRect = this.canvas.getBoundingClientRect();
   }
 
   // --- Event handlers (arrow functions for stable `this`) ---
@@ -134,10 +154,24 @@ export class InputHandler {
     this.keys.delete(e.key.toLowerCase());
   };
 
+  /**
+   * Mouse steering via MOVEMENT DELTAS (not absolute position).
+   * movementX > 0 = mouse moved right = turn right = positive steer offset
+   * Works even when cursor is outside the window.
+   */
   private onMouseMove = (e: MouseEvent): void => {
-    if (!this.canvasRect) return;
-    this.mouseX = e.clientX - this.canvasRect.left;
-    this.mouseY = e.clientY - this.canvasRect.top;
+    const dx = e.movementX || 0;
+    const dy = e.movementY || 0;
+
+    // Use horizontal movement for left/right steering (like a steering wheel)
+    // Also use vertical movement to add steering when moving mouse up/down
+    // The vertical contribution is projected based on the current snake angle
+    // so moving mouse "forward" doesn't steer, but moving mouse to the side does.
+    // For simplicity and intuitiveness, use movementX for primary steering.
+    this.steerOffset += dx * MOUSE_STEER_SENSITIVITY;
+
+    // Clamp to prevent wild spinning
+    this.steerOffset = Math.max(-MAX_STEER_OFFSET, Math.min(MAX_STEER_OFFSET, this.steerOffset));
   };
 
   private onMouseDown = (e: MouseEvent): void => {

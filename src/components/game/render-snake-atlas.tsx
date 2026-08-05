@@ -357,11 +357,11 @@ export function renderSnakeAtlas(
     atlasManager.resetEpicEffect(ctx);
     ctx.restore();
 
-    // Responsive eyes
-    drawResponsiveEyes(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2);
+    // Directional arrow — points where the snake is steering (targetAngle)
+    drawDirectionArrow(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting);
 
-    // Directional arrow
-    drawDirectionArrow(ctx, hsx, hsy, snake.angle, headDrawSize / 2, snake.boosting);
+    // Responsive eyes — look toward the steering direction (targetAngle)
+    drawResponsiveEyes(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2);
 
     // Boost speed lines
     if (snake.boosting && segRadius > 3) {
@@ -485,11 +485,11 @@ export function renderSnakeFallback(
     ctx.arc(headScreen.x, headScreen.y, headRadius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Responsive eyes
-    drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius);
+    // Directional arrow — points where the snake is steering (targetAngle)
+    drawDirectionArrow(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting);
 
-    // Directional arrow
-    drawDirectionArrow(ctx, headScreen.x, headScreen.y, snake.angle, headRadius, snake.boosting);
+    // Responsive eyes — look toward the steering direction (targetAngle)
+    drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius);
 
     // Name
     if (segRadius > 3) {
@@ -510,31 +510,51 @@ function drawDirectionArrow(
   ctx: CanvasRenderingContext2D,
   hx: number,
   hy: number,
-  angle: number,
+  faceAngle: number,
+  steerAngle: number,
   headRadius: number,
   boosting: boolean,
 ): void {
-  // Arrow sits well in front of the head — base starts just past the head edge
-  const gap = headRadius * 0.3; // clear gap between head edge and arrow base
-  const arrowLen = headRadius * 1.4;
-  const arrowWidth = headRadius * 0.55;
+  // The arrow is locked in front of the snake's face (positioned along faceAngle)
+  // but POINTS toward the steering direction (steerAngle = targetAngle).
+  // This creates a visual indicator of where the snake is being steered.
 
-  // Arrow tip — far in front
-  const tipDist = headRadius + gap + arrowLen;
-  const tipX = hx + Math.cos(angle) * tipDist;
-  const tipY = hy + Math.sin(angle) * tipDist;
+  // Compute how much the steering deviates from the face direction
+  let steerDiff = steerAngle - faceAngle;
+  while (steerDiff > Math.PI) steerDiff -= 2 * Math.PI;
+  while (steerDiff < -Math.PI) steerDiff += 2 * Math.PI;
 
-  // Arrow base wings — start just after head edge
+  // Position: always along the face direction (locked to nose)
+  const gap = headRadius * 0.25;
   const baseDist = headRadius + gap;
-  const perpAngle = angle + Math.PI / 2;
-  const b1x = hx + Math.cos(angle) * baseDist + Math.cos(perpAngle) * arrowWidth;
-  const b1y = hy + Math.sin(angle) * baseDist + Math.sin(perpAngle) * arrowWidth;
-  const b2x = hx + Math.cos(angle) * baseDist - Math.cos(perpAngle) * arrowWidth;
-  const b2y = hy + Math.sin(angle) * baseDist - Math.sin(perpAngle) * arrowWidth;
+  const bx = hx + Math.cos(faceAngle) * baseDist;
+  const by = hy + Math.sin(faceAngle) * baseDist;
 
-  ctx.fillStyle = boosting
-    ? 'rgba(255, 255, 255, 0.95)'
-    : 'rgba(255, 255, 255, 0.65)';
+  // Arrow dimensions
+  const arrowLen = headRadius * 1.2;
+  const arrowWidth = headRadius * 0.5;
+
+  // Arrow points in the steering direction, rotated by the deflection amount
+  // But capped so it doesn't point backwards
+  const maxDeflection = Math.PI * 0.6;
+  const deflectedAngle = faceAngle + Math.max(-maxDeflection, Math.min(maxDeflection, steerDiff));
+
+  // Tip position
+  const tipX = bx + Math.cos(deflectedAngle) * arrowLen;
+  const tipY = by + Math.sin(deflectedAngle) * arrowLen;
+
+  // Base wings
+  const perpAngle = deflectedAngle + Math.PI / 2;
+  const b1x = bx + Math.cos(perpAngle) * arrowWidth;
+  const b1y = by + Math.sin(perpAngle) * arrowWidth;
+  const b2x = bx - Math.cos(perpAngle) * arrowWidth;
+  const b2y = by - Math.sin(perpAngle) * arrowWidth;
+
+  // Opacity: brighter when steering hard or boosting
+  const steerIntensity = Math.min(Math.abs(steerDiff) / 0.5, 1.0);
+  const alpha = boosting ? 0.95 : 0.45 + 0.35 * steerIntensity;
+
+  ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
 
   ctx.beginPath();
   ctx.moveTo(tipX, tipY);
@@ -554,23 +574,27 @@ function drawResponsiveEyes(
   targetAngle: number,
   headRadius: number,
 ): void {
-  // Bigger eyes for visibility
+  // Eye positioning — on the face of the snake
   const eyeOffset = headRadius * 0.45;
-  const eyeRadius = headRadius * 0.35;
+  const eyeRadius = headRadius * 0.38;
   const pupilRadius = eyeRadius * 0.55;
   const perpAngle = moveAngle + Math.PI / 2;
   const eyeForward = headRadius * 0.3;
 
-  // Pupils look toward targetAngle, clamped to stay inside the eye
+  // Pupils look toward targetAngle (the steering direction / arrow direction)
   let diff = targetAngle - moveAngle;
   while (diff > Math.PI) diff -= 2 * Math.PI;
   while (diff < -Math.PI) diff += 2 * Math.PI;
-  const maxDev = 0.7;
+
+  // Clamp pupil deviation so it stays inside the eye white
+  const maxDev = 0.8;
   const clampedDiff = Math.max(-maxDev, Math.min(maxDev, diff));
   const lookAngle = moveAngle + clampedDiff;
 
-  // Pupil shifts significantly toward look direction
-  const pupilShift = eyeRadius * 0.5;
+  // Pupil shift — proportional to how hard the snake is turning.
+  // Full deviation = pupil at edge of eye white.
+  const shiftRatio = Math.abs(clampedDiff) / maxDev;
+  const pupilShift = eyeRadius * 0.55 * shiftRatio;
 
   for (const side of [-1, 1]) {
     const ex = hx + Math.cos(moveAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
@@ -585,7 +609,7 @@ function drawResponsiveEyes(
     ctx.fill();
     ctx.stroke();
 
-    // Pupil — shifted toward lookAngle
+    // Pupil — shifted toward lookAngle (the steering direction)
     const px = ex + Math.cos(lookAngle) * pupilShift;
     const py = ey + Math.sin(lookAngle) * pupilShift;
     ctx.fillStyle = '#111111';

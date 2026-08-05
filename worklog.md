@@ -65,3 +65,22 @@ Stage Summary:
 - Eyes: FIXED — pupils track mouse via snake.targetAngle
 - Boost shrink: FIXED — body shrinks from 20 to 9 in 3s, HUD reflects change
 - Files: engine.ts, render-snake-atlas.tsx, SnakeGame.tsx, config.ts
+---
+Task ID: 3
+Agent: Main
+Task: Fix boost score cost, mouse delta steering, arrow & eyes alignment
+
+Work Log:
+- **Boost score cost**: Added BOOST_SCORE_COST_PER_TICK=0.08 (~5 score/sec). Engine now decreases snake.score each tick while boosting. Changed BOOST_MIN_SCORE to 1 so boost stops when score hits 0.
+- **Mouse delta steering**: Rewrote input.ts to use e.movementX on window (not canvas). Accumulates a steerOffset with decay (0.92/frame). getState(currentAngle) returns targetAngle = currentAngle + steerOffset. Works even when cursor is outside the window.
+- **Directional arrow**: Now takes both faceAngle and steerAngle (targetAngle). Positioned along faceAngle (locked to nose), but POINTS toward steerAngle. Deflects to show turn direction. Opacity scales with steer intensity.
+- **Responsive eyes**: Pupil shift is now proportional to turn magnitude (shiftRatio = |clampedDiff|/maxDev). Eyes bigger (0.38 vs 0.35). Pupils visibly move toward the arrow/steering direction.
+- Updated SnakeGame.tsx to pass player's current angle to getState()
+- Zero lint errors, zero console errors, browser verified
+
+Stage Summary:
+- Boost linked to score: FIXED — score decreases during boost, stops at 0
+- Mouse steering: FIXED — uses movementX deltas, works outside window
+- Arrow: FIXED — locked to face, points toward steering direction, opacity indicates turn intensity
+- Eyes: FIXED — pupils shift proportionally to turn amount toward arrow direction
+- Files: config.ts, engine.ts, input.ts, render-snake-atlas.tsx, SnakeGame.tsx
