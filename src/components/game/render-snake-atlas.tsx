@@ -523,22 +523,18 @@ function drawDirectionPointer(
   while (steerDiff > Math.PI) steerDiff -= 2 * Math.PI;
   while (steerDiff < -Math.PI) steerDiff += 2 * Math.PI;
 
-  // Skip drawing when going perfectly straight (no visual need)
   const absDiff = Math.abs(steerDiff);
-  if (absDiff < 0.02 && !boosting) return;
 
-  // Line starts just past the head edge, extends far forward
+  // Line starts just past the head edge, extends forward
   const startDist = headRadius * 1.1;
-  const lineLen = headRadius * 4.0;
+  const lineLen = headRadius * 3.5;
   const endDist = startDist + lineLen;
 
-  // Line goes from head forward in the face direction, then curves
-  // toward the steering direction at the tip. This creates a smooth
-  // arc showing where the snake will turn.
+  // Start point: just in front of the head
   const sx = hx + Math.cos(faceAngle) * startDist;
   const sy = hy + Math.sin(faceAngle) * startDist;
 
-  // Tip points in the steer direction (but not more than 60° off face)
+  // Tip points in the steer direction (clamped to 60° off face)
   const maxDeflection = Math.PI / 3;
   const clampedDiff = Math.max(-maxDeflection, Math.min(maxDeflection, steerDiff));
   const tipAngle = faceAngle + clampedDiff;
@@ -551,10 +547,10 @@ function drawDirectionPointer(
   const mx = hx + Math.cos(midAngle) * midDist;
   const my = hy + Math.sin(midAngle) * midDist;
 
-  // Opacity: more visible when turning hard or boosting
+  // Opacity: always visible (subtle when straight, brighter when turning/boosting)
   const turnIntensity = Math.min(absDiff / 0.6, 1.0);
-  const alpha = boosting ? 0.7 : 0.2 + 0.4 * turnIntensity;
-  const lineW = boosting ? 2.5 : 1.8;
+  const alpha = boosting ? 0.7 : 0.15 + 0.45 * turnIntensity;
+  const lineW = boosting ? 2.5 : 1.5;
 
   ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
   ctx.lineWidth = lineW;
@@ -566,7 +562,7 @@ function drawDirectionPointer(
   ctx.stroke();
 
   // Small dot at tip for visibility
-  ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 1.2})`;
+  ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(alpha * 1.2, 1)})`;
   ctx.beginPath();
   ctx.arc(ex, ey, lineW * 1.2, 0, Math.PI * 2);
   ctx.fill();

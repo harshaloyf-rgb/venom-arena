@@ -34,8 +34,8 @@ export const BASE_SPEED = 4.5;
 /** Speed while boosting (pixels per tick at 60fps) */
 export const BOOST_SPEED = 8.0;
 
-/** Max angle change per tick for player steering (radians). Halved for smooth, non-sharp turns. */
-export const MAX_TURN_RATE = Math.PI * 0.06;
+/** Max angle change per tick for player steering (radians). Snappy for slither.io feel. */
+export const MAX_TURN_RATE = Math.PI * 0.08;
 
 /** Distance between consecutive segment positions in the path history */
 export const SEGMENT_SPACING = 8;
