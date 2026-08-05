@@ -295,6 +295,8 @@ function moveSnake(
   wantBoost: boolean,
   now: number,
 ): void {
+  // Store target angle so renderers can use it (responsive eyes, etc.)
+  snake.targetAngle = targetAngle;
   // Store previous angle for turn detection
   snake.prevAngle = snake.angle;
 
@@ -318,7 +320,7 @@ function moveSnake(
 
   // Boost eligibility
   const canBoost = wantBoost &&
-    snake.score > BOOST_MIN_SCORE &&
+    snake.score >= BOOST_MIN_SCORE &&
     snake.path.length > BOOST_MIN_BODY_SCALED;
 
   snake.boosting = canBoost;
@@ -361,7 +363,10 @@ function moveSnake(
     Math.ceil(MAX_SNAKE_LENGTH * spacingRatio),
   );
 
-  // Boost: drop food from tail, shrink
+  // Boost: drop food from tail, shrink snake
+  // During boost, path entries are 8px apart (vs 4.5px normal), so the path
+  // covers more distance with fewer entries. We must shrink AGGRESSIVELY
+  // to overcome the wide entry spacing and the trim loop.
   if (canBoost && now - snake.lastBoostDrop >= BOOST_DROP_INTERVAL) {
     snake.lastBoostDrop = now;
     const tailIdx = snake.path.length - 1;
@@ -372,14 +377,23 @@ function moveSnake(
       size: 'small', value: 1, radius: FOOD_RADII[0],
       color: FOOD_COLORS[0], glowColor: FOOD_GLOW_COLORS[0],
     });
-    if (snake.path.length > 1) snake.path.pop();
+    // Extra shrink: pop several entries so the visual body gets shorter
+    for (let i = 0; i < 5; i++) {
+      if (snake.path.length > BOOST_MIN_BODY_SCALED) snake.path.pop();
+    }
   }
 
-  // Trim to target length (pop from tail)
-  // Growth happens naturally: if targetLength increased, we pop less,
-  // and the buffer grows from prepend without trimming.
-  while (snake.path.length > targetLength) {
+  // Per-tick boost shrink: pop 1 entry to counteract prepend's +1.
+  // Without this, the trim loop would grow the path back between drops.
+  if (canBoost && snake.path.length > BOOST_MIN_BODY_SCALED) {
     snake.path.pop();
+  }
+
+  // Trim to target length (only when NOT boosting — boost handles its own length)
+  if (!canBoost) {
+    while (snake.path.length > targetLength) {
+      snake.path.pop();
+    }
   }
 
   // ── NOTE: Inner curl (corner-cutting) is a PURELY VISUAL effect ──

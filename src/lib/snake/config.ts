@@ -121,8 +121,8 @@ export const BOOST_DROP_INTERVAL = 333;
 /** Minimum body segments required to boost */
 export const BOOST_MIN_BODY = 8;
 
-/** Minimum score (starting score) required to boost — must have eaten food */
-export const BOOST_MIN_SCORE = 20;
+/** Minimum score (starting score) required to boost — set low so players can boost immediately */
+export const BOOST_MIN_SCORE = 0;
 
 /** Boost speed as a multiplier of base speed */
 export const BOOST_SPEED_MULTIPLIER = BOOST_SPEED / BASE_SPEED; // ≈ 1.778

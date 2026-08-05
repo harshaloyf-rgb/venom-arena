@@ -595,7 +595,11 @@ function renderOfflineHUD(
 ): void {
   if (state.player) {
     const logicalLen = Math.min(Math.floor(START_LENGTH + state.player.score * GROWTH_RATE), MAX_SNAKE_LENGTH);
-    drawHUDBase(ctx, state.player.score, logicalLen, fps, viewport);
+    // During boost, path shrinks below logical length — show actual visual length
+    const spacingRatio = 8 / 4.5; // SEGMENT_SPACING / BASE_SPEED
+    const pathBasedLen = Math.floor(state.player.path.length / spacingRatio);
+    const displayLen = Math.min(logicalLen, pathBasedLen);
+    drawHUDBase(ctx, state.player.score, displayLen, fps, viewport);
   }
 }
 

@@ -44,3 +44,24 @@ Stage Summary:
 - Responsive eyes: ADDED — pupils track mouse direction
 - Files modified: render-snake-atlas.tsx (complete rewrite), engine.ts (ceil fix)
 - Zero lint errors, zero console errors
+---
+Task ID: 2
+Agent: Main
+Task: Fix arrow distance, eyes responsiveness, boost shrinkage
+
+Work Log:
+- Found snake.targetAngle was NEVER SET for player in engine.ts (moveSnake received it as param but never stored it) — root cause of non-responsive eyes
+- Fixed engine.ts: added `snake.targetAngle = targetAngle` at start of moveSnake
+- Fixed canBoost check: changed `score > BOOST_MIN_SCORE` to `>=` so score=0 can boost
+- Changed BOOST_MIN_SCORE from 20 to 0 so players can boost immediately
+- Fixed boost shrinkage: during boost, pop 5 extra entries per drop + 1 per tick, disabled trim loop during boost to prevent path growing back
+- Fixed HUD: displayLen now uses min(logicalLen, pathBasedLen) so Length number drops during boost
+- Fixed arrow: increased gap between head and arrow base (0.3 * headRadius gap), arrow tip at headRadius + gap + 1.4*headRadius
+- Made eyes bigger (0.35 headRadius vs 0.28), pupil shift increased (0.5 vs 0.35), wider max deviation (0.7 vs 0.6)
+- Verified with VLM: Length drops 20→9 during 3s boost, speed lines visible, body visually shorter
+
+Stage Summary:
+- Arrow distance: FIXED — clear gap between head circle and arrow base
+- Eyes: FIXED — pupils track mouse via snake.targetAngle
+- Boost shrink: FIXED — body shrinks from 20 to 9 in 3s, HUD reflects change
+- Files: engine.ts, render-snake-atlas.tsx, SnakeGame.tsx, config.ts
