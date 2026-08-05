@@ -121,8 +121,11 @@ export const BOOST_DROP_INTERVAL = 333;
 /** Minimum body segments required to boost */
 export const BOOST_MIN_BODY = 8;
 
-/** Minimum score (starting score) required to boost — set low so players can boost immediately */
-export const BOOST_MIN_SCORE = 0;
+/** Minimum score required to boost — must have score to spend */
+export const BOOST_MIN_SCORE = 1;
+
+/** Score deducted per tick while boosting (~5 score/sec at 60fps) */
+export const BOOST_SCORE_COST_PER_TICK = 0.08;
 
 /** Boost speed as a multiplier of base speed */
 export const BOOST_SPEED_MULTIPLIER = BOOST_SPEED / BASE_SPEED; // ≈ 1.778

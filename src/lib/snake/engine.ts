@@ -26,7 +26,7 @@ import {
   SNAKE_RADIUS, NECK_PROTECTION, SPAWN_PROTECTION_MS, SPATIAL_CELL_SIZE,
   DEATH_FOOD_LARGE_DIVISOR, DEATH_FOOD_MEDIUM_DIVISOR, HEAD_ON_HEAD_BOOST_WINS,
   // BOOST
-  BOOST_DROP_INTERVAL, BOOST_MIN_BODY, BOOST_MIN_SCORE, BOOST_SHRINK_RATE,
+  BOOST_DROP_INTERVAL, BOOST_MIN_BODY, BOOST_MIN_SCORE, BOOST_SHRINK_RATE, BOOST_SCORE_COST_PER_TICK,
   // BOT
   BOT_COUNT, BOT_MAX_TURN_RATE, BOT_START_SCORE_MIN, BOT_START_SCORE_MAX,
   // SPAWN
@@ -387,6 +387,12 @@ function moveSnake(
   // Without this, the trim loop would grow the path back between drops.
   if (canBoost && snake.path.length > BOOST_MIN_BODY_SCALED) {
     snake.path.pop();
+  }
+
+  // Boost score cost: decreasing score shrinks the snake over time.
+  // Score directly drives targetLength, so lowering score = shorter body.
+  if (canBoost) {
+    snake.score = Math.max(0, snake.score - BOOST_SCORE_COST_PER_TICK);
   }
 
   // Trim to target length (only when NOT boosting — boost handles its own length)
