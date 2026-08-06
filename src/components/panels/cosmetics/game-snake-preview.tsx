@@ -2,12 +2,9 @@
 
 /**
  * Reusable game-accurate roaming snake preview.
- * Supports two modes:
- *   1. Simple mode (skinId / headColor+bodyColor) — used in skin cards
- *   2. Lab mode (colors[] + bodyStyle + taperStyle + glow) — used in Genetic Lab
- *
- * Position state is stored in a persistent ref so color/style/segment
- * changes do NOT reset the snake's position (fixes the teleporting bug).
+ * - Pre-simulates buffer on init so snake appears fully formed (no growing).
+ * - Each instance gets unique movement via seeded hash of skinId/colors.
+ * - Supports simple mode (skinId) and lab mode (colors[] + bodyStyle + taperStyle + glow).
  */
 
 import { useEffect, useRef } from 'react';
@@ -29,6 +26,24 @@ function darkenHex(hex: string, factor: number): string {
   const n = parseInt(hex.replace('#', ''), 16);
   const r = (n >> 16) & 0xff, g = (n >> 8) & 0xff, b = n & 0xff;
   return `#${Math.round(r * (1 - factor)).toString(16).padStart(2, '0')}${Math.round(g * (1 - factor)).toString(16).padStart(2, '0')}${Math.round(b * (1 - factor)).toString(16).padStart(2, '0')}`;
+}
+
+// ─── Seeded random for deterministic per-instance behavior ─────────────
+
+function hashString(str: string): number {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+  }
+  return h;
+}
+
+function seededRandom(seed: number): () => number {
+  let s = Math.abs(seed) || 1;
+  return () => {
+    s = (s * 16807) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
 }
 
 // ─── Game rendering constants (exact match to render-snake-atlas.tsx) ──
@@ -78,7 +93,7 @@ export function GameSnakePreview({
   width = 480,
   height = 220,
   segments = 24,
-  speed = 1.8,
+  speed = 1.2,
   scale = 1,
   showLabel = false,
   // Lab mode props
@@ -173,6 +188,13 @@ export function GameSnakePreview({
   const effectiveTaper = taperStyle ?? autoTaper ?? 'natural';
   const effectiveGlow = glow ?? autoGlow ?? false;
 
+  // Derive a unique seed from skinId or color combination
+  const instanceSeed = (() => {
+    if (skinId) return hashString(skinId);
+    if (colors && colors.length > 0) return hashString(colors.join(','));
+    return hashString(resolvedHead + resolvedBody);
+  })();
+
   useEffect(() => {
     const c = canvasRef.current;
     if (!c) return;
@@ -195,25 +217,11 @@ export function GameSnakePreview({
     c.addEventListener('mousemove', onMove);
     c.addEventListener('mouseleave', onLeave);
 
-    // Initialize or recover position from persistent ref
-    if (!posRef.current || !posRef.current.initialized) {
-      posRef.current = {
-        headX: width * 0.5,
-        headY: height * 0.5,
-        angle: 0,
-        targetAngle: 0,
-        turnTimer: 0,
-        nextTurn: 2000,
-        bufCount: 0,
-        initialized: true,
-      };
-    }
-
     // Reallocate buffer only if segment count changed
     const bufLen = segments * 6;
     if (!bufRef.current || prevSegRef.current !== segments) {
       bufRef.current = { bx: new Float64Array(bufLen), by: new Float64Array(bufLen) };
-      posRef.current.bufCount = 0;
+      posRef.current = null; // Force fresh init with pre-simulation
       prevSegRef.current = segments;
     }
     const { bx, by } = bufRef.current;
@@ -221,6 +229,70 @@ export function GameSnakePreview({
     const segR = G.segR * scale;
     const hr = segR * G.headScale;
     const wallM = Math.max(segR + 5, Math.min(width, height) * 0.3);
+
+    // Initialize with UNIQUE per-instance state + pre-simulate buffer
+    if (!posRef.current || !posRef.current.initialized) {
+      const rng = seededRandom(instanceSeed);
+      const initAngle = rng() * Math.PI * 2;
+      const offsetX = (rng() - 0.5) * width * 0.4;
+      const offsetY = (rng() - 0.5) * height * 0.4;
+
+      const startX = Math.max(wallM, Math.min(width - wallM, width * 0.5 + offsetX));
+      const startY = Math.max(wallM, Math.min(height - wallM, height * 0.5 + offsetY));
+
+      posRef.current = {
+        headX: startX,
+        headY: startY,
+        angle: initAngle,
+        targetAngle: initAngle + (rng() - 0.5) * 1.5,
+        turnTimer: rng() * 1500,
+        nextTurn: 1500 + rng() * 2000,
+        bufCount: 0,
+        initialized: true,
+      };
+
+      // PRE-SIMULATE: Walk the snake forward for bufLen frames to fill
+      // the entire buffer. Snake appears fully formed from the first frame.
+      const preRng = seededRandom(instanceSeed + 7919);
+      let sx = startX, sy = startY, sa = initAngle;
+      let sta = posRef.current.targetAngle;
+      let stTimer = posRef.current.turnTimer;
+      let stNext = posRef.current.nextTurn;
+
+      for (let f = 0; f < bufLen; f++) {
+        stTimer += 16;
+        if (stTimer > stNext) {
+          sta = sa + (preRng() - 0.5) * 1.8;
+          stTimer = 0;
+          stNext = 1500 + preRng() * 2000;
+        }
+        let d = sta - sa;
+        while (d > Math.PI) d -= 2 * Math.PI;
+        while (d < -Math.PI) d += 2 * Math.PI;
+        sa += d * 0.04;
+
+        sx += Math.cos(sa) * speed;
+        sy += Math.sin(sa) * speed;
+
+        // Bounce during pre-sim
+        if (sx < wallM) { sta = 0; sx = wallM; }
+        if (sx > width - wallM) { sta = Math.PI; sx = width - wallM; }
+        if (sy < wallM) { sta = Math.PI / 2; sy = wallM; }
+        if (sy > height - wallM) { sta = -Math.PI / 2; sy = height - wallM; }
+
+        bx[f] = sx;
+        by[f] = sy;
+      }
+
+      // Update state to post-simulation position
+      posRef.current.headX = sx;
+      posRef.current.headY = sy;
+      posRef.current.angle = sa;
+      posRef.current.targetAngle = sta;
+      posRef.current.turnTimer = stTimer;
+      posRef.current.nextTurn = stNext;
+      posRef.current.bufCount = bufLen;
+    }
 
     // Capture current visual props in closure — they update when effect re-runs
     const curColors = effectiveColors;
@@ -441,8 +513,6 @@ export function GameSnakePreview({
         hx: headX, hy: headY, hr, angle,
         time: performance.now(), boosting: false,
       });
-
-
 
       animRef.current = requestAnimationFrame(loop);
     };

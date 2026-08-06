@@ -85,8 +85,8 @@ export function CosmeticsSection({
           width={580}
           height={260}
           segments={24}
-          speed={1.8}
-          scale={0.7}
+          speed={1.2}
+          scale={0.63}
         />
       </div>
 
