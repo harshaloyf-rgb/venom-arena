@@ -15,7 +15,7 @@ import { SNAKE_RADIUS, CAMERA_BASE_ZOOM } from '@/lib/snake/config';
 import { getSkinAsset } from '@/lib/snake/skin-registry';
 import { resolveShapeStyle, computeTaperRadius, drawSegmentShape, readCustomSkinStateSafe } from './cosmetics-utils';
 import type { BodyStyle, TaperStyle, CustomSegment } from './cosmetics-types';
-import { renderEquippedCosmetics, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
+import { renderEquippedCosmetics, readEquippedCosmetics, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
 
 // ─── Color helpers ─────────────────────────────────────────────────────
 
@@ -221,7 +221,6 @@ export function GameSnakePreview({
     const curHeadCol = resolvedHead;
     const curBodyCol = resolvedBody;
     const curLabMode = isLabMode;
-    const curCosmetics = equippedCosmetics ?? null;
 
     let running = true;
     const loop = () => {
@@ -390,46 +389,49 @@ export function GameSnakePreview({
       ctx.beginPath(); ctx.arc(headX, headY, hr, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
 
-      // Eyes
-      const eyeOff = hr * G.eyeOff;
-      const eyeR = hr * G.eyeR;
-      const pupR = eyeR * G.pupR;
-      const fwd = hr * G.eyeFwd;
-      const perp = angle + Math.PI / 2;
+      // Responsive eyes — ONLY when no custom eye cosmetic is equipped
+      const eq = readEquippedCosmetics();
+      const hasCustomEyes = eq.eyes && eq.eyes !== 'none';
 
-      let lookA = angle;
-      const m = mouseRef.current;
-      if (m) {
-        const dx = m.x - headX, dy = m.y - headY;
-        if (Math.sqrt(dx * dx + dy * dy) > 5) lookA = Math.atan2(dy, dx);
+      if (!hasCustomEyes) {
+        const eyeOff = hr * G.eyeOff;
+        const eyeR = hr * G.eyeR;
+        const pupR = eyeR * G.pupR;
+        const fwd = hr * G.eyeFwd;
+        const perp = angle + Math.PI / 2;
+
+        let lookA = angle;
+        const m = mouseRef.current;
+        if (m) {
+          const dx = m.x - headX, dy = m.y - headY;
+          if (Math.sqrt(dx * dx + dy * dy) > 5) lookA = Math.atan2(dy, dx);
+        }
+
+        for (const side of [-1, 1]) {
+          const ex = headX + Math.cos(angle) * fwd + Math.cos(perp) * eyeOff * side;
+          const ey = headY + Math.sin(angle) * fwd + Math.sin(perp) * eyeOff * side;
+
+          ctx.fillStyle = '#ffffff';
+          ctx.strokeStyle = G.eyeBorder;
+          ctx.lineWidth = G.eyeBorderW;
+          ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+          const shift = eyeR * G.pupShift;
+          const ppx = ex + Math.cos(lookA) * shift;
+          const ppy = ey + Math.sin(lookA) * shift;
+          ctx.fillStyle = '#111111';
+          ctx.beginPath(); ctx.arc(ppx, ppy, pupR, 0, Math.PI * 2); ctx.fill();
+
+          ctx.fillStyle = `rgba(255,255,255,${G.highlight})`;
+          ctx.beginPath(); ctx.arc(ppx - pupR * 0.3, ppy - pupR * 0.35, pupR * 0.3, 0, Math.PI * 2); ctx.fill();
+        }
       }
 
-      for (const side of [-1, 1]) {
-        const ex = headX + Math.cos(angle) * fwd + Math.cos(perp) * eyeOff * side;
-        const ey = headY + Math.sin(angle) * fwd + Math.sin(perp) * eyeOff * side;
-
-        ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = G.eyeBorder;
-        ctx.lineWidth = G.eyeBorderW;
-        ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-
-        const shift = eyeR * G.pupShift;
-        const ppx = ex + Math.cos(lookA) * shift;
-        const ppy = ey + Math.sin(lookA) * shift;
-        ctx.fillStyle = '#111111';
-        ctx.beginPath(); ctx.arc(ppx, ppy, pupR, 0, Math.PI * 2); ctx.fill();
-
-        ctx.fillStyle = `rgba(255,255,255,${G.highlight})`;
-        ctx.beginPath(); ctx.arc(ppx - pupR * 0.3, ppy - pupR * 0.35, pupR * 0.3, 0, Math.PI * 2); ctx.fill();
-      }
-
-      // Face cosmetics (rendered on top of default eyes)
-      if (curCosmetics) {
-        renderEquippedCosmetics(ctx, {
-          hx: headX, hy: headY, hr, angle,
-          time: performance.now(), boosting: false,
-        });
-      }
+      // All equipped face cosmetics (custom eyes draw here if equipped)
+      renderEquippedCosmetics(ctx, {
+        hx: headX, hy: headY, hr, angle,
+        time: performance.now(), boosting: false,
+      });
 
       // Direction pointer
       const ptrS = hr * 1.1, ptrL = hr * 3;
@@ -450,7 +452,7 @@ export function GameSnakePreview({
       c.removeEventListener('mousemove', onMove);
       c.removeEventListener('mouseleave', onLeave);
     };
-  }, [width, height, segments, speed, scale, resolvedHead, resolvedBody, effectiveBodyStyle, effectiveTaper, effectiveGlow, isLabMode, effectiveColors, equippedCosmetics]);
+  }, [width, height, segments, speed, scale, resolvedHead, resolvedBody, effectiveBodyStyle, effectiveTaper, effectiveGlow, isLabMode, effectiveColors]);
 
   // Get skin name for label
   let skinName = '';
