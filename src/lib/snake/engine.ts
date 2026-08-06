@@ -354,13 +354,9 @@ function moveSnake(
   // Path entries are spaced at BASE_SPEED (one per tick).
   // To maintain the same visual length as SEGMENT_SPACING-based segments,
   // we scale the path buffer length by the spacing ratio.
-  const spacingRatio = SEGMENT_SPACING / BASE_SPEED;
-  // Use ceil to ensure the path always has enough entries for the visual body length.
-  // floor() could make the path 1-2 entries too short, causing the tail to clip
-  // slightly at normal speed and making boost appear to stretch the body.
   const targetLength = Math.min(
-    Math.ceil((START_LENGTH + snake.score * GROWTH_RATE) * spacingRatio),
-    Math.ceil(MAX_SNAKE_LENGTH * spacingRatio),
+    Math.ceil((START_LENGTH + snake.score * GROWTH_RATE) * SPACING_RATIO),
+    Math.ceil(MAX_SNAKE_LENGTH * SPACING_RATIO),
   );
 
   // Boost: drop food from tail, shrink snake
