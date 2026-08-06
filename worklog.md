@@ -122,3 +122,94 @@ Stage Summary:
 - Free cosmetics equippable instantly; paid cosmetics show coming-soon message
 - Dark theme consistent with rest of shop (bg-slate-950/900/800 palette, rounded-2xl cards, text-xs font-sans)
 
+---
+Task ID: 6
+Agent: Main
+Task: Make Genetic Pattern Lab Steps 2-4 functionally render shapes/taper/glow
+
+Work Log:
+- Read worklog.md and all relevant source files to understand the existing system
+- Identified that `generateCustomSegments` already stores shape/glow/sizeScale per segment in localStorage
+- Identified that `try-on-preview.tsx` already had inline shape drawing but `skin-preview-game.tsx` only drew circles
+- Identified that `render-snake-atlas.tsx` fallback renderer only drew circles (no shapes/taper/glow)
+
+Changes made to 4 files:
+
+1. **cosmetics-utils.ts** — Added shared rendering infrastructure:
+   - Exported `lightenHex()` and `darkenHex()` color helper functions (previously private)
+   - Added `computeTaperRadius()` — calculates size multiplier per segment index based on taper style
+   - Added `drawSegmentShape()` — unified shape drawing function supporting all 4 shapes:
+     - 'circle': standard circle with 3D radial gradient
+     - 'spike': 4-point star/spike shape pointing forward (rotates with movement direction)
+     - 'square': rotated rectangle aligned with movement direction
+     - 'diamond': rhombus shape aligned with movement direction
+     - All shapes use the same 3D radial gradient effect (highlight top-left, darken edges)
+     - All shapes support optional bioluminescent glow via ctx.shadowBlur
+
+2. **skin-preview-game.tsx** — Custom lab skin support in shop preview:
+   - Added imports for `readCustomSkinStateSafe`, `drawSegmentShape`, `computeTaperRadius`, and `CustomSegment`
+   - Before body draw loop: checks if `skinId === 'custom-lab-skin'` and reads custom segments from localStorage
+   - When custom segments exist: uses `drawSegmentShape()` with per-segment shape, color, glow, and sizeScale
+   - Falls back to existing atlas/multi-color/fallback rendering for non-custom skins
+
+3. **try-on-preview.tsx** — Refactored to use shared drawing functions:
+   - Removed duplicate `lightenHex`/`darkenHex` functions (now imported from cosmetics-utils)
+   - Removed inline shape drawing code (circle, square, diamond, spike paths)
+   - Replaced with single `drawSegmentShape()` call using `resolveShapeStyle()` for shape lookup
+   - Head gradient still uses `lightenHex`/`darkenHex` from shared module
+   - All shape/taper/glow changes now visible in real-time in the interactive preview
+
+4. **render-snake-atlas.tsx** — In-game fallback renderer custom skin support:
+   - Added imports for `drawSegmentShape`, `readCustomSkinState`, and `CustomSegment`
+   - In `renderSnakeFallback()`: checks if `snake.skinId === 'custom-lab-skin'` and reads custom segments
+   - When custom segments exist: new drawing path iterates walked segments using `drawSegmentShape()` with:
+     - Per-segment `sizeScale` for taper effect
+     - Per-segment `shape` (spike/square/diamond/circle)
+     - Per-segment `glow` for bioluminescent shadow
+     - Per-segment `angle` from the path walker for rotation
+   - Does NOT affect existing atlas-based renderer or non-custom skin rendering
+
+- Verified: `bun run lint` passes with 0 errors, 0 warnings
+
+Stage Summary:
+- Modified: cosmetics-utils.ts, skin-preview-game.tsx, try-on-preview.tsx, render-snake-atlas.tsx (4 files)
+- Genetic Pattern Lab Steps 2 (Segment Geometry), 3 (Body Taper), and 4 (Bioluminescent Glow) now visually work
+- All 6 body styles render distinct shapes in real-time: smooth=circles, dragon=spikes, armored=squares, crystal=diamonds, obsidian=all-spikes, basilisk=all-diamonds
+- All 4 taper styles affect segment size: natural, uniform, wave, heavy
+- Glow toggle adds soft colored shadow behind each segment
+- Changes visible in: DNA Lab try-on preview, shop GameSkinPreview (for custom-lab-skin), and in-game fallback renderer
+
+---
+Task ID: 1-7
+Agent: main
+Task: Major game rendering + cosmetics overhaul
+
+Work Log:
+- Added 1 billion chips to all player accounts via prisma db execute
+- Increased SNAKE_RADIUS from 8 to 12 (fatter snake)
+- Added CAMERA_BASE_ZOOM = 1.35 (closer camera, was 1.0)
+- Increased CAMERA_ZOOM_MIN from 0.3 to 0.45
+- Updated createCamera to start at CAMERA_BASE_ZOOM
+- Fixed BODY_DRAW_STEP from 7 to 14 (prevent distortion with fatter snake)
+- Made eyes EXTREMELY responsive: pupils always at edge of socket in steering direction
+- Added boost red eye effect + glow ring when boosting
+- Added full-body boost aura glow (thick glowing line along body path)
+- Enhanced boost speed lines (6 lines instead of 3, warm orange/gold color, head glow pulse)
+- Made ALL cosmetics FREE (changed all cost values to 0)
+- Added hat slot with 7 items: Crown, Top Hat, Cap, Wizard, Party, Viking, Santa
+- Added goggles slot with 4 items: Pilot, Cyber Visor, Shades, Monocle
+- Added flag slot with 8 country flag capes: India, USA, UK, Japan, Brazil, France, Germany, South Korea
+- Flags wave realistically using sine wave animation attached to snake neck
+- Updated EquippedCosmetics interface with hat, goggles, flag fields
+- Updated renderEquippedCosmetics to render hat/goggles/flag slots
+- Updated cosmetics-section.tsx to show hat/goggles/flag as equippable (no more redirect)
+- Updated skin-preview-game.tsx to render all new slots in preview
+- Genetic Pattern Lab agent made shapes/taper/glow functional
+
+Stage Summary:
+- Snake is 50% fatter, camera 35% closer, eyes ultra-responsive
+- Boost has dramatic visual effect (glow aura + speed lines + red eyes)
+- All cosmetics free with 19 new items across 3 new slots
+- 8 country flag capes with realistic wave animation
+- Lab shapes (dragon/armored/crystal/obsidian/basilisk) now render correctly
+

@@ -83,8 +83,8 @@ export const FOOD_RESPAWN_BATCH = 5;
 // 4. COLLISION — snake radius, protection zones, death rules
 // ============================================================================
 
-/** Base visual radius of each snake segment */
-export const SNAKE_RADIUS = 8;
+/** Base visual radius of each snake segment (fatter = more visible) */
+export const SNAKE_RADIUS = 12;
 
 /** First N segments of a snake's body that cannot kill on collision */
 export const NECK_PROTECTION = 5;
@@ -223,8 +223,11 @@ export const FIXED_DT = 1 / 60;
 /** Camera lerp factor (0–1, lower = smoother follow) */
 export const CAMERA_LERP = 0.08;
 
+/** Base camera zoom — starts closer for better visibility */
+export const CAMERA_BASE_ZOOM = 1.35;
+
 /** Minimum camera zoom level */
-export const CAMERA_ZOOM_MIN = 0.3;
+export const CAMERA_ZOOM_MIN = 0.45;
 
 /** Position prediction factor for extrapolation (1.0 = full prediction) */
 export const POSITION_PREDICT_FACTOR = 1.0;

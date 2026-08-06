@@ -12,6 +12,8 @@ import { SkinAtlasManager } from '@/lib/snake/atlas';
 import { SNAKE_RADIUS, SEGMENT_SPACING, HEAD_SPRITE_SIZE } from '@/lib/snake/config';
 import { getSkinAsset, isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
 import { renderEquippedCosmetics, getCosmeticById, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
+import { readCustomSkinStateSafe, drawSegmentShape, computeTaperRadius } from '@/components/panels/cosmetics/cosmetics-utils';
+import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-types';
 
 interface GameSkinPreviewProps {
   /** Skin ID (cosmetic ID, preset ID, or 'custom-lab-skin') */
@@ -115,10 +117,30 @@ export function GameSkinPreview({
       cx += segStep;
     }
 
+    // Check for custom lab skin segments with shapes/taper/glow
+    const customSegments: CustomSegment[] | null = (() => {
+      if (skinId === 'custom-lab-skin') {
+        const state = readCustomSkinStateSafe();
+        if (state?.customSkinSegments?.length) return state.customSkinSegments;
+      }
+      return null;
+    })();
+
     // Draw body (tail to head for layering)
     for (let i = positions.length - 1; i >= 0; i--) {
       const pos = positions[i];
       const r = segRadius;
+
+      // Custom lab skin with shapes — use drawSegmentShape
+      if (customSegments) {
+        const seg = customSegments[i % customSegments.length];
+        const taperedR = r * seg.sizeScale;
+        drawSegmentShape(
+          ctx, pos.x, pos.y, taperedR,
+          pos.angle, seg.shape, seg.color, seg.glow,
+        );
+        continue;
+      }
 
       if (atlas && !multiColor) {
         // Use atlas texture
@@ -253,7 +275,7 @@ export function GameSkinPreview({
       // Face cosmetics preview
       if (equippedCosmetics) {
         // Draw each equipped cosmetic
-        const slots: Array<'wings'|'ears'|'mouth'|'nose'|'eyes'> = ['wings', 'ears', 'mouth', 'nose', 'eyes'];
+        const slots: Array<'wings'|'flag'|'ears'|'hat'|'goggles'|'mouth'|'nose'|'eyes'> = ['wings', 'flag', 'ears', 'hat', 'goggles', 'mouth', 'nose', 'eyes'];
         for (const slot of slots) {
           const id = equippedCosmetics[slot];
           if (!id || id === 'none') continue;

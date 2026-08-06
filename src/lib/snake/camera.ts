@@ -5,7 +5,7 @@
 
 import type { Camera, Snake, Viewport } from './types';
 import { lerp } from './vec2';
-import { CAMERA_ZOOM_MIN, START_LENGTH } from './config';
+import { CAMERA_ZOOM_MIN, CAMERA_BASE_ZOOM, START_LENGTH } from './config';
 
 /** Update camera to follow a snake. Snaps directly to head (no lag = no vibration). */
 export function updateCamera(camera: Camera, snake: Snake, _canvasWidth: number, _canvasHeight: number): void {
@@ -21,7 +21,7 @@ export function updateCamera(camera: Camera, snake: Snake, _canvasWidth: number,
   const targetLength = snake.path.length;
   const baseLength = START_LENGTH;
   const growthFactor = Math.log2(Math.max(targetLength / baseLength, 1));
-  const targetZoom = Math.max(CAMERA_ZOOM_MIN, 1.0 - growthFactor * 0.08);
+  const targetZoom = Math.max(CAMERA_ZOOM_MIN, CAMERA_BASE_ZOOM - growthFactor * 0.1);
   camera.zoom = lerp(camera.zoom, targetZoom, 0.02);
 }
 
@@ -42,7 +42,7 @@ export function getViewport(camera: Camera, canvasWidth: number, canvasHeight: n
 
 /** Create a new camera at a given position */
 export function createCamera(x: number, y: number): Camera {
-  return { x, y, zoom: 1.0 };
+  return { x, y, zoom: CAMERA_BASE_ZOOM };
 }
 
 /** Convert world coordinates to screen coordinates */

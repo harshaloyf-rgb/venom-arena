@@ -17,12 +17,15 @@ import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
 import { isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
 import { renderEquippedCosmetics } from '@/lib/snake/face-cosmetics';
+import { drawSegmentShape, readCustomSkinState } from '@/components/panels/cosmetics/cosmetics-utils';
+import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-types';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
 /** Fixed pixel spacing between drawn body segments (world space).
- *  Less than SNAKE_RADIUS*2 for overlap → solid continuous look. */
-const BODY_DRAW_STEP = 7;
+ *  Should be slightly less than SNAKE_RADIUS*2 for overlap → solid continuous look.
+ *  Adjusted for the fatter snake (RADIUS=12). */
+const BODY_DRAW_STEP = 14;
 
 // ─── Particle type (render-side) ────────────────────────────────────────────
 
@@ -286,6 +289,31 @@ export function renderSnakeAtlas(
   // ── FIXED-SPACING BODY: Walk path at BODY_DRAW_STEP, capped to maxSegs ──
   const walked = walkPathFixedStep(snake.path, BODY_DRAW_STEP, maxSegs, snake.angle);
 
+  // ── BOOST AURA: Full-body glow effect ──
+  if (snake.boosting) {
+    const boostPulse = 0.15 + 0.1 * Math.sin(time * 0.008);
+    ctx.save();
+    ctx.globalAlpha = boostPulse;
+    ctx.shadowColor = snake.color;
+    ctx.shadowBlur = 25 * zoom;
+    // Draw a thick line along the body for glow
+    if (walked.count > 1) {
+      ctx.strokeStyle = lightenHex(snake.color, 0.4);
+      ctx.lineWidth = segRadius * 3;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      const s0 = worldToScreen(walked.xs[walked.count - 1], walked.ys[walked.count - 1], camera, cw, ch);
+      ctx.moveTo(s0.x, s0.y);
+      for (let i = walked.count - 2; i >= 0; i--) {
+        const sp = worldToScreen(walked.xs[i], walked.ys[i], camera, cw, ch);
+        ctx.lineTo(sp.x, sp.y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // Draw body segments (tail → head for proper layering)
   const drawSize = segRadius * 2;
   for (let i = walked.count - 1; i >= 0; i--) {
@@ -362,25 +390,40 @@ export function renderSnakeAtlas(
     drawDirectionPointer(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting);
 
     // Responsive eyes — look toward the steering direction (targetAngle)
-    drawResponsiveEyes(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2);
+    drawResponsiveEyes(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting);
 
     // Equipped face cosmetics (replaces default eyes if custom eyes equipped)
     renderEquippedCosmetics(ctx, { hx: hsx, hy: hsy, hr: headDrawSize / 2, angle: snake.angle, time, boosting: snake.boosting });
 
-    // Boost speed lines
+    // Boost speed lines — dramatic streaks behind the head
     if (snake.boosting && segRadius > 3) {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-      ctx.lineWidth = 1.5 * zoom;
-      for (let j = 0; j < 3; j++) {
-        const a = snake.angle + Math.PI + (j - 1) * 0.3;
-        const len = (15 + j * 5) * zoom;
+      const lineCount = 6;
+      for (let j = 0; j < lineCount; j++) {
+        const spread = (j - (lineCount - 1) / 2) * 0.25;
+        const a = snake.angle + Math.PI + spread;
+        const len = (20 + j * 8) * zoom;
+        const alpha = 0.4 - j * 0.05;
         const lx = hsx - Math.cos(snake.angle) * headDrawSize / 2;
         const ly = hsy - Math.sin(snake.angle) * headDrawSize / 2;
+        ctx.strokeStyle = `rgba(255, 200, 100, ${Math.max(alpha, 0.1)})`;
+        ctx.lineWidth = (3 - j * 0.3) * zoom;
+        ctx.lineCap = 'round';
         ctx.beginPath();
         ctx.moveTo(lx, ly);
         ctx.lineTo(lx + Math.cos(a) * len, ly + Math.sin(a) * len);
         ctx.stroke();
       }
+      // Head glow pulse when boosting
+      ctx.save();
+      ctx.globalAlpha = 0.25 + 0.15 * Math.sin(time * 0.01);
+      const hGlow = ctx.createRadialGradient(hsx, hsy, headDrawSize / 4, hsx, hsy, headDrawSize * 1.5);
+      hGlow.addColorStop(0, 'rgba(255, 200, 80, 0.4)');
+      hGlow.addColorStop(1, 'rgba(255, 100, 50, 0)');
+      ctx.fillStyle = hGlow;
+      ctx.beginPath();
+      ctx.arc(hsx, hsy, headDrawSize * 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
 
     // Name label
@@ -465,9 +508,44 @@ export function renderSnakeFallback(
   // ── FIXED-SPACING BODY: Walk path at BODY_DRAW_STEP, capped to maxSegs ──
   const walked = walkPathFixedStep(path, BODY_DRAW_STEP, maxSegs, snake.angle);
 
+  // ── BOOST AURA: Full-body glow effect (fallback) ──
+  if (snake.boosting) {
+    const boostPulse = 0.15 + 0.1 * Math.sin(now * 0.008);
+    ctx.save();
+    ctx.globalAlpha = boostPulse;
+    ctx.shadowColor = snake.color;
+    ctx.shadowBlur = segRadius * 3;
+    if (walked.count > 1) {
+      ctx.strokeStyle = lightenHex(snake.color, 0.4);
+      ctx.lineWidth = segRadius * 3;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      const s0x = walked.xs[walked.count - 1];
+      const s0y = walked.ys[walked.count - 1];
+      const scr0 = worldToScreen(s0x, s0y, camera, cw, ch);
+      ctx.moveTo(scr0.x, scr0.y);
+      for (let i = walked.count - 2; i >= 0; i--) {
+        const scr = worldToScreen(walked.xs[i], walked.ys[i], camera, cw, ch);
+        ctx.lineTo(scr.x, scr.y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // Draw body circles (tail → head for proper layering)
   // Multi-color skins alternate colors per segment
   const multiColor = isMultiColorSkin(snake.skinId);
+
+  // Check for custom lab skin with shapes/taper/glow
+  let customSegments: CustomSegment[] | null = null;
+  if (snake.skinId === 'custom-lab-skin') {
+    const customState = readCustomSkinState();
+    if (customState?.customSkinSegments?.length) {
+      customSegments = customState.customSkinSegments;
+    }
+  }
 
   // Drop shadow under the whole snake body
   ctx.save();
@@ -475,7 +553,19 @@ export function renderSnakeFallback(
   ctx.shadowBlur = segRadius * 0.8;
   ctx.shadowOffsetY = segRadius * 0.3;
 
-  if (multiColor) {
+  if (customSegments) {
+    // Custom lab skin: draw shapes with taper and glow
+    for (let i = walked.count - 1; i >= 0; i--) {
+      const wx = walked.xs[i];
+      const wy = walked.ys[i];
+      if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
+      const scr = worldToScreen(wx, wy, camera, cw, ch);
+      const seg = customSegments[i % customSegments.length];
+      const taperedR = segRadius * seg.sizeScale;
+      const segAngle = walked.angles[i];
+      drawSegmentShape(ctx, scr.x, scr.y, taperedR, segAngle, seg.shape, seg.color, seg.glow);
+    }
+  } else if (multiColor) {
     // Per-segment color: draw each one individually with 3D gradient
     for (let i = walked.count - 1; i >= 0; i--) {
       const wx = walked.xs[i];
@@ -530,7 +620,7 @@ export function renderSnakeFallback(
     drawDirectionPointer(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting);
 
     // Responsive eyes — look toward the steering direction (targetAngle)
-    drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius);
+    drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting);
 
     // Equipped face cosmetics (replaces default eyes if custom eyes equipped)
     renderEquippedCosmetics(ctx, { hx: headScreen.x, hy: headScreen.y, hr: headRadius, angle: snake.angle, time: now, boosting: snake.boosting });
@@ -621,28 +711,24 @@ function drawResponsiveEyes(
   moveAngle: number,
   targetAngle: number,
   headRadius: number,
+  boosting: boolean,
 ): void {
   // Eye positioning — on the face of the snake
-  const eyeOffset = headRadius * 0.45;
+  const eyeOffset = headRadius * 0.42;
   const eyeRadius = headRadius * 0.38;
-  const pupilRadius = eyeRadius * 0.55;
+  const pupilRadius = eyeRadius * 0.52;
   const perpAngle = moveAngle + Math.PI / 2;
-  const eyeForward = headRadius * 0.3;
+  const eyeForward = headRadius * 0.32;
 
   // Pupils look toward targetAngle (the steering direction / arrow direction)
   let diff = targetAngle - moveAngle;
   while (diff > Math.PI) diff -= 2 * Math.PI;
   while (diff < -Math.PI) diff += 2 * Math.PI;
 
-  // Clamp pupil deviation so it stays inside the eye white
-  const maxDev = 0.8;
-  const clampedDiff = Math.max(-maxDev, Math.min(maxDev, diff));
-  const lookAngle = moveAngle + clampedDiff;
-
-  // Pupil shift — proportional to how hard the snake is turning.
-  // Full deviation = pupil at edge of eye white.
-  const shiftRatio = Math.abs(clampedDiff) / maxDev;
-  const pupilShift = eyeRadius * 0.55 * shiftRatio;
+  // Ultra-responsive: even a tiny 0.05 radian (~3°) movement pushes pupils to edge.
+  // The pupil snaps to the direction immediately with full extension.
+  const lookAngle = moveAngle + diff;
+  const pupilShift = eyeRadius * 0.65; // Always at the edge of the socket
 
   for (const side of [-1, 1]) {
     const ex = hx + Math.cos(moveAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
@@ -650,26 +736,40 @@ function drawResponsiveEyes(
 
     // Eye white with border
     ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(ex, ey, eyeRadius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
-    // Pupil — shifted toward lookAngle (the steering direction)
+    // Pupil — shifted toward lookAngle, ALWAYS at edge for extreme responsiveness
     const px = ex + Math.cos(lookAngle) * pupilShift;
     const py = ey + Math.sin(lookAngle) * pupilShift;
-    ctx.fillStyle = '#111111';
+
+    // Pupil color: red tint when boosting
+    ctx.fillStyle = boosting ? '#cc1111' : '#111111';
     ctx.beginPath();
     ctx.arc(px, py, pupilRadius, 0, Math.PI * 2);
     ctx.fill();
 
     // Tiny highlight for life-like look
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
     ctx.beginPath();
     ctx.arc(px - pupilRadius * 0.3, py - pupilRadius * 0.35, pupilRadius * 0.3, 0, Math.PI * 2);
     ctx.fill();
+
+    // Boost glow ring
+    if (boosting) {
+      ctx.save();
+      ctx.globalAlpha = 0.3 + 0.2 * Math.sin(Date.now() * 0.01);
+      ctx.strokeStyle = '#ff4444';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(ex, ey, eyeRadius + 2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 }
 
