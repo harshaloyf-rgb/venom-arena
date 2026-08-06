@@ -469,3 +469,18 @@ Stage Summary:
 - Root cause of lag: 33 canvases × 60fps × heavy per-frame work (shadows, gradients, localStorage, cosmetics)
 - Economy mode reduces per-card frame cost by ~80%
 - Commit: 3eb49a5 pushed to main
+---
+Task ID: face-cosmetics-match
+Agent: Main
+Task: Match Face Cosmetics preview snake and grid size to Genetic Lab
+
+Work Log:
+- Compared Genetic Lab params: width={450} height={180} segments={20} scale={0.77}
+- Compared Face Cosmetics params: width={580} height={260} segments={24} scale={0.77}
+- Changed Face Cosmetics to match: width 580→450, height 260→180, segments 24→20
+- Verified both canvases render at 450×180 in browser
+- No console errors
+
+Stage Summary:
+- Face Cosmetics preview now uses identical canvas dimensions (450×180), segment count (20), speed (1.2), and scale (0.77) as Genetic Lab
+- Snake and grid appearance now match between both tabs
