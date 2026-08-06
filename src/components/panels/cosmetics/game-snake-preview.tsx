@@ -2,13 +2,19 @@
 
 /**
  * Reusable game-accurate roaming snake preview.
- * Exact same rendering as the admin Snake Test — dark arena, grid,
- * shadow, 3D gradient, big eyes (0.38), mouse-tracking pupils.
+ * Supports two modes:
+ *   1. Simple mode (skinId / headColor+bodyColor) — used in skin cards
+ *   2. Lab mode (colors[] + bodyStyle + taperStyle + glow) — used in Genetic Lab
+ *
+ * Position state is stored in a persistent ref so color/style/segment
+ * changes do NOT reset the snake's position (fixes the teleporting bug).
  */
 
 import { useEffect, useRef } from 'react';
 import { SNAKE_RADIUS, CAMERA_BASE_ZOOM } from '@/lib/snake/config';
 import { getSkinAsset } from '@/lib/snake/skin-registry';
+import { resolveShapeStyle, computeTaperRadius, drawSegmentShape } from './cosmetics-utils';
+import type { BodyStyle, TaperStyle } from './cosmetics-types';
 
 // ─── Color helpers ─────────────────────────────────────────────────────
 
@@ -45,6 +51,23 @@ const G = {
   shadowOffY: 0.3,
 };
 
+// ─── Persistent position state (survives across effect re-runs) ───────
+interface SnakePosState {
+  headX: number;
+  headY: number;
+  angle: number;
+  targetAngle: number;
+  turnTimer: number;
+  nextTurn: number;
+  bufCount: number;
+  initialized: boolean;
+}
+
+interface SnakeBuf {
+  bx: Float64Array;
+  by: Float64Array;
+}
+
 // ─── Component ─────────────────────────────────────────────────────────
 
 export function GameSnakePreview({
@@ -57,6 +80,11 @@ export function GameSnakePreview({
   speed = 1.8,
   scale = 1,
   showLabel = false,
+  // Lab mode props
+  colors,
+  bodyStyle,
+  taperStyle,
+  glow,
 }: {
   skinId?: string;
   headColor?: string;
@@ -67,10 +95,44 @@ export function GameSnakePreview({
   speed?: number;
   scale?: number;
   showLabel?: boolean;
+  // Genetic Lab mode
+  colors?: string[];
+  bodyStyle?: BodyStyle;
+  taperStyle?: TaperStyle;
+  glow?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef(0);
   const mouseRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Persistent position state — survives across effect re-runs
+  const posRef = useRef<SnakePosState | null>(null);
+  const bufRef = useRef<SnakeBuf | null>(null);
+  const prevSegRef = useRef(segments);
+
+  // Resolve colors for this render (stable, no side effects)
+  const resolvedHead = (() => {
+    if (colors && colors.length > 0) return colors[0];
+    if (headColorProp) return headColorProp;
+    if (skinId) {
+      try { return getSkinAsset(skinId).headColor; } catch { /* */ }
+    }
+    return '#22c55e';
+  })();
+
+  const resolvedBody = (() => {
+    if (colors && colors.length > 0) return colors[1] ?? colors[0];
+    if (bodyColorProp) return bodyColorProp;
+    if (skinId) {
+      try { return getSkinAsset(skinId).bodyColor; } catch { /* */ }
+    }
+    return '#16a34a';
+  })();
+
+  const isLabMode = colors && colors.length > 0;
+  const effectiveBodyStyle = bodyStyle ?? 'smooth';
+  const effectiveTaper = taperStyle ?? 'natural';
+  const effectiveGlow = glow ?? false;
 
   useEffect(() => {
     const c = canvasRef.current;
@@ -94,37 +156,55 @@ export function GameSnakePreview({
     c.addEventListener('mousemove', onMove);
     c.addEventListener('mouseleave', onLeave);
 
-    // Snake state
-    let headX = width * 0.5;
-    let headY = height * 0.5;
-    let angle = 0;
-    let targetAngle = 0;
-    let turnTimer = 0;
-    let nextTurn = 2000;
-
-    const bufLen = segments * 6;
-    const bx = new Float64Array(bufLen);
-    const by = new Float64Array(bufLen);
-    let bufCount = 0;
-
-    // Get skin colors — prefer direct props, fallback to registry
-    let headColor = headColorProp ?? '#22c55e';
-    let bodyColor = bodyColorProp ?? '#16a34a';
-    if (!headColorProp && !bodyColorProp && skinId) {
-      try {
-        const asset = getSkinAsset(skinId);
-        headColor = asset.headColor;
-        bodyColor = asset.bodyColor;
-      } catch { /* defaults */ }
+    // Initialize or recover position from persistent ref
+    if (!posRef.current || !posRef.current.initialized) {
+      posRef.current = {
+        headX: width * 0.5,
+        headY: height * 0.5,
+        angle: 0,
+        targetAngle: 0,
+        turnTimer: 0,
+        nextTurn: 2000,
+        bufCount: 0,
+        initialized: true,
+      };
     }
+
+    // Reallocate buffer only if segment count changed
+    const bufLen = segments * 6;
+    if (!bufRef.current || prevSegRef.current !== segments) {
+      bufRef.current = { bx: new Float64Array(bufLen), by: new Float64Array(bufLen) };
+      posRef.current.bufCount = 0;
+      prevSegRef.current = segments;
+    }
+    const { bx, by } = bufRef.current;
 
     const segR = G.segR * scale;
     const hr = segR * G.headScale;
     const wallM = Math.max(segR + 5, Math.min(width, height) * 0.3);
 
+    // Capture current visual props in closure — they update when effect re-runs
+    const curColors = colors;
+    const curBodyStyle = effectiveBodyStyle;
+    const curTaper = effectiveTaper;
+    const curGlow = effectiveGlow;
+    const curHeadCol = resolvedHead;
+    const curBodyCol = resolvedBody;
+    const curLabMode = isLabMode;
+
     let running = true;
     const loop = () => {
       if (!running) return;
+
+      const st = posRef.current!;
+      let headX = st.headX;
+      let headY = st.headY;
+      let angle = st.angle;
+      let targetAngle = st.targetAngle;
+      let turnTimer = st.turnTimer;
+      let nextTurn = st.nextTurn;
+      let bufCount = st.bufCount;
+
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       // ── Movement ──
@@ -148,6 +228,14 @@ export function GameSnakePreview({
       if (headY < wallM) { targetAngle = Math.PI / 2; headY = wallM; }
       if (headY > height - wallM) { targetAngle = -Math.PI / 2; headY = height - wallM; }
 
+      // Persist position back to ref
+      st.headX = headX;
+      st.headY = headY;
+      st.angle = angle;
+      st.targetAngle = targetAngle;
+      st.turnTimer = turnTimer;
+      st.nextTurn = nextTurn;
+
       // Buffer
       for (let i = Math.min(bufCount, bufLen - 1); i > 0; i--) {
         bx[i] = bx[i - 1];
@@ -156,6 +244,7 @@ export function GameSnakePreview({
       bx[0] = headX;
       by[0] = headY;
       bufCount = Math.min(bufCount + 1, bufLen);
+      st.bufCount = bufCount;
 
       // Build segments
       const segs: { x: number; y: number; a: number }[] = [];
@@ -203,31 +292,69 @@ export function GameSnakePreview({
         ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(width, gy); ctx.stroke();
       }
 
-      // Body
+      // Head color
+      const headCol = curLabMode
+        ? (curColors![0] ?? '#22c55e')
+        : curHeadCol;
+
       ctx.save();
-      ctx.shadowColor = 'rgba(0,0,0,0.3)';
-      ctx.shadowBlur = segR * G.shadowBlur;
-      ctx.shadowOffsetY = segR * G.shadowOffY;
+      if (!curGlow) {
+        ctx.shadowColor = 'rgba(0,0,0,0.3)';
+        ctx.shadowBlur = segR * G.shadowBlur;
+        ctx.shadowOffsetY = segR * G.shadowOffY;
+      }
+
+      // Body segments
       for (let i = segs.length - 1; i >= 1; i--) {
         const p = segs[i];
-        const grad = ctx.createRadialGradient(p.x - segR * 0.3, p.y - segR * 0.3, segR * 0.1, p.x, p.y, segR);
-        grad.addColorStop(0, lightenHex(bodyColor, G.lighten));
-        grad.addColorStop(G.lightenStop, bodyColor);
-        grad.addColorStop(1, darkenHex(bodyColor, G.darken));
-        ctx.fillStyle = grad;
-        ctx.beginPath(); ctx.arc(p.x, p.y, segR, 0, Math.PI * 2); ctx.fill();
+
+        // Per-segment color
+        let segColor: string;
+        if (curLabMode) {
+          segColor = curColors![i % curColors!.length] ?? '#ffffff';
+        } else {
+          segColor = curBodyCol;
+        }
+
+        // Per-segment taper radius (lab mode uses computed taper; simple mode = uniform)
+        let rMul = 1.0;
+        if (curLabMode) {
+          rMul = computeTaperRadius(i, segments, curTaper);
+        }
+        const r = segR * rMul;
+
+        // Per-segment shape
+        const segShape = curLabMode
+          ? resolveShapeStyle(curBodyStyle, i)
+          : 'circle' as const;
+
+        if (segShape === 'circle' && !curGlow) {
+          const grad = ctx.createRadialGradient(p.x - r * 0.3, p.y - r * 0.3, r * 0.1, p.x, p.y, r);
+          grad.addColorStop(0, lightenHex(segColor, G.lighten));
+          grad.addColorStop(G.lightenStop, segColor);
+          grad.addColorStop(1, darkenHex(segColor, G.darken));
+          ctx.fillStyle = grad;
+          ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+        } else {
+          drawSegmentShape(ctx, p.x, p.y, r, p.a, segShape, segColor, curGlow);
+        }
       }
       ctx.restore();
 
-      // Head
+      // Head — always circle with 3D gradient
       ctx.save();
-      ctx.shadowColor = 'rgba(0,0,0,0.3)';
-      ctx.shadowBlur = hr * G.shadowBlur;
-      ctx.shadowOffsetY = hr * G.shadowOffY;
+      if (curGlow) {
+        ctx.shadowBlur = hr * 1.8;
+        ctx.shadowColor = headCol;
+      } else {
+        ctx.shadowColor = 'rgba(0,0,0,0.3)';
+        ctx.shadowBlur = hr * G.shadowBlur;
+        ctx.shadowOffsetY = hr * G.shadowOffY;
+      }
       const hg = ctx.createRadialGradient(headX - hr * 0.3, headY - hr * 0.3, hr * 0.05, headX, headY, hr);
-      hg.addColorStop(0, lightenHex(headColor, G.lighten));
-      hg.addColorStop(G.lightenStop, headColor);
-      hg.addColorStop(1, darkenHex(headColor, G.darken));
+      hg.addColorStop(0, lightenHex(headCol, G.lighten));
+      hg.addColorStop(G.lightenStop, headCol);
+      hg.addColorStop(1, darkenHex(headCol, G.darken));
       ctx.fillStyle = hg;
       ctx.beginPath(); ctx.arc(headX, headY, hr, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
@@ -284,7 +411,7 @@ export function GameSnakePreview({
       c.removeEventListener('mousemove', onMove);
       c.removeEventListener('mouseleave', onLeave);
     };
-  }, [skinId, headColorProp, bodyColorProp, width, height, segments, speed, scale]);
+  }, [width, height, segments, speed, scale, resolvedHead, resolvedBody, effectiveBodyStyle, effectiveTaper, effectiveGlow, isLabMode]);
 
   // Get skin name for label
   let skinName = '';
