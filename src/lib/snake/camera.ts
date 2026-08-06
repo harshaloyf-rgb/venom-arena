@@ -5,7 +5,7 @@
 
 import type { Camera, Snake, Viewport } from './types';
 import { lerp } from './vec2';
-import { CAMERA_LERP, CAMERA_ZOOM_MIN, START_LENGTH } from './config';
+import { CAMERA_ZOOM_MIN, START_LENGTH } from './config';
 
 /** Update camera to follow a snake. Snaps directly to head (no lag = no vibration). */
 export function updateCamera(camera: Camera, snake: Snake, _canvasWidth: number, _canvasHeight: number): void {

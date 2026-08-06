@@ -4,23 +4,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Wifi, WifiOff, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { InputHandler } from './input';
 import {
-  renderFrame,
   drawDeathOverlay,
   drawControlsHint,
   drawMinimap,
+  drawGrid as drawGridFromRenderer,
+  drawFood as drawFoodFromRenderer,
+  drawStarChips as drawStarChipsFromRenderer,
+  drawExtractionZone as drawExtractionZoneFromRenderer,
 } from './renderer';
-import { renderSnakeAtlas, renderSnakeFallback } from './render-snake-atlas';
-import { cleanupSnakeParticles } from './render-snake-atlas';
+import { renderSnakeAtlas, renderSnakeFallback, cleanupSnakeParticles } from './render-snake-atlas';
 import {
   type GameState,
   type Camera,
   type Viewport,
   type Snake,
-  type FoodOrb,
-  type StarChip,
   FIXED_DT,
-  SNAKE_RADIUS,
-  SPAWN_PROTECTION_MS,
   START_LENGTH,
   GROWTH_RATE,
   MAX_SNAKE_LENGTH,
@@ -54,6 +52,9 @@ export default function SnakeGame({
   arenaConfig,
   authToken,
 }: SnakeGameProps) {
+  // If mode is 'online' but no authToken is provided, fall back to offline
+  const effectiveMode = mode === 'online' && !authToken ? 'offline' : mode;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameStateRef = useRef<GameState | null>(null);
   const cameraRef = useRef<Camera>({ x: 0, y: 0, zoom: 1.0 });
@@ -115,7 +116,7 @@ export default function SnakeGame({
   // ── Respawn handler (offline) ──
 
   const handleRespawn = useCallback(() => {
-    if (mode === 'online') {
+    if (effectiveMode === 'online') {
       onlineEngineRef.current?.requestRespawn();
       isDeadOnlineRef.current = false;
       setIsDead(false);
@@ -261,7 +262,7 @@ export default function SnakeGame({
       // ────────────────────────────────────────────────────────────────────
       // OFFLINE MODE — full local simulation
       // ────────────────────────────────────────────────────────────────────
-      if (mode === 'offline') {
+      if (effectiveMode === 'offline') {
         const state = gameStateRef.current;
         if (!state) {
           animFrameRef.current = requestAnimationFrame(loop);
@@ -287,6 +288,10 @@ export default function SnakeGame({
             isDeadRef.current = true;
             setIsDead(true);
             setFinalScore(state.player.score);
+            // Cleanup particles for dead snakes
+            for (const [sid, s] of state.snakes) {
+              if (!s.alive) cleanupDeadSnakeParticles(sid);
+            }
           }
         }
 
@@ -303,7 +308,7 @@ export default function SnakeGame({
         // ── Render snakes: bots use fallback, player uses atlas ──
         for (const [, s] of state.snakes) {
           if (s.alive && !s.isPlayer) {
-            renderSnakeFallback(ctx, s, cameraRef.current, viewport);
+            renderSnakeFallback(ctx, s, cameraRef.current, viewport, now);
           }
         }
         if (state.player && state.player.alive) {
@@ -335,7 +340,7 @@ export default function SnakeGame({
       // ────────────────────────────────────────────────────────────────────
       // ONLINE MODE — server snapshots + extrapolation
       // ────────────────────────────────────────────────────────────────────
-      else if (mode === 'online' && extrapolation && onlineEngine) {
+      else if (effectiveMode === 'online' && extrapolation && onlineEngine) {
         // Forward input to server
         if (onlineEngine.isConnected) {
           onlineEngine.setInput(inputState.targetAngle, inputState.boosting);
@@ -368,11 +373,11 @@ export default function SnakeGame({
         // ── Clear + grid ──
         ctx.fillStyle = '#0a0a0f';
         ctx.fillRect(0, 0, w, h);
-        drawGrid(ctx, camera, viewport);
+        drawGridFromRenderer(ctx, camera, viewport);
 
         // ── Extraction zone ──
         if (extraction.active) {
-          drawExtractionZone(ctx, extraction, camera, viewport);
+          drawExtractionZoneFromRenderer(ctx, extraction, camera, viewport);
         }
 
         // ── Food ──
@@ -383,17 +388,18 @@ export default function SnakeGame({
 
         // ── Snakes: all bots use fallback, player uses atlas ──
         let isFirst = true;
+        const localTargetAngle = inputState.targetAngle;
         for (const [, rs] of renderableSnakes) {
           if (!rs.alive) continue;
           if (isFirst) {
             // Player's snake — use atlas renderer
-            const adapted = renderableToSnake(rs, true, now);
+            const adapted = renderableToSnake(rs, true, now, localTargetAngle);
             renderSnakeAtlas(ctx, adapted, camera, viewport, atlasManager, now);
             isFirst = false;
           } else {
             // Bot snakes — fallback renderer for performance
             const adapted = renderableToSnake(rs, false, now);
-            renderSnakeFallback(ctx, adapted, camera, viewport);
+            renderSnakeFallback(ctx, adapted, camera, viewport, now);
           }
         }
 
@@ -483,7 +489,7 @@ export default function SnakeGame({
       )}
 
       {/* Online connection indicator */}
-      {mode === 'online' && (
+      {effectiveMode === 'online' && (
         <div className="absolute top-4 left-16 z-10 flex items-center gap-2 pointer-events-none">
           {connectionState === 'connected' && (
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/30">
@@ -509,7 +515,7 @@ export default function SnakeGame({
       )}
 
       {/* Online error panel */}
-      {mode === 'online' && onlineError && (
+      {effectiveMode === 'online' && onlineError && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="bg-slate-900 border border-red-500/30 rounded-xl p-6 max-w-sm mx-4 text-center">
             <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
@@ -555,6 +561,14 @@ export default function SnakeGame({
 }
 
 // ============================================================================
+// Helper: Cleanup dead snake particles
+// ============================================================================
+
+function cleanupDeadSnakeParticles(snakeId: string): void {
+  cleanupSnakeParticles(snakeId);
+}
+
+// ============================================================================
 // Helper: Render offline background (grid, food, star chips, extraction)
 // ============================================================================
 
@@ -563,7 +577,7 @@ function renderOfflineBackground(
   state: GameState,
   camera: Camera,
   viewport: Viewport,
-  fps: number,
+  _fps: number,
   now: number,
 ): void {
   const { width, height } = viewport;
@@ -573,19 +587,19 @@ function renderOfflineBackground(
   ctx.fillRect(0, 0, width, height);
 
   // Grid
-  drawGrid(ctx, camera, viewport);
+  drawGridFromRenderer(ctx, camera, viewport);
 
   // Extraction zone
   if (state.extractionZone.active) {
-    drawExtractionZone(ctx, state.extractionZone, camera, viewport);
+    drawExtractionZoneFromRenderer(ctx, state.extractionZone, camera, viewport);
   }
 
   // Food
-  drawOfflineFood(ctx, state.foods, camera, viewport);
+  drawFoodFromRenderer(ctx, state.foods, camera, viewport);
 
   // Star chips
   if (state.starChips.length > 0) {
-    drawOfflineStarChips(ctx, state.starChips, camera, viewport, now);
+    drawStarChipsFromRenderer(ctx, state.starChips, camera, viewport, now);
   }
 }
 
@@ -662,7 +676,7 @@ function drawHUDBase(
 // Helper: Convert RenderableSnake to Snake for atlas/fallback renderers
 // ============================================================================
 
-function renderableToSnake(rs: RenderableSnake, isPlayer: boolean, now: number): Snake {
+function renderableToSnake(rs: RenderableSnake, isPlayer: boolean, now: number, targetAngle?: number): Snake {
   return {
     id: rs.id,
     name: rs.name,
@@ -678,7 +692,7 @@ function renderableToSnake(rs: RenderableSnake, isPlayer: boolean, now: number):
     color: rs.color,
     headColor: rs.headColor,
     lastBoostDrop: 0,
-    targetAngle: rs.angle,
+    targetAngle: targetAngle ?? rs.angle,
     spiral: { active: false, startAngle: 0, theta: 0, ticksElapsed: 0, a: 1, b: 0.05, direction: 1 },
     bodyRadius: rs.bodyRadius,
     boosting: rs.boosting,
@@ -785,160 +799,6 @@ function drawOnlineStarChips(
       ctx.fill();
     }
   }
-}
-
-// ============================================================================
-// Offline food renderer (delegates to renderer.ts style)
-// ============================================================================
-
-function drawOfflineFood(
-  ctx: CanvasRenderingContext2D,
-  foods: FoodOrb[],
-  camera: Camera,
-  viewport: Viewport,
-): void {
-  const zoom = camera.zoom;
-  const cw = viewport.width;
-  const ch = viewport.height;
-
-  for (const f of foods) {
-    if (f.x < viewport.left - 20 || f.x > viewport.right + 20) continue;
-    if (f.y < viewport.top - 20 || f.y > viewport.bottom + 20) continue;
-
-    const { x: sx, y: sy } = worldToScreen(f.x, f.y, camera, cw, ch);
-    const r = f.radius * zoom;
-    if (r < 1) continue;
-
-    if (r > 2) {
-      ctx.globalAlpha = 0.3;
-      ctx.fillStyle = f.glowColor;
-      ctx.beginPath();
-      ctx.arc(sx, sy, r * 2.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-
-    ctx.fillStyle = f.color;
-    ctx.beginPath();
-    ctx.arc(sx, sy, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-// ============================================================================
-// Offline star chips renderer
-// ============================================================================
-
-function drawOfflineStarChips(
-  ctx: CanvasRenderingContext2D,
-  chips: StarChip[],
-  camera: Camera,
-  viewport: Viewport,
-  now: number,
-): void {
-  const zoom = camera.zoom;
-  const cw = viewport.width;
-  const ch = viewport.height;
-
-  for (const c of chips) {
-    if (c.x < viewport.left - 30 || c.x > viewport.right + 30) continue;
-    if (c.y < viewport.top - 30 || c.y > viewport.bottom + 30) continue;
-
-    const { x: sx, y: sy } = worldToScreen(c.x, c.y, camera, cw, ch);
-    const r = c.radius * zoom;
-    if (r < 1) continue;
-
-    const pulse = 0.7 + 0.3 * Math.sin((now - c.spawnTime) * 0.004);
-
-    ctx.globalAlpha = 0.35 * pulse;
-    ctx.fillStyle = c.glowColor;
-    ctx.beginPath();
-    ctx.arc(sx, sy, r * 3, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.globalAlpha = 0.2 * pulse;
-    ctx.strokeStyle = c.glowColor;
-    ctx.lineWidth = 1.5 * zoom;
-    ctx.beginPath();
-    ctx.arc(sx, sy, r * 2, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.globalAlpha = 1;
-
-    ctx.fillStyle = c.color;
-    ctx.beginPath();
-    ctx.arc(sx, sy, r, 0, Math.PI * 2);
-    ctx.fill();
-
-    if (r > 3) {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-      ctx.beginPath();
-      ctx.arc(sx - r * 0.15, sy - r * 0.2, r * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-}
-
-// ============================================================================
-// Grid renderer (shared)
-// ============================================================================
-
-const GRID_SIZE = 80;
-const GRID_COLOR = 'rgba(255, 255, 255, 0.04)';
-
-function drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, viewport: Viewport): void {
-  ctx.strokeStyle = GRID_COLOR;
-  ctx.lineWidth = 1;
-
-  const zoomedGrid = GRID_SIZE * camera.zoom;
-  if (zoomedGrid < 4) return;
-
-  const offsetX = (-camera.x * camera.zoom + viewport.width / 2) % zoomedGrid;
-  const offsetY = (-camera.y * camera.zoom + viewport.height / 2) % zoomedGrid;
-
-  ctx.beginPath();
-  for (let x = offsetX; x < viewport.width; x += zoomedGrid) {
-    ctx.moveTo(Math.round(x) + 0.5, 0);
-    ctx.lineTo(Math.round(x) + 0.5, viewport.height);
-  }
-  for (let y = offsetY; y < viewport.height; y += zoomedGrid) {
-    ctx.moveTo(0, Math.round(y) + 0.5);
-    ctx.lineTo(viewport.width, Math.round(y) + 0.5);
-  }
-  ctx.stroke();
-}
-
-// ============================================================================
-// Extraction zone renderer (shared)
-// ============================================================================
-
-function drawExtractionZone(
-  ctx: CanvasRenderingContext2D,
-  zone: { x: number; y: number; radius: number; active: boolean },
-  camera: Camera,
-  viewport: Viewport,
-): void {
-  const cw = viewport.width;
-  const ch = viewport.height;
-  const { x: sx, y: sy } = worldToScreen(zone.x, zone.y, camera, cw, ch);
-  const sr = zone.radius * camera.zoom;
-
-  ctx.globalAlpha = 0.06;
-  ctx.fillStyle = '#fbbf24';
-  ctx.beginPath();
-  ctx.arc(sx, sy, sr, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.globalAlpha = 0.2;
-  ctx.strokeStyle = '#fbbf24';
-  ctx.lineWidth = 2 * camera.zoom;
-  ctx.setLineDash([8 * camera.zoom, 6 * camera.zoom]);
-  ctx.beginPath();
-  ctx.arc(sx, sy, sr, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  ctx.globalAlpha = 1;
 }
 
 // ============================================================================

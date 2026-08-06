@@ -13,7 +13,6 @@
 import type { Camera, Snake, Viewport } from '@/lib/snake/types';
 import { SNAKE_RADIUS, SEGMENT_SPACING, SPAWN_PROTECTION_MS, LEGENDARY_GLOW_SIZE, START_LENGTH, GROWTH_RATE, MAX_SNAKE_LENGTH } from '@/lib/snake/config';
 import { worldToScreen } from '@/lib/snake/camera';
-import { angleDirect } from '@/lib/snake/vec2';
 import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
 
@@ -418,6 +417,7 @@ export function renderSnakeFallback(
   snake: Snake,
   camera: Camera,
   viewport: Viewport,
+  now: number,
 ): void {
   const path = snake.path;
   const pathLen = path.length;
@@ -442,7 +442,6 @@ export function renderSnakeFallback(
   const segRadius = SNAKE_RADIUS * zoom;
 
   // Spawn protection: smooth fade-in (no blinking)
-  const now = performance.now();
   const spawnAge = now - snake.spawnTime;
   if (spawnAge < SPAWN_PROTECTION_MS) {
     const t = spawnAge / SPAWN_PROTECTION_MS;
@@ -630,8 +629,6 @@ function drawResponsiveEyes(
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-const TAIL_RATIO = 0.875;
 
 function clamp(v: number, min: number, max: number): number {
   return v < min ? min : v > max ? max : v;
