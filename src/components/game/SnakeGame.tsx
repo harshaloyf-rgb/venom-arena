@@ -22,6 +22,9 @@ import {
   START_LENGTH,
   GROWTH_RATE,
   MAX_SNAKE_LENGTH,
+  CAMERA_LERP,
+  SEGMENT_SPACING,
+  BASE_SPEED,
 } from '@/lib/snake';
 import { createInitialState, gameTick, respawnPlayer } from '@/lib/snake/engine';
 import { createCamera, updateCamera, getViewport, worldToScreen } from '@/lib/snake/camera';
@@ -128,7 +131,7 @@ export default function SnakeGame({
     isDeadRef.current = false;
     setIsDead(false);
     setFinalScore(0);
-  }, [mode]);
+  }, [effectiveMode]);
 
   // ── Retry online connection ──
 
@@ -363,8 +366,8 @@ export default function SnakeGame({
         }
         if (playerSnake) {
           // Update camera using extrapolated head position
-          cameraRef.current.x += (playerSnake.headX - cameraRef.current.x) * 0.08;
-          cameraRef.current.y += (playerSnake.headY - cameraRef.current.y) * 0.08;
+          cameraRef.current.x += (playerSnake.headX - cameraRef.current.x) * CAMERA_LERP;
+          cameraRef.current.y += (playerSnake.headY - cameraRef.current.y) * CAMERA_LERP;
         }
 
         const viewport: Viewport = getViewport(cameraRef.current, w, h);
@@ -616,8 +619,7 @@ function renderOfflineHUD(
 ): void {
   if (state.player) {
     const logicalLen = Math.min(Math.floor(START_LENGTH + state.player.score * GROWTH_RATE), MAX_SNAKE_LENGTH);
-    // During boost, path shrinks below logical length — show actual visual length
-    const spacingRatio = 8 / 4.5; // SEGMENT_SPACING / BASE_SPEED
+    const spacingRatio = SEGMENT_SPACING / BASE_SPEED;
     const pathBasedLen = Math.floor(state.player.path.length / spacingRatio);
     const displayLen = Math.min(logicalLen, pathBasedLen);
     drawHUDBase(ctx, state.player.score, displayLen, fps, viewport);
@@ -705,7 +707,7 @@ function renderableToSnake(rs: RenderableSnake, isPlayer: boolean, now: number, 
 // Online food renderer (from RenderableFood[])
 // ============================================================================
 
-const FOOD_COLORS: Record<string, { color: string; glow: string; radius: number }> = {
+const ONLINE_FOOD_STYLES: Record<string, { color: string; glow: string; radius: number }> = {
   small:  { color: '#34d399', glow: '#10b981', radius: 3 },
   medium: { color: '#38bdf8', glow: '#0ea5e9', radius: 5 },
   large:  { color: '#f472b6', glow: '#ec4899', radius: 8 },
@@ -726,7 +728,7 @@ function drawOnlineFood(
     if (f.y < viewport.top - 20 || f.y > viewport.bottom + 20) continue;
 
     const { x: sx, y: sy } = worldToScreen(f.x, f.y, camera, cw, ch);
-    const style = FOOD_COLORS[f.size] ?? FOOD_COLORS.small;
+    const style = ONLINE_FOOD_STYLES[f.size] ?? ONLINE_FOOD_STYLES.small;
     const r = style.radius * zoom;
     if (r < 1) continue;
 

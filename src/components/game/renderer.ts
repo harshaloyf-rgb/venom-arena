@@ -7,13 +7,14 @@
 // ============================================================================
 
 import type { Camera, FoodOrb, StarChip, Snake, Viewport } from '@/lib/snake/types';
+import { ARENA_GRID_SIZE } from '@/lib/snake/config';
 import { worldToScreen } from '@/lib/snake/camera';
 
 // ==========================================================================
 // Grid
 // ==========================================================================
 
-const GRID_SIZE = 80;
+const GRID_SIZE = ARENA_GRID_SIZE;
 const GRID_COLOR = 'rgba(255, 255, 255, 0.04)';
 
 export function drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, viewport: Viewport): void {
