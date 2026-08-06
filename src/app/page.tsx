@@ -133,7 +133,7 @@ export default function Home() {
   const handleInspectPlayer = useCallback((p: InspectedPlayer) => { setInspectedPlayer(p); }, []);
 
   const visibleTabs = useMemo(
-    () => TABS.filter((t) => t.id !== 'admin'),
+    () => TABS.filter((t) => t.id !== 'admin' || player?.role === 'admin'),
     [player?.role],
   );
 

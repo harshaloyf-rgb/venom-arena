@@ -73,26 +73,18 @@ export function CosmeticsSection({
 
   return (
     <div className="animate-fade-in">
-      {/* Preview canvas — game-accurate roaming snake (admin skin tester engine) */}
-      <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 mb-6">
-        <div className="flex flex-col items-center gap-3">
-          <span className="text-[10px] text-slate-500 font-mono tracking-widest uppercase font-bold">
-            Live Preview
-          </span>
-          <SnakeFaceTester
-            key={activeSkinId}
-            embedded
-            skinId={activeSkinId}
-            width={580}
-            height={220}
-            segments={24}
-            speed={1.8}
-            scale={1}
-          />
-          <p className="text-[10px] text-slate-500 text-center leading-relaxed">
-            Your equipped skin with current face cosmetics applied.
-          </p>
-        </div>
+      {/* Snake Test preview — same renderer as the Snake Test tab */}
+      <div className="mb-6">
+        <SnakeFaceTester
+          key={activeSkinId}
+          embedded
+          skinId={activeSkinId}
+          width={580}
+          height={220}
+          segments={24}
+          speed={1.8}
+          scale={1}
+        />
       </div>
 
       {/* Slot sub-tabs */}
