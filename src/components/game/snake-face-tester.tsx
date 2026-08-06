@@ -1,12 +1,11 @@
 'use client';
 
 /**
- * Snake Face Tester — LIVE sine-wave animated side-by-side comparison.
- * Both snakes share IDENTICAL motion (sine wave wiggle, exactly like skin-preview).
- * Only rendering parameters differ (eye size, shadow, gradient, border).
+ * Snake Game Skin Tester — single canvas showing a moving snake
+ * rendered with exact game parameters (zoom, eyes, shadow, gradient).
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SNAKE_RADIUS, CAMERA_BASE_ZOOM, SEGMENT_SPACING } from '@/lib/snake/config';
 import { getSkinAsset } from '@/lib/snake/skin-registry';
 
@@ -28,32 +27,12 @@ function darkenHex(hex: string, factor: number): string {
   return `#${Math.round(r * (1 - factor)).toString(16).padStart(2, '0')}${Math.round(g * (1 - factor)).toString(16).padStart(2, '0')}${Math.round(b * (1 - factor)).toString(16).padStart(2, '0')}`;
 }
 
-// ─── Renderer config — mirrors exact game/preview code ─────────────────
+// ─── Game rendering params (exact match to render-snake-atlas.tsx) ─────
 
-interface RendererConfig {
-  label: string;
-  segRadius: number;
-  headScale: number;
-  lightenFactor: number;
-  lightenStop: number;
-  darkenFactor: number;
-  eyeRadiusRatio: number;
-  eyeOffsetRatio: number;
-  eyeForwardRatio: number;
-  pupilRadiusRatio: number;
-  pupilShiftRatio: number;
-  eyeBorderWidth: number;
-  eyeBorderColor: string;
-  highlightOpacity: number;
-  hasShadow: boolean;
-  shadowBlurRatio: number;
-  shadowOffsetYRatio: number;
-}
-
-const GAME_CFG: RendererConfig = {
-  label: 'GAME',
+const GAME = {
   segRadius: SNAKE_RADIUS * CAMERA_BASE_ZOOM,  // 12 * 1.35 = 16.2
   headScale: 1.3,
+  segStep: 14,
   lightenFactor: 0.35,
   lightenStop: 0.55,
   darkenFactor: 0.35,
@@ -65,45 +44,6 @@ const GAME_CFG: RendererConfig = {
   eyeBorderWidth: 1.5,
   eyeBorderColor: 'rgba(0,0,0,0.5)',
   highlightOpacity: 0.8,
-  hasShadow: true,
-  shadowBlurRatio: 0.8,
-  shadowOffsetYRatio: 0.3,
-};
-
-const PREVIEW_CFG: RendererConfig = {
-  label: 'PREVIEW',
-  segRadius: 8,
-  headScale: 1.3,
-  lightenFactor: 0.3,
-  lightenStop: 0.6,
-  darkenFactor: 0.3,
-  eyeRadiusRatio: 0.25,
-  eyeOffsetRatio: 0.4,
-  eyeForwardRatio: 0.3,
-  pupilRadiusRatio: 0.55,
-  pupilShiftRatio: 0.7,
-  eyeBorderWidth: 1,
-  eyeBorderColor: 'rgba(0,0,0,0.3)',
-  highlightOpacity: 0.7,
-  hasShadow: false,
-  shadowBlurRatio: 0,
-  shadowOffsetYRatio: 0,
-};
-
-const FIXED_CFG: RendererConfig = {
-  ...PREVIEW_CFG,
-  label: 'FIXED',
-  eyeRadiusRatio: 0.38,
-  eyeOffsetRatio: 0.42,
-  eyeForwardRatio: 0.32,
-  pupilRadiusRatio: 0.52,
-  eyeBorderWidth: 1.5,
-  eyeBorderColor: 'rgba(0,0,0,0.5)',
-  highlightOpacity: 0.8,
-  lightenFactor: 0.35,
-  lightenStop: 0.55,
-  darkenFactor: 0.35,
-  hasShadow: true,
   shadowBlurRatio: 0.8,
   shadowOffsetYRatio: 0.3,
 };
@@ -119,284 +59,267 @@ const TEST_SKINS = [
   { id: 'skin-shadow', label: 'Shadow' },
 ];
 
-// ─── Sine-wave snake canvas ─────────────────────────────────────────────
-// Both canvases receive the EXACT same positions array so motion is 1:1 identical.
-// Only the draw calls differ per cfg.
+// ─── Main component ────────────────────────────────────────────────────
 
-function SineWaveSnakeCanvas({
-  cfg,
-  skinId,
-  width = 480,
-  height = 120,
-  segments = 22,
-  sharedTimeRef,
-  label,
-  labelColor,
-}: {
-  cfg: RendererConfig;
-  skinId: string;
-  width?: number;
-  height?: number;
-  segments?: number;
-  sharedTimeRef: React.RefObject<number>;
-  label: string;
-  labelColor: string;
-}) {
+export function SnakeFaceTester() {
+  const [selectedSkin, setSelectedSkin] = useState('skin-emerald');
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animRef = useRef<number>(0);
+  const animRef = useRef(0);
   const mouseRef = useRef<{ x: number; y: number } | null>(null);
 
-  // Track mouse on this canvas
+  const W = 580;
+  const H = 260;
+  const SEGMENTS = 24;
+  const SPEED = 1.8;
+
   useEffect(() => {
     const c = canvasRef.current;
     if (!c) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    c.width = W * dpr;
+    c.height = H * dpr;
+    const ctx = c.getContext('2d');
+    if (!ctx) return;
+
+    // Mouse tracking on canvas
     const onMove = (e: MouseEvent) => {
       const r = c.getBoundingClientRect();
       mouseRef.current = {
-        x: (e.clientX - r.left) * (width / r.width),
-        y: (e.clientY - r.top) * (height / r.height),
+        x: (e.clientX - r.left) * (W / r.width),
+        y: (e.clientY - r.top) * (H / r.height),
       };
     };
     const onLeave = () => { mouseRef.current = null; };
     c.addEventListener('mousemove', onMove);
     c.addEventListener('mouseleave', onLeave);
+
+    // Snake state
+    let headX = W * 0.5;
+    let headY = H * 0.5;
+    let angle = 0;
+    let targetAngle = 0;
+    let turnTimer = 0;
+    let nextTurn = 2000;
+
+    // Position buffer
+    const bufLen = SEGMENTS * 6;
+    const px = new Float64Array(bufLen);
+    const py = new Float64Array(bufLen);
+    let bufCount = 0;
+
+    let running = true;
+    const loop = () => {
+      if (!running) return;
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // ── Update movement ──
+      turnTimer += 16;
+      if (turnTimer > nextTurn) {
+        targetAngle = angle + (Math.random() - 0.5) * 1.8;
+        turnTimer = 0;
+        nextTurn = 1500 + Math.random() * 2000;
+      }
+
+      let diff = targetAngle - angle;
+      while (diff > Math.PI) diff -= 2 * Math.PI;
+      while (diff < -Math.PI) diff += 2 * Math.PI;
+      angle += diff * 0.04;
+
+      headX += Math.cos(angle) * SPEED;
+      headY += Math.sin(angle) * SPEED;
+
+      // Bounce off walls
+      const wallM = 70;
+      if (headX < wallM) { targetAngle = 0; headX = wallM; }
+      if (headX > W - wallM) { targetAngle = Math.PI; headX = W - wallM; }
+      if (headY < wallM) { targetAngle = Math.PI / 2; headY = wallM; }
+      if (headY > H - wallM) { targetAngle = -Math.PI / 2; headY = H - wallM; }
+
+      // Prepend to buffer
+      for (let i = Math.min(bufCount, bufLen - 1); i > 0; i--) {
+        px[i] = px[i - 1];
+        py[i] = py[i - 1];
+      }
+      px[0] = headX;
+      py[0] = headY;
+      bufCount = Math.min(bufCount + 1, bufLen);
+
+      // ── Build segment positions from buffer ──
+      const segs: { x: number; y: number; a: number }[] = [];
+      let cx = headX, cy = headY;
+      let srcIdx = 0;
+      segs.push({ x: cx, y: cy, a: angle });
+
+      for (let s = 1; s < SEGMENTS && srcIdx < bufCount - 1; s++) {
+        let remaining = GAME.segStep;
+        while (remaining > 0 && srcIdx < bufCount - 1) {
+          const dx = px[srcIdx + 1] - px[srcIdx];
+          const dy = py[srcIdx + 1] - py[srcIdx];
+          const len = Math.sqrt(dx * dx + dy * dy);
+          if (len < 0.5) { srcIdx++; continue; }
+          if (len >= remaining) {
+            cx = px[srcIdx] + (dx / len) * remaining;
+            cy = py[srcIdx] + (dy / len) * remaining;
+            px[srcIdx] = cx;
+            py[srcIdx] = cy;
+            remaining = 0;
+          } else {
+            cx = px[srcIdx + 1];
+            cy = py[srcIdx + 1];
+            remaining -= len;
+            srcIdx++;
+          }
+        }
+        const prev = segs[segs.length - 1];
+        segs.push({ x: cx, y: cy, a: Math.atan2(cy - prev.y, cx - prev.x) });
+      }
+
+      // ── Draw ──
+      ctx.clearRect(0, 0, W, H);
+
+      // Background
+      const bg = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, W * 0.6);
+      bg.addColorStop(0, '#111118');
+      bg.addColorStop(1, '#0a0a0f');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+
+      // Grid
+      ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+      ctx.lineWidth = 1;
+      for (let gx = 0; gx < W; gx += 40) {
+        ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke();
+      }
+      for (let gy = 0; gy < H; gy += 40) {
+        ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
+      }
+
+      // Get skin
+      let headColor = '#22c55e';
+      let bodyColor = '#16a34a';
+      try {
+        const asset = getSkinAsset(selectedSkin);
+        headColor = asset.headColor;
+        bodyColor = asset.bodyColor;
+      } catch { /* defaults */ }
+
+      const segR = GAME.segRadius;
+      const hr = segR * GAME.headScale;
+
+      // Body shadow
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.3)';
+      ctx.shadowBlur = segR * GAME.shadowBlurRatio;
+      ctx.shadowOffsetY = segR * GAME.shadowOffsetYRatio;
+
+      for (let i = segs.length - 1; i >= 1; i--) {
+        const p = segs[i];
+        const grad = ctx.createRadialGradient(
+          p.x - segR * 0.3, p.y - segR * 0.3, segR * 0.1,
+          p.x, p.y, segR,
+        );
+        grad.addColorStop(0, lightenHex(bodyColor, GAME.lightenFactor));
+        grad.addColorStop(GAME.lightenStop, bodyColor);
+        grad.addColorStop(1, darkenHex(bodyColor, GAME.darkenFactor));
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, segR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // Head shadow
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.3)';
+      ctx.shadowBlur = hr * GAME.shadowBlurRatio;
+      ctx.shadowOffsetY = hr * GAME.shadowOffsetYRatio;
+
+      const hg = ctx.createRadialGradient(
+        headX - hr * 0.3, headY - hr * 0.3, hr * 0.05,
+        headX, headY, hr,
+      );
+      hg.addColorStop(0, lightenHex(headColor, GAME.lightenFactor));
+      hg.addColorStop(GAME.lightenStop, headColor);
+      hg.addColorStop(1, darkenHex(headColor, GAME.darkenFactor));
+      ctx.fillStyle = hg;
+      ctx.beginPath();
+      ctx.arc(headX, headY, hr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Eyes
+      const eyeOff = hr * GAME.eyeOffsetRatio;
+      const eyeR = hr * GAME.eyeRadiusRatio;
+      const pupilR = eyeR * GAME.pupilRadiusRatio;
+      const fwd = hr * GAME.eyeForwardRatio;
+      const perp = angle + Math.PI / 2;
+
+      let lookA = angle;
+      const m = mouseRef.current;
+      if (m) {
+        const dx = m.x - headX;
+        const dy = m.y - headY;
+        if (Math.sqrt(dx * dx + dy * dy) > 5) lookA = Math.atan2(dy, dx);
+      }
+
+      for (const side of [-1, 1]) {
+        const ex = headX + Math.cos(angle) * fwd + Math.cos(perp) * eyeOff * side;
+        const ey = headY + Math.sin(angle) * fwd + Math.sin(perp) * eyeOff * side;
+
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = GAME.eyeBorderColor;
+        ctx.lineWidth = GAME.eyeBorderWidth;
+        ctx.beginPath();
+        ctx.arc(ex, ey, eyeR, 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+
+        const shift = eyeR * GAME.pupilShiftRatio;
+        const ppx = ex + Math.cos(lookA) * shift;
+        const ppy = ey + Math.sin(lookA) * shift;
+        ctx.fillStyle = '#111111';
+        ctx.beginPath();
+        ctx.arc(ppx, ppy, pupilR, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = `rgba(255,255,255,${GAME.highlightOpacity})`;
+        ctx.beginPath();
+        ctx.arc(ppx - pupilR * 0.3, ppy - pupilR * 0.35, pupilR * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Direction pointer
+      const ptrS = hr * 1.1;
+      const ptrL = hr * 3;
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = 1.5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(headX + Math.cos(angle) * ptrS, headY + Math.sin(angle) * ptrS);
+      ctx.lineTo(headX + Math.cos(angle) * (ptrS + ptrL), headY + Math.sin(angle) * (ptrS + ptrL));
+      ctx.stroke();
+
+      animRef.current = requestAnimationFrame(loop);
+    };
+
+    animRef.current = requestAnimationFrame(loop);
+
     return () => {
+      running = false;
+      cancelAnimationFrame(animRef.current);
       c.removeEventListener('mousemove', onMove);
       c.removeEventListener('mouseleave', onLeave);
     };
-  }, [width, height]);
-
-  // Shared animation parameters — identical for both canvases
-  const WIGGLE_AMP = 18;
-  const WIGGLE_FREQ = 0.42;
-  const WIGGLE_SPEED = 0.004;
-
-  const draw = useCallback((
-    ctx: CanvasRenderingContext2D,
-    time: number,
-  ) => {
-    ctx.clearRect(0, 0, width, height);
-
-    // Dark background with subtle radial glow
-    const bgGrad = ctx.createRadialGradient(width / 2, height / 2, 0, width / 2, height / 2, width * 0.6);
-    bgGrad.addColorStop(0, '#111118');
-    bgGrad.addColorStop(1, '#0a0a0f');
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, width, height);
-
-    // Subtle grid
-    ctx.strokeStyle = 'rgba(255,255,255,0.025)';
-    ctx.lineWidth = 1;
-    for (let gx = 0; gx < width; gx += 40) {
-      ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, height); ctx.stroke();
-    }
-    for (let gy = 0; gy < height; gy += 40) {
-      ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(width, gy); ctx.stroke();
-    }
-
-    // ── Compute sine-wave positions (identical to skin-preview-game.tsx) ──
-    const segStep = SEGMENT_SPACING;
-    const totalLen = segments * segStep;
-    const startX = (width - totalLen) / 2;
-    const centerY = height / 2;
-
-    const positions: { x: number; y: number; angle: number }[] = [];
-    let cx = startX;
-
-    for (let i = 0; i < segments; i++) {
-      const wiggle = Math.sin(time * WIGGLE_SPEED - i * WIGGLE_FREQ) * WIGGLE_AMP;
-      positions.push({
-        x: cx,
-        y: centerY + wiggle,
-        angle: 0, // will compute below
-      });
-      cx += segStep;
-    }
-
-    // Compute per-segment angle from position differences
-    for (let i = 0; i < positions.length; i++) {
-      if (i === 0) {
-        const dx = positions[1].x - positions[0].x;
-        const dy = positions[1].y - positions[0].y;
-        positions[0].angle = Math.atan2(dy, dx);
-      } else {
-        const dx = positions[i].x - positions[i - 1].x;
-        const dy = positions[i].y - positions[i - 1].y;
-        positions[i].angle = Math.atan2(dy, dx);
-      }
-    }
-
-    // Get skin colors
-    let headColor = '#22c55e';
-    let bodyColor = '#16a34a';
-    try {
-      const asset = getSkinAsset(skinId);
-      headColor = asset.headColor;
-      bodyColor = asset.bodyColor;
-    } catch { /* defaults */ }
-
-    const segR = cfg.segRadius;
-    const hr = segR * cfg.headScale;
-
-    // ── Draw body (tail → head for layering) with optional shadow ──
-    if (cfg.hasShadow) {
-      ctx.save();
-      ctx.shadowColor = 'rgba(0,0,0,0.3)';
-      ctx.shadowBlur = segR * cfg.shadowBlurRatio;
-      ctx.shadowOffsetY = segR * cfg.shadowOffsetYRatio;
-    }
-
-    for (let i = positions.length - 1; i >= 1; i--) {
-      const pos = positions[i];
-      const grad = ctx.createRadialGradient(
-        pos.x - segR * 0.3, pos.y - segR * 0.3, segR * 0.1,
-        pos.x, pos.y, segR,
-      );
-      grad.addColorStop(0, lightenHex(bodyColor, cfg.lightenFactor));
-      grad.addColorStop(cfg.lightenStop, bodyColor);
-      grad.addColorStop(1, darkenHex(bodyColor, cfg.darkenFactor));
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, segR, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    if (cfg.hasShadow) ctx.restore();
-
-    // ── Draw head ──
-    const headPos = positions[0];
-    const hx = headPos.x;
-    const hy = headPos.y;
-    const headAngle = headPos.angle;
-
-    if (cfg.hasShadow) {
-      ctx.save();
-      ctx.shadowColor = 'rgba(0,0,0,0.3)';
-      ctx.shadowBlur = hr * cfg.shadowBlurRatio;
-      ctx.shadowOffsetY = hr * cfg.shadowOffsetYRatio;
-    }
-
-    const headGrad = ctx.createRadialGradient(
-      hx - hr * 0.3, hy - hr * 0.3, hr * 0.05,
-      hx, hy, hr,
-    );
-    headGrad.addColorStop(0, lightenHex(headColor, cfg.lightenFactor));
-    headGrad.addColorStop(cfg.lightenStop, headColor);
-    headGrad.addColorStop(1, darkenHex(headColor, cfg.darkenFactor));
-    ctx.fillStyle = headGrad;
-    ctx.beginPath();
-    ctx.arc(hx, hy, hr, 0, Math.PI * 2);
-    ctx.fill();
-
-    if (cfg.hasShadow) ctx.restore();
-
-    // ── Eyes ──
-    const eyeOffset = hr * cfg.eyeOffsetRatio;
-    const eyeR = hr * cfg.eyeRadiusRatio;
-    const pupilR = eyeR * cfg.pupilRadiusRatio;
-    const forwardOff = hr * cfg.eyeForwardRatio;
-    const perpA = headAngle + Math.PI / 2;
-
-    // Pupils track mouse (or face forward)
-    let lookAngle = headAngle;
-    const m = mouseRef.current;
-    if (m) {
-      const dx = m.x - hx;
-      const dy = m.y - hy;
-      if (Math.sqrt(dx * dx + dy * dy) > 5) {
-        lookAngle = Math.atan2(dy, dx);
-      }
-    }
-
-    for (const side of [-1, 1]) {
-      const ex = hx + Math.cos(headAngle) * forwardOff + Math.cos(perpA) * eyeOffset * side;
-      const ey = hy + Math.sin(headAngle) * forwardOff + Math.sin(perpA) * eyeOffset * side;
-
-      // White sclera
-      ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = cfg.eyeBorderColor;
-      ctx.lineWidth = cfg.eyeBorderWidth;
-      ctx.beginPath();
-      ctx.arc(ex, ey, eyeR, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      // Pupil
-      const shift = eyeR * cfg.pupilShiftRatio;
-      const px = ex + Math.cos(lookAngle) * shift;
-      const py = ey + Math.sin(lookAngle) * shift;
-      ctx.fillStyle = '#111111';
-      ctx.beginPath();
-      ctx.arc(px, py, pupilR, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Highlight dot
-      ctx.fillStyle = `rgba(255,255,255,${cfg.highlightOpacity})`;
-      ctx.beginPath();
-      ctx.arc(px - pupilR * 0.3, py - pupilR * 0.35, pupilR * 0.3, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // ── Label ──
-    ctx.fillStyle = labelColor;
-    ctx.font = 'bold 13px system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText(label, 12, 10);
-
-    // ── Sub-info ──
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.font = '10px system-ui, sans-serif';
-    ctx.fillText(`segR=${cfg.segRadius.toFixed(1)}  eyeR=${(cfg.segRadius * cfg.headScale * cfg.eyeRadiusRatio).toFixed(1)}  shadow=${cfg.hasShadow ? '✓' : '✗'}`, 12, 28);
-  }, [cfg, skinId, width, height, segments, label, labelColor]);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let running = true;
-    const loop = (time: number) => {
-      if (!running) return;
-      sharedTimeRef.current = time;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      draw(ctx, time);
-      animRef.current = requestAnimationFrame(loop);
-    };
-    animRef.current = requestAnimationFrame(loop);
-    return () => { running = false; cancelAnimationFrame(animRef.current); };
-  }, [draw, width, height, sharedTimeRef]);
+  }, [selectedSkin]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      style={{ width: `${width}px`, height: `${height}px` }}
-      className="rounded-lg cursor-crosshair border border-white/10 w-full max-w-full"
-    />
-  );
-}
-
-// ─── Main panel ─────────────────────────────────────────────────────────
-
-export function SnakeFaceTester() {
-  const [selectedSkin, setSelectedSkin] = useState('skin-emerald');
-  const sharedTimeRef = useRef(0);
-
-  return (
-    <div className="flex flex-col gap-5 p-4 max-w-5xl mx-auto">
-      {/* Title */}
+    <div className="flex flex-col gap-4 p-4 max-w-3xl mx-auto">
       <div className="text-center">
-        <h2 className="text-lg font-bold text-white">Sine-Wave Snake Face Comparison</h2>
-        <p className="text-sm text-white/50 mt-1">
-          Identical motion — only rendering params differ (eye size, shadow, gradient)
-        </p>
+        <h2 className="text-lg font-bold text-white">Game Snake Tester</h2>
+        <p className="text-sm text-white/50 mt-1">Exact game rendering params — hover to track eyes</p>
       </div>
 
-      {/* Skin selector */}
       <div className="flex flex-wrap justify-center gap-2">
         {TEST_SKINS.map(s => (
           <button
@@ -413,93 +336,11 @@ export function SnakeFaceTester() {
         ))}
       </div>
 
-      {/* Row 1: GAME vs PREVIEW — full size (shows body size difference) */}
-      <div className="space-y-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-400/80">
-          Full Size — GAME (zoomed, big eyes, shadow) vs PREVIEW (small, flat, no shadow)
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <SineWaveSnakeCanvas
-            cfg={GAME_CFG}
-            skinId={selectedSkin}
-            width={480}
-            height={130}
-            segments={22}
-            sharedTimeRef={sharedTimeRef}
-            label="GAME PARAMS"
-            labelColor="#4ade80"
-          />
-          <SineWaveSnakeCanvas
-            cfg={PREVIEW_CFG}
-            skinId={selectedSkin}
-            width={480}
-            height={130}
-            segments={22}
-            sharedTimeRef={sharedTimeRef}
-            label="PREVIEW PARAMS"
-            labelColor="#f87171"
-          />
-        </div>
-      </div>
-
-      {/* Row 2: Same body size, only face rendering differs */}
-      <div className="space-y-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-cyan-400/80">
-          Same Body Size — Only FACE rendering differs (eye size, border, shadow, gradient)
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <SineWaveSnakeCanvas
-            cfg={FIXED_CFG}
-            skinId={selectedSkin}
-            width={480}
-            height={130}
-            segments={22}
-            sharedTimeRef={sharedTimeRef}
-            label="GAME FACE (fixed size)"
-            labelColor="#22d3ee"
-          />
-          <SineWaveSnakeCanvas
-            cfg={PREVIEW_CFG}
-            skinId={selectedSkin}
-            width={480}
-            height={130}
-            segments={22}
-            sharedTimeRef={sharedTimeRef}
-            label="PREVIEW FACE (original)"
-            labelColor="#f472b6"
-          />
-        </div>
-      </div>
-
-      {/* Parameter table */}
-      <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-400/80 mb-3">
-          Exact parameter differences
-        </h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
-            <thead>
-              <tr className="border-b border-white/10 text-white/50">
-                <th className="py-1.5 pr-4">Parameter</th>
-                <th className="py-1.5 pr-4 text-emerald-400">Game</th>
-                <th className="py-1.5 pr-4 text-red-400">Preview</th>
-                <th className="py-1.5 text-white/40">Impact</th>
-              </tr>
-            </thead>
-            <tbody className="text-white/80">
-              <tr className="border-b border-white/5"><td className="py-1 pr-4 font-mono">segRadius</td><td className="pr-4">12 × 1.35 = <b>16.2</b></td><td className="pr-4">hardcoded <b>8</b></td><td className="text-red-300">Body 2× smaller</td></tr>
-              <tr className="border-b border-white/5"><td className="py-1 pr-4 font-mono">eyeRadius</td><td className="pr-4">hr × <b>0.38</b></td><td className="pr-4">hr × <b>0.25</b></td><td className="text-red-300">Eyes 52% smaller</td></tr>
-              <tr className="border-b border-white/5"><td className="py-1 pr-4 font-mono">eyeBorder</td><td className="pr-4"><b>1.5px</b> rgba(0,0,0,0.5)</td><td className="pr-4"><b>1px</b> rgba(0,0,0,0.3)</td><td className="text-amber-300">Fainter border</td></tr>
-              <tr className="border-b border-white/5"><td className="py-1 pr-4 font-mono">3D gradient</td><td className="pr-4">lighten <b>0.35</b> @ 0.55</td><td className="pr-4">lighten <b>0.30</b> @ 0.60</td><td className="text-amber-300">Flatter look</td></tr>
-              <tr><td className="py-1 pr-4 font-mono">shadow</td><td className="pr-4 text-emerald-400">✓ blur + offsetY</td><td className="pr-4 text-red-400">✗ none</td><td className="text-red-300">No depth cue</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <p className="text-center text-xs text-white/30">
-        Hover over each canvas — eyes follow your cursor. Both snakes share identical sine-wave motion.
-      </p>
+      <canvas
+        ref={canvasRef}
+        style={{ width: `${W}px`, height: `${H}px` }}
+        className="rounded-lg cursor-crosshair border border-white/10 w-full max-w-full mx-auto"
+      />
     </div>
   );
 }
