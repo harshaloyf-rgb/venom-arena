@@ -106,6 +106,7 @@ export function GameSnakePreview({
   scale = 1,
   showLabel = false,
   economy = false,
+  responsive = false,
   // Lab mode props
   colors,
   bodyStyle,
@@ -124,6 +125,7 @@ export function GameSnakePreview({
   scale?: number;
   showLabel?: boolean;
   economy?: boolean;
+  responsive?: boolean;
   // Genetic Lab mode
   colors?: string[];
   bodyStyle?: BodyStyle;
@@ -631,7 +633,10 @@ export function GameSnakePreview({
     <div className="flex flex-col items-center w-full">
       <canvas
         ref={canvasRef}
-        style={{ width: '100%', height: `${height}px` }}
+        style={responsive
+          ? { maxWidth: '100%', height: 'auto' }
+          : { width: '100%', height: `${height}px` }
+        }
         className="rounded-lg block"
       />
       {showLabel && skinName && (

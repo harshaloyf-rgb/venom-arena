@@ -82,11 +82,12 @@ export function CosmeticsSection({
         <GameSnakePreview
           key={activeSkinId}
           skinId={activeSkinId}
-          width={450}
-          height={180}
+          width={900}
+          height={360}
           segments={20}
           speed={1.2}
           scale={0.77}
+          responsive
         />
       </div>
 
