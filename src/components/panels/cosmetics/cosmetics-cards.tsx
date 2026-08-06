@@ -2,6 +2,7 @@ import { Check, Flame, Lock, Sparkles } from 'lucide-react';
 import type { Skin } from '@/lib/game-config';
 import type { SlitherPreset } from './cosmetics-types';
 import { GameSnakePreview } from './game-snake-preview';
+import { getSkinVisualProps } from './cosmetics-utils';
 
 // ---------------------------------------------------------------------------
 // Badges
@@ -161,46 +162,16 @@ export function PresetCard({
 // SkinCard (premium manufactured skins) — derive visual variety from pattern
 // ---------------------------------------------------------------------------
 
-/** Map SkinPattern → visual props for the card preview */
+/** Map SkinPattern → visual props for the card preview (uses shared source of truth) */
 function getSkinVisuals(item: Skin) {
+  // Use shared function if the skin has a pattern
+  const vis = getSkinVisualProps(item.id);
+  if (vis) return vis;
+
+  // No pattern → simple solid colors, smooth body
   const colors = [item.color];
   if (item.secondaryColor) colors.push(item.secondaryColor);
-
-  let bodyStyle: 'smooth' | 'armored' | 'crystal' | 'dragon' | 'stellar' | 'fortress' | 'stingray' | 'phantom' = 'smooth';
-  let taperStyle: 'natural' | 'uniform' | 'wave' | 'heavy' = 'natural';
-  let glow = false;
-
-  switch (item.pattern) {
-    case 'neon':
-      bodyStyle = 'crystal';
-      glow = true;
-      break;
-    case 'glow':
-      glow = true;
-      break;
-    case 'metallic':
-      bodyStyle = 'fortress';
-      taperStyle = 'uniform';
-      break;
-    case 'pulse':
-      bodyStyle = 'stellar';
-      taperStyle = 'wave';
-      glow = true;
-      break;
-    case 'rainbow':
-      bodyStyle = 'crystal';
-      taperStyle = 'wave';
-      glow = true;
-      break;
-    case 'camo':
-      bodyStyle = 'stingray';
-      taperStyle = 'natural';
-      break;
-    default:
-      break;
-  }
-
-  return { colors, bodyStyle, taperStyle, glow };
+  return { colors, bodyStyle: 'smooth' as const, taperStyle: 'natural' as const, glow: false };
 }
 
 export function SkinCard({

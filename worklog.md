@@ -386,3 +386,23 @@ Stage Summary:
 - SkinsCanvasPreview is also not used in the current shop (replaced by GameSnakePreview in cards)
 
 
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix skin rendering mismatch — pattern skins showing plain circles in cosmetic preview and game canvas
+
+Work Log:
+- Identified root cause: Skin cards used local `getSkinVisuals()` to map patterns to visual props (bodyStyle, taperStyle, glow, colors), but Face Cosmetics preview and game canvas only used `skinId` which resolved to plain headColor/bodyColor with no pattern awareness
+- Created shared `getSkinVisualProps(skinId)` function in `cosmetics-utils.ts` that builds lookup maps from ALL_COSMETICS, PASS_FREE_COSMETICS, PASS_ELITE_COSMETICS at module load time
+- Added `mapPatternToVisuals(pattern)` as the SINGLE SOURCE OF TRUTH for pattern → visual mapping, including previously missing `cyber` and `zebra` patterns
+- Updated `GameSnakePreview` to auto-detect pattern-based visual props when only `skinId` is provided (falls through: custom segments → pattern props → simple solid)
+- Updated `cosmetics-cards.tsx` SkinCard to use shared `getSkinVisualProps` instead of local `getSkinVisuals`
+- Updated `render-snake-atlas.tsx` game fallback renderer to check for pattern visuals and render with shapes/taper/glow
+- Updated head color in game fallback renderer to use pattern's primary color for consistency
+
+Stage Summary:
+- Key files modified: `cosmetics-utils.ts`, `game-snake-preview.tsx`, `cosmetics-cards.tsx`, `render-snake-atlas.tsx`
+- All pattern skins (neon, rainbow, metallic, pulse, camo, glow, cyber, zebra) now render consistently across skin cards, cosmetic preview, and game canvas
+- Added missing pattern mappings: cyber → fortress/wave/glow, zebra → armored/uniform/no-glow
+- Verified with VLM screenshot analysis: Fish Snake (neon) correctly shows diamond/crystal shapes with glow in Face Cosmetics preview
