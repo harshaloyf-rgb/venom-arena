@@ -140,3 +140,23 @@ Stage Summary:
 - Venom painter canvas allows painting segments with 18-color palette + shape/taper/glow options
 - All 20 presets, cosmetics, and custom skin features preserved
 - Lint passes clean
+---
+Task ID: 1
+Agent: main
+Task: Replace single GameSnakePreview with grid of small per-skin roaming snake previews
+
+Work Log:
+- Read cosmetics-shop.tsx, game-snake-preview.tsx, skin-registry.ts, cosmetics-types.ts to understand structure
+- Updated GameSnakePreview component: added `scale` prop (default 1), `showLabel` prop, proportional wall margin based on canvas size
+- Replaced single <GameSnakePreview> in cosmetics-shop.tsx (line 498) with a responsive grid of small previews (130x70, scale=0.5, 10 segments)
+- Each skin gets its own roaming snake canvas — 20 presets + 13 premium = 33 total
+- Grid filters by category: shows presets when presets tab active, premium when premium tab active, both when 'all'
+- Removed unused preview state (previewSkinId, previewHeadColor, previewBodyColor) and onMouseEnter hover handlers from PresetCard/SkinCard
+- Wrapped grid in styled container with "Live Skin Previews" header
+
+Stage Summary:
+- File modified: src/components/panels/cosmetics/game-snake-preview.tsx (added scale, showLabel, proportional wallM)
+- File modified: src/components/panels/cosmetics-shop.tsx (replaced single preview with grid, cleaned up state)
+- Verified: 33 canvases render on 'all' category, 20 on presets, 13 on premium
+- VLM screenshot verification confirmed different colored snakes, names below each, roaming animation
+- Lint passes clean, no runtime errors
