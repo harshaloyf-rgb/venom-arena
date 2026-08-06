@@ -116,3 +116,27 @@ Stage Summary:
 - All changes verified working in browser
 - Game starts and renders correctly
 - Wardrobe UI is clean and functional
+
+---
+Task ID: 1
+Agent: main
+Task: Redesign Shop+Lab into 4-corner Wardrobe layout with sub-pages for Cosmetics and Build Your Venom
+
+Work Log:
+- Analyzed 3 uploaded UI screenshots (current skin list, cosmetics grid, color palette reference)
+- Read all existing wardrobe/cosmetics code files (cosmetics-shop.tsx, cosmetics-types.ts, cosmetics-utils.ts, cosmetics-section.tsx, try-on-preview.tsx, skins-canvas-preview.tsx, venom-painter.tsx)
+- Created VenomPainter component at /src/components/panels/cosmetics/venom-painter.tsx — interactive canvas with 20 segment positions, color palette, shape/taper/glow selectors, delete/reset/save
+- Rewrote cosmetics-shop.tsx as 4-corner wardrobe layout:
+  - Main view: scrollable skin list (20 presets + custom), top-left BG changer, top-right Cosmetics button, bottom-left Skin Applied, bottom-right Build Your Venom
+  - Cosmetics view: back button + CosmeticsSection + OK button
+  - Venom view: back button + VenomPainter + OK button
+- Fixed lint errors: moved useCallback before early returns, renamed Image icon to ImageIcon, removed malformed JSX comments
+- Added 1 billion chips to user account (was already at 1B from previous session)
+- Verified cosmetics positioning code is correct (uses forward/perp angle helpers, proportional to head radius)
+- Browser verified all 3 views render correctly
+
+Stage Summary:
+- 4-corner wardrobe layout implemented and working
+- Venom painter canvas allows painting segments with 18-color palette + shape/taper/glow options
+- All 20 presets, cosmetics, and custom skin features preserved
+- Lint passes clean
