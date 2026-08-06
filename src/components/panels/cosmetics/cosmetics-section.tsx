@@ -16,8 +16,8 @@ import {
 } from '@/lib/snake/face-cosmetics';
 
 // Slots that have actual equippable face cosmetics (flag & banner are server-side)
-const EQUIPPABLE_SLOTS: CosmeticSlot[] = ['eyes', 'mouth', 'ears', 'wings', 'nose'];
-const ALL_SLOTS: CosmeticSlot[] = ['eyes', 'mouth', 'ears', 'wings', 'nose', 'flag', 'banner'];
+const EQUIPPABLE_SLOTS: CosmeticSlot[] = ['eyes', 'mouth', 'ears', 'wings', 'nose', 'hat', 'goggles', 'flag'];
+const ALL_SLOTS: CosmeticSlot[] = ['eyes', 'mouth', 'ears', 'wings', 'nose', 'hat', 'goggles', 'flag', 'banner'];
 
 const RARITY_STYLES: Record<CosmeticRarity, string> = {
   common: 'bg-slate-500/15 text-slate-400 border-slate-500/20',
@@ -68,7 +68,6 @@ export function CosmeticsSection({
   );
 
   const slotCosmetics = getCosmeticsBySlot(activeSlot);
-  const isFlagOrBanner = activeSlot === 'flag' || activeSlot === 'banner';
 
   return (
     <div className="animate-fade-in">
@@ -115,23 +114,9 @@ export function CosmeticsSection({
         })}
       </div>
 
-      {/* Flag / Banner redirect message */}
-      {isFlagOrBanner && (
-        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-8 flex flex-col items-center justify-center text-center gap-3">
-          <span className="text-3xl">{SLOT_INFO[activeSlot].emoji}</span>
-          <h3 className="text-sm font-bold text-white font-sans">
-            {SLOT_INFO[activeSlot].label}
-          </h3>
-          <p className="text-xs text-slate-400 font-sans max-w-sm leading-relaxed">
-            Flags and Banners are managed in the Skin &amp; Effect Gallery tab.
-          </p>
-        </div>
-      )}
-
       {/* Cosmetics card grid */}
-      {!isFlagOrBanner && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {slotCosmetics.map((cosmetic) => {
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {slotCosmetics.map((cosmetic) => {
             const isEquipped =
               equipped[activeSlot as keyof EquippedCosmetics] === cosmetic.id;
             const isFree = cosmetic.cost === 0;
@@ -185,7 +170,6 @@ export function CosmeticsSection({
             );
           })}
         </div>
-      )}
     </div>
   );
 }

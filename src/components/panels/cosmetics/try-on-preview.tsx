@@ -1,34 +1,8 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import type { BodyStyle, SegShape, TaperStyle } from './cosmetics-types';
-import { resolveShapeStyle } from './cosmetics-utils';
-
-// ---------------------------------------------------------------------------
-// Color helpers (match in-game 3D gradient look)
-// ---------------------------------------------------------------------------
-
-function lightenHex(hex: string, factor: number): string {
-  const n = parseInt(hex.replace('#', ''), 16);
-  const r = (n >> 16) & 0xff;
-  const g = (n >> 8) & 0xff;
-  const b = n & 0xff;
-  const nr = Math.round(r + (255 - r) * factor);
-  const ng = Math.round(g + (255 - g) * factor);
-  const nb = Math.round(b + (255 - b) * factor);
-  return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`;
-}
-
-function darkenHex(hex: string, factor: number): string {
-  const n = parseInt(hex.replace('#', ''), 16);
-  const r = (n >> 16) & 0xff;
-  const g = (n >> 8) & 0xff;
-  const b = n & 0xff;
-  const nr = Math.round(r * (1 - factor));
-  const ng = Math.round(g * (1 - factor));
-  const nb = Math.round(b * (1 - factor));
-  return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`;
-}
+import type { BodyStyle, TaperStyle } from './cosmetics-types';
+import { drawSegmentShape, resolveShapeStyle, lightenHex, darkenHex } from './cosmetics-utils';
 
 // ---------------------------------------------------------------------------
 // INTERACTIVE TRY-ON PLAYGROUND (steer with mouse)
@@ -139,7 +113,7 @@ export function TryOnPreview({
         ctx.stroke();
       }
 
-      // Body segments — GAME-ACCURATE 3D gradient circles
+      // Body segments — GAME-ACCURATE 3D gradient with shapes/taper/glow
       for (let i = points.length - 1; i >= 1; i--) {
         const pt = points[i];
         const prevPt = points[i - 1] || pt;
@@ -160,60 +134,7 @@ export function TryOnPreview({
 
         const r = 10 * sizeScale;
 
-        ctx.save();
-
-        // Glow effect
-        if (glow) {
-          ctx.shadowBlur = 14;
-          ctx.shadowColor = color;
-        }
-
-        // 3D gradient (same as in-game atlas head/body rendering)
-        const grad = ctx.createRadialGradient(
-          pt.x - r * 0.3, pt.y - r * 0.3, r * 0.1,
-          pt.x, pt.y, r,
-        );
-        grad.addColorStop(0, lightenHex(color, 0.3));
-        grad.addColorStop(0.6, color);
-        grad.addColorStop(1, darkenHex(color, 0.3));
-        ctx.fillStyle = grad;
-
-        // Shape rendering
-        const shape: SegShape = resolveShapeStyle(shapeStyle, i);
-        ctx.beginPath();
-        if (shape === 'circle') {
-          ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
-        } else if (shape === 'square') {
-          ctx.fillRect(pt.x - r, pt.y - r, r * 2, r * 2);
-        } else if (shape === 'diamond') {
-          ctx.moveTo(pt.x, pt.y - r);
-          ctx.lineTo(pt.x + r, pt.y);
-          ctx.lineTo(pt.x, pt.y + r);
-          ctx.lineTo(pt.x - r, pt.y);
-          ctx.closePath();
-        } else if (shape === 'spike') {
-          const perpAngle = segAngle + Math.PI / 2;
-          const spikeAngle = segAngle + Math.PI;
-          ctx.moveTo(
-            pt.x + Math.cos(segAngle) * r * 1.35,
-            pt.y + Math.sin(segAngle) * r * 1.35,
-          );
-          ctx.lineTo(
-            pt.x + Math.cos(perpAngle) * r * 0.95,
-            pt.y + Math.sin(perpAngle) * r * 0.95,
-          );
-          ctx.lineTo(
-            pt.x + Math.cos(spikeAngle) * r * 0.4,
-            pt.y + Math.sin(spikeAngle) * r * 0.4,
-          );
-          ctx.lineTo(
-            pt.x + Math.cos(perpAngle - Math.PI) * r * 0.95,
-            pt.y + Math.sin(perpAngle - Math.PI) * r * 0.95,
-          );
-          ctx.closePath();
-        }
-        ctx.fill();
-        ctx.restore();
+        drawSegmentShape(ctx, pt.x, pt.y, r, segAngle, resolveShapeStyle(shapeStyle, i), color, glow);
       }
 
       // Head — GAME-ACCURATE with 3D gradient and 1.3x scale

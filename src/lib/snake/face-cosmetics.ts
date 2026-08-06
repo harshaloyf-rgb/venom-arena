@@ -13,7 +13,7 @@
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type CosmeticSlot = 'eyes' | 'mouth' | 'ears' | 'wings' | 'nose' | 'flag' | 'banner';
+export type CosmeticSlot = 'eyes' | 'mouth' | 'ears' | 'wings' | 'nose' | 'hat' | 'goggles' | 'flag' | 'banner';
 
 export type CosmeticRarity = 'common' | 'rare' | 'epic' | 'legendary';
 
@@ -73,43 +73,43 @@ export const FACE_COSMETICS: FaceCosmetic[] = [
     draw: drawClassicEyes,
   },
   {
-    id: 'eye-angry', name: 'Furious Glare', slot: 'eyes', cost: 60,
+    id: 'eye-angry', name: 'Furious Glare', slot: 'eyes', cost: 0,
     rarity: 'common', emoji: '😠',
     description: 'Angry slanted brows that intimidate opponents.',
     draw: drawAngryEyes,
   },
   {
-    id: 'eye-cute', name: 'Cute Kawaii', slot: 'eyes', cost: 80,
+    id: 'eye-cute', name: 'Cute Kawaii', slot: 'eyes', cost: 0,
     rarity: 'common', emoji: '🥺',
     description: 'Big sparkly anime-style eyes with star highlights.',
     draw: drawCuteEyes,
   },
   {
-    id: 'eye-cyclops', name: 'Cyclops Beam', slot: 'eyes', cost: 150,
+    id: 'eye-cyclops', name: 'Cyclops Beam', slot: 'eyes', cost: 0,
     rarity: 'rare', emoji: '👁️‍🗨️',
     description: 'A single massive eye in the center with a pulsing iris.',
     draw: drawCyclopsEye,
   },
   {
-    id: 'eye-laser', name: 'Laser Sights', slot: 'eyes', cost: 200,
+    id: 'eye-laser', name: 'Laser Sights', slot: 'eyes', cost: 0,
     rarity: 'rare', emoji: '🔴',
     description: 'Red laser-dot eyes that glow when boosting.',
     draw: drawLaserEyes,
   },
   {
-    id: 'eye-dragon', name: 'Dragon Slit', slot: 'eyes', cost: 300,
+    id: 'eye-dragon', name: 'Dragon Slit', slot: 'eyes', cost: 0,
     rarity: 'rare', emoji: '🐉',
     description: 'Reptilian vertical slit pupils — ancient predator gaze.',
     draw: drawDragonEyes,
   },
   {
-    id: 'eye-neon', name: 'Neon Circuits', slot: 'eyes', cost: 500,
+    id: 'eye-neon', name: 'Neon Circuits', slot: 'eyes', cost: 0,
     rarity: 'epic', emoji: '⚡',
     description: 'Glowing cybernetic circuit-board eyes with data streams.',
     draw: drawNeonEyes,
   },
   {
-    id: 'eye-cosmic', name: 'Cosmic Void', slot: 'eyes', cost: 1000,
+    id: 'eye-cosmic', name: 'Cosmic Void', slot: 'eyes', cost: 0,
     rarity: 'legendary', emoji: '🌌',
     description: 'Eyes containing swirling galaxies and nebulae.',
     draw: drawCosmicEyes,
@@ -125,31 +125,31 @@ export const FACE_COSMETICS: FaceCosmetic[] = [
     draw: () => {},
   },
   {
-    id: 'mouth-fangs', name: 'Venom Fangs', slot: 'mouth', cost: 100,
+    id: 'mouth-fangs', name: 'Venom Fangs', slot: 'mouth', cost: 0,
     rarity: 'common', emoji: '🐍',
     description: 'Two sharp venomous fangs dripping with toxic goo.',
     draw: drawFangs,
   },
   {
-    id: 'mouth-smile', name: 'Cheshire Grin', slot: 'mouth', cost: 120,
+    id: 'mouth-smile', name: 'Cheshire Grin', slot: 'mouth', cost: 0,
     rarity: 'common', emoji: '😺',
     description: 'A wide mischievous grin across the face.',
     draw: drawSmile,
   },
   {
-    id: 'mouth-tongue', name: 'Flickering Tongue', slot: 'mouth', cost: 80,
+    id: 'mouth-tongue', name: 'Flickering Tongue', slot: 'mouth', cost: 0,
     rarity: 'common', emoji: '👅',
     description: 'A forked snake tongue that flicks in and out.',
     draw: drawTongue,
   },
   {
-    id: 'mouth-jaw', name: 'Saber Jaw', slot: 'mouth', cost: 400,
+    id: 'mouth-jaw', name: 'Saber Jaw', slot: 'mouth', cost: 0,
     rarity: 'epic', emoji: '🦷',
     description: 'Massive saber-tooth jaw with glowing edges.',
     draw: drawSaberJaw,
   },
   {
-    id: 'mouth-void', name: 'Void Maw', slot: 'mouth', cost: 800,
+    id: 'mouth-void', name: 'Void Maw', slot: 'mouth', cost: 0,
     rarity: 'legendary', emoji: '🕳️',
     description: 'A dark portal mouth that warps space around it.',
     draw: drawVoidMaw,
@@ -165,31 +165,31 @@ export const FACE_COSMETICS: FaceCosmetic[] = [
     draw: () => {},
   },
   {
-    id: 'ear-bunny', name: 'Bunny Ears', slot: 'ears', cost: 100,
+    id: 'ear-bunny', name: 'Bunny Ears', slot: 'ears', cost: 0,
     rarity: 'common', emoji: '🐰',
     description: 'Soft fluffy bunny ears that bounce while moving.',
     draw: drawBunnyEars,
   },
   {
-    id: 'ear-cat', name: 'Cat Ears', slot: 'ears', cost: 100,
+    id: 'ear-cat', name: 'Cat Ears', slot: 'ears', cost: 0,
     rarity: 'common', emoji: '🐱',
     description: 'Pointed feline ears with pink inner detail.',
     draw: drawCatEars,
   },
   {
-    id: 'ear-demon', name: 'Demon Horns', slot: 'ears', cost: 300,
+    id: 'ear-demon', name: 'Demon Horns', slot: 'ears', cost: 0,
     rarity: 'rare', emoji: '😈',
     description: 'Curved demonic horns that glow with hellfire.',
     draw: drawDemonHorns,
   },
   {
-    id: 'ear-crown', name: 'Golden Crown', slot: 'ears', cost: 500,
+    id: 'ear-crown', name: 'Golden Crown', slot: 'ears', cost: 0,
     rarity: 'epic', emoji: '👑',
     description: 'A jeweled golden crown that shines with authority.',
     draw: drawCrown,
   },
   {
-    id: 'ear-halo', name: 'Celestial Halo', slot: 'ears', cost: 1000,
+    id: 'ear-halo', name: 'Celestial Halo', slot: 'ears', cost: 0,
     rarity: 'legendary', emoji: '😇',
     description: 'A floating golden halo that orbits above the head.',
     draw: drawHalo,
@@ -205,31 +205,31 @@ export const FACE_COSMETICS: FaceCosmetic[] = [
     draw: () => {},
   },
   {
-    id: 'wing-angel', name: 'Angel Wings', slot: 'wings', cost: 300,
+    id: 'wing-angel', name: 'Angel Wings', slot: 'wings', cost: 0,
     rarity: 'rare', emoji: '👼',
     description: 'Pure white feathery angel wings that flutter.',
     draw: drawAngelWings,
   },
   {
-    id: 'wing-demon', name: 'Bat Wings', slot: 'wings', cost: 300,
+    id: 'wing-demon', name: 'Bat Wings', slot: 'wings', cost: 0,
     rarity: 'rare', emoji: '🦇',
     description: 'Dark leathery bat wings with glowing veins.',
     draw: drawBatWings,
   },
   {
-    id: 'wing-dragon', name: 'Dragon Wings', slot: 'wings', cost: 600,
+    id: 'wing-dragon', name: 'Dragon Wings', slot: 'wings', cost: 0,
     rarity: 'epic', emoji: '🐲',
     description: 'Massive scaled dragon wings with membrane detail.',
     draw: drawDragonWings,
   },
   {
-    id: 'wing-cyber', name: 'Jet Boosters', slot: 'wings', cost: 400,
+    id: 'wing-cyber', name: 'Jet Boosters', slot: 'wings', cost: 0,
     rarity: 'epic', emoji: '🚀',
     description: 'Futuristic jet boosters that ignite when boosting.',
     draw: drawJetBoosters,
   },
   {
-    id: 'wing-phoenix', name: 'Phoenix Wings', slot: 'wings', cost: 1200,
+    id: 'wing-phoenix', name: 'Phoenix Wings', slot: 'wings', cost: 0,
     rarity: 'legendary', emoji: '🔥',
     description: 'Blazing phoenix wings made of living fire.',
     draw: drawPhoenixWings,
@@ -245,29 +245,63 @@ export const FACE_COSMETICS: FaceCosmetic[] = [
     draw: () => {},
   },
   {
-    id: 'nose-pig', name: 'Pig Snout', slot: 'nose', cost: 60,
+    id: 'nose-pig', name: 'Pig Snout', slot: 'nose', cost: 0,
     rarity: 'common', emoji: '🐷',
     description: 'A cute pink pig snout on the front of the head.',
     draw: drawPigSnout,
   },
   {
-    id: 'nose-clown', name: 'Clown Nose', slot: 'nose', cost: 80,
+    id: 'nose-clown', name: 'Clown Nose', slot: 'nose', cost: 0,
     rarity: 'common', emoji: '🤡',
     description: 'A big round red clown nose.',
     draw: drawClownNose,
   },
   {
-    id: 'nose-gem', name: 'Ruby Gem', slot: 'nose', cost: 200,
+    id: 'nose-gem', name: 'Ruby Gem', slot: 'nose', cost: 0,
     rarity: 'rare', emoji: '💎',
     description: 'A faceted ruby gemstone embedded in the forehead.',
     draw: drawGemNose,
   },
   {
-    id: 'nose-third-eye', name: 'Third Eye', slot: 'nose', cost: 800,
+    id: 'nose-third-eye', name: 'Third Eye', slot: 'nose', cost: 0,
     rarity: 'legendary', emoji: '🔮',
     description: 'A mystical third eye that sees all.',
     draw: drawThirdEye,
   },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // HATS (8)
+  // ═══════════════════════════════════════════════════════════════════
+  { id: 'hat-none', name: 'No Hat', slot: 'hat', cost: 0, rarity: 'common', emoji: '❌', description: 'Remove hat.', draw: () => {} },
+  { id: 'hat-crown', name: 'Golden Crown', slot: 'hat', cost: 0, rarity: 'legendary', emoji: '👑', description: 'A regal golden crown.', draw: drawHatCrown },
+  { id: 'hat-top-hat', name: 'Top Hat', slot: 'hat', cost: 0, rarity: 'epic', emoji: '🎩', description: 'A classic black top hat.', draw: drawTopHat },
+  { id: 'hat-cap', name: 'Baseball Cap', slot: 'hat', cost: 0, rarity: 'common', emoji: '🧢', description: 'A sporty baseball cap.', draw: drawCap },
+  { id: 'hat-wizard', name: 'Wizard Hat', slot: 'hat', cost: 0, rarity: 'epic', emoji: '🧙', description: 'A pointy wizard hat with stars.', draw: drawWizardHat },
+  { id: 'hat-party', name: 'Party Hat', slot: 'hat', cost: 0, rarity: 'common', emoji: '🎉', description: 'A colorful party cone hat.', draw: drawPartyHat },
+  { id: 'hat-helmet', name: 'Viking Helmet', slot: 'hat', cost: 0, rarity: 'rare', emoji: '⚔️', description: 'A horned viking helmet.', draw: drawVikingHelmet },
+  { id: 'hat-santa', name: 'Santa Hat', slot: 'hat', cost: 0, rarity: 'rare', emoji: '🎅', description: 'A festive Santa Claus hat.', draw: drawSantaHat },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // GOGGLES (5)
+  // ═══════════════════════════════════════════════════════════════════
+  { id: 'goggles-none', name: 'No Goggles', slot: 'goggles', cost: 0, rarity: 'common', emoji: '❌', description: 'Remove goggles.', draw: () => {} },
+  { id: 'goggles-round', name: 'Pilot Goggles', slot: 'goggles', cost: 0, rarity: 'common', emoji: '🥽', description: 'Round brass pilot goggles.', draw: drawPilotGoggles },
+  { id: 'goggles-cyber', name: 'Cyber Visor', slot: 'goggles', cost: 0, rarity: 'rare', emoji: '👓', description: 'A futuristic HUD visor.', draw: drawCyberVisor },
+  { id: 'goggles-shades', name: 'Cool Shades', slot: 'goggles', cost: 0, rarity: 'common', emoji: '😎', description: 'Dark sunglasses.', draw: drawCoolShades },
+  { id: 'goggles-monocle', name: 'Monocle', slot: 'goggles', cost: 0, rarity: 'epic', emoji: '🧐', description: 'A sophisticated monocle.', draw: drawMonocle },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // FLAGS — Country capes that wave on the snake neck (8)
+  // ═══════════════════════════════════════════════════════════════════
+  { id: 'flag-none', name: 'No Flag', slot: 'flag', cost: 0, rarity: 'common', emoji: '❌', description: 'Remove flag.', draw: () => {} },
+  { id: 'flag-india', name: 'India', slot: 'flag', cost: 0, rarity: 'common', emoji: '🇮🇳', description: 'Indian tricolor flag cape.', draw: (ctx, p) => drawWavingFlag(ctx, p, ['#FF9933', '#FFFFFF', '#138808'], 'circle') },
+  { id: 'flag-usa', name: 'USA', slot: 'flag', cost: 0, rarity: 'common', emoji: '🇺🇸', description: 'Stars and stripes flag cape.', draw: (ctx, p) => drawWavingFlag(ctx, p, ['#B31942', '#FFFFFF', '#0A3161'], 'stars') },
+  { id: 'flag-uk', name: 'United Kingdom', slot: 'flag', cost: 0, rarity: 'common', emoji: '🇬🇧', description: 'Union Jack flag cape.', draw: (ctx, p) => drawWavingFlag(ctx, p, ['#012169', '#FFFFFF', '#C8102E'], 'cross') },
+  { id: 'flag-japan', name: 'Japan', slot: 'flag', cost: 0, rarity: 'common', emoji: '🇯🇵', description: 'White flag with red sun.', draw: (ctx, p) => drawWavingFlag(ctx, p, ['#FFFFFF', '#BC002D', '#FFFFFF'], 'circle') },
+  { id: 'flag-brazil', name: 'Brazil', slot: 'flag', cost: 0, rarity: 'common', emoji: '🇧🇷', description: 'Green and gold Brazilian flag.', draw: (ctx, p) => drawWavingFlag(ctx, p, ['#009739', '#FEDD00', '#002776'], 'circle') },
+  { id: 'flag-france', name: 'France', slot: 'flag', cost: 0, rarity: 'common', emoji: '🇫🇷', description: 'French tricolor flag cape.', draw: (ctx, p) => drawWavingFlag(ctx, p, ['#002395', '#FFFFFF', '#ED2939'], 'plain') },
+  { id: 'flag-germany', name: 'Germany', slot: 'flag', cost: 0, rarity: 'common', emoji: '🇩🇪', description: 'German tricolor flag cape.', draw: (ctx, p) => drawWavingFlag(ctx, p, ['#000000', '#DD0000', '#FFCC00'], 'plain') },
+  { id: 'flag-south-korea', name: 'South Korea', slot: 'flag', cost: 0, rarity: 'common', emoji: '🇰🇷', description: 'South Korean flag cape.', draw: (ctx, p) => drawWavingFlag(ctx, p, ['#FFFFFF', '#CD2E3A', '#0047A0'], 'circle') },
 ];
 
 // ─── Lookup helpers ──────────────────────────────────────────────────────────
@@ -283,13 +317,15 @@ export function getCosmeticsBySlot(slot: CosmeticSlot): FaceCosmetic[] {
 // ─── Slot label map ──────────────────────────────────────────────────────────
 
 export const SLOT_INFO: Record<CosmeticSlot, { label: string; emoji: string; desc: string }> = {
-  eyes:   { label: 'Eyes',      emoji: '👁️', desc: 'Customize your snake\'s eyes' },
-  mouth:  { label: 'Mouth',     emoji: '👄', desc: 'Add fangs, smiles, or tongues' },
-  ears:   { label: 'Headgear',  emoji: '👑', desc: 'Ears, horns, crowns & halos' },
-  wings:  { label: 'Wings',     emoji: '🪽', desc: 'Wings and boosters for your snake' },
-  nose:   { label: 'Nose',      emoji: '👃', desc: 'Nose accessories and gems' },
-  flag:   { label: 'Flags',     emoji: '🚩', desc: 'Carry a flag behind your head' },
-  banner: { label: 'Banner',    emoji: '🏆', desc: 'Show a banner above your name' },
+  eyes:    { label: 'Eyes',     emoji: '👁️', desc: 'Customize your snake\'s eyes' },
+  mouth:   { label: 'Mouth',    emoji: '👄', desc: 'Add fangs, smiles, or tongues' },
+  ears:    { label: 'Headgear', emoji: '👑', desc: 'Ears, horns, crowns & halos' },
+  wings:   { label: 'Wings',    emoji: '🪽', desc: 'Wings and boosters for your snake' },
+  nose:    { label: 'Nose',     emoji: '👃', desc: 'Nose accessories and gems' },
+  hat:     { label: 'Hats',     emoji: '🎩', desc: 'Hats, crowns, helmets & headwear' },
+  goggles: { label: 'Goggles',  emoji: '🥽', desc: 'Goggles, sunglasses & eyewear' },
+  flag:    { label: 'Flags',    emoji: '🚩', desc: 'Country flag capes on your neck' },
+  banner:  { label: 'Banner',   emoji: '🏆', desc: 'Show a banner above your name' },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1303,6 +1339,305 @@ function drawThirdEye(ctx: CanvasRenderingContext2D, p: CosmeticDrawParams) {
   ctx.beginPath(); ctx.arc(ex, ey, eyeR * 0.7, 0, Math.PI * 2); ctx.stroke();
 }
 
+// ─── HAT DRAW FUNCTIONS ────────────────────────────────────────────────────
+
+function drawHatCrown(ctx: CanvasRenderingContext2D, p: CosmeticDrawParams) {
+  const { hx, hy, hr, angle } = p;
+  ctx.save(); ctx.translate(hx, hy); ctx.rotate(angle);
+  const w = hr * 1.2, h = hr * 0.7, baseY = -hr * 0.85;
+  // Crown base
+   ctx.fillStyle = '#FFD700';
+  ctx.beginPath();
+   ctx.moveTo(-w / 2, baseY); ctx.lineTo(-w / 2, baseY - h * 0.3);
+   ctx.lineTo(-w / 3, baseY - h * 0.7); ctx.lineTo(-w / 6, baseY - h * 0.35);
+   ctx.lineTo(0, baseY - h); ctx.lineTo(w / 6, baseY - h * 0.35);
+   ctx.lineTo(w / 3, baseY - h * 0.7); ctx.lineTo(w / 2, baseY - h * 0.3);
+  ctx.lineTo(w / 2, baseY); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#B8860B'; ctx.lineWidth = Math.max(1, hr * 0.04); ctx.stroke();
+  // Gems
+  ctx.fillStyle = '#DC143C';
+  for (const x of [-w / 4, 0, w / 4]) {
+    ctx.beginPath(); ctx.arc(x, baseY - h * 0.35, hr * 0.08, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawTopHat(ctx: CanvasRenderingContext2D, p: CosmeticDrawParams) {
+  const { hx, hy, hr, angle } = p;
+  ctx.save(); ctx.translate(hx, hy); ctx.rotate(angle);
+  const w = hr * 1.1, h = hr * 1.0;
+  // Brim
+  ctx.fillStyle = '#1a1a1a';
+  ctx.beginPath(); ctx.ellipse(0, -hr * 0.8, w * 0.8, hr * 0.15, 0, 0, Math.PI * 2); ctx.fill();
+  // Top
+  ctx.fillRect(-w / 2, -hr * 0.8 - h, w, h);
+  // Band
+  ctx.fillStyle = '#8B0000';
+  ctx.fillRect(-w / 2, -hr * 0.8 - h * 0.25, w, h * 0.15);
+  ctx.restore();
+}
+
+function drawCap(ctx: CanvasRenderingContext2D, p: CosmeticDrawParams) {
+  const { hx, hy, hr, angle } = p;
+  ctx.save(); ctx.translate(hx, hy); ctx.rotate(angle);
+  const w = hr * 1.2;
+  // Cap dome
+  ctx.fillStyle = '#2563EB';
+  ctx.beginPath(); ctx.arc(0, -hr * 0.7, w * 0.55, Math.PI, 0); ctx.fill();
+  // Brim
+  ctx.fillStyle = '#1E40AF';
+  ctx.fillRect(-w * 0.7, -hr * 0.72, w * 1.4, hr * 0.12);
+  // Button
+  ctx.fillStyle = '#FFFFFF';
+  ctx.beginPath(); ctx.arc(0, -hr * 0.7 - w * 0.52, hr * 0.06, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawWizardHat(ctx: CanvasRenderingContext2D, p: CosmeticDrawParams) {
+  const { hx, hy, hr, angle, time } = p;
+  ctx.save(); ctx.translate(hx, hy); ctx.rotate(angle);
+  const h = hr * 1.4, w = hr * 1.0;
+  // Cone
+  const grad = ctx.createLinearGradient(0, -hr * 0.8 - h, 0, -hr * 0.8);
+  grad.addColorStop(0, '#4C1D95'); grad.addColorStop(1, '#7C3AED');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(-w / 2, -hr * 0.8); ctx.lineTo(0, -hr * 0.8 - h); ctx.lineTo(w / 2, -hr * 0.8);
+  ctx.closePath(); ctx.fill();
+  // Brim
+  ctx.fillStyle = '#4C1D95';
+  ctx.beginPath(); ctx.ellipse(0, -hr * 0.8, w * 0.75, hr * 0.12, 0, 0, Math.PI * 2); ctx.fill();
+  // Stars
+  ctx.fillStyle = '#FBBF24';
+  for (let i = 0; i < 3; i++) {
+    const sx = (i - 1) * hr * 0.25;
+    const sy = -hr * 0.8 - h * 0.4 - i * hr * 0.2;
+    const twinkle = 0.5 + 0.5 * Math.sin((time || 0) * 0.003 + i * 2);
+    ctx.globalAlpha = twinkle;
+    ctx.beginPath(); ctx.arc(sx, sy, hr * 0.06, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function drawPartyHat(ctx: CanvasRenderingContext2D, p: CosmeticDrawParams) {
+  const { hx, hy, hr, angle } = p;
+  ctx.save(); ctx.translate(hx, hy); ctx.rotate(angle);
+  const h = hr * 1.2, w = hr * 0.8;
+  // Striped cone
+  const colors = ['#EF4444', '#FBBF24', '#22C55E', '#3B82F6', '#A855F7'];
+  const stripeH = h / colors.length;
+  for (let i = 0; i < colors.length; i++) {
+    const topY = -hr * 0.8 - h + i * stripeH;
+    const topW = w * ((h - (i * stripeH)) / h) * 0.5;
+    const botW = w * ((h - ((i + 1) * stripeH)) / h) * 0.5;
+    ctx.fillStyle = colors[i];
+    ctx.beginPath();
+    ctx.moveTo(-topW, topY); ctx.lineTo(topW, topY);
+    ctx.lineTo(botW, topY + stripeH); ctx.lineTo(-botW, topY + stripeH);
+    ctx.closePath(); ctx.fill();
+  }
+  // Pom pom
+  ctx.fillStyle = '#FFFFFF';
+  ctx.beginPath(); ctx.arc(0, -hr * 0.8 - h, hr * 0.1, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawVikingHelmet(ctx: CanvasRenderingContext2D, p: CosmeticDrawParams) {
+  const { hx, hy, hr, angle } = p;
+  ctx.save(); ctx.translate(hx, hy); ctx.rotate(angle);
+  const w = hr * 1.1, h = hr * 0.6;
+  // Dome
+  ctx.fillStyle = '#9CA3AF';
+  ctx.beginPath(); ctx.arc(0, -hr * 0.8, w * 0.55, Math.PI, 0); ctx.fill();
+  ctx.fillRect(-w * 0.55, -hr * 0.8, w * 1.1, h * 0.3);
+  // Nose guard
+  ctx.strokeStyle = '#6B7280'; ctx.lineWidth = Math.max(1, hr * 0.05);
+  ctx.beginPath(); ctx.moveTo(0, -hr * 0.8 - w * 0.2); ctx.lineTo(0, -hr * 0.5); ctx.stroke();
+  // Horns
+  ctx.fillStyle = '#FDE68A';
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(side * w * 0.5, -hr * 0.7);
+    ctx.quadraticCurveTo(side * w * 0.8, -hr * 0.5, side * w * 0.6, -hr * 0.3);
+    ctx.quadraticCurveTo(side * w * 0.45, -hr * 0.5, side * w * 0.5, -hr * 0.7);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawSantaHat(ctx: CanvasRenderingContext2D, p: CosmeticDrawParams) {
+  const { hx, hy, hr, angle, time } = p;
+  ctx.save(); ctx.translate(hx, hy); ctx.rotate(angle);
+  const w = hr * 1.0, h = hr * 1.0;
+  // Red body
+  ctx.fillStyle = '#DC2626';
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.5, -hr * 0.75);
+  ctx.quadraticCurveTo(-w * 0.1, -hr * 0.75 - h * 0.7, w * 0.2 + Math.sin((time || 0) * 0.002) * hr * 0.1, -hr * 0.75 - h);
+  ctx.lineTo(w * 0.5, -hr * 0.75);
+  ctx.closePath(); ctx.fill();
+  // White trim
+  ctx.fillStyle = '#FFFFFF';
+  ctx.beginPath(); ctx.ellipse(0, -hr * 0.75, w * 0.6, hr * 0.12, 0, 0, Math.PI * 2); ctx.fill();
+  // Pom pom
+  ctx.beginPath(); ctx.arc(w * 0.2 + Math.sin((time || 0) * 0.002) * hr * 0.1, -hr * 0.75 - h, hr * 0.12, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// ─── GOGGLE DRAW FUNCTIONS ───────────────────────────────────────────────
+
+function drawPilotGoggles(ctx: CanvasRenderingContext2D, p: CosmeticDrawParams) {
+  const { hx, hy, hr, angle } = p;
+  ctx.save(); ctx.translate(hx, hy); ctx.rotate(angle);
+  const [fx] = forward(angle); const [px] = perp(angle);
+  const r = hr * 0.22;
+  for (const side of [-1, 1]) {
+    const ex = hr * 0.3 + px * hr * 0.3 * side;
+    const ey = -hr * 0.15;
+    // Brass rim
+    ctx.fillStyle = '#B8860B';
+    ctx.beginPath(); ctx.arc(ex, ey, r * 1.3, 0, Math.PI * 2); ctx.fill();
+    // Lens
+    ctx.fillStyle = 'rgba(100, 180, 255, 0.5)';
+    ctx.beginPath(); ctx.arc(ex, ey, r, 0, Math.PI * 2); ctx.fill();
+    // Highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.beginPath(); ctx.arc(ex - r * 0.3, ey - r * 0.3, r * 0.35, 0, Math.PI * 2); ctx.fill();
+  }
+  // Bridge
+  ctx.strokeStyle = '#B8860B'; ctx.lineWidth = Math.max(1, hr * 0.04);
+  ctx.beginPath(); ctx.moveTo(-hr * 0.08, -hr * 0.15); ctx.lineTo(hr * 0.08, -hr * 0.15); ctx.stroke();
+  ctx.restore();
+}
+
+function drawCyberVisor(ctx: CanvasRenderingContext2D, p: CosmeticDrawParams) {
+  const { hx, hy, hr, angle, time } = p;
+  ctx.save(); ctx.translate(hx, hy); ctx.rotate(angle);
+  const w = hr * 0.9, h = hr * 0.25;
+  // Visor body
+  ctx.fillStyle = 'rgba(0, 255, 200, 0.2)';
+  ctx.strokeStyle = '#00FFC8'; ctx.lineWidth = Math.max(1, hr * 0.05);
+  ctx.beginPath(); ctx.roundRect(-w / 2, -hr * 0.35, w, h, hr * 0.08); ctx.fill(); ctx.stroke();
+  // Scan line
+  const scanX = -w / 2 + ((time || 0) * 0.05 % w);
+  ctx.strokeStyle = 'rgba(0, 255, 200, 0.6)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(scanX, -hr * 0.35); ctx.lineTo(scanX, -hr * 0.35 + h); ctx.stroke();
+  ctx.restore();
+}
+
+function drawCoolShades(ctx: CanvasRenderingContext2D, p: CosmeticDrawParams) {
+  const { hx, hy, hr, angle } = p;
+  ctx.save(); ctx.translate(hx, hy); ctx.rotate(angle);
+  const w = hr * 0.38, h = hr * 0.22, gap = hr * 0.1;
+  for (const side of [-1, 1]) {
+    const lx = side * (w / 2 + gap / 2);
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.roundRect(lx - w / 2, -hr * 0.3, w, h, hr * 0.05); ctx.fill();
+    // Lens glare
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.beginPath(); ctx.roundRect(lx - w / 2 + w * 0.1, -hr * 0.3 + h * 0.15, w * 0.3, h * 0.3, 1); ctx.fill();
+  }
+  // Bridge
+  ctx.strokeStyle = '#333'; ctx.lineWidth = Math.max(1, hr * 0.04);
+  ctx.beginPath(); ctx.moveTo(-gap / 2, -hr * 0.22); ctx.lineTo(gap / 2, -hr * 0.22); ctx.stroke();
+  ctx.restore();
+}
+
+function drawMonocle(ctx: CanvasRenderingContext2D, p: CosmeticDrawParams) {
+  const { hx, hy, hr, angle } = p;
+  ctx.save(); ctx.translate(hx, hy); ctx.rotate(angle);
+  const r = hr * 0.25;
+  const mx = hr * 0.25;
+  // Lens
+  ctx.strokeStyle = '#B8860B'; ctx.lineWidth = Math.max(1, hr * 0.05);
+  ctx.fillStyle = 'rgba(200, 230, 255, 0.2)';
+  ctx.beginPath(); ctx.arc(mx, -hr * 0.15, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  // Chain
+  ctx.strokeStyle = '#B8860B'; ctx.lineWidth = Math.max(0.5, hr * 0.02);
+  ctx.beginPath(); ctx.moveTo(mx, -hr * 0.15 + r); ctx.lineTo(mx + hr * 0.1, hr * 0.5); ctx.stroke();
+  ctx.restore();
+}
+
+// ─── WAVING FLAG CAPE ─────────────────────────────────────────────────────
+
+type FlagStyle = 'plain' | 'circle' | 'stars' | 'cross';
+
+function drawWavingFlag(
+  ctx: CanvasRenderingContext2D,
+  p: CosmeticDrawParams,
+  stripeColors: string[],
+  style: FlagStyle,
+): void {
+  const { hx, hy, hr, angle, time } = p;
+  const t = (time || 0) * 0.004;
+  ctx.save(); ctx.translate(hx, hy); ctx.rotate(angle);
+
+  // Position: attached at the neck (behind head center)
+  const attachX = -hr * 0.6;
+  const flagW = hr * 2.0;
+  const flagH = hr * 1.2;
+  const cols = 20;
+  const colW = flagW / cols;
+  const amplitude = hr * 0.25;
+
+  // Draw flag as vertical strips with wave
+  for (let c = 0; c < cols; c++) {
+    const x0 = attachX + c * colW;
+    const x1 = attachX + (c + 1) * colW;
+    const wave0 = Math.sin(t + c * 0.4) * amplitude * (c / cols);
+    const wave1 = Math.sin(t + (c + 1) * 0.4) * amplitude * ((c + 1) / cols);
+    const topY = -hr * 0.3;
+    const botY = topY + flagH;
+
+    // Determine color based on stripe
+    const stripeIdx = Math.min(Math.floor(c / (cols / stripeColors.length)), stripeColors.length - 1);
+    ctx.fillStyle = stripeColors[stripeIdx];
+
+    ctx.beginPath();
+    ctx.moveTo(x0, topY + wave0);
+    ctx.lineTo(x1, topY + wave1);
+    ctx.lineTo(x1, botY + wave1);
+    ctx.lineTo(x0, botY + wave0);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Center emblem (for circle/cross styles)
+  if (style === 'circle' || style === 'stars') {
+    const centerX = attachX + flagW * 0.35;
+    const centerWave = Math.sin(t + (cols / 3) * 0.4) * amplitude * 0.35;
+    const centerY = -hr * 0.3 + flagH * 0.5 + centerWave;
+    const emblemR = flagH * 0.2;
+    ctx.fillStyle = stripeColors[1];
+    if (style === 'circle') {
+      ctx.beginPath(); ctx.arc(centerX, centerY, emblemR, 0, Math.PI * 2); ctx.fill();
+    } else {
+      // Stars: small dots
+      for (let s = 0; s < 5; s++) {
+        const sx = centerX + Math.cos(s * 1.26) * emblemR * 0.5;
+        const sy = centerY + Math.sin(s * 1.26) * emblemR * 0.5;
+        ctx.beginPath(); ctx.arc(sx, sy, emblemR * 0.15, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+
+  if (style === 'cross') {
+    const cx = attachX + flagW * 0.35;
+    const cWave = Math.sin(t + (cols / 3) * 0.4) * amplitude * 0.35;
+    const cy = -hr * 0.3 + flagH * 0.5 + cWave;
+    ctx.strokeStyle = '#C8102E'; ctx.lineWidth = flagH * 0.08;
+    ctx.beginPath(); ctx.moveTo(cx - flagH * 0.35, cy); ctx.lineTo(cx + flagH * 0.35, cy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy - flagH * 0.35); ctx.lineTo(cx, cy + flagH * 0.35); ctx.stroke();
+  }
+
+  // Pole line
+  ctx.strokeStyle = '#9CA3AF'; ctx.lineWidth = Math.max(1.5, hr * 0.05);
+  ctx.beginPath(); ctx.moveTo(attachX, -hr * 0.5); ctx.lineTo(attachX, hr * 0.5); ctx.stroke();
+
+  ctx.restore();
+}
+
 // ─── EQUIPPED COSMETICS STATE ─────────────────────────────────────────────────
 
 const EQUIPPED_KEY = 'venom_equipped_cosmetics';
@@ -1313,6 +1648,9 @@ export interface EquippedCosmetics {
   ears: string;
   wings: string;
   nose: string;
+  hat: string;
+  goggles: string;
+  flag: string;
 }
 
 const DEFAULT_EQUIPPED: EquippedCosmetics = {
@@ -1321,6 +1659,9 @@ const DEFAULT_EQUIPPED: EquippedCosmetics = {
   ears: 'ear-none',
   wings: 'wing-none',
   nose: 'nose-none',
+  hat: 'hat-none',
+  goggles: 'goggles-none',
+  flag: 'flag-none',
 };
 
 export function readEquippedCosmetics(): EquippedCosmetics {
@@ -1343,7 +1684,7 @@ export function renderEquippedCosmetics(
   params: CosmeticDrawParams,
 ): void {
   const equipped = readEquippedCosmetics();
-  const slots: CosmeticSlot[] = ['wings', 'ears', 'mouth', 'nose', 'eyes']; // back-to-front
+  const slots: CosmeticSlot[] = ['wings', 'flag', 'ears', 'hat', 'goggles', 'mouth', 'nose', 'eyes']; // back-to-front
   for (const slot of slots) {
     const id = equipped[slot];
     if (!id || id === 'none') continue;
