@@ -196,3 +196,45 @@ Stage Summary:
 - GameSnakePreview now supports dual mode: simple (skinId/headColor/bodyColor for cards) and lab mode (colors[]/bodyStyle/taperStyle/glow for Genetic Lab)
 - Position persistence via refs eliminates the teleporting bug
 - No runtime errors, clean lint, clean dev server log
+---
+Task ID: 2
+Agent: Main
+Task: Improve skin card previews (bigger, more segments), fix uniqueness, add new geometry shapes
+
+Work Log:
+- Identified root cause of no uniqueness: PresetCard only passed headColor+bodyColor (2 colors), ignoring preset's full colors[], shape, taper, glow
+- SkinCard only passed skinId, ignoring pattern-based visual variety
+- Increased preview height from 80px to 110px, segments from 10 to 15, scale from 0.45 to 0.5
+- Reduced text sizes: name text-sm→text-[11px], desc text-[10.5px]→text-[9px], button text-xs→text-[10px]
+- Reduced padding: p-4→p-3, mb-4→mb-2.5, py-2→py-1.5
+- Updated PresetCard to pass colors={preset.colors}, bodyStyle={preset.shape}, taperStyle={preset.taper}, glow={preset.glow}
+- Updated SkinCard to derive visual props from item.pattern (neon→crystal+glow, metallic→fortress+uniform, rainbow→crystal+wave+glow, camo→stingray, pulse→stellar+wave+glow)
+- Added 4 new SegShape types: star, hexagon, triangle, ring (ghost)
+- Added 4 new BodyStyle options: stellar, fortress, stingray, phantom
+- Implemented star shape: 5-pointed star using starPath helper with outer/inner radius
+- Implemented hexagon shape: regular 6-sided polygon using hexPath helper
+- Implemented triangle shape: forward-pointing arrowhead
+- Implemented phantom/ghost: semi-transparent segments with bright outline
+- Enhanced existing shapes: spike (longer forward tip 1.35→1.6), square (wider), diamond (more elongated 1.2→1.4)
+- Updated resolveShapeStyle for new body styles
+- Updated generateCustomSegments and cosmetics-shop randomizer to include new shapes
+- Updated geometry grid from 2/3 cols to 2/3/4 cols for 10 options
+- Verified all 10 shapes with VLM browser testing:
+  - Smooth Circles ✅
+  - Dragon Scales (spikes) ✅
+  - Armored Plates (squares) ✅
+  - Crystal Shards (diamonds) ✅
+  - Spiky Obsidian (all spikes) ✅
+  - Basilisk Diamonds (all diamonds) ✅
+  - Stellar Stars (5-pointed stars) ✅
+  - Fortress Hex (hexagons) ✅
+  - Stingray Blades (triangles) ✅
+  - Phantom Ghost (semi-transparent) ✅
+- Verified skin card uniqueness: VLM confirmed different cards show different colors, shapes, and visual styles
+
+Stage Summary:
+- Skin cards now show full preset visual identity (multi-color, shape, taper, glow)
+- 4 new unique geometry shapes added (star, hexagon, triangle, phantom ghost)
+- All existing shapes made more dramatically different
+- Card text/buttons reduced for cleaner look
+- Preview windows 37% taller (80→110px)
