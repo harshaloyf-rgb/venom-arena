@@ -36,6 +36,8 @@ export interface CosmeticDrawParams {
   angle: number;     // Snake facing angle
   time: number;     // Current timestamp (for animations)
   boosting: boolean; // Whether snake is boosting
+  mouseScreenX?: number; // Raw mouse X for eye tracking
+  mouseScreenY?: number; // Raw mouse Y for eye tracking
 }
 
 // ─── Color helpers ────────────────────────────────────────────────────────────

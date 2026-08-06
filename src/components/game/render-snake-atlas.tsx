@@ -228,10 +228,20 @@ export function renderSnakeAtlas(
   viewport: Viewport,
   atlasManager: SkinAtlasManager,
   time: number,
+  mouseScreenX?: number,
+  mouseScreenY?: number,
 ): void {
+  // Custom lab skins must use the fallback renderer which has
+  // segment shape / taper / glow logic. The atlas path draws uniform
+  // circle sprites and would lose those features.
+  if (snake.skinId === 'custom-lab-skin') {
+    renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY);
+    return;
+  }
+
   const atlas = atlasManager.getAtlas(snake.skinId);
   if (!atlas) {
-    renderSnakeFallback(ctx, snake, camera, viewport, time);
+    renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY);
     return;
   }
 
@@ -389,11 +399,11 @@ export function renderSnakeAtlas(
     // Direction pointer — thin line extending far ahead, shows where snake is steering
     drawDirectionPointer(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting);
 
-    // Responsive eyes — look toward the steering direction (targetAngle)
-    drawResponsiveEyes(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting);
+    // Ultra-responsive eyes — track raw mouse position relative to head
+    drawResponsiveEyes(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting, mouseScreenX, mouseScreenY);
 
     // Equipped face cosmetics (replaces default eyes if custom eyes equipped)
-    renderEquippedCosmetics(ctx, { hx: hsx, hy: hsy, hr: headDrawSize / 2, angle: snake.angle, time, boosting: snake.boosting });
+    renderEquippedCosmetics(ctx, { hx: hsx, hy: hsy, hr: headDrawSize / 2, angle: snake.angle, time, boosting: snake.boosting, mouseScreenX, mouseScreenY });
 
     // Boost speed lines — dramatic streaks behind the head
     if (snake.boosting && segRadius > 3) {
@@ -466,6 +476,8 @@ export function renderSnakeFallback(
   camera: Camera,
   viewport: Viewport,
   now: number,
+  mouseScreenX?: number,
+  mouseScreenY?: number,
 ): void {
   const path = snake.path;
   const pathLen = path.length;
@@ -619,11 +631,11 @@ export function renderSnakeFallback(
     // Direction pointer — thin line extending far ahead, shows where snake is steering
     drawDirectionPointer(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting);
 
-    // Responsive eyes — look toward the steering direction (targetAngle)
-    drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting);
+    // Responsive eyes — track raw mouse position relative to head
+    drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting, mouseScreenX, mouseScreenY);
 
     // Equipped face cosmetics (replaces default eyes if custom eyes equipped)
-    renderEquippedCosmetics(ctx, { hx: headScreen.x, hy: headScreen.y, hr: headRadius, angle: snake.angle, time: now, boosting: snake.boosting });
+    renderEquippedCosmetics(ctx, { hx: headScreen.x, hy: headScreen.y, hr: headRadius, angle: snake.angle, time: now, boosting: snake.boosting, mouseScreenX, mouseScreenY });
 
     // Name
     if (segRadius > 3) {
@@ -712,6 +724,8 @@ function drawResponsiveEyes(
   targetAngle: number,
   headRadius: number,
   boosting: boolean,
+  mouseScreenX?: number,
+  mouseScreenY?: number,
 ): void {
   // Eye positioning — on the face of the snake
   const eyeOffset = headRadius * 0.42;
@@ -720,15 +734,28 @@ function drawResponsiveEyes(
   const perpAngle = moveAngle + Math.PI / 2;
   const eyeForward = headRadius * 0.32;
 
-  // Pupils look toward targetAngle (the steering direction / arrow direction)
-  let diff = targetAngle - moveAngle;
-  while (diff > Math.PI) diff -= 2 * Math.PI;
-  while (diff < -Math.PI) diff += 2 * Math.PI;
+  // ── ULTRA-RESPONSIVE EYE TRACKING ──
+  // Use raw mouse screen position relative to the head for TRUE responsiveness.
+  // Even the tiniest mouse movement shifts pupils dramatically.
+  // Falls back to targetAngle only when mouse position is unavailable.
+  let lookAngle: number;
+  if (mouseScreenX !== undefined && mouseScreenY !== undefined) {
+    // Direct mouse-to-head angle for maximum responsiveness
+    const dx = mouseScreenX - hx;
+    const dy = mouseScreenY - hy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > 2) {
+      lookAngle = Math.atan2(dy, dx);
+    } else {
+      lookAngle = moveAngle;
+    }
+  } else {
+    // Fallback: use steering direction
+    lookAngle = targetAngle;
+  }
 
-  // Ultra-responsive: even a tiny 0.05 radian (~3°) movement pushes pupils to edge.
-  // The pupil snaps to the direction immediately with full extension.
-  const lookAngle = moveAngle + diff;
-  const pupilShift = eyeRadius * 0.65; // Always at the edge of the socket
+  // Pupil always at maximum extension toward look direction
+  const pupilShift = eyeRadius * 0.7; // Slightly beyond center for extreme tracking
 
   for (const side of [-1, 1]) {
     const ex = hx + Math.cos(moveAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
@@ -766,7 +793,7 @@ function drawResponsiveEyes(
       ctx.strokeStyle = '#ff4444';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(ex, ey, eyeRadius + 2, 0, Math.PI * 2);
+    ctx.arc(ex, ey, eyeRadius + 2, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
