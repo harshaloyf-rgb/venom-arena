@@ -14,7 +14,6 @@ import {
   BODY_DOWNSAMPLE_INTERVAL,
   FOOD_DOWNSAMPLE_RADIUS,
   MAX_SNAKES_PER_SNAPSHOT,
-  SPATIAL_CELL_SIZE,
 } from './config';
 
 // Inner curl (corner-cutting) is a client-side visual effect.

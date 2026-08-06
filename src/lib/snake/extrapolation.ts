@@ -315,7 +315,11 @@ export class ExtrapolationEngine {
       }
 
       // Prepend the new head position to the path.
+      // Pop the tail to prevent unbounded growth between snapshots.
       es.path.prepend(es.currentX, es.currentY);
+      if (es.path.length > 2) {
+        es.path.pop();
+      }
     }
   }
 

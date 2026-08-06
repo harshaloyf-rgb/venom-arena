@@ -6,14 +6,8 @@
 // ============================================================================
 
 // ============================================================================
-// 1. ARENA — arena geometry, boundaries, grid appearance
+// 1. ARENA — arena grid appearance
 // ============================================================================
-
-/** Radius of the playable arena in pixels (circular boundary) */
-export const ARENA_RADIUS = 5000;
-
-/** Distance from arena edge at which boundary warning begins */
-export const ARENA_BOUNDARY_MARGIN = 200;
 
 /** Background grid cell size in pixels */
 export const ARENA_GRID_SIZE = 100;
@@ -83,8 +77,7 @@ export const INITIAL_SPAWN_RADIUS = 3000;
 /** Number of food orbs to spawn per tick when below target */
 export const FOOD_RESPAWN_BATCH = 5;
 
-/** Food beyond this distance from any snake gets cleaned up */
-export const FOOD_DESPAWN_RADIUS = 6000;
+// FOOD_DESPAWN_RADIUS removed — was unused (no despawn logic implemented)
 
 // ============================================================================
 // 4. COLLISION — snake radius, protection zones, death rules
@@ -310,8 +303,7 @@ export const FOOD_DOWNSAMPLE_RADIUS = 500;
 /** Extraction zone radius in pixels */
 export const EXTRACTION_ZONE_RADIUS = 800;
 
-/** Rate at which extraction zone shrinks per second (0 = no shrink) */
-export const ZONE_SHRINK_RATE = 0.5;
+// ZONE_SHRINK_RATE removed — was unused (no shrink logic implemented)
 
 /** Minimum score required to enter the extraction zone */
 export const EXTRACTION_SCORE_THRESHOLD = 50;
@@ -331,11 +323,7 @@ export const STAR_CHIP_RADIUS = 12;
 /** Glow color for star chips */
 export const STAR_CHIP_GLOW = '#fbbf24';
 
-/** Duration in ms for each extraction zone phase */
-export const EXTRACTION_ZONE_DURATION = 60000;
-
-/** Interval in ms between extraction zone spawn events */
-export const EXTRACTION_ZONE_SPAWN_INTERVAL = 120000;
+// EXTRACTION_ZONE_DURATION, EXTRACTION_ZONE_SPAWN_INTERVAL removed — unused
 
 /** Array of 5 golden/amber colors for star chip variety */
 export const STAR_CHIP_COLORS: string[] = [

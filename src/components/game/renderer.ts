@@ -1,79 +1,22 @@
 // ============================================================================
 // Renderer — Pure Canvas API rendering functions.
 //
-// SNAKE BODY RENDERING (slither.io-style):
-// The head records its position every tick into a path buffer.
-// The body reads positions from the head's history. The renderer walks
-// the path at a FIXED visual spacing, capped to the snake's logical length.
-// This keeps the visual body length constant regardless of speed.
+// Exports only the functions used by SnakeGame.tsx:
+//   - drawGrid, drawFood, drawStarChips, drawExtractionZone (shared renderers)
+//   - drawDeathOverlay, drawControlsHint, drawMinimap (overlay UI)
 // ============================================================================
 
-import type { Camera, FoodOrb, GameState, Snake, StarChip, Viewport } from '@/lib/snake/types';
-import { SNAKE_RADIUS, SEGMENT_SPACING, SPAWN_PROTECTION_MS, START_LENGTH, GROWTH_RATE, MAX_SNAKE_LENGTH } from '@/lib/snake/config';
+import type { Camera, FoodOrb, StarChip, Snake, Viewport } from '@/lib/snake/types';
 import { worldToScreen } from '@/lib/snake/camera';
-
-/** Fixed pixel spacing between drawn body circles.
- *  Less than SNAKE_RADIUS for overlap → solid continuous look. */
-const BODY_STEP = 6;
-
-const GRID_SIZE = 80;
-const GRID_COLOR = 'rgba(255, 255, 255, 0.04)';
-const BG_COLOR = '#0a0a0f';
-
-// ==========================================================================
-// Main render function
-// ==========================================================================
-
-/** Render the entire game frame */
-export function renderFrame(
-  ctx: CanvasRenderingContext2D,
-  state: GameState,
-  camera: Camera,
-  viewport: Viewport,
-  fps: number,
-  now: number,
-): void {
-  const { width, height } = viewport;
-
-  // Clear
-  ctx.fillStyle = BG_COLOR;
-  ctx.fillRect(0, 0, width, height);
-
-  // Grid
-  drawGrid(ctx, camera, viewport);
-
-  // Extraction zone (faint circle, drawn under everything)
-  if (state.extractionZone.active) {
-    drawExtractionZone(ctx, state.extractionZone, camera, viewport);
-  }
-
-  // Food
-  drawFood(ctx, state.foods, camera, viewport);
-
-  // Star chips (golden glow circles)
-  if (state.starChips.length > 0) {
-    drawStarChips(ctx, state.starChips, camera, viewport, now);
-  }
-
-  // Snakes (bots first, then player on top)
-  for (const [, s] of state.snakes) {
-    if (s.alive && !s.isPlayer) drawSnake(ctx, s, camera, viewport, now);
-  }
-  if (state.player && state.player.alive) {
-    drawSnake(ctx, state.player, camera, viewport, now);
-  }
-
-  // HUD
-  if (state.player) {
-    drawHUD(ctx, state.player, fps, viewport);
-  }
-}
 
 // ==========================================================================
 // Grid
 // ==========================================================================
 
-function drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, viewport: Viewport): void {
+const GRID_SIZE = 80;
+const GRID_COLOR = 'rgba(255, 255, 255, 0.04)';
+
+export function drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, viewport: Viewport): void {
   ctx.strokeStyle = GRID_COLOR;
   ctx.lineWidth = 1;
 
@@ -99,7 +42,7 @@ function drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, viewport: Viewp
 // Food
 // ==========================================================================
 
-function drawFood(
+export function drawFood(
   ctx: CanvasRenderingContext2D,
   foods: FoodOrb[],
   camera: Camera,
@@ -143,7 +86,7 @@ function drawFood(
 // Star Chips (golden glow collectibles)
 // ==========================================================================
 
-function drawStarChips(
+export function drawStarChips(
   ctx: CanvasRenderingContext2D,
   chips: StarChip[],
   camera: Camera,
@@ -198,7 +141,7 @@ function drawStarChips(
 // Extraction Zone
 // ==========================================================================
 
-function drawExtractionZone(
+export function drawExtractionZone(
   ctx: CanvasRenderingContext2D,
   zone: { x: number; y: number; radius: number; active: boolean },
   camera: Camera,
@@ -225,354 +168,6 @@ function drawExtractionZone(
   ctx.setLineDash([]);
 
   ctx.globalAlpha = 1;
-}
-
-// ==========================================================================
-// Snake Body — slither.io-style fixed-spacing path walker
-// ==========================================================================
-
-function drawSnake(
-  ctx: CanvasRenderingContext2D,
-  snake: Snake,
-  camera: Camera,
-  viewport: Viewport,
-  now: number,
-): void {
-  const path = snake.path;
-  const pathLen = path.length;
-  if (pathLen < 2) return;
-
-  // ── HEAD-LEVEL CULLING ──
-  const headWorldX = path.headX;
-  const headWorldY = path.headY;
-  const logicalLen = Math.min(Math.floor(START_LENGTH + snake.score * GROWTH_RATE), MAX_SNAKE_LENGTH);
-  const visualLen = logicalLen * SEGMENT_SPACING;
-  const cullMargin = visualLen + 100;
-  if (headWorldX < viewport.left - cullMargin || headWorldX > viewport.right + cullMargin) return;
-  if (headWorldY < viewport.top - cullMargin || headWorldY > viewport.bottom + cullMargin) return;
-
-  const zoom = camera.zoom;
-  const cw = viewport.width;
-  const ch = viewport.height;
-
-  // Spawn protection: smooth sine-wave pulse instead of hard blink
-  const spawnAge = now - snake.spawnTime;
-  if (spawnAge < SPAWN_PROTECTION_MS) {
-    const t = spawnAge / SPAWN_PROTECTION_MS; // 0→1 over protection duration
-    // Pulsing glow that fades out as protection ends
-    const pulse = 0.5 + 0.5 * Math.sin(now * 0.015);
-    ctx.globalAlpha = 0.4 + 0.6 * (1 - t * pulse);
-  }
-
-  const segRadius = SNAKE_RADIUS * zoom;
-  const headRadius = segRadius * 1.8;
-
-  const vl = viewport.left - 20;
-  const vr = viewport.right + 20;
-  const vt = viewport.top - 20;
-  const vb = viewport.bottom + 20;
-
-  const headScreen = worldToScreen(headWorldX, headWorldY, camera, cw, ch);
-  const headVisible = headWorldX >= vl && headWorldX <= vr && headWorldY >= vt && headWorldY <= vb;
-
-  // ── BODY: Walk path at fixed BODY_STEP, CAPPED to logical length ──
-  // The path buffer may be longer during boost (entries spaced at BOOST_SPEED).
-  // We cap the number of drawn circles so the visual body length stays constant.
-  // visualLen = logicalLen * SEGMENT_SPACING (in world pixels)
-  // maxCircles = ceil(visualLen / BODY_STEP)
-
-  const maxCircles = Math.ceil(visualLen / BODY_STEP);
-
-  ctx.fillStyle = snake.color;
-  ctx.beginPath();
-  let hasBodySegs = false;
-
-  // Path walker state
-  let pIdx = 0;
-  let pFrac = 0;
-  let pSegLen = 0;
-  let pSegDx = 0;
-  let pSegDy = 0;
-
-  // Initialize first path segment
-  pSegDx = path.getX(1) - headWorldX;
-  pSegDy = path.getY(1) - headWorldY;
-  pSegLen = Math.sqrt(pSegDx * pSegDx + pSegDy * pSegDy);
-
-  for (let s = 1; s <= maxCircles; s++) {
-    // Walk BODY_STEP pixels along the path
-    let toWalk = BODY_STEP;
-    let reachedEnd = false;
-
-    while (toWalk > 0.01) {
-      if (pSegLen < 0.01) {
-        pIdx++;
-        pFrac = 0;
-        if (pIdx + 1 < pathLen) {
-          const sx = path.getX(pIdx);
-          const sy = path.getY(pIdx);
-          pSegDx = path.getX(pIdx + 1) - sx;
-          pSegDy = path.getY(pIdx + 1) - sy;
-          pSegLen = Math.sqrt(pSegDx * pSegDx + pSegDy * pSegDy);
-        } else {
-          pSegLen = 0;
-          reachedEnd = true;
-          break;
-        }
-        continue;
-      }
-
-      const avail = pSegLen * (1 - pFrac);
-      if (avail <= 0.01) {
-        pIdx++;
-        pFrac = 0;
-        if (pIdx + 1 < pathLen) {
-          const sx = path.getX(pIdx);
-          const sy = path.getY(pIdx);
-          pSegDx = path.getX(pIdx + 1) - sx;
-          pSegDy = path.getY(pIdx + 1) - sy;
-          pSegLen = Math.sqrt(pSegDx * pSegDx + pSegDy * pSegDy);
-        } else {
-          pSegLen = 0;
-          reachedEnd = true;
-          break;
-        }
-        continue;
-      }
-
-      if (avail <= toWalk) {
-        toWalk -= avail;
-        pIdx++;
-        pFrac = 0;
-        if (pIdx + 1 < pathLen) {
-          const sx = path.getX(pIdx);
-          const sy = path.getY(pIdx);
-          pSegDx = path.getX(pIdx + 1) - sx;
-          pSegDy = path.getY(pIdx + 1) - sy;
-          pSegLen = Math.sqrt(pSegDx * pSegDx + pSegDy * pSegDy);
-        } else {
-          pSegLen = 0;
-          reachedEnd = true;
-          break;
-        }
-      } else {
-        pFrac += toWalk / pSegLen;
-        toWalk = 0;
-      }
-    }
-
-    if (reachedEnd) {
-      // Draw tail circle at last valid position
-      if (pIdx < pathLen) {
-        const tx = path.getX(Math.min(pIdx, pathLen - 1));
-        const ty = path.getY(Math.min(pIdx, pathLen - 1));
-        if (tx >= vl && tx <= vr && ty >= vt && ty <= vb) {
-          const scr = worldToScreen(tx, ty, camera, cw, ch);
-          ctx.moveTo(scr.x + segRadius, scr.y);
-          ctx.arc(scr.x, scr.y, segRadius, 0, Math.PI * 2);
-          hasBodySegs = true;
-        }
-      }
-      break;
-    }
-
-    // Get interpolated world position
-    const sx = path.getX(pIdx);
-    const sy = path.getY(pIdx);
-    const wx = pSegLen > 0.01 ? sx + pSegDx * pFrac : sx;
-    const wy = pSegLen > 0.01 ? sy + pSegDy * pFrac : sy;
-
-    if (wx >= vl && wx <= vr && wy >= vt && wy <= vb) {
-      const scr = worldToScreen(wx, wy, camera, cw, ch);
-      ctx.moveTo(scr.x + segRadius, scr.y);
-      ctx.arc(scr.x, scr.y, segRadius, 0, Math.PI * 2);
-      hasBodySegs = true;
-    }
-  }
-
-  if (hasBodySegs) ctx.fill();
-
-  // ── Head ──
-  if (headVisible) {
-    ctx.fillStyle = snake.headColor;
-    ctx.beginPath();
-    ctx.arc(headScreen.x, headScreen.y, headRadius, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // ── Eyes (responsive — track target direction) ──
-  if (headVisible) {
-    drawEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius);
-  }
-
-  // ── Directional arrow (slither.io style) — drawn ON TOP of head ──
-  if (headVisible) {
-    drawDirectionArrow(ctx, headScreen.x, headScreen.y, snake.angle, headRadius, snake.boosting);
-  }
-
-  // ── Boost lines ──
-  if (headVisible && snake.boosting && segRadius > 3) {
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.lineWidth = 1.5 * zoom;
-    for (let j = 0; j < 3; j++) {
-      const a = snake.angle + Math.PI + (j - 1) * 0.3;
-      const len = (15 + j * 5) * zoom;
-      const bx = headScreen.x - Math.cos(snake.angle) * headRadius;
-      const by = headScreen.y - Math.sin(snake.angle) * headRadius;
-      ctx.beginPath();
-      ctx.moveTo(bx, by);
-      ctx.lineTo(bx + Math.cos(a) * len, by + Math.sin(a) * len);
-      ctx.stroke();
-    }
-  }
-
-  // ── Name label ──
-  if (headVisible && segRadius > 3) {
-    ctx.fillStyle = snake.isPlayer ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.5)';
-    ctx.font = `${Math.max(10, 12 * zoom)}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(snake.name, headScreen.x, headScreen.y - headRadius - 4 * zoom);
-  }
-
-  ctx.globalAlpha = 1;
-}
-
-// ==========================================================================
-// Directional Arrow (slither.io-style pointer in front of mouth)
-// ==========================================================================
-
-function drawDirectionArrow(
-  ctx: CanvasRenderingContext2D,
-  hx: number,
-  hy: number,
-  angle: number,
-  headRadius: number,
-  boosting: boolean,
-): void {
-  // Arrow extends well beyond the head circle for visibility
-  const arrowLen = headRadius * 1.2;
-  const arrowWidth = headRadius * 0.5;
-
-  // Arrow tip (in front of the head)
-  const tipDist = headRadius + arrowLen;
-  const tipX = hx + Math.cos(angle) * tipDist;
-  const tipY = hy + Math.sin(angle) * tipDist;
-
-  // Arrow base (at head edge, wings spread perpendicular)
-  const baseDist = headRadius * 0.7;
-  const perpAngle = angle + Math.PI / 2;
-  const b1x = hx + Math.cos(angle) * baseDist + Math.cos(perpAngle) * arrowWidth;
-  const b1y = hy + Math.sin(angle) * baseDist + Math.sin(perpAngle) * arrowWidth;
-  const b2x = hx + Math.cos(angle) * baseDist - Math.cos(perpAngle) * arrowWidth;
-  const b2y = hy + Math.sin(angle) * baseDist - Math.sin(perpAngle) * arrowWidth;
-
-  // Color: bright white when boosting, subtle when normal
-  ctx.fillStyle = boosting
-    ? 'rgba(255, 255, 255, 0.95)'
-    : 'rgba(255, 255, 255, 0.7)';
-
-  ctx.beginPath();
-  ctx.moveTo(tipX, tipY);
-  ctx.lineTo(b1x, b1y);
-  ctx.lineTo(b2x, b2y);
-  ctx.closePath();
-  ctx.fill();
-}
-
-// ==========================================================================
-// Eyes — Responsive pupils that track targetAngle (mouse direction)
-// ==========================================================================
-
-function drawEyes(
-  ctx: CanvasRenderingContext2D,
-  hx: number,
-  hy: number,
-  moveAngle: number,
-  targetAngle: number,
-  headRadius: number,
-): void {
-  const eyeOffset = headRadius * 0.42;
-  const eyeRadius = headRadius * 0.32;
-  const pupilRadius = eyeRadius * 0.55;
-  const perpAngle = moveAngle + Math.PI / 2;
-  const eyeForward = headRadius * 0.35;
-
-  // Pupils look toward targetAngle, clamped to stay inside the eye
-  let lookAngle = targetAngle;
-  let diff = lookAngle - moveAngle;
-  while (diff > Math.PI) diff -= 2 * Math.PI;
-  while (diff < -Math.PI) diff += 2 * Math.PI;
-  const maxPupilDev = 0.6;
-  if (Math.abs(diff) > maxPupilDev) {
-    lookAngle = moveAngle + Math.sign(diff) * maxPupilDev;
-  }
-
-  // How far the pupil shifts inside its socket
-  const pupilShift = eyeRadius * 0.4;
-
-  for (const side of [-1, 1]) {
-    const ex = hx + Math.cos(moveAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
-    const ey = hy + Math.sin(moveAngle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
-
-    // Eye white with subtle border
-    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-    ctx.lineWidth = 1;
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(ex, ey, eyeRadius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    // Pupil — shifted toward lookAngle
-    const px = ex + Math.cos(lookAngle) * pupilShift;
-    const py = ey + Math.sin(lookAngle) * pupilShift;
-    ctx.fillStyle = '#111111';
-    ctx.beginPath();
-    ctx.arc(px, py, pupilRadius, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Tiny highlight on pupil for life-like look
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.beginPath();
-    ctx.arc(px - pupilRadius * 0.25, py - pupilRadius * 0.3, pupilRadius * 0.3, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-// ==========================================================================
-// HUD
-// ==========================================================================
-
-function drawHUD(
-  ctx: CanvasRenderingContext2D,
-  player: Snake,
-  fps: number,
-  viewport: Viewport,
-): void {
-  const p = 16;
-  const lh = 22;
-
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-  ctx.beginPath();
-  ctx.roundRect(p, p, 180, lh * 2 + p * 2, 8);
-  ctx.fill();
-
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 16px monospace';
-  ctx.fillText(`Score: ${player.score}`, p + 12, p + 10);
-
-  const logicalLength = Math.min(Math.floor(START_LENGTH + player.score * GROWTH_RATE), MAX_SNAKE_LENGTH);
-  ctx.font = '13px monospace';
-  ctx.fillStyle = '#a0a0a0';
-  ctx.fillText(`Length: ${logicalLength}`, p + 12, p + 10 + lh);
-
-  ctx.textAlign = 'right';
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-  ctx.font = '12px monospace';
-  ctx.fillText(`${fps} FPS`, viewport.width - p, p);
 }
 
 // ==========================================================================
