@@ -1,414 +1,273 @@
 'use client';
 
 /**
- * Game-Accurate Skin Preview — shows the EXACT same snake rendering
- * that appears in the actual game canvas. Uses the atlas-based renderer
- * so what you see in the shop IS what you get in-game.
+ * Game-Accurate Skin Preview — renders the snake with EXACT game params
+ * (eye size 0.38, border 1.5px, shadow, gradient 0.35) so the shop preview
+ * matches what players see in-game.
  */
 
 import { useEffect, useRef, useCallback } from 'react';
 import type { SkinAsset } from '@/lib/snake/types';
 import { SkinAtlasManager } from '@/lib/snake/atlas';
-import { SNAKE_RADIUS, SEGMENT_SPACING, HEAD_SPRITE_SIZE } from '@/lib/snake/config';
+import { SNAKE_RADIUS, CAMERA_BASE_ZOOM, SEGMENT_SPACING } from '@/lib/snake/config';
 import { getSkinAsset, isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
 import { renderEquippedCosmetics, getCosmeticById, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
-import { readCustomSkinStateSafe, drawSegmentShape, computeTaperRadius } from '@/components/panels/cosmetics/cosmetics-utils';
+import { readCustomSkinStateSafe, drawSegmentShape } from '@/components/panels/cosmetics/cosmetics-utils';
 import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-types';
 
+// ─── Game-accurate constants (mirrors render-snake-atlas.tsx) ───────────
+
+const HEAD_SCALE = 1.3;
+const LIGHTEN = 0.35;
+const LIGHTEN_STOP = 0.55;
+const DARKEN = 0.35;
+const EYE_RADIUS_RATIO = 0.38;
+const EYE_OFFSET_RATIO = 0.42;
+const EYE_FORWARD_RATIO = 0.32;
+const PUPIL_RADIUS_RATIO = 0.52;
+const PUPIL_SHIFT_RATIO = 0.7;
+const EYE_BORDER_W = 1.5;
+const EYE_BORDER_COLOR = 'rgba(0,0,0,0.5)';
+const HIGHLIGHT_OPACITY = 0.8;
+const SHADOW_BLUR_R = 0.8;
+const SHADOW_OFFSET_Y_R = 0.3;
+
 interface GameSkinPreviewProps {
-  /** Skin ID (cosmetic ID, preset ID, or 'custom-lab-skin') */
   skinId: string;
-  /** Canvas width in CSS pixels */
   width?: number;
-  /** Canvas height in CSS pixels */
   height?: number;
-  /** Number of body segments to show */
   segments?: number;
-  /** Whether to show a wiggle animation */
   animated?: boolean;
-  /** Optional SkinAsset override (avoids re-lookup) */
   assetOverride?: SkinAsset;
-  /** Extra CSS classes */
   className?: string;
-  /** Override equipped cosmetics for preview */
   equippedCosmetics?: EquippedCosmetics | null;
 }
 
-// Shared atlas manager for all previews (builds once, reuses)
 let sharedAtlasManager: SkinAtlasManager | null = null;
-
 function getSharedAtlasManager(): SkinAtlasManager {
-  if (!sharedAtlasManager) {
-    sharedAtlasManager = new SkinAtlasManager();
-  }
+  if (!sharedAtlasManager) sharedAtlasManager = new SkinAtlasManager();
   return sharedAtlasManager;
 }
 
+// ─── Color helpers ─────────────────────────────────────────────────────
+
+function lightenHex(hex: string, f: number): string {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const r = (n >> 16) & 0xff, g = (n >> 8) & 0xff, b = n & 0xff;
+  return `#${Math.round(r + (255 - r) * f).toString(16).padStart(2, '0')}${Math.round(g + (255 - g) * f).toString(16).padStart(2, '0')}${Math.round(b + (255 - b) * f).toString(16).padStart(2, '0')}`;
+}
+function darkenHex(hex: string, f: number): string {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const r = (n >> 16) & 0xff, g = (n >> 8) & 0xff, b = n & 0xff;
+  return `#${Math.round(r * (1 - f)).toString(16).padStart(2, '0')}${Math.round(g * (1 - f)).toString(16).padStart(2, '0')}${Math.round(b * (1 - f)).toString(16).padStart(2, '0')}`;
+}
+
+// ─── Component ─────────────────────────────────────────────────────────
+
 export function GameSkinPreview({
-  skinId,
-  width = 220,
-  height = 80,
-  segments = 18,
-  animated = true,
-  assetOverride,
-  equippedCosmetics,
-  className = '',
+  skinId, width = 220, height = 80, segments = 18,
+  animated = true, assetOverride, equippedCosmetics, className = '',
 }: GameSkinPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animRef = useRef<number>(0);
+  const animRef = useRef(0);
   const mouseRef = useRef<{ x: number; y: number } | null>(null);
 
-  const draw = useCallback((
-    ctx: CanvasRenderingContext2D,
-    canvasW: number,
-    canvasH: number,
-    time: number,
-  ) => {
+  const draw = useCallback((ctx: CanvasRenderingContext2D, W: number, H: number, time: number) => {
     const asset = assetOverride ?? getSkinAsset(skinId);
-    const atlasManager = getSharedAtlasManager();
-
-    // Ensure atlas is built for this skin
-    if (!atlasManager.getAtlas(asset.id)) {
-      atlasManager.buildAtlas(asset);
-    }
-    const atlas = atlasManager.getAtlas(asset.id);
-
+    const am = getSharedAtlasManager();
+    if (!am.getAtlas(asset.id)) am.buildAtlas(asset);
+    const atlas = am.getAtlas(asset.id);
     const multiColor = isMultiColorSkin(skinId);
 
-    ctx.clearRect(0, 0, canvasW, canvasH);
+    ctx.clearRect(0, 0, W, H);
 
-    // Background: subtle dark gradient
-    const bgGrad = ctx.createRadialGradient(canvasW / 2, canvasH / 2, 0, canvasW / 2, canvasH / 2, canvasW / 2);
-    bgGrad.addColorStop(0, 'rgba(15, 23, 42, 0.3)');
-    bgGrad.addColorStop(1, 'rgba(15, 23, 42, 0.6)');
-    ctx.fillStyle = bgGrad;
-    ctx.beginPath();
-    ctx.roundRect(0, 0, canvasW, canvasH, 8);
-    ctx.fill();
+    // Background
+    const bg = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, W / 2);
+    bg.addColorStop(0, 'rgba(15, 23, 42, 0.3)');
+    bg.addColorStop(1, 'rgba(15, 23, 42, 0.6)');
+    ctx.fillStyle = bg;
+    ctx.beginPath(); ctx.roundRect(0, 0, W, H, 8); ctx.fill();
 
-    // Calculate segment layout
-    const segRadius = 8;
-    const segStep = SEGMENT_SPACING;
-    const headScale = 1.3;
-    const totalLen = segments * segStep;
-    const startX = (canvasW - totalLen) / 2;
-    const centerY = canvasH / 2;
+    // Layout
+    const r = 8;
+    const step = SEGMENT_SPACING;
+    const totalLen = segments * step;
+    const sx = (W - totalLen) / 2;
+    const cy = H / 2;
 
-    // Generate wiggle positions
-    const positions: { x: number; y: number; angle: number }[] = [];
-    let cx = startX;
-    let cy = centerY;
-    let baseAngle = 0; // moving right
-
+    // Sine-wave positions
+    const pos: { x: number; y: number; a: number }[] = [];
+    let px = sx;
     for (let i = 0; i < segments; i++) {
-      // Sinusoidal wiggle
-      const wiggle = animated
-        ? Math.sin(time * 0.004 - i * 0.42) * 9
-        : Math.sin(-i * 0.42) * 9;
-
-      const perpX = -Math.sin(baseAngle);
-      const perpY = Math.cos(baseAngle);
-
-      positions.push({
-        x: cx,
-        y: cy + wiggle,
-        angle: baseAngle,
-      });
-
-      cx += segStep;
+      const w = animated ? Math.sin(time * 0.004 - i * 0.42) * 9 : Math.sin(-i * 0.42) * 9;
+      pos.push({ x: px, y: cy + w, a: 0 });
+      px += step;
+    }
+    // Compute angles from neighbours
+    for (let i = 0; i < pos.length; i++) {
+      const next = i < pos.length - 1 ? pos[i + 1] : pos[i];
+      const prev = i > 0 ? pos[i - 1] : pos[i];
+      pos[i].a = Math.atan2(next.y - prev.y, next.x - prev.x);
     }
 
-    // Check for custom lab skin segments with shapes/taper/glow
-    const customSegments: CustomSegment[] | null = (() => {
+    // Custom lab skin?
+    const customSegs: CustomSegment[] | null = (() => {
       if (skinId === 'custom-lab-skin') {
-        const state = readCustomSkinStateSafe();
-        if (state?.customSkinSegments?.length) return state.customSkinSegments;
+        const s = readCustomSkinStateSafe();
+        if (s?.customSkinSegments?.length) return s.customSkinSegments;
       }
       return null;
     })();
 
-    // Draw body (tail to head for layering)
-    for (let i = positions.length - 1; i >= 0; i--) {
-      const pos = positions[i];
-      const r = segRadius;
+    // ── Body (tail → head) ──
+    for (let i = pos.length - 1; i >= 0; i--) {
+      const p = pos[i];
 
-      // Custom lab skin with shapes — use drawSegmentShape
-      if (customSegments) {
-        const seg = customSegments[i % customSegments.length];
-        const taperedR = r * seg.sizeScale;
-        drawSegmentShape(
-          ctx, pos.x, pos.y, taperedR,
-          pos.angle, seg.shape, seg.color, seg.glow,
-        );
+      if (customSegs) {
+        const seg = customSegs[i % customSegs.length];
+        drawSegmentShape(ctx, p.x, p.y, r * seg.sizeScale, p.a, seg.shape, seg.color, seg.glow);
         continue;
       }
 
       if (atlas && !multiColor) {
-        // Use atlas texture
-        const bodyIdx = i % atlas.body.length;
-        const region = atlas.body[bodyIdx];
-
+        const region = atlas.body[i % atlas.body.length];
         ctx.save();
-        ctx.translate(pos.x, pos.y);
-        ctx.rotate(pos.angle);
-
-        // Apply epic effects
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.a);
         if (asset.animation && asset.animation !== 'none') {
-          atlasManager.applyEpicEffect(ctx, asset.animation, time * 0.001, 0, 0, r * 2, asset.bodyColor);
+          am.applyEpicEffect(ctx, asset.animation, time * 0.001, 0, 0, r * 2, asset.bodyColor);
         }
-
-        ctx.drawImage(
-          atlas.canvas,
-          region.x, region.y, region.width, region.height,
-          -r, -r, r * 2, r * 2,
-        );
-
-        atlasManager.resetEpicEffect(ctx);
-        ctx.restore();
-      } else if (multiColor) {
-        // Multi-color: alternating segments with gradient 3D effect
-        const segColor = getSegmentColor(skinId, i) ?? asset.bodyColor;
-
-        ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.3)';
-        ctx.shadowBlur = r * 0.8;
-        ctx.shadowOffsetY = r * 0.3;
-        // 3D gradient (game-accurate params)
-        const grad = ctx.createRadialGradient(
-          pos.x - r * 0.3, pos.y - r * 0.3, r * 0.1,
-          pos.x, pos.y, r,
-        );
-        grad.addColorStop(0, lightenHex(segColor, 0.35));
-        grad.addColorStop(0.55, segColor);
-        grad.addColorStop(1, darkenHex(segColor, 0.35));
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.drawImage(atlas.canvas, region.x, region.y, region.width, region.height, -r, -r, r * 2, r * 2);
+        am.resetEpicEffect(ctx);
         ctx.restore();
       } else {
-        // Fallback: solid with 3D gradient (game-accurate params)
+        const col = multiColor ? (getSegmentColor(skinId, i) ?? asset.bodyColor) : asset.bodyColor;
         ctx.save();
         ctx.shadowColor = 'rgba(0,0,0,0.3)';
-        ctx.shadowBlur = r * 0.8;
-        ctx.shadowOffsetY = r * 0.3;
-        const grad = ctx.createRadialGradient(
-          pos.x - r * 0.3, pos.y - r * 0.3, r * 0.1,
-          pos.x, pos.y, r,
-        );
-        grad.addColorStop(0, lightenHex(asset.bodyColor, 0.35));
-        grad.addColorStop(0.55, asset.bodyColor);
-        grad.addColorStop(1, darkenHex(asset.bodyColor, 0.35));
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.shadowBlur = r * SHADOW_BLUR_R;
+        ctx.shadowOffsetY = r * SHADOW_OFFSET_Y_R;
+        const g = ctx.createRadialGradient(p.x - r * 0.3, p.y - r * 0.3, r * 0.1, p.x, p.y, r);
+        g.addColorStop(0, lightenHex(col, LIGHTEN));
+        g.addColorStop(LIGHTEN_STOP, col);
+        g.addColorStop(1, darkenHex(col, DARKEN));
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
       }
     }
 
-    // Draw head (last position = head)
-    if (positions.length > 0) {
-      const headPos = positions[0];
-      const hr = segRadius * headScale;
+    // ── Head ──
+    if (pos.length > 0) {
+      const hp = pos[0];
+      const hr = r * HEAD_SCALE;
 
       if (atlas && !multiColor) {
         const region = atlas.head;
         ctx.save();
-        ctx.translate(headPos.x, headPos.y);
-        ctx.rotate(headPos.angle);
-
+        ctx.translate(hp.x, hp.y);
+        ctx.rotate(hp.a);
         if (asset.animation && asset.animation !== 'none') {
-          atlasManager.applyEpicEffect(ctx, asset.animation, time * 0.001, 0, 0, hr * 2, asset.headColor);
+          am.applyEpicEffect(ctx, asset.animation, time * 0.001, 0, 0, hr * 2, asset.headColor);
         }
-
-        ctx.drawImage(
-          atlas.canvas,
-          region.x, region.y, region.width, region.height,
-          -hr, -hr, hr * 2, hr * 2,
-        );
-
-        atlasManager.resetEpicEffect(ctx);
+        ctx.drawImage(atlas.canvas, region.x, region.y, region.width, region.height, -hr, -hr, hr * 2, hr * 2);
+        am.resetEpicEffect(ctx);
         ctx.restore();
       } else {
-        const headColor = multiColor
-          ? (getSegmentColor(skinId, 0) ?? asset.headColor)
-          : asset.headColor;
-
+        const hc = multiColor ? (getSegmentColor(skinId, 0) ?? asset.headColor) : asset.headColor;
         ctx.save();
         ctx.shadowColor = 'rgba(0,0,0,0.3)';
-        ctx.shadowBlur = hr * 0.8;
-        ctx.shadowOffsetY = hr * 0.3;
-        const grad = ctx.createRadialGradient(
-          headPos.x - hr * 0.3, headPos.y - hr * 0.3, hr * 0.1,
-          headPos.x, headPos.y, hr,
-        );
-        grad.addColorStop(0, lightenHex(headColor, 0.35));
-        grad.addColorStop(0.55, headColor);
-        grad.addColorStop(1, darkenHex(headColor, 0.35));
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(headPos.x, headPos.y, hr, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.shadowBlur = hr * SHADOW_BLUR_R;
+        ctx.shadowOffsetY = hr * SHADOW_OFFSET_Y_R;
+        const g = ctx.createRadialGradient(hp.x - hr * 0.3, hp.y - hr * 0.3, hr * 0.1, hp.x, hp.y, hr);
+        g.addColorStop(0, lightenHex(hc, LIGHTEN));
+        g.addColorStop(LIGHTEN_STOP, hc);
+        g.addColorStop(1, darkenHex(hc, DARKEN));
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(hp.x, hp.y, hr, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
       }
 
-      // Draw eyes on head — game-accurate params
-      const eyeOffset = hr * 0.42;
-      const eyeR = hr * 0.38;
-      const pupilR = eyeR * 0.52;
-      const forwardOffset = hr * 0.32;
-      const perpAngle = headPos.angle + Math.PI / 2;
+      // ── Eyes (game-accurate) ──
+      const eyeOff = hr * EYE_OFFSET_RATIO;
+      const eyeR = hr * EYE_RADIUS_RATIO;
+      const pupR = eyeR * PUPIL_RADIUS_RATIO;
+      const fwd = hr * EYE_FORWARD_RATIO;
+      const perp = hp.a + Math.PI / 2;
 
       for (const side of [-1, 1]) {
-        const ex = headPos.x + Math.cos(headPos.angle) * forwardOffset + Math.cos(perpAngle) * eyeOffset * side;
-        const ey = headPos.y + Math.sin(headPos.angle) * forwardOffset + Math.sin(perpAngle) * eyeOffset * side;
+        const ex = hp.x + Math.cos(hp.a) * fwd + Math.cos(perp) * eyeOff * side;
+        const ey = hp.y + Math.sin(hp.a) * fwd + Math.sin(perp) * eyeOff * side;
+
         ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(ex, ey, eyeR, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+        ctx.strokeStyle = EYE_BORDER_COLOR;
+        ctx.lineWidth = EYE_BORDER_W;
+        ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
 
-        // Pupil tracks mouse position for ultra-responsive feel
-        let lookAngle = headPos.angle;
-        const mRef = mouseRef.current;
-        if (mRef) {
-          const dx = mRef.x - ex;
-          const dy = mRef.y - ey;
-          if (Math.sqrt(dx * dx + dy * dy) > 2) {
-            lookAngle = Math.atan2(dy, dx);
-          }
+        let lookA = hp.a;
+        const m = mouseRef.current;
+        if (m) {
+          const dx = m.x - ex, dy = m.y - ey;
+          if (Math.sqrt(dx * dx + dy * dy) > 2) lookA = Math.atan2(dy, dx);
         }
-        const pupilShift = eyeR * 0.7;
-        const px = ex + Math.cos(lookAngle) * pupilShift;
-        const py = ey + Math.sin(lookAngle) * pupilShift;
+        const shift = eyeR * PUPIL_SHIFT_RATIO;
+        const ppx = ex + Math.cos(lookA) * shift;
+        const ppy = ey + Math.sin(lookA) * shift;
         ctx.fillStyle = '#111111';
-        ctx.beginPath();
-        ctx.arc(px, py, pupilR, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(ppx, ppy, pupR, 0, Math.PI * 2); ctx.fill();
 
-        // Highlight (game-accurate opacity)
-        ctx.fillStyle = 'rgba(255,255,255,0.8)';
-        ctx.beginPath();
-        ctx.arc(px - pupilR * 0.3, py - pupilR * 0.35, pupilR * 0.3, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.fillStyle = `rgba(255,255,255,${HIGHLIGHT_OPACITY})`;
+        ctx.beginPath(); ctx.arc(ppx - pupR * 0.3, ppy - pupR * 0.35, pupR * 0.3, 0, Math.PI * 2); ctx.fill();
       }
 
-      // Face cosmetics preview
+      // Face cosmetics
       if (equippedCosmetics) {
-        // Draw each equipped cosmetic
         const slots: Array<'wings'|'flag'|'ears'|'hat'|'goggles'|'mouth'|'nose'|'eyes'> = ['wings', 'flag', 'ears', 'hat', 'goggles', 'mouth', 'nose', 'eyes'];
         for (const slot of slots) {
           const id = equippedCosmetics[slot];
           if (!id || id === 'none') continue;
-          const cosmetic = getCosmeticById(id);
-          if (cosmetic) cosmetic.draw(ctx, {
-            hx: headPos.x, hy: headPos.y, hr, angle: headPos.angle, time, boosting: false
-          });
+          const c = getCosmeticById(id);
+          if (c) c.draw(ctx, { hx: hp.x, hy: hp.y, hr, angle: hp.a, time, boosting: false });
         }
       } else {
-        renderEquippedCosmetics(ctx, {
-          hx: headPos.x, hy: headPos.y, hr, angle: headPos.angle, time, boosting: false
-        });
+        renderEquippedCosmetics(ctx, { hx: hp.x, hy: hp.y, hr, angle: hp.a, time, boosting: false });
       }
 
-      // Glow effect for rare+ skins
+      // Rarity glow
       if (asset.rarity === 'epic' || asset.rarity === 'legendary') {
-        const glowIntensity = 0.2 + 0.1 * Math.sin(time * 0.003);
-        ctx.save();
-        ctx.globalAlpha = glowIntensity;
-        const glowGrad = ctx.createRadialGradient(headPos.x, headPos.y, hr, headPos.x, headPos.y, hr * 2.5);
-        glowGrad.addColorStop(0, asset.bodyColor);
-        glowGrad.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = glowGrad;
-        ctx.beginPath();
-        ctx.arc(headPos.x, headPos.y, hr * 2.5, 0, Math.PI * 2);
-        ctx.fill();
+        const gi = 0.2 + 0.1 * Math.sin(time * 0.003);
+        ctx.save(); ctx.globalAlpha = gi;
+        const gg = ctx.createRadialGradient(hp.x, hp.y, hr, hp.x, hp.y, hr * 2.5);
+        gg.addColorStop(0, asset.bodyColor); gg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = gg;
+        ctx.beginPath(); ctx.arc(hp.x, hp.y, hr * 2.5, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
       }
     }
   }, [skinId, segments, animated, assetOverride, equippedCosmetics]);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
+    const c = canvasRef.current;
+    if (!c) return;
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    const ctx = canvas.getContext('2d');
+    c.width = width * dpr; c.height = height * dpr;
+    const ctx = c.getContext('2d');
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // Track mouse position for responsive eyes in preview
-    const handleMouseMove = (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = width / rect.width;
-      const scaleY = height / rect.height;
-      mouseRef.current = {
-        x: (e.clientX - rect.left) * scaleX,
-        y: (e.clientY - rect.top) * scaleY,
-      };
+    const onMove = (e: MouseEvent) => {
+      const rect = c.getBoundingClientRect();
+      mouseRef.current = { x: (e.clientX - rect.left) * (width / rect.width), y: (e.clientY - rect.top) * (height / rect.height) };
     };
-    const handleMouseLeave = () => { mouseRef.current = null; };
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('mouseleave', handleMouseLeave);
+    const onLeave = () => { mouseRef.current = null; };
+    c.addEventListener('mousemove', onMove); c.addEventListener('mouseleave', onLeave);
 
-    if (!animated) {
-      draw(ctx, width, height, 0);
-      return () => {
-        canvas.removeEventListener('mousemove', handleMouseMove);
-        canvas.removeEventListener('mouseleave', handleMouseLeave);
-      };
-    }
+    if (!animated) { draw(ctx, width, height, 0); return () => { c.removeEventListener('mousemove', onMove); c.removeEventListener('mouseleave', onLeave); }; }
 
     let running = true;
-    const loop = (time: number) => {
-      if (!running) return;
-      draw(ctx, width, height, time);
-      animRef.current = requestAnimationFrame(loop);
-    };
+    const loop = (t: number) => { if (!running) return; draw(ctx, width, height, t); animRef.current = requestAnimationFrame(loop); };
     animRef.current = requestAnimationFrame(loop);
-
-    return () => {
-      running = false;
-      cancelAnimationFrame(animRef.current);
-      canvas.removeEventListener('mousemove', handleMouseMove);
-      canvas.removeEventListener('mouseleave', handleMouseLeave);
-    };
+    return () => { running = false; cancelAnimationFrame(animRef.current); c.removeEventListener('mousemove', onMove); c.removeEventListener('mouseleave', onLeave); };
   }, [draw, width, height, animated]);
 
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{ width: `${width}px`, height: `${height}px` }}
-      className={`block ${className}`}
-    />
-  );
-}
-
-// ─── Color helpers (duplicated from atlas.ts to avoid circular deps) ────────
-
-function lightenHex(hex: string, factor: number): string {
-  const n = parseInt(hex.replace('#', ''), 16);
-  const r = (n >> 16) & 0xff;
-  const g = (n >> 8) & 0xff;
-  const b = n & 0xff;
-  const nr = Math.round(r + (255 - r) * factor);
-  const ng = Math.round(g + (255 - g) * factor);
-  const nb = Math.round(b + (255 - b) * factor);
-  return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`;
-}
-
-function darkenHex(hex: string, factor: number): string {
-  const n = parseInt(hex.replace('#', ''), 16);
-  const r = (n >> 16) & 0xff;
-  const g = (n >> 8) & 0xff;
-  const b = n & 0xff;
-  const nr = Math.round(r * (1 - factor));
-  const ng = Math.round(g * (1 - factor));
-  const nb = Math.round(b * (1 - factor));
-  return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`;
+  return <canvas ref={canvasRef} style={{ width: `${width}px`, height: `${height}px` }} className={`block ${className}`} />;
 }
