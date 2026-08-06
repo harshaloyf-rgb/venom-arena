@@ -128,7 +128,7 @@ export function PresetCard({
             height={110}
             segments={15}
             speed={1.2}
-            scale={0.5}
+            scale={0.45}
           />
         </div>
 
@@ -232,7 +232,7 @@ export function SkinCard({
             height={110}
             segments={15}
             speed={1.2}
-            scale={0.5}
+            scale={0.45}
           />
         </div>
 

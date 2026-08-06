@@ -422,3 +422,26 @@ Stage Summary:
 - Directional arrows removed from ALL skin previews (shared GameSnakePreview component)
 - Cosmetic preview snake is now 30% smaller (scale 0.7)
 - Files modified: game-snake-preview.tsx (removed arrow code), cosmetics-section.tsx (scale 1→0.7)
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix snake growing from center, unique movement per preview, reduce sizes, normalize speed
+
+Work Log:
+- Added `hashString()` and `seededRandom()` for deterministic per-instance behavior
+- Each instance derives `instanceSeed` from skinId or color combination hash
+- Init block now uses seeded random for: starting angle, position offset, turn timer, target angle
+- Pre-simulates `bufLen` (segments*6) frames forward on init to fill the entire buffer
+- Snake appears fully formed from the very first frame — no growing animation
+- Each snake card starts at a unique position, facing a unique direction, with unique turn timing
+- Root cause of speed difference: 3 callers used different speed values (1.2, 1.5, 1.8)
+- Normalized all speeds to 1.2 across all previews
+- Reduced all scales by 10%: cards 0.5→0.45, lab 0.85→0.77, cosmetics 0.7→0.63
+- Changed default speed prop from 1.8 to 1.2
+
+Stage Summary:
+- Files modified: game-snake-preview.tsx (major rewrite of init), cosmetics-cards.tsx, cosmetics-shop.tsx, cosmetics-section.tsx
+- All 33 skin card previews now start fully formed with unique movement patterns
+- Speed is now uniform (1.2) across Skin Gallery, Genetic Lab, and Face Cosmetics
+- All preview sizes reduced by 10%
+- Lint clean, no runtime errors
