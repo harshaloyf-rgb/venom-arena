@@ -181,6 +181,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
           writeCustomSkinState(next);
           setCustomState(next);
         }
+        refresh(); // re-fetch player so currentSkin updates immediately
         notify(`Equipped Body Skin: ${item.name}`, 'success', onToast);
       }
     } else {
@@ -201,6 +202,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
           writeCustomSkinState(next);
           setCustomState(next);
         }
+        refresh(); // re-fetch player so currentSkin + unlockedSkins update immediately
         notify(
           `Unlocked & Equipped ${item.name}! -${item.cost} CHIPS`,
           'success',
