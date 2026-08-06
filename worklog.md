@@ -160,3 +160,39 @@ Stage Summary:
 - Verified: 33 canvases render on 'all' category, 20 on presets, 13 on premium
 - VLM screenshot verification confirmed different colored snakes, names below each, roaming animation
 - Lint passes clean, no runtime errors
+---
+Task ID: 1
+Agent: Main
+Task: Fix Genetic Pattern Lab - remove text, add segments, fix teleporting, fix geometry/taper/glow
+
+Work Log:
+- Read try-on-preview.tsx (old component, now replaced by GameSnakePreview)
+- Read game-snake-preview.tsx to understand current rendering
+- Read cosmetics-shop.tsx to find where GameSnakePreview is used in the lab
+- Identified root causes:
+  1. "STEER TO TEST" text was a span above the canvas in cosmetics-shop.tsx
+  2. Segments was 16, user wanted 20-21
+  3. Teleporting: all snake state was inside useEffect closure, re-initialized on every prop change
+  4. Geometry/Taper/Glow: these props (bodyStyle, taperStyle, glow) were not passed from cosmetics-shop.tsx to GameSnakePreview, and the component didn't support them
+- Rewrote GameSnakePreview to support Genetic Lab mode (colors[], bodyStyle, taperStyle, glow)
+- Used persistent refs (posRef, bufRef) for position state that survives effect re-runs
+- Color resolution done via useMemo-like pattern in render body, captured in effect closure
+- Added drawSegmentShape integration for non-circle shapes (dragon, armored, crystal, obsidian, basilisk)
+- Added computeTaperRadius integration for taper physics
+- Added glow shadow rendering via drawSegmentShape's glow parameter
+- Updated cosmetics-shop.tsx: removed "LAB HOLO-PREVIEW (STEER TO TEST)" span, passed colors/bodyStyle/taperStyle/glow props, increased segments from 16 to 20
+- Fixed lint issues with react-hooks/immutability by avoiding ref mutations after useEffect
+- Verified with browser + VLM:
+  - STEER TO TEST text removed ✅
+  - Snake has 20 body segments ✅
+  - No teleporting on color change ✅
+  - Dragon Scales geometry shows spikes ✅
+  - Heavy Head taper shows large head + thin tail ✅
+  - Bioluminescent Aura glow toggle works ✅
+  - Skin card previews still work correctly ✅
+
+Stage Summary:
+- All 6 user requests fixed in a single pass
+- GameSnakePreview now supports dual mode: simple (skinId/headColor/bodyColor for cards) and lab mode (colors[]/bodyStyle/taperStyle/glow for Genetic Lab)
+- Position persistence via refs eliminates the teleporting bug
+- No runtime errors, clean lint, clean dev server log

@@ -612,15 +612,14 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
           {/* LEFT COLUMN — Game-accurate roaming snake preview + Projector card */}
           <div className="lg:col-span-5 flex flex-col gap-4">
             <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4">
-              <span className="text-[10px] text-slate-500 font-mono tracking-widest uppercase font-bold block text-center mb-2">
-                LAB HOLO-PREVIEW (STEER TO TEST)
-              </span>
               <GameSnakePreview
-                headColor={colorSequence[0]}
-                bodyColor={colorSequence[1] ?? colorSequence[0]}
+                colors={colorSequence}
+                bodyStyle={bodyStyle}
+                taperStyle={taperStyle}
+                glow={glowEnabled}
                 width={450}
                 height={180}
-                segments={16}
+                segments={20}
                 speed={1.5}
                 scale={0.85}
               />
