@@ -6,6 +6,8 @@ import type {
   TaperStyle,
 } from './cosmetics-types';
 import { CUSTOM_SKIN_KEY } from './cosmetics-types';
+import { ALL_COSMETICS, PASS_FREE_COSMETICS, PASS_ELITE_COSMETICS } from '@/lib/game-config';
+import type { SkinPattern } from '@/lib/game-config';
 
 // ---------------------------------------------------------------------------
 // Shared shape-style resolution — maps BodyStyle → per-segment SegShape.
@@ -191,9 +193,91 @@ function hexPath(
 }
 
 // ---------------------------------------------------------------------------
-// drawSegmentShape — draws a single snake body segment with the given shape,
-// 3D radial gradient, optional glow, and rotation to face the movement angle.
+// getSkinVisualProps — shared pattern → visual props mapping
 // ---------------------------------------------------------------------------
+
+/** Visual props derived from a skin's pattern field */
+export interface SkinVisualProps {
+  colors: string[];
+  bodyStyle: BodyStyle;
+  taperStyle: TaperStyle;
+  glow: boolean;
+}
+
+/** Build a flat lookup: skinId → SkinPattern */
+const skinPatternMap = new Map<string, SkinPattern>();
+for (const item of ALL_COSMETICS) {
+  if (item.type === 'skin' && item.pattern) skinPatternMap.set(item.id, item.pattern);
+}
+for (const item of PASS_FREE_COSMETICS) {
+  if (item.type === 'skin' && item.pattern) skinPatternMap.set(item.id, item.pattern);
+}
+for (const item of PASS_ELITE_COSMETICS) {
+  if (item.type === 'skin' && item.pattern) skinPatternMap.set(item.id, item.pattern);
+}
+
+/** Build a flat lookup: skinId → { color, secondaryColor } */
+const skinColorMap = new Map<string, { color: string; secondaryColor?: string }>();
+for (const item of ALL_COSMETICS) {
+  if (item.type === 'skin') skinColorMap.set(item.id, { color: item.color, secondaryColor: item.secondaryColor });
+}
+for (const item of PASS_FREE_COSMETICS) {
+  if (item.type === 'skin') skinColorMap.set(item.id, { color: item.color, secondaryColor: item.secondaryColor });
+}
+for (const item of PASS_ELITE_COSMETICS) {
+  if (item.type === 'skin') skinColorMap.set(item.id, { color: item.color, secondaryColor: item.secondaryColor });
+}
+
+/**
+ * Map a SkinPattern to visual rendering props (bodyStyle, taperStyle, glow, colors).
+ * This is the SINGLE SOURCE OF TRUTH used by SkinCard, GameSnakePreview, and
+ * the game renderer to ensure consistent visuals everywhere.
+ */
+export function mapPatternToVisuals(pattern: SkinPattern): Omit<SkinVisualProps, 'colors'> {
+  switch (pattern) {
+    case 'neon':
+      return { bodyStyle: 'crystal', taperStyle: 'natural', glow: true };
+    case 'glow':
+      return { bodyStyle: 'smooth', taperStyle: 'natural', glow: true };
+    case 'metallic':
+      return { bodyStyle: 'fortress', taperStyle: 'uniform', glow: false };
+    case 'pulse':
+      return { bodyStyle: 'stellar', taperStyle: 'wave', glow: true };
+    case 'rainbow':
+      return { bodyStyle: 'crystal', taperStyle: 'wave', glow: true };
+    case 'camo':
+      return { bodyStyle: 'stingray', taperStyle: 'natural', glow: false };
+    case 'cyber':
+      return { bodyStyle: 'fortress', taperStyle: 'wave', glow: true };
+    case 'zebra':
+      return { bodyStyle: 'armored', taperStyle: 'uniform', glow: false };
+    default:
+      return { bodyStyle: 'smooth', taperStyle: 'natural', glow: false };
+  }
+}
+
+/**
+ * Get the full visual props for a skin by its ID.
+ * Returns null for skins without a pattern (they use simple solid rendering).
+ * For skins with a pattern, returns colors[] + bodyStyle + taperStyle + glow
+ * so the caller can render in "lab mode" with proper shapes/effects.
+ */
+export function getSkinVisualProps(skinId: string): SkinVisualProps | null {
+  const pattern = skinPatternMap.get(skinId);
+  if (!pattern) return null; // No pattern → simple solid skin
+
+  const colors_data = skinColorMap.get(skinId);
+  const colors = [colors_data?.color ?? '#22c55e'];
+  if (colors_data?.secondaryColor) colors.push(colors_data.secondaryColor);
+
+  const { bodyStyle, taperStyle, glow } = mapPatternToVisuals(pattern);
+  return { colors, bodyStyle, taperStyle, glow };
+}
+
+// ---------------------------------------------------------------------------
+// drawSegmentShape
+// ---------------------------------------------------------------------------
+
 export function drawSegmentShape(
   ctx: CanvasRenderingContext2D,
   x: number,

@@ -13,7 +13,7 @@
 import { useEffect, useRef } from 'react';
 import { SNAKE_RADIUS, CAMERA_BASE_ZOOM } from '@/lib/snake/config';
 import { getSkinAsset } from '@/lib/snake/skin-registry';
-import { resolveShapeStyle, computeTaperRadius, drawSegmentShape, readCustomSkinStateSafe } from './cosmetics-utils';
+import { resolveShapeStyle, computeTaperRadius, drawSegmentShape, readCustomSkinStateSafe, getSkinVisualProps } from './cosmetics-utils';
 import type { BodyStyle, TaperStyle, CustomSegment } from './cosmetics-types';
 import { renderEquippedCosmetics, readEquippedCosmetics, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
 
@@ -134,13 +134,14 @@ export function GameSnakePreview({
     return '#16a34a';
   })();
 
-  // Auto-detect lab-mode props from localStorage when a skinId with custom
-  // segments is equipped (e.g. presets stored via handleEquipSlitherPreset).
+  // Auto-detect lab-mode props: (1) pattern-based from skin registry,
+  // (2) custom segments from localStorage (presets / DNA lab).
   let autoColors: string[] | undefined;
   let autoBodyStyle: BodyStyle | undefined;
   let autoTaper: TaperStyle | undefined;
   let autoGlow: boolean | undefined;
   if (skinId && !colors) {
+    // 1. Check for custom segments in localStorage (presets / DNA lab)
     const stored = readCustomSkinStateSafe();
     if (stored?.useCustomSkin && stored.currentSkin === skinId && stored.customSkinSegments?.length) {
       const segs = stored.customSkinSegments;
@@ -151,11 +152,19 @@ export function GameSnakePreview({
       else if (shapes.has('diamond')) autoBodyStyle = 'crystal';
       else if (shapes.has('spike')) autoBodyStyle = 'obsidian';
       else autoBodyStyle = 'smooth';
-      // Detect taper from sizeScale variation
       const scales = segs.map((s: CustomSegment) => s.sizeScale);
       const hasVariation = Math.max(...scales) - Math.min(...scales) > 0.1;
       autoTaper = hasVariation ? 'natural' : 'uniform';
       autoGlow = segs.some((s: CustomSegment) => s.glow);
+    } else {
+      // 2. Check for pattern-based visual props (manufactured skins)
+      const vis = getSkinVisualProps(skinId);
+      if (vis) {
+        autoColors = vis.colors;
+        autoBodyStyle = vis.bodyStyle;
+        autoTaper = vis.taperStyle;
+        autoGlow = vis.glow;
+      }
     }
   }
   const effectiveColors = colors ?? autoColors;

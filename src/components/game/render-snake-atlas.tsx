@@ -17,7 +17,7 @@ import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
 import { isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
 import { renderEquippedCosmetics, readEquippedCosmetics } from '@/lib/snake/face-cosmetics';
-import { drawSegmentShape, readCustomSkinState } from '@/components/panels/cosmetics/cosmetics-utils';
+import { drawSegmentShape, readCustomSkinState, getSkinVisualProps, resolveShapeStyle, computeTaperRadius } from '@/components/panels/cosmetics/cosmetics-utils';
 import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-types';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -241,7 +241,10 @@ export function renderSnakeAtlas(
     customState.currentSkin === snake.skinId &&
     (customState.customSkinSegments?.length ?? 0) > 0;
 
-  if (snake.skinId === 'custom-lab-skin' || hasCustomSegments) {
+  // Pattern-based skins (neon, rainbow, metallic, etc.) need shape-aware rendering
+  const patternVisuals = getSkinVisualProps(snake.skinId);
+
+  if (snake.skinId === 'custom-lab-skin' || hasCustomSegments || patternVisuals) {
     renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY);
     return;
   }
@@ -573,6 +576,9 @@ export function renderSnakeFallback(
     customSegments = customState.customSkinSegments;
   }
 
+  // Check for pattern-based visual props (manufactured skins with neon/rainbow/etc.)
+  const patternVis = getSkinVisualProps(snake.skinId);
+
   // Drop shadow under the whole snake body
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.3)';
@@ -590,6 +596,23 @@ export function renderSnakeFallback(
       const taperedR = segRadius * seg.sizeScale;
       const segAngle = walked.angles[i];
       drawSegmentShape(ctx, scr.x, scr.y, taperedR, segAngle, seg.shape, seg.color, seg.glow);
+    }
+  } else if (patternVis) {
+    // Pattern-based skin: draw with shapes, taper, and glow from the shared mapping
+    const pColors = patternVis.colors;
+    const pBodyStyle = patternVis.bodyStyle;
+    const pTaper = patternVis.taperStyle;
+    const pGlow = patternVis.glow;
+    for (let i = walked.count - 1; i >= 0; i--) {
+      const wx = walked.xs[i];
+      const wy = walked.ys[i];
+      if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
+      const scr = worldToScreen(wx, wy, camera, cw, ch);
+      const segAngle = walked.angles[i];
+      const segColor = pColors[i % pColors.length] ?? snake.color;
+      const segShape = resolveShapeStyle(pBodyStyle, i);
+      const taperedR = segRadius * computeTaperRadius(i, walked.count, pTaper);
+      drawSegmentShape(ctx, scr.x, scr.y, taperedR, segAngle, segShape, segColor, pGlow);
     }
   } else if (multiColor) {
     // Per-segment color: draw each one individually with 3D gradient
@@ -632,11 +655,13 @@ export function renderSnakeFallback(
   // ── Head ──
   const headRadius = segRadius * 1.3;
   if (headVisible) {
+    // For pattern skins, use the pattern's primary color for the head
+    const effectiveHeadColor = patternVis ? (patternVis.colors[0] ?? snake.headColor) : snake.headColor;
     // 3D head gradient
     const headGrad = ctx.createRadialGradient(headScreen.x - headRadius * 0.3, headScreen.y - headRadius * 0.3, headRadius * 0.05, headScreen.x, headScreen.y, headRadius);
-    headGrad.addColorStop(0, lightenHex(snake.headColor, 0.35));
-    headGrad.addColorStop(0.55, snake.headColor);
-    headGrad.addColorStop(1, darkenHex(snake.headColor, 0.35));
+    headGrad.addColorStop(0, lightenHex(effectiveHeadColor, 0.35));
+    headGrad.addColorStop(0.55, effectiveHeadColor);
+    headGrad.addColorStop(1, darkenHex(effectiveHeadColor, 0.35));
     ctx.fillStyle = headGrad;
     ctx.beginPath();
     ctx.arc(headScreen.x, headScreen.y, headRadius, 0, Math.PI * 2);
