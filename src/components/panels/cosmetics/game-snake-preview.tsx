@@ -55,6 +55,8 @@ export function GameSnakePreview({
   height = 220,
   segments = 24,
   speed = 1.8,
+  scale = 1,
+  showLabel = false,
 }: {
   skinId?: string;
   headColor?: string;
@@ -63,6 +65,8 @@ export function GameSnakePreview({
   height?: number;
   segments?: number;
   speed?: number;
+  scale?: number;
+  showLabel?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef(0);
@@ -114,8 +118,9 @@ export function GameSnakePreview({
       } catch { /* defaults */ }
     }
 
-    const segR = G.segR;
+    const segR = G.segR * scale;
     const hr = segR * G.headScale;
+    const wallM = Math.max(segR + 5, Math.min(width, height) * 0.3);
 
     let running = true;
     const loop = () => {
@@ -138,7 +143,6 @@ export function GameSnakePreview({
       headY += Math.sin(angle) * speed;
 
       // Bounce
-      const wallM = 70;
       if (headX < wallM) { targetAngle = 0; headX = wallM; }
       if (headX > width - wallM) { targetAngle = Math.PI; headX = width - wallM; }
       if (headY < wallM) { targetAngle = Math.PI / 2; headY = wallM; }
@@ -280,13 +284,29 @@ export function GameSnakePreview({
       c.removeEventListener('mousemove', onMove);
       c.removeEventListener('mouseleave', onLeave);
     };
-  }, [skinId, headColorProp, bodyColorProp, width, height, segments, speed]);
+  }, [skinId, headColorProp, bodyColorProp, width, height, segments, speed, scale]);
+
+  // Get skin name for label
+  let skinName = '';
+  if (showLabel && skinId) {
+    try {
+      const asset = getSkinAsset(skinId);
+      skinName = asset.name;
+    } catch { /* no name */ }
+  }
 
   return (
-    <canvas
-      ref={canvasRef}
-      style={{ width: `${width}px`, height: `${height}px` }}
-      className="rounded-lg cursor-crosshair border border-white/10 w-full max-w-full"
-    />
+    <div className="flex flex-col items-center">
+      <canvas
+        ref={canvasRef}
+        style={{ width: `${width}px`, height: `${height}px` }}
+        className="rounded-lg border border-white/10 w-full max-w-full"
+      />
+      {showLabel && skinName && (
+        <span className="text-[9px] text-slate-500 mt-1 truncate max-w-full text-center leading-tight">
+          {skinName}
+        </span>
+      )}
+    </div>
   );
 }
