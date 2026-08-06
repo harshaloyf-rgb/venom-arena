@@ -129,6 +129,7 @@ export function PresetCard({
             segments={15}
             speed={1.2}
             scale={0.45}
+            economy
           />
         </div>
 
@@ -152,7 +153,7 @@ export function PresetCard({
             : 'bg-slate-900 text-slate-300 group-hover:bg-indigo-600 group-hover:text-white'
         }`}
       >
-        {active ? 'Equipped' : 'Equip Preset'}
+        {active ? 'Equipped' : 'Launch Me'}
       </button>
     </div>
   );
@@ -233,6 +234,7 @@ export function SkinCard({
             segments={15}
             speed={1.2}
             scale={0.45}
+            economy
           />
         </div>
 
