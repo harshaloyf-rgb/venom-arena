@@ -216,7 +216,7 @@ export function GameSnakePreview({
     const ctx = c.getContext('2d', { alpha: false });
     if (!ctx) return;
 
-    // Mouse tracking (only for non-economy mode)
+    // Mouse tracking (always — cheap, only fires on hover)
     const onMove = (e: MouseEvent) => {
       const rect = c.getBoundingClientRect();
       mouseRef.current = {
@@ -225,10 +225,8 @@ export function GameSnakePreview({
       };
     };
     const onLeave = () => { mouseRef.current = null; };
-    if (!economy) {
-      c.addEventListener('mousemove', onMove);
-      c.addEventListener('mouseleave', onLeave);
-    }
+    c.addEventListener('mousemove', onMove);
+    c.addEventListener('mouseleave', onLeave);
 
     // Reallocate buffer only if segment count changed
     const bufLen = segments * 6;
@@ -483,22 +481,32 @@ export function GameSnakePreview({
         ctx.fillStyle = hg;
         ctx.beginPath(); ctx.arc(headX, headY, hr, 0, Math.PI * 2); ctx.fill();
 
-        // Simple eyes (no mouse tracking, no cosmetics)
+        // Responsive eyes (mouse tracking, no cosmetics)
         const eyeOff = hr * G.eyeOff;
         const eyeR = hr * G.eyeR;
         const pupR = eyeR * G.pupR;
         const fwd = hr * G.eyeFwd;
         const perp = angle + Math.PI / 2;
+
+        let lookA = angle;
+        const m = mouseRef.current;
+        if (m) {
+          const dx = m.x - headX, dy = m.y - headY;
+          if (Math.sqrt(dx * dx + dy * dy) > 5) lookA = Math.atan2(dy, dx);
+        }
+
         for (const side of [-1, 1]) {
           const ex = headX + Math.cos(angle) * fwd + Math.cos(perp) * eyeOff * side;
           const ey = headY + Math.sin(angle) * fwd + Math.sin(perp) * eyeOff * side;
           ctx.fillStyle = '#ffffff';
           ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, Math.PI * 2); ctx.fill();
           const shift = eyeR * G.pupShift;
+          const ppx = ex + Math.cos(lookA) * shift;
+          const ppy = ey + Math.sin(lookA) * shift;
           ctx.fillStyle = '#111111';
-          ctx.beginPath(); ctx.arc(ex + Math.cos(angle) * shift, ey + Math.sin(angle) * shift, pupR, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(ppx, ppy, pupR, 0, Math.PI * 2); ctx.fill();
           ctx.fillStyle = `rgba(255,255,255,${G.highlight})`;
-          ctx.beginPath(); ctx.arc(ex + Math.cos(angle) * shift - pupR * 0.3, ey + Math.sin(angle) * shift - pupR * 0.35, pupR * 0.3, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(ppx - pupR * 0.3, ppy - pupR * 0.35, pupR * 0.3, 0, Math.PI * 2); ctx.fill();
         }
       } else {
         // FULL MODE: shadows, gradients, mouse-tracking eyes, cosmetics
@@ -605,10 +613,8 @@ export function GameSnakePreview({
     return () => {
       running = false;
       cancelAnimationFrame(animRef.current);
-      if (!economy) {
-        c.removeEventListener('mousemove', onMove);
-        c.removeEventListener('mouseleave', onLeave);
-      }
+      c.removeEventListener('mousemove', onMove);
+      c.removeEventListener('mouseleave', onLeave);
     };
   }, [width, height, segments, speed, scale, resolvedHead, resolvedBody, effectiveBodyStyle, effectiveTaper, effectiveGlow, isLabMode, effectiveColors, instanceSeed, economy]);
 
