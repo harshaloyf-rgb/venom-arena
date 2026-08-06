@@ -11,6 +11,7 @@ import type { SkinAsset } from '@/lib/snake/types';
 import { SkinAtlasManager } from '@/lib/snake/atlas';
 import { SNAKE_RADIUS, SEGMENT_SPACING, HEAD_SPRITE_SIZE } from '@/lib/snake/config';
 import { getSkinAsset, isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
+import { renderEquippedCosmetics, getCosmeticById, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
 
 interface GameSkinPreviewProps {
   /** Skin ID (cosmetic ID, preset ID, or 'custom-lab-skin') */
@@ -27,6 +28,8 @@ interface GameSkinPreviewProps {
   assetOverride?: SkinAsset;
   /** Extra CSS classes */
   className?: string;
+  /** Override equipped cosmetics for preview */
+  equippedCosmetics?: EquippedCosmetics | null;
 }
 
 // Shared atlas manager for all previews (builds once, reuses)
@@ -46,6 +49,7 @@ export function GameSkinPreview({
   segments = 18,
   animated = true,
   assetOverride,
+  equippedCosmetics,
   className = '',
 }: GameSkinPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -246,6 +250,24 @@ export function GameSkinPreview({
         ctx.fill();
       }
 
+      // Face cosmetics preview
+      if (equippedCosmetics) {
+        // Draw each equipped cosmetic
+        const slots: Array<'wings'|'ears'|'mouth'|'nose'|'eyes'> = ['wings', 'ears', 'mouth', 'nose', 'eyes'];
+        for (const slot of slots) {
+          const id = equippedCosmetics[slot];
+          if (!id || id === 'none') continue;
+          const cosmetic = getCosmeticById(id);
+          if (cosmetic) cosmetic.draw(ctx, {
+            hx: headPos.x, hy: headPos.y, hr, angle: headPos.angle, time, boosting: false
+          });
+        }
+      } else {
+        renderEquippedCosmetics(ctx, {
+          hx: headPos.x, hy: headPos.y, hr, angle: headPos.angle, time, boosting: false
+        });
+      }
+
       // Glow effect for rare+ skins
       if (asset.rarity === 'epic' || asset.rarity === 'legendary') {
         const glowIntensity = 0.2 + 0.1 * Math.sin(time * 0.003);
@@ -261,7 +283,7 @@ export function GameSkinPreview({
         ctx.restore();
       }
     }
-  }, [skinId, segments, animated, assetOverride]);
+  }, [skinId, segments, animated, assetOverride, equippedCosmetics]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

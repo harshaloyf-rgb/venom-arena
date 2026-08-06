@@ -16,6 +16,7 @@ import { worldToScreen } from '@/lib/snake/camera';
 import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
 import { isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
+import { renderEquippedCosmetics } from '@/lib/snake/face-cosmetics';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -227,7 +228,7 @@ export function renderSnakeAtlas(
 ): void {
   const atlas = atlasManager.getAtlas(snake.skinId);
   if (!atlas) {
-    renderSnakeFallback(ctx, snake, camera, viewport);
+    renderSnakeFallback(ctx, snake, camera, viewport, time);
     return;
   }
 
@@ -363,6 +364,9 @@ export function renderSnakeAtlas(
     // Responsive eyes — look toward the steering direction (targetAngle)
     drawResponsiveEyes(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2);
 
+    // Equipped face cosmetics (replaces default eyes if custom eyes equipped)
+    renderEquippedCosmetics(ctx, { hx: hsx, hy: hsy, hr: headDrawSize / 2, angle: snake.angle, time, boosting: snake.boosting });
+
     // Boost speed lines
     if (snake.boosting && segRadius > 3) {
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
@@ -465,40 +469,59 @@ export function renderSnakeFallback(
   // Multi-color skins alternate colors per segment
   const multiColor = isMultiColorSkin(snake.skinId);
 
+  // Drop shadow under the whole snake body
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.3)';
+  ctx.shadowBlur = segRadius * 0.8;
+  ctx.shadowOffsetY = segRadius * 0.3;
+
   if (multiColor) {
-    // Per-segment color: draw each one individually
+    // Per-segment color: draw each one individually with 3D gradient
     for (let i = walked.count - 1; i >= 0; i--) {
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
       const scr = worldToScreen(wx, wy, camera, cw, ch);
-      const segColor = getSegmentColor(snake.skinId, i);
-      ctx.fillStyle = segColor ?? snake.color;
+      const segColor = getSegmentColor(snake.skinId, i) ?? snake.color;
+      const grad = ctx.createRadialGradient(scr.x - segRadius * 0.3, scr.y - segRadius * 0.3, segRadius * 0.1, scr.x, scr.y, segRadius);
+      grad.addColorStop(0, lightenHex(segColor, 0.3));
+      grad.addColorStop(0.5, segColor);
+      grad.addColorStop(1, darkenHex(segColor, 0.3));
+      ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(scr.x, scr.y, segRadius, 0, Math.PI * 2);
       ctx.fill();
     }
   } else {
-    // Batched single-color draw (high performance)
-    ctx.fillStyle = snake.color;
-    ctx.beginPath();
-    let hasBodySegs = false;
+    // Per-segment 3D radial gradient (each segment needs its own gradient)
     for (let i = walked.count - 1; i >= 0; i--) {
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
       const scr = worldToScreen(wx, wy, camera, cw, ch);
-      ctx.moveTo(scr.x + segRadius, scr.y);
+      const grad = ctx.createRadialGradient(scr.x - segRadius * 0.3, scr.y - segRadius * 0.3, segRadius * 0.1, scr.x, scr.y, segRadius);
+      grad.addColorStop(0, lightenHex(snake.color, 0.3));
+      grad.addColorStop(0.5, snake.color);
+      grad.addColorStop(1, darkenHex(snake.color, 0.3));
+      ctx.fillStyle = grad;
+      ctx.beginPath();
       ctx.arc(scr.x, scr.y, segRadius, 0, Math.PI * 2);
-      hasBodySegs = true;
+      ctx.fill();
     }
-    if (hasBodySegs) ctx.fill();
   }
+
+  // Reset shadow after drawing body
+  ctx.restore();
 
   // ── Head ──
   const headRadius = segRadius * 1.3;
   if (headVisible) {
-    ctx.fillStyle = snake.headColor;
+    // 3D head gradient
+    const headGrad = ctx.createRadialGradient(headScreen.x - headRadius * 0.3, headScreen.y - headRadius * 0.3, headRadius * 0.05, headScreen.x, headScreen.y, headRadius);
+    headGrad.addColorStop(0, lightenHex(snake.headColor, 0.35));
+    headGrad.addColorStop(0.55, snake.headColor);
+    headGrad.addColorStop(1, darkenHex(snake.headColor, 0.35));
+    ctx.fillStyle = headGrad;
     ctx.beginPath();
     ctx.arc(headScreen.x, headScreen.y, headRadius, 0, Math.PI * 2);
     ctx.fill();
@@ -508,6 +531,9 @@ export function renderSnakeFallback(
 
     // Responsive eyes — look toward the steering direction (targetAngle)
     drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius);
+
+    // Equipped face cosmetics (replaces default eyes if custom eyes equipped)
+    renderEquippedCosmetics(ctx, { hx: headScreen.x, hy: headScreen.y, hr: headRadius, angle: snake.angle, time: now, boosting: snake.boosting });
 
     // Name
     if (segRadius > 3) {
@@ -648,6 +674,28 @@ function drawResponsiveEyes(
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+function lightenHex(hex: string, factor: number): string {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const r = (n >> 16) & 0xff;
+  const g = (n >> 8) & 0xff;
+  const b = n & 0xff;
+  const nr = Math.round(r + (255 - r) * factor);
+  const ng = Math.round(g + (255 - g) * factor);
+  const nb = Math.round(b + (255 - b) * factor);
+  return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`;
+}
+
+function darkenHex(hex: string, factor: number): string {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const r = (n >> 16) & 0xff;
+  const g = (n >> 8) & 0xff;
+  const b = n & 0xff;
+  const nr = Math.round(r * (1 - factor));
+  const ng = Math.round(g * (1 - factor));
+  const nb = Math.round(b * (1 - factor));
+  return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`;
+}
 
 function clamp(v: number, min: number, max: number): number {
   return v < min ? min : v > max ? max : v;

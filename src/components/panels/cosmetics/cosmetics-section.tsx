@@ -1,0 +1,191 @@
+'use client';
+
+import { useState, useCallback } from 'react';
+import { Check, Lock, Sparkles } from 'lucide-react';
+import { GameSkinPreview } from './skin-preview-game';
+import {
+  FACE_COSMETICS,
+  getCosmeticsBySlot,
+  getCosmeticById,
+  SLOT_INFO,
+  readEquippedCosmetics,
+  writeEquippedCosmetics,
+  type CosmeticSlot,
+  type EquippedCosmetics,
+  type CosmeticRarity,
+} from '@/lib/snake/face-cosmetics';
+
+// Slots that have actual equippable face cosmetics (flag & banner are server-side)
+const EQUIPPABLE_SLOTS: CosmeticSlot[] = ['eyes', 'mouth', 'ears', 'wings', 'nose'];
+const ALL_SLOTS: CosmeticSlot[] = ['eyes', 'mouth', 'ears', 'wings', 'nose', 'flag', 'banner'];
+
+const RARITY_STYLES: Record<CosmeticRarity, string> = {
+  common: 'bg-slate-500/15 text-slate-400 border-slate-500/20',
+  rare: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20',
+  epic: 'bg-purple-500/15 text-purple-400 border-purple-500/20',
+  legendary: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
+};
+
+export function CosmeticsSection({
+  onToast,
+}: {
+  onToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
+}) {
+  const [activeSlot, setActiveSlot] = useState<CosmeticSlot>('eyes');
+  const [equipped, setEquipped] = useState<EquippedCosmetics>(
+    readEquippedCosmetics(),
+  );
+
+  // Equipped state is initialized from localStorage and updated on equip actions.
+  // No need for a sync effect since this component owns the write path.
+
+  const handleEquip = useCallback(
+    (cosmeticId: string, slot: CosmeticSlot) => {
+      if (equipped[slot as keyof EquippedCosmetics] === cosmeticId) {
+        onToast?.('Already equipped!', 'info');
+        return;
+      }
+
+      const cosmetic = getCosmeticById(cosmeticId);
+      if (!cosmetic) return;
+
+      if (cosmetic.cost === 0) {
+        const next: EquippedCosmetics = {
+          ...equipped,
+          [slot]: cosmeticId,
+        };
+        writeEquippedCosmetics(next);
+        setEquipped(next);
+        onToast?.(`\u2705 ${cosmetic.name} equipped!`, 'success');
+      } else {
+        onToast?.(
+          'Available in future update \u2014 coming soon!',
+          'info',
+        );
+      }
+    },
+    [equipped, onToast],
+  );
+
+  const slotCosmetics = getCosmeticsBySlot(activeSlot);
+  const isFlagOrBanner = activeSlot === 'flag' || activeSlot === 'banner';
+
+  return (
+    <div className="animate-fade-in">
+      {/* Preview canvas */}
+      <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 mb-6">
+        <div className="flex flex-col items-center gap-3">
+          <span className="text-[10px] text-slate-500 font-mono tracking-widest uppercase font-bold">
+            Live Preview
+          </span>
+          <GameSkinPreview
+            skinId="custom-lab-skin"
+            width={280}
+            height={100}
+            segments={14}
+            animated={true}
+            equippedCosmetics={equipped}
+            className="rounded-xl"
+          />
+          <p className="text-[10px] text-slate-500 text-center leading-relaxed">
+            Your snake with current face cosmetics applied.
+          </p>
+        </div>
+      </div>
+
+      {/* Slot sub-tabs */}
+      <div className="flex flex-wrap gap-2 mb-5">
+        {ALL_SLOTS.map((slot) => {
+          const info = SLOT_INFO[slot];
+          const isActive = activeSlot === slot;
+          return (
+            <button
+              key={slot}
+              type="button"
+              onClick={() => setActiveSlot(slot)}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-sans font-semibold transition-all cursor-pointer ${
+                isActive
+                  ? 'bg-slate-800 text-white border border-slate-700 shadow-md'
+                  : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-transparent'
+              }`}
+            >
+              {info.emoji} {info.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Flag / Banner redirect message */}
+      {isFlagOrBanner && (
+        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-8 flex flex-col items-center justify-center text-center gap-3">
+          <span className="text-3xl">{SLOT_INFO[activeSlot].emoji}</span>
+          <h3 className="text-sm font-bold text-white font-sans">
+            {SLOT_INFO[activeSlot].label}
+          </h3>
+          <p className="text-xs text-slate-400 font-sans max-w-sm leading-relaxed">
+            Flags and Banners are managed in the Skin &amp; Effect Gallery tab.
+          </p>
+        </div>
+      )}
+
+      {/* Cosmetics card grid */}
+      {!isFlagOrBanner && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {slotCosmetics.map((cosmetic) => {
+            const isEquipped =
+              equipped[activeSlot as keyof EquippedCosmetics] === cosmetic.id;
+            const isFree = cosmetic.cost === 0;
+
+            return (
+              <button
+                key={cosmetic.id}
+                type="button"
+                onClick={() => handleEquip(cosmetic.id, cosmetic.slot)}
+                className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 text-left transition-all cursor-pointer hover:border-slate-600/60 hover:bg-slate-900/80 hover:shadow-lg hover:shadow-black/20 group"
+              >
+                {/* Emoji */}
+                <div className="flex items-center justify-center text-4xl mb-3 group-hover:scale-110 transition-transform">
+                  {cosmetic.emoji}
+                </div>
+
+                {/* Name */}
+                <h4 className="text-xs font-bold text-white font-sans mb-1.5">
+                  {cosmetic.name}
+                </h4>
+
+                {/* Rarity badge */}
+                <span
+                  className={`inline-block text-[9px] font-semibold border rounded-full px-2 py-0.5 mb-2 font-sans uppercase tracking-wide ${RARITY_STYLES[cosmetic.rarity]}`}
+                >
+                  {cosmetic.rarity}
+                </span>
+
+                {/* Description */}
+                <p className="text-[10px] text-slate-400 font-sans leading-relaxed mb-3">
+                  {cosmetic.description}
+                </p>
+
+                {/* Action button area */}
+                <div className="mt-auto">
+                  {isEquipped ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2.5 py-1">
+                      <Check className="w-3 h-3" /> Equipped
+                    </span>
+                  ) : isFree ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-200 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 group-hover:bg-slate-700 transition-colors">
+                      <Sparkles className="w-3 h-3" /> Free
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 bg-slate-800/60 border border-slate-700/60 rounded-lg px-2.5 py-1">
+                      <Lock className="w-3 h-3" /> {cosmetic.cost} Chips
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

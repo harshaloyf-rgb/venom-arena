@@ -313,7 +313,7 @@ export const CUSTOM_SKIN_KEY = 'venom_custom_skin_state';
 // ---------------------------------------------------------------------------
 // Shop UI types & constants
 // ---------------------------------------------------------------------------
-export type ShopView = 'presets' | 'editor';
+export type ShopView = 'presets' | 'editor' | 'cosmetics';
 export type CategoryFilter =
   | 'all'
   | 'presets'
@@ -321,7 +321,8 @@ export type CategoryFilter =
   | 'trails'
   | 'deaths'
   | 'flags'
-  | 'banners';
+  | 'banners'
+  | 'cosmetics';
 
 export const CATEGORY_TABS: { id: CategoryFilter; label: string }[] = [
   { id: 'all', label: '🌈 All Items' },
@@ -331,6 +332,7 @@ export const CATEGORY_TABS: { id: CategoryFilter; label: string }[] = [
   { id: 'deaths', label: '💥 Death Novas' },
   { id: 'flags', label: '🇺🇸 Flags' },
   { id: 'banners', label: '🏆 Profile Banners' },
+  { id: 'cosmetics', label: '🎭 Face Cosmetics' },
 ];
 
 export const BODY_STYLE_OPTIONS: {

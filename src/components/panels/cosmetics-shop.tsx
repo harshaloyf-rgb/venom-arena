@@ -79,6 +79,7 @@ import {
   BannerCard,
 } from './cosmetics/cosmetics-cards';
 import { TryOnPreview } from './cosmetics/try-on-preview';
+import { CosmeticsSection } from './cosmetics/cosmetics-section';
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -469,28 +470,51 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
           >
             🧬 Genetic Pattern Lab
           </button>
+          <button
+            type="button"
+            onClick={() => setShopView('cosmetics')}
+            className={`px-4 py-2 rounded-lg text-xs font-sans font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              shopView === 'cosmetics'
+                ? 'bg-amber-600 text-white shadow'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            🎭 Face Cosmetics
+          </button>
         </div>
       </div>
 
       {/* BODY */}
-      {shopView === 'presets' ? (
+      {shopView === 'cosmetics' ? (
+        <CosmeticsSection onToast={onToast} />
+      ) : shopView === 'presets' ? (
         <div className="animate-fade-in">
           {/* Category filters */}
           <div className="flex flex-wrap gap-2 mb-6">
-            {CATEGORY_TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveCategory(tab.id)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-sans font-semibold transition-all cursor-pointer ${
-                  activeCategory === tab.id
-                    ? 'bg-slate-800 text-white border border-slate-700 shadow-md font-bold'
-                    : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-transparent'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+            {CATEGORY_TABS.map((tab) => {
+              const handleClick = () => {
+                if (tab.id === 'cosmetics') {
+                  setShopView('cosmetics');
+                } else {
+                  setActiveCategory(tab.id);
+                }
+              };
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={handleClick}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-sans font-semibold transition-all cursor-pointer ${
+                    (tab.id === 'cosmetics' && shopView === 'cosmetics')
+                      || (tab.id !== 'cosmetics' && activeCategory === tab.id)
+                      ? 'bg-slate-800 text-white border border-slate-700 shadow-md font-bold'
+                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-transparent'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
 
           {/* Gallery grid */}
