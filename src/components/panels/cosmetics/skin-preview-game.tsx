@@ -110,11 +110,11 @@ export function GameSkinPreview({
       pos[i].a = Math.atan2(next.y - prev.y, next.x - prev.x);
     }
 
-    // Custom lab skin?
+    // Custom skin with segments? (presets or custom-lab-skin)
     const customSegs: CustomSegment[] | null = (() => {
-      if (skinId === 'custom-lab-skin') {
-        const s = readCustomSkinStateSafe();
-        if (s?.customSkinSegments?.length) return s.customSkinSegments;
+      const s = readCustomSkinStateSafe();
+      if (s?.useCustomSkin && s.currentSkin === skinId && s.customSkinSegments?.length) {
+        return s.customSkinSegments;
       }
       return null;
     })();

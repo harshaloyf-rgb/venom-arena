@@ -231,10 +231,17 @@ export function renderSnakeAtlas(
   mouseScreenX?: number,
   mouseScreenY?: number,
 ): void {
-  // Custom lab skins must use the fallback renderer which has
-  // segment shape / taper / glow logic. The atlas path draws uniform
+  // Skins with custom segments (presets equipped via localStorage or
+  // custom-lab-skin) must use the fallback renderer which supports
+  // per-segment shape / taper / glow.  The atlas path draws uniform
   // circle sprites and would lose those features.
-  if (snake.skinId === 'custom-lab-skin') {
+  const customState = readCustomSkinState();
+  const hasCustomSegments =
+    customState?.useCustomSkin === true &&
+    customState.currentSkin === snake.skinId &&
+    (customState.customSkinSegments?.length ?? 0) > 0;
+
+  if (snake.skinId === 'custom-lab-skin' || hasCustomSegments) {
     renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY);
     return;
   }
@@ -483,6 +490,9 @@ export function renderSnakeFallback(
   const pathLen = path.length;
   if (pathLen < 2) return;
 
+  // Read custom skin state once (may contain segments for presets or custom-lab-skin)
+  const customState = readCustomSkinState();
+
   const headWorldX = path.headX;
   const headWorldY = path.headY;
 
@@ -550,13 +560,12 @@ export function renderSnakeFallback(
   // Multi-color skins alternate colors per segment
   const multiColor = isMultiColorSkin(snake.skinId);
 
-  // Check for custom lab skin with shapes/taper/glow
+  // Check for custom segments (presets or custom-lab-skin) with shapes/taper/glow
   let customSegments: CustomSegment[] | null = null;
-  if (snake.skinId === 'custom-lab-skin') {
-    const customState = readCustomSkinState();
-    if (customState?.customSkinSegments?.length) {
-      customSegments = customState.customSkinSegments;
-    }
+  if (customState?.useCustomSkin === true &&
+      customState.currentSkin === snake.skinId &&
+      (customState.customSkinSegments?.length ?? 0) > 0) {
+    customSegments = customState.customSkinSegments;
   }
 
   // Drop shadow under the whole snake body

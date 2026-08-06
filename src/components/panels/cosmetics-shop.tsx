@@ -487,7 +487,11 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
 
       {/* BODY */}
       {shopView === 'cosmetics' ? (
-        <CosmeticsSection onToast={onToast} />
+        <CosmeticsSection onToast={onToast} activeSkinId={
+          customState?.useCustomSkin
+            ? customState.currentSkin
+            : p.currentSkin
+        } />
       ) : shopView === 'presets' ? (
         <div className="animate-fade-in">
           {/* Category filters */}
