@@ -296,11 +296,11 @@ export function GameSnakePreview({
   }
 
   return (
-    <div className="flex flex-col items-center">
+    <div className="flex flex-col items-center w-full">
       <canvas
         ref={canvasRef}
-        style={{ width: `${width}px`, height: `${height}px` }}
-        className="rounded-lg border border-white/10 w-full max-w-full"
+        style={{ width: '100%', height: `${height}px` }}
+        className="rounded-lg block"
       />
       {showLabel && skinName && (
         <span className="text-[9px] text-slate-500 mt-1 truncate max-w-full text-center leading-tight">

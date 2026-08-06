@@ -1,6 +1,7 @@
 import { Check, Flame, Lock, Sparkles } from 'lucide-react';
 import type { Skin } from '@/lib/game-config';
 import type { SlitherPreset } from './cosmetics-types';
+import { GameSnakePreview } from './game-snake-preview';
 
 // ---------------------------------------------------------------------------
 // Badges
@@ -115,8 +116,20 @@ export function PresetCard({
       {active && <ActiveBadge accent="indigo" />}
 
       <div>
+        <div className="h-[80px] bg-slate-900/45 rounded-xl border border-slate-800/40 mb-4 overflow-hidden">
+          <GameSnakePreview
+            skinId={preset.id}
+            headColor={preset.colors[0]}
+            bodyColor={preset.colors[1] ?? preset.colors[0]}
+            width={280}
+            height={80}
+            segments={10}
+            speed={1.2}
+            scale={0.45}
+          />
+        </div>
+
         <div className="flex items-center gap-1.5 mb-1.5 justify-center">
-          <span className="text-2xl">{preset.emoji}</span>
           <h3 className="text-sm font-bold text-white tracking-tight group-hover:text-indigo-400 transition-colors">
             {preset.name}
           </h3>
@@ -191,8 +204,18 @@ export function SkinCard({
       )}
 
       <div>
+        <div className="h-[80px] bg-slate-900/45 rounded-xl border border-slate-800/40 mb-4 overflow-hidden">
+          <GameSnakePreview
+            skinId={item.id}
+            width={280}
+            height={80}
+            segments={10}
+            speed={1.2}
+            scale={0.45}
+          />
+        </div>
+
         <div className="flex items-center gap-1.5 mb-1.5 justify-center">
-          <span className="text-2xl">{item.emoji}</span>
           <h3
             className={`text-sm font-bold text-white tracking-tight group-hover:text-${accent}-400 transition-colors`}
         >

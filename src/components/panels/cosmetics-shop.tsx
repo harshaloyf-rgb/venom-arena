@@ -80,7 +80,6 @@ import {
 } from './cosmetics/cosmetics-cards';
 import { TryOnPreview } from './cosmetics/try-on-preview';
 import { CosmeticsSection } from './cosmetics/cosmetics-section';
-import { GameSnakePreview } from './cosmetics/game-snake-preview';
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -490,42 +489,6 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
         <CosmeticsSection onToast={onToast} />
       ) : shopView === 'presets' ? (
         <div className="animate-fade-in">
-          {/* Game-accurate roaming snake previews — one per skin */}
-          <div className="mb-6 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-3">
-            <span className="text-[10px] text-slate-500 font-mono tracking-widest uppercase font-bold block text-center mb-3">
-              Live Skin Previews
-            </span>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 justify-items-center">
-              {showPresetsTab &&
-                SLITHER_PRESETS.map((preset) => (
-                  <GameSnakePreview
-                    key={preset.id}
-                    skinId={preset.id}
-                    headColor={preset.colors[0]}
-                    bodyColor={preset.colors[1] ?? preset.colors[0]}
-                    width={130}
-                    height={70}
-                    segments={10}
-                    speed={1.2}
-                    scale={0.5}
-                    showLabel
-                  />
-                ))}
-              {showPremiumTab &&
-                manufacturedSkins.map((item) => (
-                  <GameSnakePreview
-                    key={item.id}
-                    skinId={item.id}
-                    width={130}
-                    height={70}
-                    segments={10}
-                    speed={1.2}
-                    scale={0.5}
-                    showLabel
-                  />
-                ))}
-            </div>
-          </div>
           {/* Category filters */}
           <div className="flex flex-wrap gap-2 mb-6">
             {CATEGORY_TABS.map((tab) => {
