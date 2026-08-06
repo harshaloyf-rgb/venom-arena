@@ -352,8 +352,15 @@ export function CosmeticsSection({
 
   const handleEquip = useCallback(
     (cosmeticId: string, slot: CosmeticSlot) => {
+      // Toggle: if already equipped, UNEQUIP back to 'none'
       if (equipped[slot as keyof EquippedCosmetics] === cosmeticId) {
-        onToast?.('Already equipped!', 'info');
+        const next: EquippedCosmetics = {
+          ...equipped,
+          [slot]: 'none',
+        };
+        writeEquippedCosmetics(next);
+        setEquipped(next);
+        onToast?.('❌ Unequipped — back to default', 'info');
         return;
       }
 
@@ -442,8 +449,8 @@ export function CosmeticsSection({
 
                 <div className="mt-auto">
                   {isEquipped ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2.5 py-1">
-                      <Check className="w-3 h-3" /> Equipped
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-1">
+                      <Check className="w-3 h-3" /> Click to Unequip
                     </span>
                   ) : isFree ? (
                     <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-200 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 group-hover:bg-slate-700 transition-colors">
