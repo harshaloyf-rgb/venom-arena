@@ -515,8 +515,8 @@ export function SnakeFaceTester({
     return (
       <canvas
         ref={canvasRef}
-        style={{ width: '100%', height: `${height}px` }}
-        className="rounded-lg cursor-crosshair block"
+        style={{ width: `${width}px`, height: `${height}px` }}
+        className="rounded-lg cursor-crosshair border border-white/10 w-full max-w-full"
       />
     );
   }

@@ -238,3 +238,19 @@ Stage Summary:
 - All existing shapes made more dramatically different
 - Card text/buttons reduced for cleaner look
 - Preview windows 37% taller (80→110px)
+---
+Task ID: 1
+Agent: Main
+Task: Replace Face Cosmetics preview with exact Snake Test canvas + fix admin tab visibility
+
+Work Log:
+- Enhanced SnakeFaceTester to support embedded mode (skinId prop, custom segments from localStorage, face cosmetics overlay)
+- Embedded canvas styled identically to standalone Snake Test tab canvas (same className, same style)
+- Replaced GameSnakePreview in cosmetics-section.tsx with embedded SnakeFaceTester — no wrapper, no labels, no buttons, just the canvas
+- Fixed admin tab always hidden: visibleTabs filter was unconditionally removing admin tab (line 136 page.tsx)
+- Changed filter from `t.id !== 'admin'` to `t.id !== 'admin' || player?.role === 'admin'`
+
+Stage Summary:
+- Face Cosmetics now shows exact same Snake Test canvas renderer
+- Admin tab now visible for admin-role players in lobby station
+- Files: snake-face-tester.tsx (embedded mode), cosmetics-section.tsx (swap), page.tsx (admin filter fix)
