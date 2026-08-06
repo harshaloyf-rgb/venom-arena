@@ -4,7 +4,7 @@
  * Reusable game-accurate roaming snake preview.
  * - Pre-simulates buffer on init so snake appears fully formed (no growing).
  * - Each instance gets unique movement via seeded hash of skinId/colors.
- * - Supports simple mode (skinId) and lab mode (colors[] + bodyStyle + taperStyle + glow).
+ * - economy mode: skips shadows, gradients, grid, cosmetics — for 30+ card grids.
  */
 
 import { useEffect, useRef } from 'react';
@@ -84,6 +84,15 @@ interface SnakeBuf {
   by: Float64Array;
 }
 
+// Pre-allocated segment array (avoids GC pressure in 30+ canvas loops)
+const _segs: { x: number; y: number; a: number }[] = [];
+function ensureSegs(n: number) {
+  if (_segs.length < n) {
+    for (let i = _segs.length; i < n; i++) _segs.push({ x: 0, y: 0, a: 0 });
+  }
+  return _segs;
+}
+
 // ─── Component ─────────────────────────────────────────────────────────
 
 export function GameSnakePreview({
@@ -96,6 +105,7 @@ export function GameSnakePreview({
   speed = 1.2,
   scale = 1,
   showLabel = false,
+  economy = false,
   // Lab mode props
   colors,
   bodyStyle,
@@ -113,6 +123,7 @@ export function GameSnakePreview({
   speed?: number;
   scale?: number;
   showLabel?: boolean;
+  economy?: boolean;
   // Genetic Lab mode
   colors?: string[];
   bodyStyle?: BodyStyle;
@@ -202,10 +213,10 @@ export function GameSnakePreview({
     const dpr = window.devicePixelRatio || 1;
     c.width = width * dpr;
     c.height = height * dpr;
-    const ctx = c.getContext('2d');
+    const ctx = c.getContext('2d', { alpha: false });
     if (!ctx) return;
 
-    // Mouse tracking
+    // Mouse tracking (only for non-economy mode)
     const onMove = (e: MouseEvent) => {
       const rect = c.getBoundingClientRect();
       mouseRef.current = {
@@ -214,8 +225,10 @@ export function GameSnakePreview({
       };
     };
     const onLeave = () => { mouseRef.current = null; };
-    c.addEventListener('mousemove', onMove);
-    c.addEventListener('mouseleave', onLeave);
+    if (!economy) {
+      c.addEventListener('mousemove', onMove);
+      c.addEventListener('mouseleave', onLeave);
+    }
 
     // Reallocate buffer only if segment count changed
     const bufLen = segments * 6;
@@ -294,7 +307,13 @@ export function GameSnakePreview({
       posRef.current.bufCount = bufLen;
     }
 
-    // Capture current visual props in closure — they update when effect re-runs
+    // Pre-compute colors for simple mode (avoids per-frame lightenHex/darkenHex)
+    const bodyLight = !isLabMode ? lightenHex(resolvedBody, G.lighten) : '';
+    const bodyDark = !isLabMode ? darkenHex(resolvedBody, G.darken) : '';
+    const headLight = lightenHex(resolvedHead, G.lighten);
+    const headDark = darkenHex(resolvedHead, G.darken);
+
+    // Capture current visual props in closure
     const curColors = effectiveColors;
     const curBodyStyle = effectiveBodyStyle;
     const curTaper = effectiveTaper;
@@ -303,9 +322,19 @@ export function GameSnakePreview({
     const curBodyCol = resolvedBody;
     const curLabMode = isLabMode;
 
+    // Reusable segment array
+    const segs = ensureSegs(segments);
+
+    // Frame skip counter for economy mode (render every 2nd frame)
+    let frameSkip = 0;
+
     let running = true;
     const loop = () => {
       if (!running) return;
+
+      // Economy: skip every other frame for drawing (still simulate movement)
+      frameSkip++;
+      const shouldDraw = !economy || (frameSkip % 2 === 0);
 
       const st = posRef.current!;
       let headX = st.headX;
@@ -316,9 +345,7 @@ export function GameSnakePreview({
       let nextTurn = st.nextTurn;
       let bufCount = st.bufCount;
 
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-      // ── Movement ──
+      // ── Movement (always simulate, even on skip frames) ──
       turnTimer += 16;
       if (turnTimer > nextTurn) {
         targetAngle = angle + (Math.random() - 0.5) * 1.8;
@@ -357,10 +384,19 @@ export function GameSnakePreview({
       bufCount = Math.min(bufCount + 1, bufLen);
       st.bufCount = bufCount;
 
-      // Build segments
-      const segs: { x: number; y: number; a: number }[] = [];
+      // ── Draw (skip on economy off-frames) ──
+      if (!shouldDraw) {
+        animRef.current = requestAnimationFrame(loop);
+        return;
+      }
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // Build segments (reuse pre-allocated array)
+      let segCount = 0;
       let cx = headX, cy = headY, srcIdx = 0;
-      segs.push({ x: cx, y: cy, a: angle });
+      segs[0].x = cx; segs[0].y = cy; segs[0].a = angle;
+      segCount = 1;
 
       for (let s = 1; s < segments && srcIdx < bufCount - 1; s++) {
         let rem = G.step;
@@ -379,140 +415,189 @@ export function GameSnakePreview({
             rem -= len; srcIdx++;
           }
         }
-        const prev = segs[segs.length - 1];
-        segs.push({ x: cx, y: cy, a: Math.atan2(cy - prev.y, cx - prev.x) });
+        const prev = segs[segCount - 1];
+        segs[segCount].x = cx; segs[segCount].y = cy; segs[segCount].a = Math.atan2(cy - prev.y, cx - prev.x);
+        segCount++;
       }
 
-      // ── Draw ──
+      // Clear & background
       ctx.clearRect(0, 0, width, height);
+      if (economy) {
+        // Flat background — no gradient
+        ctx.fillStyle = '#0e0e14';
+        ctx.fillRect(0, 0, width, height);
+      } else {
+        const bg = ctx.createRadialGradient(width / 2, height / 2, 0, width / 2, height / 2, width * 0.6);
+        bg.addColorStop(0, '#111118');
+        bg.addColorStop(1, '#0a0a0f');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, width, height);
 
-      // Background
-      const bg = ctx.createRadialGradient(width / 2, height / 2, 0, width / 2, height / 2, width * 0.6);
-      bg.addColorStop(0, '#111118');
-      bg.addColorStop(1, '#0a0a0f');
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, width, height);
-
-      // Grid
-      ctx.strokeStyle = 'rgba(255,255,255,0.03)';
-      ctx.lineWidth = 1;
-      for (let gx = 0; gx < width; gx += 40) {
-        ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, height); ctx.stroke();
-      }
-      for (let gy = 0; gy < height; gy += 40) {
-        ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(width, gy); ctx.stroke();
+        // Grid
+        ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+        ctx.lineWidth = 1;
+        for (let gx = 0; gx < width; gx += 40) {
+          ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, height); ctx.stroke();
+        }
+        for (let gy = 0; gy < height; gy += 40) {
+          ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(width, gy); ctx.stroke();
+        }
       }
 
       // Head color
-      const headCol = curLabMode
-        ? (curColors![0] ?? '#22c55e')
-        : curHeadCol;
-
-      ctx.save();
-      if (!curGlow) {
-        ctx.shadowColor = 'rgba(0,0,0,0.3)';
-        ctx.shadowBlur = segR * G.shadowBlur;
-        ctx.shadowOffsetY = segR * G.shadowOffY;
-      }
+      const headCol = curLabMode ? (curColors![0] ?? '#22c55e') : curHeadCol;
 
       // Body segments
-      for (let i = segs.length - 1; i >= 1; i--) {
-        const p = segs[i];
+      if (economy) {
+        // ECONOMY: no shadows, flat fills for circles, skip cosmetics
+        for (let i = segCount - 1; i >= 1; i--) {
+          const p = segs[i];
+          let segColor: string;
+          if (curLabMode) {
+            segColor = curColors![i % curColors!.length] ?? '#ffffff';
+          } else {
+            segColor = curBodyCol;
+          }
+          let rMul = 1.0;
+          if (curLabMode) rMul = computeTaperRadius(i, segments, curTaper);
+          const r = segR * rMul;
+          const segShape = curLabMode ? resolveShapeStyle(curBodyStyle, i) : 'circle' as const;
 
-        // Per-segment color
-        let segColor: string;
-        if (curLabMode) {
-          segColor = curColors![i % curColors!.length] ?? '#ffffff';
-        } else {
-          segColor = curBodyCol;
+          if (segShape === 'circle' && !curGlow) {
+            // Simple flat circle with cached colors
+            const grad = ctx.createRadialGradient(p.x - r * 0.3, p.y - r * 0.3, r * 0.1, p.x, p.y, r);
+            grad.addColorStop(0, bodyLight);
+            grad.addColorStop(G.lightenStop, segColor);
+            grad.addColorStop(1, bodyDark);
+            ctx.fillStyle = grad;
+            ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+          } else {
+            drawSegmentShape(ctx, p.x, p.y, r, p.a, segShape, segColor, curGlow);
+          }
         }
 
-        // Per-segment taper radius (lab mode uses computed taper; simple mode = uniform)
-        let rMul = 1.0;
-        if (curLabMode) {
-          rMul = computeTaperRadius(i, segments, curTaper);
-        }
-        const r = segR * rMul;
+        // Head — simple gradient, no shadow
+        const hg = ctx.createRadialGradient(headX - hr * 0.3, headY - hr * 0.3, hr * 0.05, headX, headY, hr);
+        hg.addColorStop(0, headLight);
+        hg.addColorStop(G.lightenStop, headCol);
+        hg.addColorStop(1, headDark);
+        ctx.fillStyle = hg;
+        ctx.beginPath(); ctx.arc(headX, headY, hr, 0, Math.PI * 2); ctx.fill();
 
-        // Per-segment shape
-        const segShape = curLabMode
-          ? resolveShapeStyle(curBodyStyle, i)
-          : 'circle' as const;
-
-        if (segShape === 'circle' && !curGlow) {
-          const grad = ctx.createRadialGradient(p.x - r * 0.3, p.y - r * 0.3, r * 0.1, p.x, p.y, r);
-          grad.addColorStop(0, lightenHex(segColor, G.lighten));
-          grad.addColorStop(G.lightenStop, segColor);
-          grad.addColorStop(1, darkenHex(segColor, G.darken));
-          ctx.fillStyle = grad;
-          ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
-        } else {
-          drawSegmentShape(ctx, p.x, p.y, r, p.a, segShape, segColor, curGlow);
-        }
-      }
-      ctx.restore();
-
-      // Head — always circle with 3D gradient
-      ctx.save();
-      if (curGlow) {
-        ctx.shadowBlur = hr * 1.8;
-        ctx.shadowColor = headCol;
-      } else {
-        ctx.shadowColor = 'rgba(0,0,0,0.3)';
-        ctx.shadowBlur = hr * G.shadowBlur;
-        ctx.shadowOffsetY = hr * G.shadowOffY;
-      }
-      const hg = ctx.createRadialGradient(headX - hr * 0.3, headY - hr * 0.3, hr * 0.05, headX, headY, hr);
-      hg.addColorStop(0, lightenHex(headCol, G.lighten));
-      hg.addColorStop(G.lightenStop, headCol);
-      hg.addColorStop(1, darkenHex(headCol, G.darken));
-      ctx.fillStyle = hg;
-      ctx.beginPath(); ctx.arc(headX, headY, hr, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-
-      // Responsive eyes — ONLY when no custom eye cosmetic is equipped
-      const eq = readEquippedCosmetics();
-      const hasCustomEyes = eq.eyes && eq.eyes !== 'none';
-
-      if (!hasCustomEyes) {
+        // Simple eyes (no mouse tracking, no cosmetics)
         const eyeOff = hr * G.eyeOff;
         const eyeR = hr * G.eyeR;
         const pupR = eyeR * G.pupR;
         const fwd = hr * G.eyeFwd;
         const perp = angle + Math.PI / 2;
-
-        let lookA = angle;
-        const m = mouseRef.current;
-        if (m) {
-          const dx = m.x - headX, dy = m.y - headY;
-          if (Math.sqrt(dx * dx + dy * dy) > 5) lookA = Math.atan2(dy, dx);
-        }
-
         for (const side of [-1, 1]) {
           const ex = headX + Math.cos(angle) * fwd + Math.cos(perp) * eyeOff * side;
           const ey = headY + Math.sin(angle) * fwd + Math.sin(perp) * eyeOff * side;
-
           ctx.fillStyle = '#ffffff';
-          ctx.strokeStyle = G.eyeBorder;
-          ctx.lineWidth = G.eyeBorderW;
-          ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-
+          ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, Math.PI * 2); ctx.fill();
           const shift = eyeR * G.pupShift;
-          const ppx = ex + Math.cos(lookA) * shift;
-          const ppy = ey + Math.sin(lookA) * shift;
           ctx.fillStyle = '#111111';
-          ctx.beginPath(); ctx.arc(ppx, ppy, pupR, 0, Math.PI * 2); ctx.fill();
-
+          ctx.beginPath(); ctx.arc(ex + Math.cos(angle) * shift, ey + Math.sin(angle) * shift, pupR, 0, Math.PI * 2); ctx.fill();
           ctx.fillStyle = `rgba(255,255,255,${G.highlight})`;
-          ctx.beginPath(); ctx.arc(ppx - pupR * 0.3, ppy - pupR * 0.35, pupR * 0.3, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(ex + Math.cos(angle) * shift - pupR * 0.3, ey + Math.sin(angle) * shift - pupR * 0.35, pupR * 0.3, 0, Math.PI * 2); ctx.fill();
         }
-      }
+      } else {
+        // FULL MODE: shadows, gradients, mouse-tracking eyes, cosmetics
+        ctx.save();
+        if (!curGlow) {
+          ctx.shadowColor = 'rgba(0,0,0,0.3)';
+          ctx.shadowBlur = segR * G.shadowBlur;
+          ctx.shadowOffsetY = segR * G.shadowOffY;
+        }
 
-      // All equipped face cosmetics (custom eyes draw here if equipped)
-      renderEquippedCosmetics(ctx, {
-        hx: headX, hy: headY, hr, angle,
-        time: performance.now(), boosting: false,
-      });
+        for (let i = segCount - 1; i >= 1; i--) {
+          const p = segs[i];
+          let segColor: string;
+          if (curLabMode) {
+            segColor = curColors![i % curColors!.length] ?? '#ffffff';
+          } else {
+            segColor = curBodyCol;
+          }
+          let rMul = 1.0;
+          if (curLabMode) rMul = computeTaperRadius(i, segments, curTaper);
+          const r = segR * rMul;
+          const segShape = curLabMode ? resolveShapeStyle(curBodyStyle, i) : 'circle' as const;
+
+          if (segShape === 'circle' && !curGlow) {
+            const grad = ctx.createRadialGradient(p.x - r * 0.3, p.y - r * 0.3, r * 0.1, p.x, p.y, r);
+            grad.addColorStop(0, lightenHex(segColor, G.lighten));
+            grad.addColorStop(G.lightenStop, segColor);
+            grad.addColorStop(1, darkenHex(segColor, G.darken));
+            ctx.fillStyle = grad;
+            ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+          } else {
+            drawSegmentShape(ctx, p.x, p.y, r, p.a, segShape, segColor, curGlow);
+          }
+        }
+        ctx.restore();
+
+        // Head
+        ctx.save();
+        if (curGlow) {
+          ctx.shadowBlur = hr * 1.8;
+          ctx.shadowColor = headCol;
+        } else {
+          ctx.shadowColor = 'rgba(0,0,0,0.3)';
+          ctx.shadowBlur = hr * G.shadowBlur;
+          ctx.shadowOffsetY = hr * G.shadowOffY;
+        }
+        const hg = ctx.createRadialGradient(headX - hr * 0.3, headY - hr * 0.3, hr * 0.05, headX, headY, hr);
+        hg.addColorStop(0, lightenHex(headCol, G.lighten));
+        hg.addColorStop(G.lightenStop, headCol);
+        hg.addColorStop(1, darkenHex(headCol, G.darken));
+        ctx.fillStyle = hg;
+        ctx.beginPath(); ctx.arc(headX, headY, hr, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+
+        // Responsive eyes
+        const eq = readEquippedCosmetics();
+        const hasCustomEyes = eq.eyes && eq.eyes !== 'none';
+
+        if (!hasCustomEyes) {
+          const eyeOff = hr * G.eyeOff;
+          const eyeR = hr * G.eyeR;
+          const pupR = eyeR * G.pupR;
+          const fwd = hr * G.eyeFwd;
+          const perp = angle + Math.PI / 2;
+
+          let lookA = angle;
+          const m = mouseRef.current;
+          if (m) {
+            const dx = m.x - headX, dy = m.y - headY;
+            if (Math.sqrt(dx * dx + dy * dy) > 5) lookA = Math.atan2(dy, dx);
+          }
+
+          for (const side of [-1, 1]) {
+            const ex = headX + Math.cos(angle) * fwd + Math.cos(perp) * eyeOff * side;
+            const ey = headY + Math.sin(angle) * fwd + Math.sin(perp) * eyeOff * side;
+
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = G.eyeBorder;
+            ctx.lineWidth = G.eyeBorderW;
+            ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+            const shift = eyeR * G.pupShift;
+            const ppx = ex + Math.cos(lookA) * shift;
+            const ppy = ey + Math.sin(lookA) * shift;
+            ctx.fillStyle = '#111111';
+            ctx.beginPath(); ctx.arc(ppx, ppy, pupR, 0, Math.PI * 2); ctx.fill();
+
+            ctx.fillStyle = `rgba(255,255,255,${G.highlight})`;
+            ctx.beginPath(); ctx.arc(ppx - pupR * 0.3, ppy - pupR * 0.35, pupR * 0.3, 0, Math.PI * 2); ctx.fill();
+          }
+        }
+
+        // All equipped face cosmetics
+        renderEquippedCosmetics(ctx, {
+          hx: headX, hy: headY, hr, angle,
+          time: performance.now(), boosting: false,
+        });
+      }
 
       animRef.current = requestAnimationFrame(loop);
     };
@@ -521,10 +606,12 @@ export function GameSnakePreview({
     return () => {
       running = false;
       cancelAnimationFrame(animRef.current);
-      c.removeEventListener('mousemove', onMove);
-      c.removeEventListener('mouseleave', onLeave);
+      if (!economy) {
+        c.removeEventListener('mousemove', onMove);
+        c.removeEventListener('mouseleave', onLeave);
+      }
     };
-  }, [width, height, segments, speed, scale, resolvedHead, resolvedBody, effectiveBodyStyle, effectiveTaper, effectiveGlow, isLabMode, effectiveColors]);
+  }, [width, height, segments, speed, scale, resolvedHead, resolvedBody, effectiveBodyStyle, effectiveTaper, effectiveGlow, isLabMode, effectiveColors, instanceSeed, economy]);
 
   // Get skin name for label
   let skinName = '';
