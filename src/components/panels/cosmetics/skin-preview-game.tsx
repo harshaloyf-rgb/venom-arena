@@ -170,29 +170,35 @@ export function GameSkinPreview({
         const segColor = getSegmentColor(skinId, i) ?? asset.bodyColor;
 
         ctx.save();
-        // 3D gradient
+        ctx.shadowColor = 'rgba(0,0,0,0.3)';
+        ctx.shadowBlur = r * 0.8;
+        ctx.shadowOffsetY = r * 0.3;
+        // 3D gradient (game-accurate params)
         const grad = ctx.createRadialGradient(
           pos.x - r * 0.3, pos.y - r * 0.3, r * 0.1,
           pos.x, pos.y, r,
         );
-        grad.addColorStop(0, lightenHex(segColor, 0.25));
-        grad.addColorStop(0.6, segColor);
-        grad.addColorStop(1, darkenHex(segColor, 0.25));
+        grad.addColorStop(0, lightenHex(segColor, 0.35));
+        grad.addColorStop(0.55, segColor);
+        grad.addColorStop(1, darkenHex(segColor, 0.35));
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       } else {
-        // Fallback: solid with 3D gradient
+        // Fallback: solid with 3D gradient (game-accurate params)
         ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.3)';
+        ctx.shadowBlur = r * 0.8;
+        ctx.shadowOffsetY = r * 0.3;
         const grad = ctx.createRadialGradient(
           pos.x - r * 0.3, pos.y - r * 0.3, r * 0.1,
           pos.x, pos.y, r,
         );
-        grad.addColorStop(0, lightenHex(asset.bodyColor, 0.25));
-        grad.addColorStop(0.6, asset.bodyColor);
-        grad.addColorStop(1, darkenHex(asset.bodyColor, 0.25));
+        grad.addColorStop(0, lightenHex(asset.bodyColor, 0.35));
+        grad.addColorStop(0.55, asset.bodyColor);
+        grad.addColorStop(1, darkenHex(asset.bodyColor, 0.35));
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
@@ -230,13 +236,16 @@ export function GameSkinPreview({
           : asset.headColor;
 
         ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.3)';
+        ctx.shadowBlur = hr * 0.8;
+        ctx.shadowOffsetY = hr * 0.3;
         const grad = ctx.createRadialGradient(
           headPos.x - hr * 0.3, headPos.y - hr * 0.3, hr * 0.1,
           headPos.x, headPos.y, hr,
         );
-        grad.addColorStop(0, lightenHex(headColor, 0.3));
-        grad.addColorStop(0.6, headColor);
-        grad.addColorStop(1, darkenHex(headColor, 0.3));
+        grad.addColorStop(0, lightenHex(headColor, 0.35));
+        grad.addColorStop(0.55, headColor);
+        grad.addColorStop(1, darkenHex(headColor, 0.35));
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(headPos.x, headPos.y, hr, 0, Math.PI * 2);
@@ -244,19 +253,19 @@ export function GameSkinPreview({
         ctx.restore();
       }
 
-      // Draw eyes on head — track mouse for responsiveness
-      const eyeOffset = hr * 0.4;
-      const eyeR = hr * 0.25;
-      const pupilR = eyeR * 0.55;
-      const forwardOffset = hr * 0.3;
+      // Draw eyes on head — game-accurate params
+      const eyeOffset = hr * 0.42;
+      const eyeR = hr * 0.38;
+      const pupilR = eyeR * 0.52;
+      const forwardOffset = hr * 0.32;
       const perpAngle = headPos.angle + Math.PI / 2;
 
       for (const side of [-1, 1]) {
         const ex = headPos.x + Math.cos(headPos.angle) * forwardOffset + Math.cos(perpAngle) * eyeOffset * side;
         const ey = headPos.y + Math.sin(headPos.angle) * forwardOffset + Math.sin(perpAngle) * eyeOffset * side;
         ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.arc(ex, ey, eyeR, 0, Math.PI * 2);
         ctx.fill();
@@ -280,8 +289,8 @@ export function GameSkinPreview({
         ctx.arc(px, py, pupilR, 0, Math.PI * 2);
         ctx.fill();
 
-        // Highlight
-        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        // Highlight (game-accurate opacity)
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
         ctx.beginPath();
         ctx.arc(px - pupilR * 0.3, py - pupilR * 0.35, pupilR * 0.3, 0, Math.PI * 2);
         ctx.fill();
