@@ -20,7 +20,6 @@ import {
   computeTaperRadius,
   drawSegmentShape,
 } from '@/components/panels/cosmetics/cosmetics-utils';
-import { renderEquippedCosmetics } from '@/lib/snake/face-cosmetics';
 import type { CustomSegment, BodyStyle, TaperStyle } from '@/components/panels/cosmetics/cosmetics-types';
 
 // ─── Color helpers ─────────────────────────────────────────────────────
@@ -478,14 +477,6 @@ export function SnakeFaceTester({
         ctx.fill();
       }
 
-      // ── Face cosmetics (embedded mode) ──
-      if (embedded) {
-        renderEquippedCosmetics(ctx, {
-          hx: headX, hy: headY, hr, angle,
-          time: performance.now(), boosting: false,
-        });
-      }
-
       // ── Direction pointer ──
       const ptrS = hr * 1.1;
       const ptrL = hr * 3;
@@ -508,7 +499,7 @@ export function SnakeFaceTester({
       c.removeEventListener('mousemove', onMove);
       c.removeEventListener('mouseleave', onLeave);
     };
-  }, [width, height, segments, speed, scale, effectiveSkinId, headColor, bodyColor, customSkin, isCustomMode, embedded]);
+  }, [width, height, segments, speed, scale, effectiveSkinId, headColor, bodyColor, customSkin, isCustomMode]);
 
   // ── Render ──
   if (embedded) {
