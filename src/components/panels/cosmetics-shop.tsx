@@ -80,6 +80,7 @@ import {
 } from './cosmetics/cosmetics-cards';
 import { TryOnPreview } from './cosmetics/try-on-preview';
 import { CosmeticsSection } from './cosmetics/cosmetics-section';
+import { GameSnakePreview } from './cosmetics/game-snake-preview';
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -88,6 +89,9 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
   const { player, loading, refresh } = useAuth();
   const [shopView, setShopView] = useState<ShopView>('presets');
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>('all');
+  const [previewHeadColor, setPreviewHeadColor] = useState<string | undefined>(undefined);
+  const [previewBodyColor, setPreviewBodyColor] = useState<string | undefined>(undefined);
+  const [previewSkinId, setPreviewSkinId] = useState<string>('skin-emerald');
 
   // DNA Lab custom states — initialized lazily from localStorage on the
   // client so that the Lab tab reflects whatever the player last deployed.
@@ -489,6 +493,10 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
         <CosmeticsSection onToast={onToast} />
       ) : shopView === 'presets' ? (
         <div className="animate-fade-in">
+          {/* Game-accurate roaming snake preview */}
+          <div className="mb-6">
+            <GameSnakePreview skinId={previewSkinId} headColor={previewHeadColor} bodyColor={previewBodyColor} />
+          </div>
           {/* Category filters */}
           <div className="flex flex-wrap gap-2 mb-6">
             {CATEGORY_TABS.map((tab) => {
@@ -529,6 +537,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
                     preset={preset}
                     active={active}
                     onClick={() => handleEquipSlitherPreset(preset)}
+                    onMouseEnter={() => { setPreviewSkinId(preset.id); setPreviewHeadColor(preset.colors[0]); setPreviewBodyColor(preset.colors[1] ?? preset.colors[0]); }}
                   />
                 );
               })}
@@ -549,6 +558,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
                     accent="emerald"
                     onClick={() => void handleEquipManufacturedSkin(item)}
                     equipLabel="Equip Skin"
+                    onMouseEnter={() => { setPreviewSkinId(item.id); setPreviewHeadColor(undefined); setPreviewBodyColor(undefined); }}
                   />
                 );
               })}

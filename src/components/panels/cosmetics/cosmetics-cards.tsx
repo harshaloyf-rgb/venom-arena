@@ -87,14 +87,17 @@ export function PresetCard({
   preset,
   active,
   onClick,
+  onMouseEnter,
 }: {
   preset: SlitherPreset;
   active: boolean;
   onClick: () => void;
+  onMouseEnter?: () => void;
 }) {
   return (
     <div
       onClick={onClick}
+      onMouseEnter={onMouseEnter}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
@@ -150,6 +153,7 @@ export function SkinCard({
   onClick,
   equipLabel,
   accent,
+  onMouseEnter,
 }: {
   item: Skin;
   unlocked: boolean;
@@ -158,10 +162,12 @@ export function SkinCard({
   onClick: () => void;
   equipLabel: string;
   accent: 'indigo' | 'emerald';
+  onMouseEnter?: () => void;
 }) {
   return (
     <div
       onClick={onClick}
+      onMouseEnter={onMouseEnter}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
