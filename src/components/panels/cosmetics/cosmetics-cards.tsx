@@ -1,7 +1,6 @@
 import { Check, Flame, Lock, Sparkles } from 'lucide-react';
 import type { Skin } from '@/lib/game-config';
 import type { SlitherPreset } from './cosmetics-types';
-import { GameSkinPreview } from './skin-preview-game';
 
 // ---------------------------------------------------------------------------
 // Badges
@@ -113,17 +112,8 @@ export function PresetCard({
       {active && <ActiveBadge accent="indigo" />}
 
       <div>
-        <div className="mb-4 flex justify-center">
-          <GameSkinPreview
-            skinId={preset.id}
-            width={200}
-            height={72}
-            segments={18}
-          />
-        </div>
-
         <div className="flex items-center gap-1.5 mb-1.5 justify-center">
-          <span className="text-base">{preset.emoji}</span>
+          <span className="text-2xl">{preset.emoji}</span>
           <h3 className="text-sm font-bold text-white tracking-tight group-hover:text-indigo-400 transition-colors">
             {preset.name}
           </h3>
@@ -195,17 +185,8 @@ export function SkinCard({
       )}
 
       <div>
-        <div className="mb-4 flex justify-center">
-          <GameSkinPreview
-            skinId={item.id}
-            width={200}
-            height={72}
-            segments={18}
-          />
-        </div>
-
         <div className="flex items-center gap-1.5 mb-1.5 justify-center">
-          <span className="text-base">{item.emoji}</span>
+          <span className="text-2xl">{item.emoji}</span>
           <h3
             className={`text-sm font-bold text-white tracking-tight group-hover:text-${accent}-400 transition-colors`}
         >
