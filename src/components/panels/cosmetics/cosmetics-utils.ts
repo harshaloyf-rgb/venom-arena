@@ -8,8 +8,7 @@ import type {
 import { CUSTOM_SKIN_KEY } from './cosmetics-types';
 
 // ---------------------------------------------------------------------------
-// Shared shape-style resolution — eliminates 3x duplication across
-// generateCustomSegments, SkinsCanvasPreview, and TryOnPreview.
+// Shared shape-style resolution — maps BodyStyle → per-segment SegShape.
 // ---------------------------------------------------------------------------
 export function resolveShapeStyle(
   shapeStyle: string,
@@ -23,11 +22,17 @@ export function resolveShapeStyle(
     return index === 0 ? 'circle' : index % 2 === 1 ? 'diamond' : 'circle';
   if (shapeStyle === 'obsidian') return 'spike';
   if (shapeStyle === 'basilisk') return 'diamond';
+  if (shapeStyle === 'stellar')
+    return index === 0 ? 'circle' : index % 2 === 1 ? 'star' : 'circle';
+  if (shapeStyle === 'fortress') return 'hexagon';
+  if (shapeStyle === 'stingray')
+    return index === 0 ? 'circle' : 'triangle';
+  if (shapeStyle === 'phantom') return index === 0 ? 'circle' : 'ring';
   return 'circle'; // smooth or default
 }
 
 // ---------------------------------------------------------------------------
-// generateCustomSegments — exact replica of original helper.
+// generateCustomSegments
 // ---------------------------------------------------------------------------
 export function generateCustomSegments(
   colors: string[],
@@ -41,7 +46,6 @@ export function generateCustomSegments(
 
   for (let i = 0; i < totalNodes; i++) {
     const color = colors[i % colors.length];
-
     const shape = resolveShapeStyle(shapeStyle, i);
 
     let sizeScale = 1.0;
@@ -67,7 +71,7 @@ export function generateCustomSegments(
 }
 
 // ---------------------------------------------------------------------------
-// localStorage custom-skin persistence — read by GameCanvas client-side.
+// localStorage custom-skin persistence
 // ---------------------------------------------------------------------------
 export function readCustomSkinState(): CustomSkinState | null {
   try {
@@ -79,10 +83,6 @@ export function readCustomSkinState(): CustomSkinState | null {
   }
 }
 
-/**
- * SSR-safe variant — returns `null` during server rendering so lazy useState
- * initializers don't crash on `localStorage is not defined`.
- */
 export function readCustomSkinStateSafe(): CustomSkinState | null {
   if (typeof window === 'undefined') return null;
   return readCustomSkinState();
@@ -97,7 +97,7 @@ export function writeCustomSkinState(state: CustomSkinState) {
 }
 
 // ---------------------------------------------------------------------------
-// Color helpers (shared across all renderers)
+// Color helpers
 // ---------------------------------------------------------------------------
 
 export function lightenHex(hex: string, factor: number): string {
@@ -123,9 +123,7 @@ export function darkenHex(hex: string, factor: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// computeTaperRadius — returns the size multiplier for a segment at a given
-// index based on the taper style.  `totalSegments` is the total number of
-// body segments (not counting the head).  Head (index 0) is handled specially.
+// computeTaperRadius
 // ---------------------------------------------------------------------------
 export function computeTaperRadius(
   index: number,
@@ -133,7 +131,6 @@ export function computeTaperRadius(
   taperStyle: TaperStyle,
 ): number {
   if (index === 0) {
-    // Head is always larger
     switch (taperStyle) {
       case 'uniform': return 1.3;
       case 'natural': return 1.35;
@@ -141,7 +138,7 @@ export function computeTaperRadius(
       case 'heavy':   return 1.6;
     }
   }
-  const t = index / totalSegments; // 0→1 from head to tail
+  const t = index / totalSegments;
   switch (taperStyle) {
     case 'uniform': return 1.0;
     case 'natural': return Math.max(0.65, 1.25 - t * 0.55);
@@ -151,17 +148,51 @@ export function computeTaperRadius(
 }
 
 // ---------------------------------------------------------------------------
+// Helper: draw a 5-pointed star path centered at (x,y) with outer radius `or`
+// and inner radius `ir`, rotated by `angle`.
+// ---------------------------------------------------------------------------
+function starPath(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number,
+  or: number, ir: number,
+  angle: number,
+) {
+  const points = 5;
+  const step = Math.PI / points;
+  for (let i = 0; i < points * 2; i++) {
+    const rad = i % 2 === 0 ? or : ir;
+    const a = angle + i * step - Math.PI / 2;
+    const px = cx + Math.cos(a) * rad;
+    const py = cy + Math.sin(a) * rad;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+// ---------------------------------------------------------------------------
+// Helper: draw a regular hexagon path centered at (cx,cy) with radius `r`,
+// flat-top orientation rotated by `angle`.
+// ---------------------------------------------------------------------------
+function hexPath(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number,
+  r: number,
+  angle: number,
+) {
+  for (let i = 0; i < 6; i++) {
+    const a = angle + (Math.PI / 3) * i;
+    const px = cx + Math.cos(a) * r;
+    const py = cy + Math.sin(a) * r;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+// ---------------------------------------------------------------------------
 // drawSegmentShape — draws a single snake body segment with the given shape,
 // 3D radial gradient, optional glow, and rotation to face the movement angle.
-//
-// Parameters:
-//   ctx         — Canvas 2D context
-//   x, y        — center of the segment
-//   radius      — base radius (already includes taper scaling)
-//   angle       — direction the snake is moving (radians)
-//   shape       — 'circle' | 'spike' | 'square' | 'diamond'
-//   color       — hex color of the segment
-//   glowEnabled — whether to add a bioluminescent glow
 // ---------------------------------------------------------------------------
 export function drawSegmentShape(
   ctx: CanvasRenderingContext2D,
@@ -177,16 +208,16 @@ export function drawSegmentShape(
 
   ctx.save();
 
-  // Bioluminescent glow — soft colored shadow
+  // Bioluminescent glow
   if (glowEnabled) {
     ctx.shadowBlur = r * 1.8;
     ctx.shadowColor = color;
   }
 
-  // 3D radial gradient (highlight top-left, darken edges)
+  // 3D radial gradient
   const grad = ctx.createRadialGradient(
     x - r * 0.3, y - r * 0.3, r * 0.1,
-    x, y, r,
+    x, y, r * 1.1,
   );
   grad.addColorStop(0, lightenHex(color, 0.3));
   grad.addColorStop(0.6, color);
@@ -195,81 +226,97 @@ export function drawSegmentShape(
 
   ctx.beginPath();
 
+  const perpAngle = angle + Math.PI / 2;
+  const backAngle = angle + Math.PI;
+
   switch (shape) {
     case 'circle': {
       ctx.arc(x, y, r, 0, Math.PI * 2);
       break;
     }
     case 'spike': {
-      // Star/spike shape pointing forward (in the direction of `angle`)
-      const perpAngle = angle + Math.PI / 2;
-      const backAngle = angle + Math.PI;
-      // 4-point spike: forward tip, two side points, back point
+      // Dramatic 4-point spike — much longer forward tip
       ctx.moveTo(
-        x + Math.cos(angle) * r * 1.35,
-        y + Math.sin(angle) * r * 1.35,
+        x + Math.cos(angle) * r * 1.6,
+        y + Math.sin(angle) * r * 1.6,
       );
       ctx.lineTo(
-        x + Math.cos(perpAngle) * r * 0.95,
-        y + Math.sin(perpAngle) * r * 0.95,
+        x + Math.cos(perpAngle) * r * 1.0,
+        y + Math.sin(perpAngle) * r * 1.0,
       );
       ctx.lineTo(
-        x + Math.cos(backAngle) * r * 0.4,
-        y + Math.sin(backAngle) * r * 0.4,
+        x + Math.cos(backAngle) * r * 0.3,
+        y + Math.sin(backAngle) * r * 0.3,
       );
       ctx.lineTo(
-        x + Math.cos(perpAngle + Math.PI) * r * 0.95,
-        y + Math.sin(perpAngle + Math.PI) * r * 0.95,
+        x + Math.cos(perpAngle + Math.PI) * r * 1.0,
+        y + Math.sin(perpAngle + Math.PI) * r * 1.0,
       );
       ctx.closePath();
       break;
     }
     case 'square': {
-      // Rotated square aligned with movement direction
-      const perpAngle = angle + Math.PI / 2;
-      const halfDiag = r * 1.1;
-      ctx.moveTo(
-        x + Math.cos(angle) * halfDiag,
-        y + Math.sin(angle) * halfDiag,
-      );
-      ctx.lineTo(
-        x + Math.cos(perpAngle) * halfDiag * 0.72,
-        y + Math.sin(perpAngle) * halfDiag * 0.72,
-      );
-      ctx.lineTo(
-        x + Math.cos(angle + Math.PI) * halfDiag,
-        y + Math.sin(angle + Math.PI) * halfDiag,
-      );
-      ctx.lineTo(
-        x + Math.cos(perpAngle + Math.PI) * halfDiag * 0.72,
-        y + Math.sin(perpAngle + Math.PI) * halfDiag * 0.72,
-      );
+      // Wider rotated rectangle aligned with movement
+      const fwd = r * 1.15;
+      const side = r * 0.85;
+      ctx.moveTo(x + Math.cos(angle) * fwd, y + Math.sin(angle) * fwd);
+      ctx.lineTo(x + Math.cos(perpAngle) * side, y + Math.sin(perpAngle) * side);
+      ctx.lineTo(x + Math.cos(backAngle) * fwd * 0.85, y + Math.sin(backAngle) * fwd * 0.85);
+      ctx.lineTo(x + Math.cos(perpAngle + Math.PI) * side, y + Math.sin(perpAngle + Math.PI) * side);
       ctx.closePath();
       break;
     }
     case 'diamond': {
-      // Diamond / rhombus aligned with movement direction
-      const perpAngle = angle + Math.PI / 2;
-      const fwd = r * 1.2;
-      const side = r * 0.75;
+      // Elongated diamond — more dramatic than before
+      const fwd = r * 1.4;
+      const side = r * 0.8;
+      ctx.moveTo(x + Math.cos(angle) * fwd, y + Math.sin(angle) * fwd);
+      ctx.lineTo(x + Math.cos(perpAngle) * side, y + Math.sin(perpAngle) * side);
+      ctx.lineTo(x + Math.cos(backAngle) * fwd * 0.6, y + Math.sin(backAngle) * fwd * 0.6);
+      ctx.lineTo(x + Math.cos(perpAngle + Math.PI) * side, y + Math.sin(perpAngle + Math.PI) * side);
+      ctx.closePath();
+      break;
+    }
+    case 'star': {
+      // 5-pointed star rotated to face movement direction
+      starPath(ctx, x, y, r * 1.3, r * 0.55, angle);
+      break;
+    }
+    case 'hexagon': {
+      // Distinctly hexagonal — wider than circle
+      hexPath(ctx, x, y, r * 1.3, angle);
+      break;
+    }
+    case 'triangle': {
+      // Forward-pointing triangle (arrowhead)
       ctx.moveTo(
-        x + Math.cos(angle) * fwd,
-        y + Math.sin(angle) * fwd,
+        x + Math.cos(angle) * r * 1.5,
+        y + Math.sin(angle) * r * 1.5,
       );
       ctx.lineTo(
-        x + Math.cos(perpAngle) * side,
-        y + Math.sin(perpAngle) * side,
+        x + Math.cos(perpAngle) * r * 0.9,
+        y + Math.sin(perpAngle) * r * 0.9,
       );
       ctx.lineTo(
-        x + Math.cos(angle + Math.PI) * fwd * 0.7,
-        y + Math.sin(angle + Math.PI) * fwd * 0.7,
-      );
-      ctx.lineTo(
-        x + Math.cos(perpAngle + Math.PI) * side,
-        y + Math.sin(perpAngle + Math.PI) * side,
+        x + Math.cos(perpAngle + Math.PI) * r * 0.9,
+        y + Math.sin(perpAngle + Math.PI) * r * 0.9,
       );
       ctx.closePath();
       break;
+    }
+    case 'ring': {
+      // Phantom — semi-transparent ghostly circles
+      ctx.globalAlpha = 0.35;
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+      // Bright outline to maintain shape visibility
+      ctx.strokeStyle = color;
+      ctx.lineWidth = r * 0.25;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      return;
     }
   }
 

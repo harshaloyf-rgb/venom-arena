@@ -25,7 +25,7 @@ export const PALETTE_COLORS = [
 // ---------------------------------------------------------------------------
 // Custom skin segment shape — matches original `CustomSegment` interface.
 // ---------------------------------------------------------------------------
-export type SegShape = 'circle' | 'square' | 'diamond' | 'spike';
+export type SegShape = 'circle' | 'square' | 'diamond' | 'spike' | 'star' | 'hexagon' | 'triangle' | 'ring';
 export interface CustomSegment {
   color: string;
   sizeScale: number;
@@ -39,7 +39,11 @@ export type BodyStyle =
   | 'armored'
   | 'crystal'
   | 'obsidian'
-  | 'basilisk';
+  | 'basilisk'
+  | 'stellar'
+  | 'fortress'
+  | 'stingray'
+  | 'phantom';
 export type TaperStyle = 'natural' | 'uniform' | 'wave' | 'heavy';
 
 export interface SlitherPreset {
@@ -361,6 +365,26 @@ export const BODY_STYLE_OPTIONS: {
     id: 'basilisk',
     label: 'Basilisk Diamonds',
     desc: 'Pointy royal nodes',
+  },
+  {
+    id: 'stellar',
+    label: 'Stellar Stars',
+    desc: 'Rotating 5-pointed stars',
+  },
+  {
+    id: 'fortress',
+    label: 'Fortress Hex',
+    desc: 'Hexagonal armor plating',
+  },
+  {
+    id: 'stingray',
+    label: 'Stingray Blades',
+    desc: 'Forward-pointing triangles',
+  },
+  {
+    id: 'phantom',
+    label: 'Phantom Ghost',
+    desc: 'Semi-transparent specters',
   },
 ];
 

@@ -351,6 +351,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
   function handleRandomizePattern() {
     const categories: BodyStyle[] = [
       'smooth', 'dragon', 'armored', 'crystal', 'obsidian', 'basilisk',
+      'stellar', 'fortress', 'stingray', 'phantom',
     ];
     const tapers: TaperStyle[] = ['natural', 'uniform', 'wave', 'heavy'];
     const colorsList = PALETTE_COLORS.map((c) => c.hex);
@@ -804,22 +805,22 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
                 </h3>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                 {BODY_STYLE_OPTIONS.map((style) => (
                   <button
                     key={style.id}
                     type="button"
                     onClick={() => setBodyStyle(style.id)}
-                    className={`p-3 rounded-xl border text-left transition duration-200 cursor-pointer flex flex-col justify-between ${
+                    className={`p-2 rounded-xl border text-left transition duration-200 cursor-pointer flex flex-col justify-between ${
                       bodyStyle === style.id
                         ? 'bg-indigo-600/10 border-indigo-500 shadow shadow-indigo-950'
                         : 'bg-slate-900 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/80'
                     }`}
                   >
-                    <span className="text-xs font-bold text-white block capitalize">
+                    <span className="text-[10.5px] font-bold text-white block capitalize">
                       {style.label}
                     </span>
-                    <span className="text-[10px] text-slate-400 block mt-1 leading-snug">
+                    <span className="text-[9px] text-slate-400 block mt-0.5 leading-snug">
                       {style.desc}
                     </span>
                   </button>
