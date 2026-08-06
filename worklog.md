@@ -484,3 +484,23 @@ Work Log:
 Stage Summary:
 - Face Cosmetics preview now uses identical canvas dimensions (450×180), segment count (20), speed (1.2), and scale (0.77) as Genetic Lab
 - Snake and grid appearance now match between both tabs
+---
+Task ID: face-cosmetics-responsive
+Agent: Main
+Task: Fix Face Cosmetics preview - larger canvas, same snake/grid size as Genetic Lab
+
+Work Log:
+- Root cause: canvas used `width: 100%` CSS which stretched a 450×180 buffer across a wider container, causing blur and grid stretching
+- Added `responsive` prop to GameSnakePreview: when true, uses `maxWidth: 100%, height: auto` instead of `width: 100%, height: fixed`
+- Updated Face Cosmetics: `width={900} height={360} segments={20} scale={0.77} responsive`
+- Canvas buffer 900×360 (5:2 ratio, same as Genetic Lab 450:180)
+- With `max-width: 100%` the canvas displays at native 900×360 without any stretching
+- Snake scale 0.77 and grid spacing 40px identical to Genetic Lab
+- Verified: canvas CSS dimensions match buffer exactly (900×360), no stretching
+
+Stage Summary:
+- Face Cosmetics preview is now 2x the area of Genetic Lab (900×360 vs 450×180)
+- Snake and grid are identical visual size (same scale 0.77, same 40px grid spacing)
+- No blur or stretching because canvas displays at native pixel size
+- Added `responsive` prop to GameSnakePreview for proper canvas sizing
+
