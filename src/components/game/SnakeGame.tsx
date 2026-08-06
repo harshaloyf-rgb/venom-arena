@@ -331,6 +331,11 @@ export default function SnakeGame({
 
         const viewport: Viewport = getViewport(cameraRef.current, w, h);
 
+        // Get raw mouse screen position for ultra-responsive eye tracking
+        const mousePos = input.getMousePos();
+        const mouseSX = mousePos?.x;
+        const mouseSY = mousePos?.y;
+
         // ── Render: grid, food, star chips, extraction zone ──
         renderOfflineBackground(ctx, state, cameraRef.current, viewport, fc.fps, now);
 
@@ -341,7 +346,7 @@ export default function SnakeGame({
           }
         }
         if (state.player && state.player.alive) {
-          renderSnakeAtlas(ctx, state.player, cameraRef.current, viewport, atlasManager, now);
+          renderSnakeAtlas(ctx, state.player, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY);
         }
 
         // HUD, controls, minimap, death overlay
@@ -418,12 +423,15 @@ export default function SnakeGame({
         // ── Snakes: all bots use fallback, player uses atlas ──
         let isFirst = true;
         const localTargetAngle = inputState.targetAngle;
+        const onlineMousePos = input.getMousePos();
+        const onlineMouseSX = onlineMousePos?.x;
+        const onlineMouseSY = onlineMousePos?.y;
         for (const [, rs] of renderableSnakes) {
           if (!rs.alive) continue;
           if (isFirst) {
             // Player's snake — use atlas renderer
             const adapted = renderableToSnake(rs, true, now, localTargetAngle);
-            renderSnakeAtlas(ctx, adapted, camera, viewport, atlasManager, now);
+            renderSnakeAtlas(ctx, adapted, camera, viewport, atlasManager, now, onlineMouseSX, onlineMouseSY);
             isFirst = false;
           } else {
             // Bot snakes — fallback renderer for performance

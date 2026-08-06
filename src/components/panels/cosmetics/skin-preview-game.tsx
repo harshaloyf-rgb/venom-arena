@@ -56,6 +56,7 @@ export function GameSkinPreview({
 }: GameSkinPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
+  const mouseRef = useRef<{ x: number; y: number } | null>(null);
 
   const draw = useCallback((
     ctx: CanvasRenderingContext2D,
@@ -243,15 +244,16 @@ export function GameSkinPreview({
         ctx.restore();
       }
 
-      // Draw eyes on head
+      // Draw eyes on head — track mouse for responsiveness
       const eyeOffset = hr * 0.4;
       const eyeR = hr * 0.25;
       const pupilR = eyeR * 0.55;
       const forwardOffset = hr * 0.3;
+      const perpAngle = headPos.angle + Math.PI / 2;
 
       for (const side of [-1, 1]) {
-        const ex = headPos.x + forwardOffset;
-        const ey = headPos.y + eyeOffset * side;
+        const ex = headPos.x + Math.cos(headPos.angle) * forwardOffset + Math.cos(perpAngle) * eyeOffset * side;
+        const ey = headPos.y + Math.sin(headPos.angle) * forwardOffset + Math.sin(perpAngle) * eyeOffset * side;
         ctx.fillStyle = '#ffffff';
         ctx.strokeStyle = 'rgba(0,0,0,0.3)';
         ctx.lineWidth = 1;
@@ -260,15 +262,28 @@ export function GameSkinPreview({
         ctx.fill();
         ctx.stroke();
 
+        // Pupil tracks mouse position for ultra-responsive feel
+        let lookAngle = headPos.angle;
+        const mRef = mouseRef.current;
+        if (mRef) {
+          const dx = mRef.x - ex;
+          const dy = mRef.y - ey;
+          if (Math.sqrt(dx * dx + dy * dy) > 2) {
+            lookAngle = Math.atan2(dy, dx);
+          }
+        }
+        const pupilShift = eyeR * 0.7;
+        const px = ex + Math.cos(lookAngle) * pupilShift;
+        const py = ey + Math.sin(lookAngle) * pupilShift;
         ctx.fillStyle = '#111111';
         ctx.beginPath();
-        ctx.arc(ex + pupilR * 0.3, ey, pupilR, 0, Math.PI * 2);
+        ctx.arc(px, py, pupilR, 0, Math.PI * 2);
         ctx.fill();
 
         // Highlight
         ctx.fillStyle = 'rgba(255,255,255,0.7)';
         ctx.beginPath();
-        ctx.arc(ex + pupilR * 0.1 - pupilR * 0.3, ey - pupilR * 0.35, pupilR * 0.3, 0, Math.PI * 2);
+        ctx.arc(px - pupilR * 0.3, py - pupilR * 0.35, pupilR * 0.3, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -318,9 +333,26 @@ export function GameSkinPreview({
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+    // Track mouse position for responsive eyes in preview
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = width / rect.width;
+      const scaleY = height / rect.height;
+      mouseRef.current = {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY,
+      };
+    };
+    const handleMouseLeave = () => { mouseRef.current = null; };
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mouseleave', handleMouseLeave);
+
     if (!animated) {
       draw(ctx, width, height, 0);
-      return;
+      return () => {
+        canvas.removeEventListener('mousemove', handleMouseMove);
+        canvas.removeEventListener('mouseleave', handleMouseLeave);
+      };
     }
 
     let running = true;
@@ -334,6 +366,8 @@ export function GameSkinPreview({
     return () => {
       running = false;
       cancelAnimationFrame(animRef.current);
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('mouseleave', handleMouseLeave);
     };
   }, [draw, width, height, animated]);
 
