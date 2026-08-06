@@ -463,8 +463,7 @@ export function GameSnakePreview({
           const r = segR * rMul;
           const segShape = curLabMode ? resolveShapeStyle(curBodyStyle, i) : 'circle' as const;
 
-          if (segShape === 'circle' && !curGlow) {
-            // Simple flat circle with cached colors
+          if (segShape === 'circle' && !curGlow && !curLabMode) {
             const grad = ctx.createRadialGradient(p.x - r * 0.3, p.y - r * 0.3, r * 0.1, p.x, p.y, r);
             grad.addColorStop(0, bodyLight);
             grad.addColorStop(G.lightenStop, segColor);
