@@ -1,7 +1,7 @@
 import { Check, Flame, Lock, Sparkles } from 'lucide-react';
 import type { Skin } from '@/lib/game-config';
 import type { SlitherPreset } from './cosmetics-types';
-import { SkinsCanvasPreview } from './skins-canvas-preview';
+import { GameSkinPreview } from './skin-preview-game';
 
 // ---------------------------------------------------------------------------
 // Badges
@@ -113,11 +113,12 @@ export function PresetCard({
       {active && <ActiveBadge accent="indigo" />}
 
       <div>
-        <div className="mb-4">
-          <SkinsCanvasPreview
-            colors={preset.colors}
-            shapeStyle={preset.shape}
-            glow={preset.glow}
+        <div className="mb-4 flex justify-center">
+          <GameSkinPreview
+            skinId={preset.id}
+            width={200}
+            height={72}
+            segments={18}
           />
         </div>
 
@@ -194,16 +195,12 @@ export function SkinCard({
       )}
 
       <div>
-        <div className="mb-4">
-          <SkinsCanvasPreview
-            colors={[item.color, item.secondaryColor || item.color]}
-            pattern={item.pattern}
-            shapeStyle="smooth"
-            glow={
-              item.pattern === 'glow' ||
-              item.pattern === 'neon' ||
-              item.pattern === 'rainbow'
-            }
+        <div className="mb-4 flex justify-center">
+          <GameSkinPreview
+            skinId={item.id}
+            width={200}
+            height={72}
+            segments={18}
           />
         </div>
 

@@ -15,6 +15,7 @@ import { SNAKE_RADIUS, SEGMENT_SPACING, SPAWN_PROTECTION_MS, LEGENDARY_GLOW_SIZE
 import { worldToScreen } from '@/lib/snake/camera';
 import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
+import { isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -461,20 +462,38 @@ export function renderSnakeFallback(
   const walked = walkPathFixedStep(path, BODY_DRAW_STEP, maxSegs, snake.angle);
 
   // Draw body circles (tail → head for proper layering)
-  ctx.fillStyle = snake.color;
-  ctx.beginPath();
-  let hasBodySegs = false;
+  // Multi-color skins alternate colors per segment
+  const multiColor = isMultiColorSkin(snake.skinId);
 
-  for (let i = walked.count - 1; i >= 0; i--) {
-    const wx = walked.xs[i];
-    const wy = walked.ys[i];
-    if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-    const scr = worldToScreen(wx, wy, camera, cw, ch);
-    ctx.moveTo(scr.x + segRadius, scr.y);
-    ctx.arc(scr.x, scr.y, segRadius, 0, Math.PI * 2);
-    hasBodySegs = true;
+  if (multiColor) {
+    // Per-segment color: draw each one individually
+    for (let i = walked.count - 1; i >= 0; i--) {
+      const wx = walked.xs[i];
+      const wy = walked.ys[i];
+      if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
+      const scr = worldToScreen(wx, wy, camera, cw, ch);
+      const segColor = getSegmentColor(snake.skinId, i);
+      ctx.fillStyle = segColor ?? snake.color;
+      ctx.beginPath();
+      ctx.arc(scr.x, scr.y, segRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else {
+    // Batched single-color draw (high performance)
+    ctx.fillStyle = snake.color;
+    ctx.beginPath();
+    let hasBodySegs = false;
+    for (let i = walked.count - 1; i >= 0; i--) {
+      const wx = walked.xs[i];
+      const wy = walked.ys[i];
+      if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
+      const scr = worldToScreen(wx, wy, camera, cw, ch);
+      ctx.moveTo(scr.x + segRadius, scr.y);
+      ctx.arc(scr.x, scr.y, segRadius, 0, Math.PI * 2);
+      hasBodySegs = true;
+    }
+    if (hasBodySegs) ctx.fill();
   }
-  if (hasBodySegs) ctx.fill();
 
   // ── Head ──
   const headRadius = segRadius * 1.3;
@@ -635,11 +654,16 @@ function clamp(v: number, min: number, max: number): number {
 }
 
 function getAnimationForSkin(skinId: string): string {
+  // Built-in atlas skins with known animations
   const map: Record<string, string> = {
     'skin-neon-pink': 'pulse',
     'skin-arctic': 'flow',
     'skin-lava-core': 'lava',
     'skin-cyber-phantom': 'cyberpulse',
+    'skin-gold': 'glow',
+    'skin-crimson': 'glow',
+    'skin-neonglow': 'pulse',
+    'skin-rainbow': 'flow',
   };
   return map[skinId] ?? 'none';
 }

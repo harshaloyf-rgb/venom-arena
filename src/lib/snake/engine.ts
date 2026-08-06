@@ -8,7 +8,7 @@
 // ============================================================================
 
 import type {
-  GameState, InputState, FoodOrb, Snake, StarChip,
+  GameState, InputState, FoodOrb, Snake, StarChip, SkinAsset, SkinRarity,
 } from './types';
 import { PathBuffer, scratchVec2 } from './pool';
 import { SpatialHash, type SpatialEntity } from './spatial-hash';
@@ -101,8 +101,19 @@ const _insertScratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
 // Initialization
 // ==========================================================================
 
+/** Optional skin override for the player snake */
+export interface PlayerSkinOverride {
+  skinId: string;
+  bodyColor: string;
+  headColor: string;
+  accentColor: string;
+  pattern?: SkinAsset['pattern'];
+  animation?: SkinAsset['animation'];
+  rarity: SkinRarity;
+}
+
 /** Create the initial game state */
-export function createInitialState(): GameState {
+export function createInitialState(playerSkin?: PlayerSkinOverride | null): GameState {
   const state: GameState = {
     snakes: new Map(),
     foods: [],
@@ -118,7 +129,7 @@ export function createInitialState(): GameState {
   const now = Date.now();
 
   // Spawn player
-  const player = createSnake('player', 'You', 0, 0, 0, false, now);
+  const player = createSnake('player', 'You', 0, 0, 0, false, now, playerSkin);
   state.player = player;
   state.snakes.set(player.id, player);
 
@@ -147,6 +158,7 @@ function createSnake(
   posY: number,
   isBot: boolean,
   now: number,
+  skinOverride?: PlayerSkinOverride | null,
 ): Snake {
   const targetLength = Math.min(Math.floor(START_LENGTH + startScore * GROWTH_RATE), MAX_SNAKE_LENGTH);
   const palette = SNAKE_PALETTES[Math.floor(Math.random() * SNAKE_PALETTES.length)];
@@ -169,6 +181,12 @@ function createSnake(
     path.appendTail(x, y);
   }
 
+  // Apply skin override for player snakes
+  const color = skinOverride ? skinOverride.bodyColor : palette[0];
+  const headColor = skinOverride ? skinOverride.headColor : palette[1];
+  const skinId = skinOverride ? skinOverride.skinId : 'skin-default';
+  const rarity = skinOverride ? skinOverride.rarity : 'common';
+
   return {
     id,
     name,
@@ -182,14 +200,14 @@ function createSnake(
     isBot,
     isPlayer: !isBot,
     spawnTime: now,
-    color: palette[0],
-    headColor: palette[1],
+    color,
+    headColor,
     lastBoostDrop: 0,
     targetAngle: angle,
     spiral: { active: false, startAngle: 0, theta: 0, ticksElapsed: 0, a: 0, b: 0, direction: 1 },
     bodyRadius: SNAKE_RADIUS,
-    skinId: 'skin-default',
-    rarity: 'common',
+    skinId,
+    rarity,
   };
 }
 
@@ -774,7 +792,15 @@ export function respawnPlayer(state: GameState): void {
   if (old) old.alive = false;
 
   const pos = findSafeSpawn(state.snakes, 0, 0);
-  const newPlayer = createSnake('player', 'You', 0, pos.x, pos.y, false, Date.now());
+  // Preserve player's skin on respawn
+  const skinOverride: PlayerSkinOverride | undefined = old ? {
+    skinId: old.skinId,
+    bodyColor: old.color,
+    headColor: old.headColor,
+    accentColor: '',
+    rarity: old.rarity,
+  } : undefined;
+  const newPlayer = createSnake('player', 'You', 0, pos.x, pos.y, false, Date.now(), skinOverride);
   state.player = newPlayer;
   state.snakes.set(newPlayer.id, newPlayer);
 }
