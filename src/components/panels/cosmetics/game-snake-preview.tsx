@@ -13,8 +13,9 @@
 import { useEffect, useRef } from 'react';
 import { SNAKE_RADIUS, CAMERA_BASE_ZOOM } from '@/lib/snake/config';
 import { getSkinAsset } from '@/lib/snake/skin-registry';
-import { resolveShapeStyle, computeTaperRadius, drawSegmentShape } from './cosmetics-utils';
-import type { BodyStyle, TaperStyle } from './cosmetics-types';
+import { resolveShapeStyle, computeTaperRadius, drawSegmentShape, readCustomSkinStateSafe } from './cosmetics-utils';
+import type { BodyStyle, TaperStyle, CustomSegment } from './cosmetics-types';
+import { renderEquippedCosmetics, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
 
 // ─── Color helpers ─────────────────────────────────────────────────────
 
@@ -85,6 +86,8 @@ export function GameSnakePreview({
   bodyStyle,
   taperStyle,
   glow,
+  // Face cosmetics
+  equippedCosmetics,
 }: {
   skinId?: string;
   headColor?: string;
@@ -100,6 +103,8 @@ export function GameSnakePreview({
   bodyStyle?: BodyStyle;
   taperStyle?: TaperStyle;
   glow?: boolean;
+  // Face cosmetics
+  equippedCosmetics?: EquippedCosmetics | null;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef(0);
@@ -129,10 +134,35 @@ export function GameSnakePreview({
     return '#16a34a';
   })();
 
-  const isLabMode = colors && colors.length > 0;
-  const effectiveBodyStyle = bodyStyle ?? 'smooth';
-  const effectiveTaper = taperStyle ?? 'natural';
-  const effectiveGlow = glow ?? false;
+  // Auto-detect lab-mode props from localStorage when a skinId with custom
+  // segments is equipped (e.g. presets stored via handleEquipSlitherPreset).
+  let autoColors: string[] | undefined;
+  let autoBodyStyle: BodyStyle | undefined;
+  let autoTaper: TaperStyle | undefined;
+  let autoGlow: boolean | undefined;
+  if (skinId && !colors) {
+    const stored = readCustomSkinStateSafe();
+    if (stored?.useCustomSkin && stored.currentSkin === skinId && stored.customSkinSegments?.length) {
+      const segs = stored.customSkinSegments;
+      autoColors = segs.map((s: CustomSegment) => s.color);
+      const shapes = new Set(segs.map((s: CustomSegment) => s.shape));
+      if (shapes.has('spike') && shapes.size > 1) autoBodyStyle = 'dragon';
+      else if (shapes.has('square')) autoBodyStyle = 'armored';
+      else if (shapes.has('diamond')) autoBodyStyle = 'crystal';
+      else if (shapes.has('spike')) autoBodyStyle = 'obsidian';
+      else autoBodyStyle = 'smooth';
+      // Detect taper from sizeScale variation
+      const scales = segs.map((s: CustomSegment) => s.sizeScale);
+      const hasVariation = Math.max(...scales) - Math.min(...scales) > 0.1;
+      autoTaper = hasVariation ? 'natural' : 'uniform';
+      autoGlow = segs.some((s: CustomSegment) => s.glow);
+    }
+  }
+  const effectiveColors = colors ?? autoColors;
+  const isLabMode = effectiveColors && effectiveColors.length > 0;
+  const effectiveBodyStyle = bodyStyle ?? autoBodyStyle ?? 'smooth';
+  const effectiveTaper = taperStyle ?? autoTaper ?? 'natural';
+  const effectiveGlow = glow ?? autoGlow ?? false;
 
   useEffect(() => {
     const c = canvasRef.current;
@@ -184,13 +214,14 @@ export function GameSnakePreview({
     const wallM = Math.max(segR + 5, Math.min(width, height) * 0.3);
 
     // Capture current visual props in closure — they update when effect re-runs
-    const curColors = colors;
+    const curColors = effectiveColors;
     const curBodyStyle = effectiveBodyStyle;
     const curTaper = effectiveTaper;
     const curGlow = effectiveGlow;
     const curHeadCol = resolvedHead;
     const curBodyCol = resolvedBody;
     const curLabMode = isLabMode;
+    const curCosmetics = equippedCosmetics ?? null;
 
     let running = true;
     const loop = () => {
@@ -392,6 +423,14 @@ export function GameSnakePreview({
         ctx.beginPath(); ctx.arc(ppx - pupR * 0.3, ppy - pupR * 0.35, pupR * 0.3, 0, Math.PI * 2); ctx.fill();
       }
 
+      // Face cosmetics (rendered on top of default eyes)
+      if (curCosmetics) {
+        renderEquippedCosmetics(ctx, {
+          hx: headX, hy: headY, hr, angle,
+          time: performance.now(), boosting: false,
+        });
+      }
+
       // Direction pointer
       const ptrS = hr * 1.1, ptrL = hr * 3;
       ctx.strokeStyle = 'rgba(255,255,255,0.15)';
@@ -411,7 +450,7 @@ export function GameSnakePreview({
       c.removeEventListener('mousemove', onMove);
       c.removeEventListener('mouseleave', onLeave);
     };
-  }, [width, height, segments, speed, scale, resolvedHead, resolvedBody, effectiveBodyStyle, effectiveTaper, effectiveGlow, isLabMode]);
+  }, [width, height, segments, speed, scale, resolvedHead, resolvedBody, effectiveBodyStyle, effectiveTaper, effectiveGlow, isLabMode, effectiveColors, equippedCosmetics]);
 
   // Get skin name for label
   let skinName = '';
