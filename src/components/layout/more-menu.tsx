@@ -1,6 +1,6 @@
 'use client';
 
-import { X, ShoppingBag, User, Crown, Award, Shield, Sparkles, Film, Coins, Users } from 'lucide-react';
+import { X, ShoppingBag, User, Crown, Award, Shield, Sparkles, Film, Coins, Users, Eye } from 'lucide-react';
 
 interface MoreMenuProps {
   isOpen: boolean;
@@ -27,6 +27,7 @@ const ITEMS: MenuItem[] = [
   { tabId: 'clips', Icon: Film, label: 'Highlights', color: 'text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20' },
   { tabId: 'store', Icon: Coins, label: 'Chip Vault', color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20 hover:bg-cyan-500/20' },
   { tabId: 'social', Icon: Users, label: 'Social', color: 'text-violet-400 bg-violet-500/10 border-violet-500/20 hover:bg-violet-500/20' },
+  { tabId: 'tester', Icon: Eye, label: 'Face Test', color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20 hover:bg-cyan-500/20' },
   { tabId: 'admin', Icon: Shield, label: 'Admin', color: 'text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20', adminOnly: true },
 ];
 

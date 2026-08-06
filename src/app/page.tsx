@@ -133,7 +133,7 @@ export default function Home() {
   const handleInspectPlayer = useCallback((p: InspectedPlayer) => { setInspectedPlayer(p); }, []);
 
   const visibleTabs = useMemo(
-    () => player?.role === 'admin' ? TABS : TABS.filter((t) => t.id !== 'admin' && t.id !== 'tester'),
+    () => TABS.filter((t) => t.id !== 'admin'),
     [player?.role],
   );
 
@@ -589,7 +589,7 @@ export default function Home() {
               {activeTab === 'store' && <ChipStore onToast={toastFn} />}
               {activeTab === 'social' && <SocialPanel onToast={toastFn} onInspectPlayer={handleInspectPlayer} />}
               {activeTab === 'admin' && player?.role === 'admin' && <AdminPanel onToast={toastFn} />}
-              {activeTab === 'tester' && player?.role === 'admin' && <SnakeFaceTester />}
+              {activeTab === 'tester' && <SnakeFaceTester />}
             </div>
           </div>
         )}
