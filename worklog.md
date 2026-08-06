@@ -254,3 +254,4 @@ Stage Summary:
 - Face Cosmetics now shows exact same Snake Test canvas renderer
 - Admin tab now visible for admin-role players in lobby station
 - Files: snake-face-tester.tsx (embedded mode), cosmetics-section.tsx (swap), page.tsx (admin filter fix)
+
