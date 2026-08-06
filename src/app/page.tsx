@@ -92,7 +92,7 @@ const TABS: TabDef[] = [
   { id: 'store', label: 'Vault', icon: Coins, activeColor: 'text-emerald-400 bg-emerald-600/10 border-emerald-500/30' },
   { id: 'social', label: 'Friends & Search', icon: Users, activeColor: 'text-violet-400 bg-violet-600/10 border-violet-500/30' },
   { id: 'admin', label: 'Admin', icon: Shield, activeColor: 'text-red-400 bg-red-600/10 border-red-500/30' },
-  { id: 'tester', label: 'Face Test', icon: Eye, activeColor: 'text-cyan-400 bg-cyan-600/10 border-cyan-500/30' },
+  { id: 'tester', label: 'Snake Test', icon: Eye, activeColor: 'text-cyan-400 bg-cyan-600/10 border-cyan-500/30' },
 ];
 
 const PANEL_TITLES: Record<string, string> = {
@@ -100,7 +100,7 @@ const PANEL_TITLES: Record<string, string> = {
   leaderboard: 'Global Standings', championships: 'Championships',
   halloffame: 'Hall of Fame', clans: 'Syndicates', seasonpass: 'Season Pass',
   clips: 'Highlights', rewards: 'Daily Claims', store: 'Chip Vault',
-  social: 'Friends & Social', admin: 'Admin Panel', tester: 'Face Comparison',
+  social: 'Friends & Social', admin: 'Admin Panel', tester: 'Game Snake Tester',
 };
 
 // ---------------------------------------------------------------------------
