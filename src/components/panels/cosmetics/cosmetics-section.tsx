@@ -28,8 +28,10 @@ const RARITY_STYLES: Record<CosmeticRarity, string> = {
 
 export function CosmeticsSection({
   onToast,
+  activeSkinId = 'skin-default',
 }: {
   onToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
+  activeSkinId?: string;
 }) {
   const [activeSlot, setActiveSlot] = useState<CosmeticSlot>('eyes');
   const [equipped, setEquipped] = useState<EquippedCosmetics>(
@@ -78,7 +80,7 @@ export function CosmeticsSection({
             Live Preview
           </span>
           <GameSkinPreview
-            skinId="custom-lab-skin"
+            skinId={activeSkinId}
             width={280}
             height={100}
             segments={14}
@@ -87,7 +89,7 @@ export function CosmeticsSection({
             className="rounded-xl"
           />
           <p className="text-[10px] text-slate-500 text-center leading-relaxed">
-            Your snake with current face cosmetics applied.
+            Your equipped skin with current face cosmetics applied.
           </p>
         </div>
       </div>
