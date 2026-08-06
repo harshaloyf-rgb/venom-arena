@@ -5,7 +5,34 @@ import type { BodyStyle, SegShape, TaperStyle } from './cosmetics-types';
 import { resolveShapeStyle } from './cosmetics-utils';
 
 // ---------------------------------------------------------------------------
-// 2. INTERACTIVE TRY-ON PLAYGROUND (steer with mouse)
+// Color helpers (match in-game 3D gradient look)
+// ---------------------------------------------------------------------------
+
+function lightenHex(hex: string, factor: number): string {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const r = (n >> 16) & 0xff;
+  const g = (n >> 8) & 0xff;
+  const b = n & 0xff;
+  const nr = Math.round(r + (255 - r) * factor);
+  const ng = Math.round(g + (255 - g) * factor);
+  const nb = Math.round(b + (255 - b) * factor);
+  return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`;
+}
+
+function darkenHex(hex: string, factor: number): string {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const r = (n >> 16) & 0xff;
+  const g = (n >> 8) & 0xff;
+  const b = n & 0xff;
+  const nr = Math.round(r * (1 - factor));
+  const ng = Math.round(g * (1 - factor));
+  const nb = Math.round(b * (1 - factor));
+  return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`;
+}
+
+// ---------------------------------------------------------------------------
+// INTERACTIVE TRY-ON PLAYGROUND (steer with mouse)
+// Uses the SAME 3D gradient circles and eyes as the in-game renderer.
 // ---------------------------------------------------------------------------
 interface TryOnPreviewProps {
   colors: string[];
@@ -39,9 +66,11 @@ export function TryOnPreview({
 
     const handleMouseMove = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
+      const scaleX = 450 / rect.width;
+      const scaleY = 180 / rect.height;
       mousePos.current = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY,
       };
     };
     const handleMouseEnter = () => {
@@ -102,23 +131,21 @@ export function TryOnPreview({
 
       // Mouse radar ring
       if (isHovered.current) {
+        const scaleX = canvas.width / canvas.getBoundingClientRect().width;
+        const scaleY = canvas.height / canvas.getBoundingClientRect().height;
         ctx.strokeStyle = 'rgba(99, 102, 241, 0.2)';
         ctx.beginPath();
         ctx.arc(mousePos.current.x, mousePos.current.y, 12, 0, Math.PI * 2);
         ctx.stroke();
       }
 
-      // Body segments
+      // Body segments — GAME-ACCURATE 3D gradient circles
       for (let i = points.length - 1; i >= 1; i--) {
         const pt = points[i];
         const prevPt = points[i - 1] || pt;
         const segAngle = Math.atan2(pt.y - prevPt.y, pt.x - prevPt.x);
-        const perpAngle = segAngle + Math.PI / 2;
 
-        const sizeRatio = 1 - (i / points.length) * 0.45;
         const color = colors[i % colors.length] || '#ffffff';
-
-        const shape: SegShape = resolveShapeStyle(shapeStyle, i);
 
         let sizeScale = 1.0;
         if (taperStyle === 'uniform') {
@@ -131,19 +158,31 @@ export function TryOnPreview({
           sizeScale = Math.max(0.55, 1.35 - (i / points.length) * 0.8);
         }
 
-        const r = 10 * sizeRatio * sizeScale;
+        const r = 10 * sizeScale;
 
         ctx.save();
+
+        // Glow effect
         if (glow) {
-          ctx.shadowBlur = 12;
+          ctx.shadowBlur = 14;
           ctx.shadowColor = color;
         }
-        ctx.fillStyle = color;
 
+        // 3D gradient (same as in-game atlas head/body rendering)
+        const grad = ctx.createRadialGradient(
+          pt.x - r * 0.3, pt.y - r * 0.3, r * 0.1,
+          pt.x, pt.y, r,
+        );
+        grad.addColorStop(0, lightenHex(color, 0.3));
+        grad.addColorStop(0.6, color);
+        grad.addColorStop(1, darkenHex(color, 0.3));
+        ctx.fillStyle = grad;
+
+        // Shape rendering
+        const shape: SegShape = resolveShapeStyle(shapeStyle, i);
         ctx.beginPath();
         if (shape === 'circle') {
           ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
-          ctx.fill();
         } else if (shape === 'square') {
           ctx.fillRect(pt.x - r, pt.y - r, r * 2, r * 2);
         } else if (shape === 'diamond') {
@@ -152,8 +191,8 @@ export function TryOnPreview({
           ctx.lineTo(pt.x, pt.y + r);
           ctx.lineTo(pt.x - r, pt.y);
           ctx.closePath();
-          ctx.fill();
         } else if (shape === 'spike') {
+          const perpAngle = segAngle + Math.PI / 2;
           const spikeAngle = segAngle + Math.PI;
           ctx.moveTo(
             pt.x + Math.cos(segAngle) * r * 1.35,
@@ -172,22 +211,35 @@ export function TryOnPreview({
             pt.y + Math.sin(perpAngle - Math.PI) * r * 0.95,
           );
           ctx.closePath();
-          ctx.fill();
         }
+        ctx.fill();
         ctx.restore();
       }
 
-      // Head
+      // Head — GAME-ACCURATE with 3D gradient and 1.3x scale
       const head = points[0];
+      const nextPt = points[1] || head;
+      const headAngle = Math.atan2(head.y - nextPt.y, head.x - nextPt.x);
       const headColor = colors[0] || '#ffffff';
+      const headR = 12;
+
       ctx.save();
       if (glow) {
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = 18;
         ctx.shadowColor = headColor;
       }
-      ctx.fillStyle = headColor;
+
+      // 3D head gradient (same as atlas head rendering)
+      const headGrad = ctx.createRadialGradient(
+        head.x - headR * 0.3, head.y - headR * 0.3, headR * 0.1,
+        head.x, head.y, headR,
+      );
+      headGrad.addColorStop(0, lightenHex(headColor, 0.35));
+      headGrad.addColorStop(0.6, headColor);
+      headGrad.addColorStop(1, darkenHex(headColor, 0.3));
+      ctx.fillStyle = headGrad;
       ctx.beginPath();
-      ctx.arc(head.x, head.y, 12, 0, Math.PI * 2);
+      ctx.arc(head.x, head.y, headR, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
 
@@ -197,10 +249,8 @@ export function TryOnPreview({
         ctx.strokeStyle = '#ef4444';
         ctx.lineWidth = 2.5;
         ctx.lineCap = 'round';
-        const nextPt = points[1] || head;
-        const headAngle = Math.atan2(head.y - nextPt.y, head.x - nextPt.x);
-        const startX = head.x + Math.cos(headAngle) * 12;
-        const startY = head.y + Math.sin(headAngle) * 12;
+        const startX = head.x + Math.cos(headAngle) * headR;
+        const startY = head.y + Math.sin(headAngle) * headR;
         const endX = startX + Math.cos(headAngle) * 8;
         const endY = startY + Math.sin(headAngle) * 8;
 
@@ -220,41 +270,40 @@ export function TryOnPreview({
         ctx.restore();
       }
 
-      // Eyes
-      const nextPt = points[1] || head;
-      const headAngle = Math.atan2(head.y - nextPt.y, head.x - nextPt.x);
-      const eyeL = {
-        x: head.x + Math.cos(headAngle + 0.45) * 6,
-        y: head.y + Math.sin(headAngle + 0.45) * 6,
-      };
-      const eyeR = {
-        x: head.x + Math.cos(headAngle - 0.45) * 6,
-        y: head.y + Math.sin(headAngle - 0.45) * 6,
-      };
+      // Eyes — GAME-ACCURATE responsive eyes with white, pupil, and highlight
+      const eyeForward = headR * 0.3;
+      const eyeOffset = headR * 0.45;
+      const eyeR = headR * 0.28;
+      const pupilR = eyeR * 0.55;
+      const perpAngle = headAngle + Math.PI / 2;
 
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(eyeL.x, eyeL.y, 2.8, 0, Math.PI * 2);
-      ctx.arc(eyeR.x, eyeR.y, 2.8, 0, Math.PI * 2);
-      ctx.fill();
+      for (const side of [-1, 1]) {
+        const ex = head.x + Math.cos(headAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
+        const ey = head.y + Math.sin(headAngle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
 
-      ctx.fillStyle = '#090d16';
-      ctx.beginPath();
-      ctx.arc(
-        eyeL.x + Math.cos(headAngle) * 0.8,
-        eyeL.y + Math.sin(headAngle) * 0.8,
-        1.4,
-        0,
-        Math.PI * 2,
-      );
-      ctx.arc(
-        eyeR.x + Math.cos(headAngle) * 0.8,
-        eyeR.y + Math.sin(headAngle) * 0.8,
-        1.4,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
+        // Eye white with border (same as in-game)
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(ex, ey, eyeR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Pupil
+        const px = ex + Math.cos(headAngle) * pupilR * 0.3;
+        const py = ey + Math.sin(headAngle) * pupilR * 0.3;
+        ctx.fillStyle = '#111111';
+        ctx.beginPath();
+        ctx.arc(px, py, pupilR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Tiny highlight (same as in-game)
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        ctx.beginPath();
+        ctx.arc(px - pupilR * 0.3, py - pupilR * 0.35, pupilR * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       animId = requestAnimationFrame(render);
     };

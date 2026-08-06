@@ -26,9 +26,11 @@ import {
   SEGMENT_SPACING,
   BASE_SPEED,
 } from '@/lib/snake';
-import { createInitialState, gameTick, respawnPlayer } from '@/lib/snake/engine';
+import { createInitialState, gameTick, respawnPlayer, type PlayerSkinOverride } from '@/lib/snake/engine';
 import { createCamera, updateCamera, getViewport, worldToScreen } from '@/lib/snake/camera';
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
+import { getPlayerSkinAsset, getPlayerSkinId, registerSkinAsset } from '@/lib/snake/skin-registry';
+import { useAuth } from '@/components/providers/auth-provider';
 import { ExtrapolationEngine, type RenderableSnake, type RenderableFood, type RenderableStarChip } from '@/lib/snake/extrapolation';
 import { OnlineEngine, type ConnectionState } from './online-engine';
 
@@ -57,6 +59,9 @@ export default function SnakeGame({
 }: SnakeGameProps) {
   // If mode is 'online' but no authToken is provided, fall back to offline
   const effectiveMode = mode === 'online' && !authToken ? 'offline' : mode;
+
+  // ── Player skin (read from auth + localStorage) ──
+  const { player: authPlayer } = useAuth();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameStateRef = useRef<GameState | null>(null);
@@ -172,8 +177,29 @@ export default function SnakeGame({
       atlasManager.buildAtlas(skin);
     }
 
-    // ── Init offline game state ──
-    gameStateRef.current = createInitialState();
+    // ── Resolve player's selected skin ──
+    const serverSkinId = authPlayer?.currentSkin ?? 'skin-default';
+    const playerSkinAsset = getPlayerSkinAsset(serverSkinId);
+    const playerSkinId = getPlayerSkinId(serverSkinId);
+
+    // Build atlas for player's skin if it's not already a DEFAULT_SKIN
+    if (!atlasManager.getAtlas(playerSkinAsset.id)) {
+      atlasManager.buildAtlas(playerSkinAsset);
+      registerSkinAsset(playerSkinAsset);
+    }
+
+    const skinOverride: PlayerSkinOverride = {
+      skinId: playerSkinAsset.id,
+      bodyColor: playerSkinAsset.bodyColor,
+      headColor: playerSkinAsset.headColor,
+      accentColor: playerSkinAsset.accentColor ?? '',
+      pattern: playerSkinAsset.pattern,
+      animation: playerSkinAsset.animation,
+      rarity: playerSkinAsset.rarity,
+    };
+
+    // ── Init offline game state with player skin ──
+    gameStateRef.current = createInitialState(skinOverride);
     cameraRef.current = createCamera(0, 0);
     isDeadRef.current = false;
     showControlsRef.current = true;
@@ -224,8 +250,8 @@ export default function SnakeGame({
         setFinalScore(maxScore);
       };
 
-      // Connect with default skin
-      onlineEngine.connect(arenaId, authToken, 'skin-viper-green');
+      // Connect with player's selected skin
+      onlineEngine.connect(arenaId, authToken, playerSkinId);
     }
 
     // ── Game loop ──
