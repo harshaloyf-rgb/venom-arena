@@ -69,12 +69,6 @@ export const FACE_COSMETICS: FaceCosmetic[] = [
   // EYES (8)
   // ═══════════════════════════════════════════════════════════════════
   {
-    id: 'eye-default', name: 'Classic Eyes', slot: 'eyes', cost: 0,
-    rarity: 'common', emoji: '👁️',
-    description: 'The standard-issue responsive white eyes with black pupils.',
-    draw: drawClassicEyes,
-  },
-  {
     id: 'eye-angry', name: 'Furious Glare', slot: 'eyes', cost: 0,
     rarity: 'common', emoji: '😠',
     description: 'Angry slanted brows that intimidate opponents.',
@@ -1656,7 +1650,7 @@ export interface EquippedCosmetics {
 }
 
 const DEFAULT_EQUIPPED: EquippedCosmetics = {
-  eyes: 'eye-default',
+  eyes: 'none',
   mouth: 'mouth-none',
   ears: 'ear-none',
   wings: 'wing-none',

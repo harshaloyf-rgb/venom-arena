@@ -256,7 +256,48 @@ function TesterCanvas({ skinId }: { skinId: string }) {
       ctx.fill();
       ctx.restore();
 
-      // Face cosmetics (handles eyes + all other equipped cosmetics)
+      // Responsive eyes (always drawn — cosmetic eyes paint over if equipped)
+      const eyeOff = hr * GAME.eyeOffsetRatio;
+      const eyeR = hr * GAME.eyeRadiusRatio;
+      const pupilR = eyeR * GAME.pupilRadiusRatio;
+      const fwd = hr * GAME.eyeForwardRatio;
+      const perp = angle + Math.PI / 2;
+
+      let lookA = angle;
+      const m = mouseRef.current;
+      if (m) {
+        const dx = m.x - headX;
+        const dy = m.y - headY;
+        if (Math.sqrt(dx * dx + dy * dy) > 5) lookA = Math.atan2(dy, dx);
+      }
+
+      for (const side of [-1, 1]) {
+        const ex = headX + Math.cos(angle) * fwd + Math.cos(perp) * eyeOff * side;
+        const ey = headY + Math.sin(angle) * fwd + Math.sin(perp) * eyeOff * side;
+
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = GAME.eyeBorderColor;
+        ctx.lineWidth = GAME.eyeBorderWidth;
+        ctx.beginPath();
+        ctx.arc(ex, ey, eyeR, 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+
+        const shift = eyeR * GAME.pupilShiftRatio;
+        const ppx = ex + Math.cos(lookA) * shift;
+        const ppy = ey + Math.sin(lookA) * shift;
+        ctx.fillStyle = '#111111';
+        ctx.beginPath();
+        ctx.arc(ppx, ppy, pupilR, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = `rgba(255,255,255,${GAME.highlightOpacity})`;
+        ctx.beginPath();
+        ctx.arc(ppx - pupilR * 0.3, ppy - pupilR * 0.35, pupilR * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Other face cosmetics (mouth, ears, hat, goggles, wings, etc.)
+      // Eyes slot is 'none' by default so no double-draw
       renderEquippedCosmetics(ctx, {
         hx: headX, hy: headY, hr, angle,
         time: performance.now(), boosting: false,
