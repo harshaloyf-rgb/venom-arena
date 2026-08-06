@@ -16,7 +16,7 @@ import { worldToScreen } from '@/lib/snake/camera';
 import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
 import { isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
-import { renderEquippedCosmetics } from '@/lib/snake/face-cosmetics';
+import { renderEquippedCosmetics, readEquippedCosmetics } from '@/lib/snake/face-cosmetics';
 import { drawSegmentShape, readCustomSkinState } from '@/components/panels/cosmetics/cosmetics-utils';
 import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-types';
 
@@ -407,9 +407,14 @@ export function renderSnakeAtlas(
     drawDirectionPointer(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting);
 
     // Ultra-responsive eyes — track raw mouse position relative to head
-    drawResponsiveEyes(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting, mouseScreenX, mouseScreenY);
+    // Skip if a custom eye cosmetic is equipped (it draws its own eyes)
+    const equipped = readEquippedCosmetics();
+    const hasCustomEyes = equipped.eyes && equipped.eyes !== 'none';
+    if (!hasCustomEyes) {
+      drawResponsiveEyes(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting, mouseScreenX, mouseScreenY);
+    }
 
-    // Equipped face cosmetics (replaces default eyes if custom eyes equipped)
+    // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
     renderEquippedCosmetics(ctx, { hx: hsx, hy: hsy, hr: headDrawSize / 2, angle: snake.angle, time, boosting: snake.boosting, mouseScreenX, mouseScreenY });
 
     // Boost speed lines — dramatic streaks behind the head
@@ -641,9 +646,14 @@ export function renderSnakeFallback(
     drawDirectionPointer(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting);
 
     // Responsive eyes — track raw mouse position relative to head
-    drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting, mouseScreenX, mouseScreenY);
+    // Skip if a custom eye cosmetic is equipped (it draws its own eyes)
+    const eq2 = readEquippedCosmetics();
+    const hasCustomEyes2 = eq2.eyes && eq2.eyes !== 'none';
+    if (!hasCustomEyes2) {
+      drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting, mouseScreenX, mouseScreenY);
+    }
 
-    // Equipped face cosmetics (replaces default eyes if custom eyes equipped)
+    // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
     renderEquippedCosmetics(ctx, { hx: headScreen.x, hy: headScreen.y, hr: headRadius, angle: snake.angle, time: now, boosting: snake.boosting, mouseScreenX, mouseScreenY });
 
     // Name
