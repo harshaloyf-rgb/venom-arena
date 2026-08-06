@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { Check, Lock, Sparkles } from 'lucide-react';
-import { GameSnakePreview } from './game-snake-preview';
+import { SnakeFaceTester } from '@/components/game/snake-face-tester';
 import {
   FACE_COSMETICS,
   getCosmeticsBySlot,
@@ -73,21 +73,21 @@ export function CosmeticsSection({
 
   return (
     <div className="animate-fade-in">
-      {/* Preview canvas — roaming game-accurate snake */}
+      {/* Preview canvas — game-accurate roaming snake (admin skin tester engine) */}
       <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 mb-6">
         <div className="flex flex-col items-center gap-3">
           <span className="text-[10px] text-slate-500 font-mono tracking-widest uppercase font-bold">
             Live Preview
           </span>
-          <GameSnakePreview
+          <SnakeFaceTester
             key={activeSkinId}
+            embedded
             skinId={activeSkinId}
-            width={450}
-            height={160}
-            segments={18}
-            speed={1.5}
-            scale={0.85}
-            equippedCosmetics={equipped}
+            width={580}
+            height={220}
+            segments={24}
+            speed={1.8}
+            scale={1}
           />
           <p className="text-[10px] text-slate-500 text-center leading-relaxed">
             Your equipped skin with current face cosmetics applied.
