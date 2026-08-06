@@ -406,3 +406,19 @@ Stage Summary:
 - All pattern skins (neon, rainbow, metallic, pulse, camo, glow, cyber, zebra) now render consistently across skin cards, cosmetic preview, and game canvas
 - Added missing pattern mappings: cyber → fortress/wave/glow, zebra → armored/uniform/no-glow
 - Verified with VLM screenshot analysis: Fish Snake (neon) correctly shows diamond/crystal shapes with glow in Face Cosmetics preview
+---
+Task ID: 1
+Agent: Main Agent
+Task: Decrease snake size in cosmetic preview + remove directional arrows from all skin previews
+
+Work Log:
+- Removed directional arrow (direction pointer) from GameSnakePreview component (lines 445-452 in game-snake-preview.tsx)
+- The arrow was drawn as a white line extending from snake head forward, now completely removed
+- Decreased cosmetic preview snake scale from 1 to 0.7 in cosmetics-section.tsx (line 89)
+- Verified via browser: Face Cosmetics tab, Skin & Effect Gallery, Genetic Pattern Lab all render correctly with no arrows
+- No runtime errors, clean dev server log
+
+Stage Summary:
+- Directional arrows removed from ALL skin previews (shared GameSnakePreview component)
+- Cosmetic preview snake is now 30% smaller (scale 0.7)
+- Files modified: game-snake-preview.tsx (removed arrow code), cosmetics-section.tsx (scale 1→0.7)
