@@ -442,14 +442,7 @@ export function GameSnakePreview({
         time: performance.now(), boosting: false,
       });
 
-      // Direction pointer
-      const ptrS = hr * 1.1, ptrL = hr * 3;
-      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-      ctx.lineWidth = 1.5; ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(headX + Math.cos(angle) * ptrS, headY + Math.sin(angle) * ptrS);
-      ctx.lineTo(headX + Math.cos(angle) * (ptrS + ptrL), headY + Math.sin(angle) * (ptrS + ptrL));
-      ctx.stroke();
+
 
       animRef.current = requestAnimationFrame(loop);
     };
