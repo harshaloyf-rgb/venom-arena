@@ -423,6 +423,7 @@ function moveSnake(
   }
 
   // Boost score cost: integer-based — deduct 1 point every N ticks.
+  // Score drops → targetLength drops → body shrinks smoothly after boost ends.
   if (canBoost) {
     snake.boostCostAccum = (snake.boostCostAccum ?? 0) + 1;
     if (snake.boostCostAccum >= BOOST_SCORE_COST_INTERVAL) {
@@ -434,30 +435,14 @@ function moveSnake(
   }
 
   // ── Length management ──────────────────────────────────────────────
-  // Every tick: prepend adds 1. We need exactly 1 pop to stay stable,
-  // 0 pops to grow, or 2 pops to shrink — all max 1 change per tick.
-  //
-  // Boost mode: pop to counteract prepend, but ONLY if path >= targetLength.
-  // If path < targetLength (ate food, needs to grow), skip the pop so
-  // prepend's +1 acts as growth. Then a second trim pop catches
-  // score-driven targetLength decreases.
-  //
-  // Normal mode: just trim if over target (prepend = natural growth).
-
-  if (canBoost) {
-    // Counteract prepend, but allow growth if below target
-    if (snake.path.length > Math.max(targetLength, BOOST_MIN_BODY_SCALED)) {
-      snake.path.pop();
-    }
-    // Additional trim if still above target (score dropped)
-    if (snake.path.length > targetLength) {
-      snake.path.pop();
-    }
-  } else {
-    // Normal: trim max 1 if over target
-    if (snake.path.length > targetLength) {
-      snake.path.pop();
-    }
+  // prepend adds 1 every tick. This single trim handles everything:
+  //   - At targetLength: prepend(+1), trim(-1) = stable
+  //   - Below target: prepend(+1), no trim = grows by 1
+  //   - Above target (post-boost score loss): prepend(+1), trim(-1) = stable
+  //     then when boost ends: no prepend counter, trim(-1) = shrinks smoothly
+  // Max 1 pop per tick — zero pulsing, zero fluctuation.
+  if (snake.path.length > targetLength) {
+    snake.path.pop();
   }
 
   // ── NOTE: Inner curl (corner-cutting) is a PURELY VISUAL effect ──
