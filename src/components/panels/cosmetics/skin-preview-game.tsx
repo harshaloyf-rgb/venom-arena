@@ -119,12 +119,25 @@ export function GameSkinPreview({
       return null;
     })();
 
+    // ── Normalize stale first-segment sizeScale ──
+    let normalizedSegs = customSegs;
+    if (normalizedSegs && normalizedSegs.length > 1 && Math.abs(normalizedSegs[0].sizeScale - normalizedSegs[1].sizeScale) > 0.05) {
+      let restUniform = true;
+      const ref = normalizedSegs[1].sizeScale;
+      for (let k = 2; k < normalizedSegs.length; k++) {
+        if (Math.abs(normalizedSegs[k].sizeScale - ref) > 0.1) { restUniform = false; break; }
+      }
+      if (restUniform) {
+        normalizedSegs = normalizedSegs.map((s, idx) => idx === 0 ? { ...s, sizeScale: ref } : s);
+      }
+    }
+
     // ── Body (tail → head) ──
     for (let i = pos.length - 1; i >= 0; i--) {
       const p = pos[i];
 
-      if (customSegs) {
-        const seg = customSegs[i % customSegs.length];
+      if (normalizedSegs) {
+        const seg = normalizedSegs[i % normalizedSegs.length];
         drawSegmentShape(ctx, p.x, p.y, r * seg.sizeScale, p.a, seg.shape, seg.color, seg.glow);
         continue;
       }
@@ -158,8 +171,8 @@ export function GameSkinPreview({
 
     // ── Head ──
     // Detect uniform taper: head matches body size when everything is uniform
-    const isUniform = customSegs
-      ? customSegs.every((s) => Math.abs(s.sizeScale - 1.0) < 0.01)
+    const isUniform = normalizedSegs
+      ? normalizedSegs.every((s) => Math.abs(s.sizeScale - 1.0) < 0.01)
       : false;
     const headScale = isUniform ? 1.0 : HEAD_SCALE;
 

@@ -180,7 +180,10 @@ export function GameSnakePreview({
       else if (shapes.has('diamond')) autoBodyStyle = 'crystal';
       else if (shapes.has('spike')) autoBodyStyle = 'obsidian';
       else autoBodyStyle = 'smooth';
-      const scales = segs.map((s: CustomSegment) => s.sizeScale);
+      // Skip index 0 when detecting taper — it may have stale sizeScale from old code
+      const scales = segs.length > 2
+        ? segs.slice(1).map((s: CustomSegment) => s.sizeScale)
+        : segs.map((s: CustomSegment) => s.sizeScale);
       const hasVariation = Math.max(...scales) - Math.min(...scales) > 0.1;
       autoTaper = hasVariation ? 'natural' : 'uniform';
       autoGlow = segs.some((s: CustomSegment) => s.glow);
