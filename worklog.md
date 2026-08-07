@@ -875,3 +875,21 @@ Stage Summary:
 - Red collision circles render on every body segment except head (index 0) and tail (index count-1)
 - Added to both renderSnakeAtlas() and renderSnakeFallback()
 - No console errors, clean lint
+---
+Task ID: 4
+Agent: Main
+Task: Fix collision circles + remove first body segment hardcoded overrides
+
+Work Log:
+- Fixed collision circle loop: changed i=1 to i=0 (head is NOT in walked array, walked[0]=1st body segment)
+- Changed guard from walked.count > 3 to > 2 (now includes snakes with just 3 segments)
+- Removed index===0 hardcoded circle override in resolveShapeStyle (7 body styles affected: dragon, armored, crystal, stellar, stingray, phantom + default)
+- Removed index===0 hardcoded sizeScale override in generateCustomSegments (was 1.3/1.35/1.6 for uniform/natural/wave/heavy)
+- Removed index===0 hardcoded radius override in computeTaperRadius (same pattern)
+- First body segment now fully respects user-selected shape and taper settings
+
+Stage Summary:
+- Red collision circles now appear on 1st body segment through 2nd-to-last (was missing 1st)
+- First body segment shape follows the actual body style (was always circle)
+- First body segment size follows the actual taper style (was always 1.3x)
+- Clean lint, committed and pushed
