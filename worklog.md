@@ -570,3 +570,24 @@ Stage Summary:
 - Lerp speed: 0.25 for snappy but smooth response
 - Blink: 9000-11000ms cycle (6/min), 120ms duration, thin eyelid arcs
 - File: /home/z/my-project/src/components/game/render-snake-atlas.tsx
+
+---
+Task ID: eye-circular-smooth
+Agent: Main
+Task: Fix pupil jittery return to center + make pupil movement circular
+
+Work Log:
+- Replaced left/right-only angular velocity tracking with full 360 circular tracking
+- Direction uses targetAngle directly for circular pupil movement
+- Magnitude combines steering delta with angular velocity
+- Asymmetric lerp: 0.10 out, 0.03 return to center
+- Added 0.97 damping when idle
+- Renamed _targetAngle to targetAngle
+- Verified in browser: no errors
+
+Stage Summary:
+- Pupils move in full circular motion following steering
+- Return to center is 3x slower than moving outward
+- Angular velocity keeps shift alive during sustained turns
+- Blink rate at 6/min unchanged
+
