@@ -744,3 +744,25 @@ Stage Summary:
 - SnakeFaceTester component removed from UI (file still exists but unused)
 - Game server formulas synced with client
 - All changes pass lint, no runtime errors
+---
+Task ID: 1
+Agent: main
+Task: Add Extract and Boost buttons to gameplay
+
+Work Log:
+- Added `setExternalBoost(active: boolean)` method to InputHandler (input.ts) for external UI button control
+- Added `activateExtractionZone(state, x, y)` and `deactivateExtractionZone(state)` exports to engine.ts
+- Added `externalBoostRef` and `extractionActive` state to SnakeGame component
+- Added `handleExtract` callback: activates extraction zone at player position, requires score >= 50, 30s auto-deactivate
+- Added external boost merge in game loop: `if (externalBoostRef.current) inputState.boosting = true`
+- Added two bottom-action buttons to JSX: Extract (left, amber, click once) and Boost (right, orange, hold to boost)
+- Extract button: disabled when extraction zone already active or when dead
+- Boost button: uses onPointerDown/Up/Leave/Cancel for hold-to-boost mechanic
+- Verified with agent-browser: both buttons render, no console errors, lint passes clean
+
+Stage Summary:
+- Extract button (bottom-left, amber): Click to activate extraction zone at player position (requires 50+ score, 30s duration)
+- Boost button (bottom-right, orange): Hold to boost (same as Space/Shift/click but as a touch-friendly button)
+- Both buttons disable when player is dead
+- Files modified: input.ts, engine.ts, SnakeGame.tsx
+

@@ -90,6 +90,11 @@ export class InputHandler {
     };
   }
 
+  /** Set boosting from an external source (e.g. UI button) */
+  setExternalBoost(active: boolean): void {
+    this.state.boosting = active;
+  }
+
   /** Update canvas rect (call on resize) */
   updateRect(): void {
     this.canvasRect = this.canvas.getBoundingClientRect();
