@@ -834,12 +834,16 @@ export class ArenaRoom {
   private killSnake(snake: ServerSnake, killerId: string, killerName: string): void {
     snake.alive = false;
 
+    // Death food formula: always a mix of small/medium/large.
+    // Minimum 20 value dropped (even at score 0).
     const score = snake.score;
-    const largeCount = Math.floor(score / DEATH_FOOD_LARGE_DIVISOR);
-    let remainder = score - largeCount * DEATH_FOOD_LARGE_DIVISOR;
-    const medCount = Math.floor(remainder / DEATH_FOOD_MEDIUM_DIVISOR);
-    const smallCount = remainder - medCount * DEATH_FOOD_MEDIUM_DIVISOR;
-
+    const dropValue = Math.max(score, 20);
+    const largeVal = Math.floor(dropValue * 0.4 / 5) * 5;
+    const medVal = Math.floor(dropValue * 0.3 / 3) * 3;
+    const smallVal = dropValue - largeVal - medVal;
+    const largeCount = Math.max(1, largeVal / 5);
+    const medCount = Math.max(1, medVal / 3);
+    const smallCount = Math.max(1, smallVal);
     const totalFood = largeCount + medCount + smallCount;
 
     // Record kill event
@@ -851,11 +855,6 @@ export class ArenaRoom {
       score,
       timestamp: Date.now(),
     });
-
-    if (totalFood === 0) {
-      if (snake.isBot) this.snakes.delete(snake.id);
-      return;
-    }
 
     // Distribute food along body path
     const segLen = snake.path.length;

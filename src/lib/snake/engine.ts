@@ -970,18 +970,17 @@ function checkCollisions(state: GameState, now: number): void {
 function killSnake(state: GameState, snake: Snake): void {
   snake.alive = false;
 
-  // Death food formula: L=floor(score/divisor_L), rem=score-L*divisor_L, M=floor(rem/divisor_M), S=rem-M*divisor_M
-  const score = snake.score;
-  const largeCount = Math.floor(score / DEATH_FOOD_LARGE_DIVISOR);
-  let remainder = score - largeCount * DEATH_FOOD_LARGE_DIVISOR;
-  const medCount = Math.floor(remainder / DEATH_FOOD_MEDIUM_DIVISOR);
-  const smallCount = remainder - medCount * DEATH_FOOD_MEDIUM_DIVISOR;
-
+  // Death food formula: always a mix of small/medium/large.
+  // Minimum 20 value dropped (even at score 0).
+  const dropValue = Math.max(snake.score, 20);
+  // ~40% as large (5 each), ~30% as medium (3 each), rest as small (1 each)
+  const largeVal = Math.floor(dropValue * 0.4 / 5) * 5;
+  const medVal = Math.floor(dropValue * 0.3 / 3) * 3;
+  const smallVal = dropValue - largeVal - medVal;
+  const largeCount = Math.max(1, largeVal / 5);
+  const medCount = Math.max(1, medVal / 3);
+  const smallCount = Math.max(1, smallVal);
   const totalFood = largeCount + medCount + smallCount;
-  if (totalFood === 0) {
-    if (!snake.isPlayer) state.snakes.delete(snake.id);
-    return;
-  }
 
   // Distribute food along body path
   const segLen = snake.path.length;
