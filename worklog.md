@@ -913,3 +913,22 @@ Stage Summary:
 - Second cause: game-snake-preview skipped drawing segment i=0 in body loops
 - All 4 files now respect 'uniform' taper by making head same size as body segments
 - Atlas renderer (non-fallback) unchanged since atlas skins use pre-rendered textures designed for 1.3x head
+
+---
+Task ID: 3
+Agent: Main
+Task: Add head collision point line at snake nose
+
+Work Log:
+- Read render-snake-atlas.tsx to understand head rendering in both atlas and fallback renderers
+- Added head collision point (perpendicular red line at nose) to atlas renderer (lines 513-528)
+- Added head collision point to fallback renderer (lines 804-818)
+- Checked cosmetics-utils.ts for first body segment 1.3x issue — confirmed no hardcoded override exists (computeTaperRadius returns 1.0 for uniform, generateCustomSegments sets sizeScale 1.0 for uniform)
+- Verified with VLM that both head collision line and body collision circles render correctly in-game
+- Lint passes with no errors
+
+Stage Summary:
+- Head collision point: red perpendicular line drawn at the nose of the head in both renderers
+- Line uses rgba(220, 38, 38, 0.9) stroke, 2.5px width, 0.7 alpha, matching body collision point style
+- Line extends 0.7 * headRadius on each side of the nose perpendicular to direction of travel
+- First body segment issue: confirmed already fixed — no index===0 hardcoded 1.3x found in cosmetics-utils.ts
