@@ -688,3 +688,33 @@ Stage Summary:
 - Turn radius is 50% tighter for more responsive steering
 - Snake Test page now has full score/fatness testing capability
 - Files modified: engine.ts, config.ts, snake-face-tester.tsx
+---
+Task ID: 2
+Agent: Main
+Task: Fix broken imports, uncapped growth, debug panel, thinner starting snake
+
+Work Log:
+- Fixed broken imports in snake-face-tester.tsx: replaced SNAKE_RADIUS_MAX, SNAKE_RADIUS_GROWTH_SCALE, GROWTH_RATE with new config exports (SNAKE_RADIUS_GROWTH_RATE, computeBodyRadius, computeBodyLength)
+- Fixed broken imports in SnakeGame.tsx: replaced GROWTH_RATE, MAX_SNAKE_LENGTH, START_LENGTH with computeBodyLength, computeBodyRadius, SNAKE_RADIUS_MIN, SNAKE_RADIUS_GROWTH_RATE
+- Fixed renderOfflineHUD to use computeBodyLength() instead of inline formula
+- Raised MAX_SNAKE_LENGTH safety cap from 5000 to 10000 (requires ~4M score to reach — practically unreachable)
+- Updated config.ts comments with accurate score-to-size reference table
+- Updated camera.ts comments for new SNAKE_RADIUS_MIN=6 and uncapped growth values
+- Added DebugPanel component to SnakeGame.tsx (F3 toggle, offline only):
+  - Live stats: score, body radius, target length, path entries, camera zoom
+  - Score input field with SET button
+  - 10 preset buttons (0, 50, 200, 1K, 5K, 10K, 50K, 100K, 500K, 1M)
+  - Score slider (0–1M range)
+  - Growth formula reference at bottom
+  - handleDebugSetScore callback to avoid react-hooks/immutability lint error
+- Added body radius display to in-game HUD (3-line HUD now: score, length, radius)
+- Added subtle 'F3: Debug' hint at bottom-left of canvas
+- Verified all changes compile cleanly, lint passes, and debug panel works correctly in browser
+- Verified stats accuracy: score 0→radius 6px/length 15, score 100K→radius 31.3px/length 1596
+
+Stage Summary:
+- Build compiles cleanly, zero lint errors
+- Debug panel verified working via agent-browser (F3 opens, presets set score, stats update live)
+- Growth is effectively uncapped: sqrt curve with 10000 segment safety cap (~4M score to reach)
+- Starting snake: 6px radius, 15 segments (thin and small)
+- Key files changed: config.ts, SnakeGame.tsx, snake-face-tester.tsx, camera.ts

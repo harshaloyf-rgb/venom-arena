@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { SNAKE_RADIUS, SNAKE_RADIUS_MIN, SNAKE_RADIUS_MAX, SNAKE_RADIUS_GROWTH_SCALE, CAMERA_BASE_ZOOM, SEGMENT_SPACING, START_LENGTH, GROWTH_RATE, MAX_SNAKE_LENGTH } from '@/lib/snake/config';
+import { SNAKE_RADIUS_MIN, SNAKE_RADIUS_GROWTH_RATE, SEGMENT_SPACING, computeBodyRadius, computeBodyLength } from '@/lib/snake/config';
 import { getSkinAsset } from '@/lib/snake/skin-registry';
 
 // ─── Color helpers ─────────────────────────────────────────────────────
@@ -28,11 +28,7 @@ function darkenHex(hex: string, factor: number): string {
   return `#${Math.round(r * (1 - factor)).toString(16).padStart(2, '0')}${Math.round(g * (1 - factor)).toString(16).padStart(2, '0')}${Math.round(b * (1 - factor)).toString(16).padStart(2, '0')}`;
 }
 
-// ─── Body radius formula (must match engine.ts computeBodyRadius) ─────
-
-function computeBodyRadius(score: number): number {
-  return SNAKE_RADIUS_MIN + (SNAKE_RADIUS_MAX - SNAKE_RADIUS_MIN) * Math.sqrt(score / (score + SNAKE_RADIUS_GROWTH_SCALE));
-}
+// Body radius formula imported from config — single source of truth.
 
 // ─── Game rendering params (exact match to render-snake-atlas.tsx) ─────
 
@@ -93,7 +89,7 @@ export function SnakeFaceTester() {
 
   // Compute values for display
   const bodyRadius = computeBodyRadius(testScore);
-  const logicalLen = Math.min(Math.floor(START_LENGTH + testScore * GROWTH_RATE), MAX_SNAKE_LENGTH);
+  const logicalLen = computeBodyLength(testScore);
   const segments = Math.min(Math.ceil((logicalLen * SEGMENT_SPACING) / GAME.segStep), 120); // cap for preview
 
   // Keep ref in sync with state
@@ -148,7 +144,7 @@ export function SnakeFaceTester() {
 
       const curRadius = computeBodyRadius(scoreRef.current);
       const curSegs = Math.min(
-        Math.ceil((Math.min(Math.floor(START_LENGTH + scoreRef.current * GROWTH_RATE), MAX_SNAKE_LENGTH) * SEGMENT_SPACING) / GAME.segStep),
+        Math.ceil((computeBodyLength(scoreRef.current) * SEGMENT_SPACING) / GAME.segStep),
         120,
       );
 
