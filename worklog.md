@@ -858,3 +858,20 @@ Stage Summary:
 - engine.ts: trim allows 2 pops/tick so excess drains faster than prepend adds
 - Both growth and shrinking are now smooth at 1 visual segment per tick
 - Verified: no lint errors, no console errors, game renders correctly
+---
+Task ID: 3
+Agent: Main
+Task: Add red collision point circles on snake body segments
+
+Work Log:
+- Found render-snake-atlas.tsx with two renderers: atlas-based and fallback
+- Both use walkPathFixedStep() producing walked.xs/ys arrays (index 0=near head, count-1=tail)
+- Added collision circles from index 1 (2nd segment) to walked.count-2 (2nd last) in both renderers
+- Used red fill (#ef4444) at 70% opacity with darker red stroke border
+- Circle radius = segRadius * 0.6 (visible but not overwhelming)
+- Verified with VLM: red dots confirmed visible on all body segments, head and tail excluded
+
+Stage Summary:
+- Red collision circles render on every body segment except head (index 0) and tail (index count-1)
+- Added to both renderSnakeAtlas() and renderSnakeFallback()
+- No console errors, clean lint

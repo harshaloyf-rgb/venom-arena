@@ -396,6 +396,26 @@ export function renderSnakeAtlas(
     ctx.restore();
   }
 
+  // ── Collision Points: red circles on 2nd segment to 2nd-last segment ──
+  if (walked.count > 3) {
+    ctx.save();
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = '#ef4444';
+    ctx.strokeStyle = 'rgba(220, 38, 38, 0.9)';
+    ctx.lineWidth = 2;
+    for (let i = 1; i <= walked.count - 2; i++) {
+      const wx = walked.xs[i];
+      const wy = walked.ys[i];
+      if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
+      const { x: sx, y: sy } = worldToScreen(wx, wy, camera, cw, ch);
+      ctx.beginPath();
+      ctx.arc(sx, sy, segRadius * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // ── Head ──
   const headVisible = headWx >= vl && headWx <= vr && headWy >= vt && headWy <= vb;
   if (headVisible) {
@@ -683,6 +703,26 @@ export function renderSnakeFallback(
 
   // Reset shadow after drawing body
   ctx.restore();
+
+  // ── Collision Points: red circles on 2nd segment to 2nd-last segment ──
+  if (walked.count > 3) {
+    ctx.save();
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = '#ef4444';
+    ctx.strokeStyle = 'rgba(220, 38, 38, 0.9)';
+    ctx.lineWidth = 2;
+    for (let i = 1; i <= walked.count - 2; i++) {
+      const wx = walked.xs[i];
+      const wy = walked.ys[i];
+      if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
+      const scr = worldToScreen(wx, wy, camera, cw, ch);
+      ctx.beginPath();
+      ctx.arc(scr.x, scr.y, segRadius * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
   // ── Head ──
   const headRadius = segRadius * 1.3;
