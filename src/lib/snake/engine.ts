@@ -312,8 +312,7 @@ function moveSnake(
   // circles — works at both base and boost speed.
 
   let diff = targetAngle - snake.angle;
-  while (diff > Math.PI) diff -= 2 * Math.PI;
-  while (diff < -Math.PI) diff += 2 * Math.PI;
+  diff = Math.atan2(Math.sin(diff), Math.cos(diff));
 
   // Determine speed for turn rate (before we know final speed, use current)
   const canBoost = wantBoost &&
