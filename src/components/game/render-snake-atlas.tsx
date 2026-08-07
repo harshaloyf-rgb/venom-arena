@@ -723,9 +723,11 @@ function drawDirectionPointer(
 
   const absDiff = Math.abs(steerDiff);
 
-  // Line starts just past the head edge, extends forward
+  // Line grows slightly with snake size: base 5x headRadius, scales up to 7x at large sizes
+  // headRadius ranges from ~6 (start) to ~31 (100K score)
+  const sizeScale = Math.min(1.4, 1.0 + (headRadius - 6) * 0.015);
+  const lineLen = headRadius * 5.0 * sizeScale;
   const startDist = headRadius * 1.1;
-  const lineLen = headRadius * 3.5;
   const endDist = startDist + lineLen;
 
   // Start point: just in front of the head
@@ -750,6 +752,7 @@ function drawDirectionPointer(
   const alpha = boosting ? 0.7 : 0.15 + 0.45 * turnIntensity;
   const lineW = boosting ? 2.5 : 1.5;
 
+  // Draw the curved direction line
   ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
   ctx.lineWidth = lineW;
   ctx.lineCap = 'round';
@@ -759,10 +762,23 @@ function drawDirectionPointer(
   ctx.quadraticCurveTo(mx, my, ex, ey);
   ctx.stroke();
 
-  // Small dot at tip for visibility
-  ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(alpha * 1.2, 1)})`;
+  // Arrowhead at the tip
+  const arrowLen = headRadius * 0.9 * sizeScale;
+  const arrowHalfAngle = 0.4; // ~23° spread
+  const arrowAlpha = Math.min(alpha * 1.1, 0.85);
+
+  ctx.fillStyle = `rgba(255, 255, 255, ${arrowAlpha})`;
   ctx.beginPath();
-  ctx.arc(ex, ey, lineW * 1.2, 0, Math.PI * 2);
+  ctx.moveTo(ex, ey);
+  ctx.lineTo(
+    ex - Math.cos(tipAngle - arrowHalfAngle) * arrowLen,
+    ey - Math.sin(tipAngle - arrowHalfAngle) * arrowLen,
+  );
+  ctx.lineTo(
+    ex - Math.cos(tipAngle + arrowHalfAngle) * arrowLen,
+    ey - Math.sin(tipAngle + arrowHalfAngle) * arrowLen,
+  );
+  ctx.closePath();
   ctx.fill();
 }
 
