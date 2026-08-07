@@ -671,3 +671,20 @@ Stage Summary:
 - Collision hitbox stays at 12px regardless of visual size (fair gameplay)
 - Camera zoom is smooth, width-aware, barely noticeable during gameplay
 - 4 files modified: config.ts, engine.ts, camera.ts, types.ts, render-snake-atlas.tsx, renderer.ts, SnakeGame.tsx
+---
+Task ID: 2
+Agent: main
+Task: Fix boost length pulsation, increase turn rate 50%, add 100K test snake
+
+Work Log:
+- Fixed boost length pulsation: replaced flat 5-pops-per-drop with proportional shrink (2% of path length, min 1). Small snakes (37 entries) now pop 1 per drop instead of 5. Large snakes pop proportionally more.
+- Enabled trim during boost (removed !canBoost guard). Score decreases → targetLength decreases → trim smoothly shortens path. No more sudden shrink/snap-back.
+- Increased MAX_TURN_RATE from π*0.025 to π*0.0375 (50% increase). U-turn now in ~0.44s instead of ~0.67s.
+- Increased BOT_MAX_TURN_RATE from π*0.015 to π*0.0225 (50% increase).
+- Rewrote SnakeFaceTester with score slider (0-100K), presets (0/50/200/500/2K/10K/100K), live radius/segment display, dynamic body radius using computeBodyRadius formula.
+
+Stage Summary:
+- Boost no longer causes visible length pulsation on small snakes
+- Turn radius is 50% tighter for more responsive steering
+- Snake Test page now has full score/fatness testing capability
+- Files modified: engine.ts, config.ts, snake-face-tester.tsx
