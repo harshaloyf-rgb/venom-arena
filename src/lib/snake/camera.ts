@@ -30,8 +30,9 @@ export function updateCamera(camera: Camera, snake: Snake, _canvasWidth: number,
   const lengthFactor = Math.log2(Math.max(targetLength / baseLength, 1));
 
   // Width factor: log2 of radius ratio, weighted at 0.8× (secondary to length)
-  // At start: bodyRadius=12, ratio=1, factor=0
-  // At max:  bodyRadius=28, ratio=2.33, factor=0.89
+  // At start: bodyRadius=6, ratio=1, factor=0
+  // At 10K: bodyRadius=14, ratio=2.33, factor=0.89
+  // At 100K: bodyRadius=31, ratio=5.17, factor=1.87
   const bodyRatio = snake.bodyRadius / SNAKE_RADIUS_MIN;
   const widthFactor = Math.log2(Math.max(bodyRatio, 1)) * 0.8;
 

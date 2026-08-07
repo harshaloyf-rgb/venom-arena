@@ -46,11 +46,15 @@ export const GROWTH_LENGTH_COEFF = 5;
 export const START_LENGTH = 15;
 
 /** Performance safety cap for snake body length (segment count).
- *  With sqrt growth, you'd need ~1M score to reach this. Practically unreachable. */
-export const MAX_SNAKE_LENGTH = 5000;
+ *  With sqrt growth (coeff=5), you'd need ~4M score to reach this.
+ *  Set very high — no player should ever notice a ceiling.
+ *  At 100K score: ~1,596 segments. At 1M: ~5,015 segments. */
+export const MAX_SNAKE_LENGTH = 10000;
 
 /** Compute visual body length (segments) from score using sqrt growth.
- *  Fast growth early, naturally decelerates. No player gets stuck at same size. */
+ *  Fast growth early, naturally decelerates — different score ranges look distinct.
+ *  No player gets stuck at same size. Safety cap at MAX_SNAKE_LENGTH (practically unreachable).
+ *  Score 0→15  |  100→65  |  1K→173  |  10K→515  |  100K→1,596  |  1M→5,015 */
 export function computeBodyLength(score: number): number {
   return Math.min(
     Math.floor(START_LENGTH + GROWTH_LENGTH_COEFF * Math.sqrt(score)),
