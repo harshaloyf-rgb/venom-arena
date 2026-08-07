@@ -12,7 +12,7 @@ import { SNAKE_RADIUS, CAMERA_BASE_ZOOM } from '@/lib/snake/config';
 import { getSkinAsset } from '@/lib/snake/skin-registry';
 import { resolveShapeStyle, computeTaperRadius, drawSegmentShape, readCustomSkinStateSafe, getSkinVisualProps } from './cosmetics-utils';
 import type { BodyStyle, TaperStyle, CustomSegment } from './cosmetics-types';
-import { renderEquippedCosmetics, readEquippedCosmetics, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
+import { getCosmeticById, readEquippedCosmetics, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
 
 // ─── Color helpers ─────────────────────────────────────────
 
@@ -575,7 +575,7 @@ export function GameSnakePreview({
         ctx.beginPath(); ctx.arc(headX, headY, hr, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
 
-        // Responsive eyes
+        // Responsive eyes — read equipped cosmetics ONCE per frame
         const eq = readEquippedCosmetics();
         const hasCustomEyes = eq.eyes && eq.eyes !== 'none';
 
@@ -624,11 +624,16 @@ export function GameSnakePreview({
           }
         }
 
-        // All equipped face cosmetics
-        renderEquippedCosmetics(ctx, {
-          hx: headX, hy: headY, hr, angle,
-          time: performance.now(), boosting: false,
-        });
+        // All equipped face cosmetics (use cached eq — no extra localStorage read)
+        const cosmeticSlots: Array<'wings'|'flag'|'ears'|'hat'|'goggles'|'mouth'|'nose'|'eyes'> =
+          ['wings', 'flag', 'ears', 'hat', 'goggles', 'mouth', 'nose', 'eyes'];
+        const cosParams = { hx: headX, hy: headY, hr, angle, time: performance.now(), boosting: false };
+        for (const slot of cosmeticSlots) {
+          const id = eq[slot as keyof EquippedCosmetics];
+          if (!id || id === 'none') continue;
+          const cosmetic = getCosmeticById(id);
+          if (cosmetic) cosmetic.draw(ctx, cosParams);
+        }
       }
 
       animRef.current = requestAnimationFrame(loop);
