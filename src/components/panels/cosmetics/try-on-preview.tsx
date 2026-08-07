@@ -137,12 +137,12 @@ export function TryOnPreview({
         drawSegmentShape(ctx, pt.x, pt.y, r, segAngle, resolveShapeStyle(shapeStyle, i), color, glow);
       }
 
-      // Head — GAME-ACCURATE with 3D gradient and 1.3x scale
+      // Head — matches body size when taper is uniform
       const head = points[0];
       const nextPt = points[1] || head;
       const headAngle = Math.atan2(head.y - nextPt.y, head.x - nextPt.x);
       const headColor = colors[0] || '#ffffff';
-      const headR = 12;
+      const headR = taperStyle === 'uniform' ? 10 : 13;
 
       ctx.save();
       if (glow) {

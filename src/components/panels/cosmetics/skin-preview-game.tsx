@@ -157,9 +157,15 @@ export function GameSkinPreview({
     }
 
     // ── Head ──
+    // Detect uniform taper: head matches body size when everything is uniform
+    const isUniform = customSegs
+      ? customSegs.every((s) => Math.abs(s.sizeScale - 1.0) < 0.01)
+      : false;
+    const headScale = isUniform ? 1.0 : HEAD_SCALE;
+
     if (pos.length > 0) {
       const hp = pos[0];
-      const hr = r * HEAD_SCALE;
+      const hr = r * headScale;
 
       if (atlas && !multiColor) {
         const region = atlas.head;

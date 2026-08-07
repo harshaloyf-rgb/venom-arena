@@ -893,3 +893,23 @@ Stage Summary:
 - First body segment shape follows the actual body style (was always circle)
 - First body segment size follows the actual taper style (was always 1.3x)
 - Clean lint, committed and pushed
+---
+Task ID: 1
+Agent: main
+Task: Fix head and first body segment being bigger than rest when uniform taper is selected
+
+Work Log:
+- Investigated all renderers and preview components for hardcoded head size multipliers
+- Found head hardcoded to 1.3x in 4 files: render-snake-atlas.tsx, game-snake-preview.tsx, try-on-preview.tsx, skin-preview-game.tsx
+- Found game-snake-preview.tsx body loop skipped i=0 (first body segment)
+- Fixed render-snake-atlas.tsx fallback renderer: detect uniform taper via customSegments.every(s => s.sizeScale ≈ 1.0) or patternVis.taperStyle === 'uniform', use headScale 1.0 vs 1.3
+- Fixed game-snake-preview.tsx: head uses effectiveHeadScale (1.0 for uniform, 1.3 otherwise), body loops changed from i>=1 to i>=0
+- Fixed try-on-preview.tsx: headR = 10 (same as body) for uniform, 13 for other tapers
+- Fixed skin-preview-game.tsx: detect uniform from customSegs, use headScale 1.0 vs HEAD_SCALE (1.3)
+- Verified clean lint and successful compilation
+
+Stage Summary:
+- Root cause: head was always 1.3x bigger regardless of taper setting in ALL renderers/previews
+- Second cause: game-snake-preview skipped drawing segment i=0 in body loops
+- All 4 files now respect 'uniform' taper by making head same size as body segments
+- Atlas renderer (non-fallback) unchanged since atlas skins use pre-rendered textures designed for 1.3x head
