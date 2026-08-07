@@ -414,7 +414,7 @@ export function renderSnakeAtlas(
     ctx.restore();
 
     // Direction pointer — thin line extending far ahead, shows where snake is steering
-    drawDirectionPointer(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting);
+    drawDirectionPointer(ctx, snake.id, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting);
 
     // Ultra-responsive eyes — track raw mouse position relative to head
     // Skip if a custom eye cosmetic is equipped (it draws its own eyes)
@@ -676,7 +676,7 @@ export function renderSnakeFallback(
     ctx.fill();
 
     // Direction pointer — thin line extending far ahead, shows where snake is steering
-    drawDirectionPointer(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting);
+    drawDirectionPointer(ctx, snake.id, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting);
 
     // Responsive eyes — track raw mouse position relative to head
     // Skip if a custom eye cosmetic is equipped (it draws its own eyes)
@@ -707,8 +707,11 @@ export function renderSnakeFallback(
 // This pointer is just a subtle visual aid — a thin line extending from the
 // head in the direction the snake is turning, so you can see the turn intent.
 
+const _smoothDirAngle = new Map<string, number>();
+
 function drawDirectionPointer(
   ctx: CanvasRenderingContext2D,
+  snakeId: string,
   hx: number,
   hy: number,
   faceAngle: number,
@@ -716,8 +719,17 @@ function drawDirectionPointer(
   headRadius: number,
   boosting: boolean,
 ): void {
+  // Smooth/lag the steer angle for slower arrow response
+  let prev = _smoothDirAngle.get(snakeId);
+  if (prev === undefined) prev = steerAngle;
+  let diff = steerAngle - prev;
+  while (diff > Math.PI) diff -= 2 * Math.PI;
+  while (diff < -Math.PI) diff += 2 * Math.PI;
+  const smoothed = prev + diff * 0.12;
+  _smoothDirAngle.set(snakeId, smoothed);
+
   // How much the steering deviates from current facing
-  let steerDiff = steerAngle - faceAngle;
+  let steerDiff = smoothed - faceAngle;
   while (steerDiff > Math.PI) steerDiff -= 2 * Math.PI;
   while (steerDiff < -Math.PI) steerDiff += 2 * Math.PI;
 
@@ -726,8 +738,13 @@ function drawDirectionPointer(
   // Line grows slightly with snake size: base 5x headRadius, scales up to 7x at large sizes
   // headRadius ranges from ~6 (start) to ~31 (100K score)
   const sizeScale = Math.min(1.4, 1.0 + (headRadius - 6) * 0.015);
+  const lineLen = headRadius * 5.0 * sizeScale;
   const startDist = headRadius * 1.1;
-  const endDist = startDist + headRadius * 1.2 * sizeScale;
+  const endDist = startDist + lineLen;
+
+  // Start point: just in front of the head
+  const sx = hx + Math.cos(faceAngle) * startDist;
+  const sy = hy + Math.sin(faceAngle) * startDist;
 
   // Tip points in the steer direction (clamped to 60° off face)
   const maxDeflection = Math.PI / 3;
@@ -736,12 +753,28 @@ function drawDirectionPointer(
   const ex = hx + Math.cos(tipAngle) * endDist;
   const ey = hy + Math.sin(tipAngle) * endDist;
 
+  // Midpoint — blend between face and steer direction
+  const midDist = startDist + lineLen * 0.5;
+  const midAngle = faceAngle + clampedDiff * 0.4;
+  const mx = hx + Math.cos(midAngle) * midDist;
+  const my = hy + Math.sin(midAngle) * midDist;
+
   // Opacity: always visible (subtle when straight, brighter when turning/boosting)
   const turnIntensity = Math.min(absDiff / 0.6, 1.0);
   const alpha = boosting ? 0.7 : 0.15 + 0.45 * turnIntensity;
+  const lineW = boosting ? 2.5 : 1.5;
 
-  // Direction line hidden — only arrowhead drawn
-  // Arrowhead at the tip (closer to head since no line)
+  // Direction line — invisible
+  ctx.strokeStyle = `rgba(255, 255, 255, 0)`;
+  ctx.lineWidth = lineW;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.quadraticCurveTo(mx, my, ex, ey);
+  ctx.stroke();
+
+  // Arrowhead at the tip
   const arrowLen = headRadius * 0.9 * sizeScale;
   const arrowHalfAngle = 0.4; // ~23° spread
   const arrowAlpha = Math.min(alpha * 1.1, 0.85);
