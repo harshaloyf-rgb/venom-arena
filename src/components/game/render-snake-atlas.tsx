@@ -43,6 +43,9 @@ interface RenderParticle {
 /** Per-snake live particle pool */
 const particlePools: Map<string, RenderParticle[]> = new Map();
 
+/** Per-snake smoothed pupil state for lerp-based eye tracking */
+const pupilSmoothMap: Map<string, { shiftX: number; shiftY: number }> = new Map();
+
 // ─── Path Walker ────────────────────────────────────────────────────────────
 
 /**
@@ -414,7 +417,7 @@ export function renderSnakeAtlas(
     const equipped = readEquippedCosmetics();
     const hasCustomEyes = equipped.eyes && equipped.eyes !== 'none';
     if (!hasCustomEyes) {
-      drawResponsiveEyes(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting, mouseScreenX, mouseScreenY, time);
+      drawResponsiveEyes(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting, snake.id, time);
     }
 
     // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
@@ -675,7 +678,7 @@ export function renderSnakeFallback(
     const eq2 = readEquippedCosmetics();
     const hasCustomEyes2 = eq2.eyes && eq2.eyes !== 'none';
     if (!hasCustomEyes2) {
-      drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting, mouseScreenX, mouseScreenY, now);
+      drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting, snake.id, now);
     }
 
     // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
@@ -768,8 +771,7 @@ function drawResponsiveEyes(
   targetAngle: number,
   headRadius: number,
   boosting: boolean,
-  mouseScreenX?: number,
-  mouseScreenY?: number,
+  snakeId: string,
   time?: number,
 ): void {
   // Eye positioning — on the face of the snake
@@ -778,20 +780,39 @@ function drawResponsiveEyes(
   let pupilRadius = eyeRadius * 0.52;
   const perpAngle = moveAngle + Math.PI / 2;
   const eyeForward = headRadius * 0.32;
-  const maxShift = eyeRadius * 0.7;
+  const maxShift = eyeRadius * 0.85;
+
+  // ── SMOOTHING STATE (per-snake, keyed by snake ID) ──
+  let smooth = pupilSmoothMap.get(snakeId);
+  if (!smooth) {
+    smooth = { shiftX: 0, shiftY: 0 };
+    pupilSmoothMap.set(snakeId, smooth);
+  }
+  // Prune stale entries (keep map small)
+  if (pupilSmoothMap.size > 50) {
+    const keys = [...pupilSmoothMap.keys()];
+    for (let i = 0; i < keys.length - 20; i++) pupilSmoothMap.delete(keys[i]);
+  }
 
   // ── BLINK SYSTEM ──
-  // Each snake blinks every 3-5 seconds for ~150ms.
-  // Use head position as a seed so different snakes blink at different times.
-  const blinkSeed = Math.abs(Math.round(hx * 7 + hy * 13)) % 1000;
-  const blinkCycle = 3000 + (blinkSeed % 2000); // 3-5 second cycle
-  const blinkDuration = 150;
+  // ~30 blinks per minute = 1 blink every 2000ms, with ±200ms randomness
+  // Use snakeId for a stable seed (head position changes every frame!)
+  let idHash = 0;
+  for (let i = 0; i < snakeId.length; i++) idHash = ((idHash << 5) - idHash + snakeId.charCodeAt(i)) | 0;
+  const blinkSeed = Math.abs(idHash) % 1000;
+  const blinkCycle = 1800 + (blinkSeed % 400); // 1800-2200ms
+  const blinkDuration = 120; // snappy blink
   const blinkPhase = time ? (time + blinkSeed * 3) % blinkCycle : 99999;
   const isBlinking = blinkPhase < blinkDuration;
 
   // ── BOOST MODE: locked forward, dilated pupils, intense ──
   if (boosting) {
-    pupilRadius = eyeRadius * 0.6; // dilated pupils when boosting
+    pupilRadius = eyeRadius * 0.6;
+    // Reset smooth toward forward when boosting
+    const bTargetX = Math.cos(moveAngle) * maxShift;
+    const bTargetY = Math.sin(moveAngle) * maxShift;
+    smooth.shiftX += (bTargetX - smooth.shiftX) * 0.25;
+    smooth.shiftY += (bTargetY - smooth.shiftY) * 0.25;
 
     for (const side of [-1, 1]) {
       const ex = hx + Math.cos(moveAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
@@ -806,9 +827,9 @@ function drawResponsiveEyes(
       ctx.fill();
       ctx.stroke();
 
-      // Pupil — LOCKED FORWARD at max extension
-      const px = ex + Math.cos(moveAngle) * maxShift;
-      const py = ey + Math.sin(moveAngle) * maxShift;
+      // Pupil — LOCKED FORWARD
+      const px = ex + smooth.shiftX;
+      const py = ey + smooth.shiftY;
       ctx.fillStyle = '#cc1111';
       ctx.beginPath();
       ctx.arc(px, py, pupilRadius, 0, Math.PI * 2);
@@ -833,36 +854,20 @@ function drawResponsiveEyes(
     return;
   }
 
-  // ── NORMAL MODE: deadzone, relative tracking, center rest ──
-  // Compute look angle relative to head direction.
-  // This way even small mouse offsets from the forward line produce visible pupil shift.
-  let deltaAngle = 0;
-  if (mouseScreenX !== undefined && mouseScreenY !== undefined) {
-    const dx = mouseScreenX - hx;
-    const dy = mouseScreenY - hy;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist > 5) {
-      const rawLook = Math.atan2(dy, dx);
-      deltaAngle = rawLook - moveAngle;
-      // Normalize to [-PI, PI]
-      while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
-      while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
-    }
-  } else {
-    // Keyboard/touch fallback: use targetAngle relative to moveAngle
-    deltaAngle = targetAngle - moveAngle;
-    while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
-    while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
-  }
+  // ── NORMAL MODE: use steering delta (targetAngle - moveAngle) ──
+  let deltaAngle = targetAngle - moveAngle;
+  // Normalize to [-PI, PI]
+  while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
+  while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
 
   const absDelta = Math.abs(deltaAngle);
 
-  // Deadzone + gradual shift:
-  //   |delta| < 0.12 rad (~7°)  → shift = 0     (center rest)
-  //   |delta| < 0.45 rad (~26°) → shift = lerp   (gradual)
-  //   |delta| >= 0.45 rad       → shift = max    (full extension)
-  const DEADZONE = 0.12;
-  const FULL_ZONE = 0.45;
+  // Deadzone + gradual shift (tuned for steering delta range of 0 to ±π):
+  //   |delta| < 0.05 rad (~3°)   → shift = 0     (center rest)
+  //   |delta| < 0.30 rad (~17°)  → shift = lerp   (gradual)
+  //   |delta| >= 0.30 rad        → shift = max    (full extension)
+  const DEADZONE = 0.05;
+  const FULL_ZONE = 0.30;
   let shiftRatio: number;
   if (absDelta < DEADZONE) {
     shiftRatio = 0;
@@ -873,28 +878,32 @@ function drawResponsiveEyes(
   }
   const pupilShift = maxShift * shiftRatio;
 
-  // The direction the pupil shifts toward (clamped delta, 0 when in deadzone)
+  // Direction the pupil shifts toward
   const lookDir = absDelta < 0.001 ? moveAngle : moveAngle + deltaAngle;
 
-  // ── Micro-idle jitter: tiny random pupil wobble when centered ──
-  let jitterX = 0, jitterY = 0;
-  if (shiftRatio < 0.3 && time) {
-    const jt = time * 0.002 + blinkSeed;
-    jitterX = Math.sin(jt * 3.7) * 0.8;
-    jitterY = Math.cos(jt * 2.3) * 0.6;
-  }
+  // ── LERP SMOOTHING: smooth the pupil shift for organic motion ──
+  const targetShiftX = Math.cos(lookDir) * pupilShift;
+  const targetShiftY = Math.sin(lookDir) * pupilShift;
+  const LERP_SPEED = 0.22;
+  smooth.shiftX += (targetShiftX - smooth.shiftX) * LERP_SPEED;
+  smooth.shiftY += (targetShiftY - smooth.shiftY) * LERP_SPEED;
 
   for (const side of [-1, 1]) {
     const ex = hx + Math.cos(moveAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
     const ey = hy + Math.sin(moveAngle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
 
     if (isBlinking) {
-      // ── BLINK: draw a thin curved line instead of full eye ──
-      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
-      ctx.lineWidth = 2;
+      // ── BLINK: thin eyelid arcs (top + bottom) closing inward ──
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.lineWidth = 1;
       ctx.lineCap = 'round';
+      // Top eyelid arc
       ctx.beginPath();
-      ctx.arc(ex, ey, eyeRadius * 0.8, moveAngle - 0.6, moveAngle + 0.6);
+      ctx.arc(ex, ey, eyeRadius * 0.75, moveAngle - 0.35, moveAngle + 0.35);
+      ctx.stroke();
+      // Bottom eyelid arc (slightly offset)
+      ctx.beginPath();
+      ctx.arc(ex, ey, eyeRadius * 0.75, moveAngle + Math.PI - 0.35, moveAngle + Math.PI + 0.35);
       ctx.stroke();
       continue;
     }
@@ -908,9 +917,9 @@ function drawResponsiveEyes(
     ctx.fill();
     ctx.stroke();
 
-    // Pupil — shifted based on deadzone/gradual system
-    const px = ex + Math.cos(lookDir) * pupilShift + jitterX;
-    const py = ey + Math.sin(lookDir) * pupilShift + jitterY;
+    // Pupil — smoothly shifted via lerp
+    const px = ex + smooth.shiftX;
+    const py = ey + smooth.shiftY;
 
     ctx.fillStyle = '#111111';
     ctx.beginPath();
@@ -970,4 +979,5 @@ function getAnimationForSkin(skinId: string): string {
 
 export function cleanupSnakeParticles(snakeId: string): void {
   particlePools.delete(snakeId);
+  pupilSmoothMap.delete(snakeId);
 }

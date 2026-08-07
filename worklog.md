@@ -523,3 +523,30 @@ Stage Summary:
 - MICRO-JITTER: tiny sinusoidal pupil wobble when idle (shiftRatio < 0.3)
 - Preview components (economy + full mode) updated with matching deadzone system
 
+---
+Task ID: 2
+Agent: Main
+Task: Fix game canvas snake eyes — shaking, limited range, blink rate
+
+Work Log:
+- Diagnosed root causes: (1) aggressive micro-jitter (0.8px/0.6px sin oscillation) causing visible shaking, (2) using mouse-to-head atan2 which has tiny range in slither.io geometry, (3) deadzone too large (7°) eating most of the signal, (4) blink seed based on head position which changes every frame
+- Implemented all 7 suggested fixes in render-snake-atlas.tsx drawResponsiveEyes function
+- Added pupilSmoothMap (module-level Map<string, {shiftX, shiftY}>) for per-snake lerp smoothing state
+- Changed function signature: replaced mouseScreenX/mouseScreenY with snakeId parameter
+- Updated both call sites (atlas renderer + fallback renderer) to pass snake.id
+- Blink: fixed seed to use snakeId hash instead of head position (was changing every frame)
+- Blink: changed from 3-5s cycle (12-20/min) to 1800-2200ms cycle (~30/min)
+- Blink: changed from 2px thick arc to 1px thin dual eyelid arcs
+- Verified with VLM analysis: no jitter, pupils track steering direction, solid stable appearance
+
+Stage Summary:
+- Key changes in /home/z/my-project/src/components/game/render-snake-atlas.tsx
+- Removed micro-jitter entirely (was causing shaking)
+- Switched from mouse-to-head angle to steering delta (targetAngle - moveAngle)
+- Reduced deadzone from 0.12 (7°) to 0.05 (3°)
+- Reduced full-zone from 0.45 (26°) to 0.30 (17°)
+- Increased maxShift from eyeRadius*0.7 to eyeRadius*0.85
+- Added lerp smoothing at 0.22 speed for organic motion
+- Fixed blink seed to use snakeId hash (stable per-snake)
+- Blink rate: 30/min (1800-2200ms cycle, 120ms duration)
+- Blink visual: thin 1px dual eyelid arcs instead of thick single line
