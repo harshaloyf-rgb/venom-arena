@@ -118,17 +118,17 @@ export function PresetCard({
       {active && <ActiveBadge accent="indigo" />}
 
       <div>
-        <div className="h-[110px] bg-slate-900/45 rounded-xl border border-slate-800/40 mb-2.5 overflow-hidden">
+        <div className="h-[140px] bg-slate-900/45 rounded-xl border border-slate-800/40 mb-2.5 overflow-hidden">
           <GameSnakePreview
             colors={preset.colors}
             bodyStyle={preset.shape}
             taperStyle={preset.taper}
             glow={preset.glow}
-            width={280}
-            height={110}
-            segments={15}
+            width={320}
+            height={140}
+            segments={18}
             speed={1.2}
-            scale={0.65}
+            scale={0.8}
             economy
           />
         </div>
@@ -223,17 +223,17 @@ export function SkinCard({
       )}
 
       <div>
-        <div className="h-[110px] bg-slate-900/45 rounded-xl border border-slate-800/40 mb-2.5 overflow-hidden">
+        <div className="h-[140px] bg-slate-900/45 rounded-xl border border-slate-800/40 mb-2.5 overflow-hidden">
           <GameSnakePreview
             colors={vis.colors}
             bodyStyle={vis.bodyStyle}
             taperStyle={vis.taperStyle}
             glow={vis.glow}
-            width={280}
-            height={110}
-            segments={15}
+            width={320}
+            height={140}
+            segments={18}
             speed={1.2}
-            scale={0.65}
+            scale={0.8}
             economy
           />
         </div>

@@ -231,7 +231,8 @@ export function GameSnakePreview({
     c.addEventListener('mouseleave', onLeave);
 
     // Reallocate buffer only if segment count changed
-    const bufLen = segments * 6;
+    // Economy cards use smaller buffer (less pre-sim = faster mount)
+    const bufLen = economy ? segments * 3 : segments * 6;
     if (!bufRef.current || prevSegRef.current !== segments) {
       bufRef.current = { bx: new Float64Array(bufLen), by: new Float64Array(bufLen) };
       posRef.current = null; // Force fresh init with pre-simulation
@@ -328,9 +329,29 @@ export function GameSnakePreview({
     // Frame skip counter for economy mode (render every 2nd frame)
     let frameSkip = 0;
 
+    // Visibility tracking — pause rAF when off-screen (huge perf win with 20+ cards)
+    let isVisible = true;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        isVisible = entry.isIntersecting;
+        // Resume loop if became visible and not already running
+        if (isVisible && running && !animRef.current) {
+          animRef.current = requestAnimationFrame(loop);
+        }
+      },
+      { threshold: 0.0 }, // trigger as soon as any pixel enters/exits
+    );
+    observer.observe(c);
+
     let running = true;
     const loop = () => {
       if (!running) return;
+
+      // Off-screen → skip entirely (no movement sim, no draw, no rAF)
+      if (!isVisible) {
+        animRef.current = 0;
+        return;
+      }
 
       // Economy: skip every other frame for drawing (still simulate movement)
       frameSkip++;
@@ -643,6 +664,7 @@ export function GameSnakePreview({
     return () => {
       running = false;
       cancelAnimationFrame(animRef.current);
+      observer.disconnect();
       c.removeEventListener('mousemove', onMove);
       c.removeEventListener('mouseleave', onLeave);
     };
