@@ -66,6 +66,77 @@ const BOT_NAMES = [
   'Wiggles', 'Slithers', 'Fang', 'Venom', 'Toxin', 'Striker',
 ];
 
+// ─── Test Obstacles ────────────────────────────────────────────────────
+
+/** Generate test obstacles: wall barriers with varying gap sizes.
+ *  Gaps range from 10px (impassable) to 18px (passable) to test hairline collision.
+ *  Walls are placed around spawn area (0,0) at various distances. */
+function generateTestObstacles(): Array<{ x1: number; y1: number; x2: number; y2: number }> {
+  const walls: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+  const R = 400; // wall half-length
+  const THICK = 8; // visual wall thickness (half)
+
+  // Helper: add a horizontal wall segment at (cx, cy)
+  const hWall = (cx: number, cy: number, halfLen: number) => {
+    walls.push({ x1: cx - halfLen, y1: cy, x2: cx + halfLen, y2: cy });
+  };
+  // Helper: add a vertical wall segment at (cx, cy)
+  const vWall = (cx: number, cy: number, halfLen: number) => {
+    walls.push({ x1: cx, y1: cy - halfLen, x2: cx, y2: cy + halfLen });
+  };
+
+  // ── Ring 1: 300px from center ──
+  // Horizontal barriers with varying gaps
+  const D1 = 300;
+  // Top wall with a gap in center (14px — hairline, should be passable)
+  hWall(-D1, -D1, R * 0.6);
+  hWall(7 + R * 0.6, -D1, R * 0.4); // 14px gap
+
+  // Bottom wall with a gap (10px — too tight, impassable)
+  hWall(-D1, D1, R * 0.55);
+  hWall(10 + R * 0.55, D1, R * 0.45); // 10px gap
+
+  // Left wall with a gap (18px — comfortable pass)
+  vWall(-D1, -D1, R * 0.5);
+  vWall(-D1, 9 + R * 0.5, R * 0.5); // 18px gap
+
+  // Right wall with a gap (12px — exact collision distance, borderline)
+  vWall(D1, -D1, R * 0.55);
+  vWall(D1, 12 + R * 0.55, R * 0.45); // 12px gap
+
+  // ── Ring 2: 600px ──
+  const D2 = 600;
+  hWall(-D2, -D2, R * 0.45);
+  hWall(14 + R * 0.45, -D2, R * 0.55);
+  hWall(-D2, D2, R * 0.55);
+  hWall(12 + R * 0.55, D2, R * 0.45);
+  vWall(-D2, -D2, R * 0.5);
+  vWall(-D2, 10 + R * 0.5, R * 0.5);
+  vWall(D2, -D2, R * 0.55);
+  vWall(D2, 12 + R * 0.55, R * 0.45);
+
+  // ── Diagonal walls for angled testing ──
+  walls.push({ x1: -200, y1: -500, x2: 200, y2: -500 });
+  walls.push({ x1: 220, y1: -500, x2: 500, y2: -220 });
+  walls.push({ x1: 200, y1: 500, x2: -200, y2: 500 });
+  walls.push({ x1: -220, y1: 500, x2: -500, y2: 220 });
+
+  return walls;
+}
+
+/** Point-to-line-segment closest distance (squared) */
+function pointToSegDistSq(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq < 0.001) return (px - x1) * (px - x1) + (py - y1) * (py - y1);
+  let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  const cx = x1 + t * dx;
+  const cy = y1 + t * dy;
+  return (px - cx) * (px - cx) + (py - cy) * (py - cy);
+}
+
 /** Color palette for snakes (body, head) */
 const SNAKE_PALETTES: [string, string][] = [
   ['#ef4444', '#f87171'], ['#f97316', '#fb923c'],
@@ -120,6 +191,7 @@ export function createInitialState(playerSkin?: PlayerSkinOverride | null, initi
     showControls: true,
     tickCount: 0,
     extractionZone: { x: 0, y: 0, radius: EXTRACTION_ZONE_RADIUS, active: false },
+    obstacles: generateTestObstacles(),
   };
 
   const now = Date.now();
@@ -801,6 +873,27 @@ function checkCollisions(state: GameState, now: number): void {
         // Tie: both die
         deadSnakes.add(snake.id);
         deadSnakes.add(otherId);
+      }
+    }
+  }
+
+  // ── Obstacle collision: black dot vs wall segments ──
+  const obstacles = state.obstacles;
+  if (obstacles.length > 0) {
+    const wallHitDistSq = SNAKE_RADIUS * SNAKE_RADIUS; // dot-to-wall kill distance
+    for (const [, snake] of snakesMap) {
+      if (!snake.alive || deadSnakes.has(snake.id)) continue;
+      if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
+
+      const dotX = snake.path.headX + Math.cos(snake.angle) * snake.bodyRadius * dotDist;
+      const dotY = snake.path.headY + Math.sin(snake.angle) * snake.bodyRadius * dotDist;
+
+      for (let w = 0; w < obstacles.length; w++) {
+        const ob = obstacles[w];
+        if (pointToSegDistSq(dotX, dotY, ob.x1, ob.y1, ob.x2, ob.y2) <= wallHitDistSq) {
+          deadSnakes.add(snake.id);
+          break;
+        }
       }
     }
   }

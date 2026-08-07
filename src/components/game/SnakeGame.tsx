@@ -11,6 +11,7 @@ import {
   drawFood as drawFoodFromRenderer,
   drawStarChips as drawStarChipsFromRenderer,
   drawExtractionZone as drawExtractionZoneFromRenderer,
+  drawObstacles as drawObstaclesFromRenderer,
 } from './renderer';
 import { renderSnakeAtlas, renderSnakeFallback, cleanupSnakeParticles, clearSmoothedSegs } from './render-snake-atlas';
 import {
@@ -481,6 +482,11 @@ export default function SnakeGame({
         ctx.fillRect(0, 0, w, h);
         drawGridFromRenderer(ctx, camera, viewport);
 
+        // ── Obstacles (test walls) ──
+        if (stateRef.current.obstacles.length > 0) {
+          drawObstaclesFromRenderer(ctx, stateRef.current.obstacles, camera, viewport);
+        }
+
         // ── Extraction zone ──
         if (extraction.active) {
           drawExtractionZoneFromRenderer(ctx, extraction, camera, viewport);
@@ -907,6 +913,11 @@ function renderOfflineBackground(
 
   // Grid
   drawGridFromRenderer(ctx, camera, viewport);
+
+  // Obstacles (test walls)
+  if (state.obstacles.length > 0) {
+    drawObstaclesFromRenderer(ctx, state.obstacles, camera, viewport);
+  }
 
   // Extraction zone
   if (state.extractionZone.active) {
