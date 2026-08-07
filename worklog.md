@@ -1001,3 +1001,36 @@ Stage Summary:
 - 60 wall segments across 6 rings with gaps 1-20px
 - Collision: < 12px gaps = death traps, 12-20px gaps = passable with skill
 - Wall visual: thin red hairlines with glow effect
+---
+Task ID: 1
+Agent: Main
+Task: Fix collision detection — black dot (1px) for wall/obstacle collision
+
+Work Log:
+- Investigated engine.ts and game-state.ts collision code
+- Found head-to-body and head-to-head collisions ALREADY use black dot correctly
+- Found obstacle collision uses black dot BUT with wallHitDistSq = SNAKE_RADIUS^2 = 36 (6px radius)
+- Found online server has NO obstacle collision at all, and arena boundary uses head center not black dot
+- Found online client references undefined `stateRef.current.obstacles` (bug)
+
+Changes Made:
+1. engine.ts: Changed wallHitDistSq from SNAKE_RADIUS*SNAKE_RADIUS (36) to 1 (1px point)
+2. engine.ts: Updated obstacle generation comments for new gap passability
+3. game-state.ts: Added pointToSegDistSq helper function
+4. game-state.ts: Added generateTestObstacles() function (mirrors engine.ts)
+5. game-state.ts: Added obstacles field to ArenaRoom class
+6. game-state.ts: Added obstacle collision check in checkCollisions() with 1px wallHitDistSq
+7. game-state.ts: Fixed enforceArenaBounds() to use black dot instead of head center
+8. shared.ts: Added obstacles field to ArenaSnapshot interface
+9. types.ts (client): Added obstacles field to ArenaSnapshot interface
+10. game-state.ts: buildSnapshot() now includes obstacles in output
+11. SnakeGame.tsx: Added onlineObstaclesRef to cache obstacles from snapshot
+12. SnakeGame.tsx: Fixed broken stateRef.current.obstacles reference to use onlineObstaclesRef.current
+13. SnakeGame.tsx: onSnapshot callback now caches obstacles from server snapshot
+
+Stage Summary:
+- Black dot collision is now 1px radius for walls (was 6px)
+- Gaps >= 2px are now passable, 1px gaps are barely passable (pixel-perfect)
+- Online mode now has full obstacle support (generation + collision + rendering)
+- Arena boundary in online mode now uses black dot instead of head center
+- Lint passes, no runtime errors, game verified in browser

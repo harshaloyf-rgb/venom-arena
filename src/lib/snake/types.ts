@@ -341,4 +341,6 @@ export interface ArenaSnapshot {
   starChips: Array<{ id: number; x: number; y: number; value: number }>;
   /** Extraction zone state */
   extraction: { x: number; y: number; radius: number; active: boolean };
+  /** Obstacle wall segments */
+  obstacles: Array<{ x1: number; y1: number; x2: number; y2: number }>;
 }

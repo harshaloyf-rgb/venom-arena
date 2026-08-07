@@ -90,6 +90,7 @@ export default function SnakeGame({
   // Online state
   const onlineEngineRef = useRef<OnlineEngine | null>(null);
   const extrapolationRef = useRef<ExtrapolationEngine | null>(null);
+  const onlineObstaclesRef = useRef<Array<{ x1: number; y1: number; x2: number; y2: number }>>([]);
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [onlineError, setOnlineError] = useState<string | null>(null);
   const isDeadOnlineRef = useRef(false);
@@ -250,6 +251,10 @@ export default function SnakeGame({
 
       onlineEngine.onSnapshot = (snapshot) => {
         extrapolation!.update(snapshot, performance.now());
+        // Cache obstacles from first snapshot (they don't change)
+        if (snapshot.obstacles && snapshot.obstacles.length > 0) {
+          onlineObstaclesRef.current = snapshot.obstacles;
+        }
       };
 
       onlineEngine.onError = (msg) => {
@@ -482,9 +487,9 @@ export default function SnakeGame({
         ctx.fillRect(0, 0, w, h);
         drawGridFromRenderer(ctx, camera, viewport);
 
-        // ── Obstacles (test walls) ──
-        if (stateRef.current.obstacles.length > 0) {
-          drawObstaclesFromRenderer(ctx, stateRef.current.obstacles, camera, viewport);
+        // ── Obstacles (hairline-gap walls) ──
+        if (onlineObstaclesRef.current.length > 0) {
+          drawObstaclesFromRenderer(ctx, onlineObstaclesRef.current, camera, viewport);
         }
 
         // ── Extraction zone ──
