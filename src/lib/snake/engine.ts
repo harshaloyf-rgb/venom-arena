@@ -70,9 +70,9 @@ const BOT_NAMES = [
 
 /** Generate obstacle walls with hairline gaps (1px–20px).
  *  Each barrier is a long wall with a small gap that may or may not be passable.
- *  Collision uses SNAKE_RADIUS (6px), so:
- *    - Gaps < 12px  → impassable death trap (looks passable but isn't)
- *    - Gaps 12–20px → barely passable with precision alignment
+ *  Collision uses the BLACK DOT (1px radius), so:
+ *    - Gaps >= 2px  → passable with reasonable alignment
+ *    - Gaps 1px     → barely passable (pixel-perfect precision needed)
  *  Walls are arranged in concentric rectangular rings at increasing distances. */
 function generateTestObstacles(): Array<{ x1: number; y1: number; x2: number; y2: number }> {
   const walls: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
@@ -935,10 +935,10 @@ function checkCollisions(state: GameState, now: number): void {
     }
   }
 
-  // ── Obstacle collision: black dot vs wall segments ──
+  // ── Obstacle collision: black dot (1px radius) vs wall segments ──
   const obstacles = state.obstacles;
   if (obstacles.length > 0) {
-    const wallHitDistSq = SNAKE_RADIUS * SNAKE_RADIUS; // dot-to-wall kill distance
+    const wallHitDistSq = 1; // black dot is a point — 1px kill radius for walls
     for (const [, snake] of snakesMap) {
       if (!snake.alive || deadSnakes.has(snake.id)) continue;
       if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
