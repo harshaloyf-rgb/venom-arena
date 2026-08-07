@@ -650,3 +650,24 @@ Stage Summary:
 - Each file uses a unique globalThis key to avoid cross-file collisions
 - On every HMR re-evaluation the counter increments, forcing React to tear down the old animation loop and re-run with the latest closure code
 - No logic changes — only dependency array additions and module-level counters
+---
+Task ID: 1
+Agent: main
+Task: Fix decimal scores, implement dynamic snake width growth, refine camera zoom
+
+Work Log:
+- Changed BOOST_SCORE_COST_PER_TICK (0.08 float) → BOOST_SCORE_COST_AMOUNT (1) + BOOST_SCORE_COST_INTERVAL (12 ticks). Deducts 1 integer point every 12 ticks (~5/sec) instead of 0.08/tick. Eliminates decimal scores entirely.
+- Added SNAKE_RADIUS_MIN (12), SNAKE_RADIUS_MAX (28), SNAKE_RADIUS_GROWTH_SCALE (400) to config.ts. Formula: radius = MIN + (MAX-MIN) * sqrt(score / (score + SCALE)). Fast growth early, smooth taper.
+- Added computeBodyRadius() in engine.ts. Sets snake.bodyRadius every tick from score. SNAKE_RADIUS (12) stays as constant collision/food-eat radius.
+- Updated render-snake-atlas.tsx: replaced SNAKE_RADIUS * zoom with snake.bodyRadius * zoom in both atlas and fallback renderers.
+- Rewrote camera.ts: width-aware zoom using log2(lengthFactor) + log2(bodyRatio)*0.8, coefficient 0.11, lerp 0.015 (2.5s to 90%). Range ~1.35→0.55 over full score spectrum.
+- Added Math.floor() to all score displays: HUD canvas, death overlay, leaderboard (offline + online).
+- Added boostCostAccum field to Snake type for integer tick accumulator.
+- All changes verified: clean lint, no console errors, game renders and runs.
+
+Stage Summary:
+- Score is now always integer (no more decimals)
+- Snake visually grows fatter as score increases (12px → 28px radius)
+- Collision hitbox stays at 12px regardless of visual size (fair gameplay)
+- Camera zoom is smooth, width-aware, barely noticeable during gameplay
+- 4 files modified: config.ts, engine.ts, camera.ts, types.ts, render-snake-atlas.tsx, renderer.ts, SnakeGame.tsx

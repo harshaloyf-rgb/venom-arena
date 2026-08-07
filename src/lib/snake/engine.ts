@@ -23,10 +23,12 @@ import {
   FOOD_COLORS, FOOD_GLOW_COLORS, FOOD_SPAWN_AREA_RADIUS, INITIAL_SPAWN_RADIUS,
   FOOD_RESPAWN_BATCH,
   // COLLISION
-  SNAKE_RADIUS, NECK_PROTECTION, SPAWN_PROTECTION_MS, SPATIAL_CELL_SIZE,
+  SNAKE_RADIUS, SNAKE_RADIUS_MIN, SNAKE_RADIUS_MAX, SNAKE_RADIUS_GROWTH_SCALE,
+  NECK_PROTECTION, SPAWN_PROTECTION_MS, SPATIAL_CELL_SIZE,
   DEATH_FOOD_LARGE_DIVISOR, DEATH_FOOD_MEDIUM_DIVISOR, HEAD_ON_HEAD_BOOST_WINS,
   // BOOST
-  BOOST_DROP_INTERVAL, BOOST_MIN_BODY, BOOST_MIN_SCORE, BOOST_SCORE_COST_PER_TICK,
+  BOOST_DROP_INTERVAL, BOOST_MIN_BODY, BOOST_MIN_SCORE,
+  BOOST_SCORE_COST_AMOUNT, BOOST_SCORE_COST_INTERVAL,
   // BOT
   BOT_COUNT, BOT_MAX_TURN_RATE, BOT_START_SCORE_MIN, BOT_START_SCORE_MAX,
   // SPAWN
@@ -43,6 +45,13 @@ import {
  * This ratio scales path-length-dependent values accordingly.
  */
 const SPACING_RATIO = SEGMENT_SPACING / BASE_SPEED;
+
+/** Compute visual body radius from score using smooth sqrt curve.
+ *  Starts at SNAKE_RADIUS_MIN (12) and asymptotically approaches SNAKE_RADIUS_MAX (28).
+ *  Fast growth early (noticeable), slow growth late (tapers off naturally). */
+function computeBodyRadius(score: number): number {
+  return SNAKE_RADIUS_MIN + (SNAKE_RADIUS_MAX - SNAKE_RADIUS_MIN) * Math.sqrt(score / (score + SNAKE_RADIUS_GROWTH_SCALE));
+}
 
 /** Scaled neck protection: covers same physical distance as NECK_PROTECTION * SEGMENT_SPACING */
 const NECK_PROTECTION_SCALED = Math.ceil(NECK_PROTECTION * SPACING_RATIO);
@@ -205,7 +214,7 @@ function createSnake(
     lastBoostDrop: 0,
     targetAngle: angle,
     spiral: { active: false, startAngle: 0, theta: 0, ticksElapsed: 0, a: 0, b: 0, direction: 1 },
-    bodyRadius: SNAKE_RADIUS,
+    bodyRadius: computeBodyRadius(startScore),
     skinId,
     rarity,
   };
@@ -403,10 +412,16 @@ function moveSnake(
     snake.path.pop();
   }
 
-  // Boost score cost: decreasing score shrinks the snake over time.
-  // Score directly drives targetLength, so lowering score = shorter body.
+  // Boost score cost: integer-based — deduct 1 point every N ticks.
+  // Avoids decimal scores. Score drives targetLength, so lower score = shorter body.
   if (canBoost) {
-    snake.score = Math.max(0, snake.score - BOOST_SCORE_COST_PER_TICK);
+    snake.boostCostAccum = (snake.boostCostAccum ?? 0) + 1;
+    if (snake.boostCostAccum >= BOOST_SCORE_COST_INTERVAL) {
+      snake.boostCostAccum = 0;
+      snake.score = Math.max(0, snake.score - BOOST_SCORE_COST_AMOUNT);
+    }
+  } else {
+    snake.boostCostAccum = 0;
   }
 
   // Trim to target length (only when NOT boosting — boost handles its own length)
@@ -422,8 +437,8 @@ function moveSnake(
   // across ticks (path entries persist and shift indices on prepend),
   // causing the body to shatter and flicker.
 
-  // Update cached body radius
-  snake.bodyRadius = SNAKE_RADIUS;
+  // Update visual body radius (grows with score — collision stays at SNAKE_RADIUS)
+  snake.bodyRadius = computeBodyRadius(snake.score);
 }
 
 // ==========================================================================
