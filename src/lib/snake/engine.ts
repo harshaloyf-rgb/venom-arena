@@ -16,8 +16,8 @@ import { distSq } from './vec2';
 import { getBotTarget } from './bot-ai';
 import {
   // MOVEMENT
-  BASE_SPEED, BOOST_SPEED, SEGMENT_SPACING, START_LENGTH, LENGTH_PER_SCORE,
-  MAX_TURN_RATE, computeBodyLength, computeBodyRadius,
+  BASE_SPEED, BOOST_SPEED, BASE_TURN_RATE, MIN_TURN_RATE, SEGMENT_SPACING, START_LENGTH, LENGTH_PER_SCORE,
+  computeBodyLength, computeBodyRadius,
   // FOOD
   FOOD_COUNT_TARGET, FOOD_SPAWN_WEIGHTS, FOOD_VALUES, FOOD_RADII,
   FOOD_COLORS, FOOD_GLOW_COLORS, FOOD_SPAWN_AREA_RADIUS, INITIAL_SPAWN_RADIUS,
@@ -97,7 +97,7 @@ const _insertScratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
 // ==========================================================================
 // Spiral turn system DISABLED — was causing infinite spinning bug.
 // The exit condition could never trigger because the spiral's own turn
-// rate (clamped to MAX_TURN_RATE * 2 = 0.754 rad) always exceeded
+// rate (clamped to turn rate * 2) always exceeded
 // MAX_SPIRAL_ANGLE_DELTA (0.15 rad). Will be re-implemented later.
 // ==========================================================================
 
@@ -323,13 +323,23 @@ function moveSnake(
   snake.prevAngle = snake.angle;
 
   // ── Angle computation ──────────────────────────────────────────────
-  // Simple linear turning toward target angle.
+  // Dynamic turn rate: faster speed = less turning ability.
+  // Lerp between BASE_TURN_RATE (at base speed) and MIN_TURN_RATE (at boost speed).
 
   let diff = targetAngle - snake.angle;
   while (diff > Math.PI) diff -= 2 * Math.PI;
   while (diff < -Math.PI) diff += 2 * Math.PI;
 
-  const maxTurn = snake.isBot ? BOT_MAX_TURN_RATE : MAX_TURN_RATE;
+  // Determine speed for turn rate (before we know final speed, use current)
+  const canBoost = wantBoost &&
+    snake.score >= BOOST_MIN_SCORE &&
+    snake.path.length > BOOST_MIN_BODY_SCALED;
+  const currentSpeed = canBoost ? BOOST_SPEED : BASE_SPEED;
+  const speedT = Math.min(1, Math.max(0, (currentSpeed - BASE_SPEED) / (BOOST_SPEED - BASE_SPEED)));
+  const maxTurn = snake.isBot
+    ? BOT_MAX_TURN_RATE
+    : BASE_TURN_RATE + (MIN_TURN_RATE - BASE_TURN_RATE) * speedT;
+
   if (Math.abs(diff) <= maxTurn) {
     snake.angle = targetAngle;
   } else {
@@ -339,11 +349,6 @@ function moveSnake(
   // Normalize angle to [-PI, PI]
   if (snake.angle > Math.PI) snake.angle -= 2 * Math.PI;
   else if (snake.angle < -Math.PI) snake.angle += 2 * Math.PI;
-
-  // Boost eligibility
-  const canBoost = wantBoost &&
-    snake.score >= BOOST_MIN_SCORE &&
-    snake.path.length > BOOST_MIN_BODY_SCALED;
 
   snake.boosting = canBoost;
   snake.speed = canBoost ? BOOST_SPEED : BASE_SPEED;
