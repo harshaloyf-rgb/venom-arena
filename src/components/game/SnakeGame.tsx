@@ -104,11 +104,68 @@ export default function SnakeGame({
   // External boost state (from UI button)
   const externalBoostRef = useRef(false);
 
+  // Smoothed steering angle — snake body follows this (arrow leads)
+  const smoothedAngleRef = useRef(NaN);
+
   // Extraction progress tracking
   const extractProgressRef = useRef(0);
   const extractLastAngleRef = useRef(0);
   const extractActiveRef = useRef(false);
 
+  // Virtual joystick state
+  const joystickActiveRef = useRef(false);
+  const [joystickActive, setJoystickActive] = useState(false);
+  const joystickThumbRef = useRef({ x: 0, y: 0 });
+  const joystickCenterRef = useRef({ x: 0, y: 0 });
+  const [joystickThumb, setJoystickThumb] = useState({ x: 0, y: 0 });
+
+  // ── Joystick handlers ──
+  const JOYSTICK_RADIUS = 50;
+  const JOYSTICK_DEAD = 8;
+
+  const updateJoystickFromPointer = useCallback((clientX: number, clientY: number) => {
+    const center = joystickCenterRef.current;
+    let dx = clientX - center.x;
+    let dy = clientY - center.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > JOYSTICK_RADIUS) {
+      dx = (dx / dist) * JOYSTICK_RADIUS;
+      dy = (dy / dist) * JOYSTICK_RADIUS;
+    }
+    joystickThumbRef.current = { x: dx, y: dy };
+    setJoystickThumb({ x: dx, y: dy });
+
+    if (dist > JOYSTICK_DEAD) {
+      const angle = Math.atan2(dy, dx);
+      inputRef.current?.setJoystickAngle(angle);
+    }
+  }, []);
+
+  const handleJoystickStart = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    joystickCenterRef.current = { x: cx, y: cy };
+    joystickActiveRef.current = true;
+    setJoystickActive(true);
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    updateJoystickFromPointer(e.clientX, e.clientY);
+  }, [updateJoystickFromPointer]);
+
+  const handleJoystickMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!joystickActiveRef.current) return;
+    updateJoystickFromPointer(e.clientX, e.clientY);
+  }, [updateJoystickFromPointer]);
+
+  const handleJoystickEnd = useCallback(() => {
+    joystickActiveRef.current = false;
+    setJoystickActive(false);
+    joystickThumbRef.current = { x: 0, y: 0 };
+    setJoystickThumb({ x: 0, y: 0 });
+    inputRef.current?.clearJoystick();
+  }, []);
   // ── Leaderboard updater (offline) ──
 
   const handleDebugSetScore = useCallback((val: number) => {
@@ -299,6 +356,14 @@ export default function SnakeGame({
       const now = Date.now();
       const inputState = input.getState();
 
+      // ── Smooth the target angle (snake body follows arrow) ──
+      if (isNaN(smoothedAngleRef.current)) smoothedAngleRef.current = inputState.targetAngle;
+      let sDiff = inputState.targetAngle - smoothedAngleRef.current;
+      while (sDiff > Math.PI) sDiff -= 2 * Math.PI;
+      while (sDiff < -Math.PI) sDiff += 2 * Math.PI;
+      smoothedAngleRef.current += sDiff * 0.12;
+      const smoothedTarget = smoothedAngleRef.current;
+
       // ── Frame elapsed (for extraction progress, both modes) ──
       const prevFrameTimeRef = lastTimeRef.current || timestamp;
       const frameElapsed = Math.min(timestamp - prevFrameTimeRef, 100);
@@ -313,15 +378,15 @@ export default function SnakeGame({
           // Just started extracting — lock the current angle
           extractActiveRef.current = true;
           extractProgressRef.current = 0;
-          extractLastAngleRef.current = inputState.targetAngle;
+          extractLastAngleRef.current = smoothedTarget;
         }
         // Check direction change (any angle difference resets progress)
-        const angleDelta = Math.abs(inputState.targetAngle - extractLastAngleRef.current);
+        const angleDelta = Math.abs(smoothedTarget - extractLastAngleRef.current);
         const wrappedDelta = Math.min(angleDelta, Math.PI * 2 - angleDelta);
         if (wrappedDelta > 0.05) {
           // Direction changed — reset progress, lock new angle
           extractProgressRef.current = 0;
-          extractLastAngleRef.current = inputState.targetAngle;
+          extractLastAngleRef.current = smoothedTarget;
         } else {
           // Accumulate progress: 3000ms = 1.0
           extractProgressRef.current += frameElapsed / 3000;
@@ -365,7 +430,8 @@ export default function SnakeGame({
         // Run fixed ticks
         const tickMs = FIXED_DT * 1000;
         while (accumulatorRef.current >= tickMs) {
-          gameTick(state, inputState, FIXED_DT);
+          const smoothedInput = { targetAngle: smoothedTarget, boosting: inputState.boosting };
+          gameTick(state, smoothedInput, FIXED_DT);
           accumulatorRef.current -= tickMs;
 
           // Check player death
@@ -449,7 +515,7 @@ export default function SnakeGame({
       else if (effectiveMode === 'online' && extrapolation && onlineEngine) {
         // Forward input to server
         if (onlineEngine.isConnected) {
-          onlineEngine.setInput(inputState.targetAngle, inputState.boosting);
+          onlineEngine.setInput(smoothedTarget, inputState.boosting);
         }
 
         // Extrapolate between snapshots
@@ -733,12 +799,39 @@ export default function SnakeGame({
           <span>Extract</span>
         </button>
       </div>
+
+      {/* ── Virtual Joystick (bottom-right) ── */}
+      <div
+        onPointerDown={handleJoystickStart}
+        onPointerMove={handleJoystickMove}
+        onPointerUp={handleJoystickEnd}
+        onPointerLeave={handleJoystickEnd}
+        onPointerCancel={handleJoystickEnd}
+        className="absolute bottom-6 right-5 z-10 select-none touch-none"
+        style={{ width: 130, height: 130 }}
+      >
+        {/* Outer ring */}
+        <div className="absolute inset-0 rounded-full border border-white/15 bg-white/5" />
+        {/* Direction labels */}
+        <span className="absolute top-1 left-1/2 -translate-x-1/2 text-white/20 text-[10px]">W</span>
+        <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-white/20 text-[10px]">S</span>
+        <span className="absolute left-1 top-1/2 -translate-y-1/2 text-white/20 text-[10px]">A</span>
+        <span className="absolute right-1 top-1/2 -translate-y-1/2 text-white/20 text-[10px]">D</span>
+        {/* Thumb */}
+        <div
+          className="absolute rounded-full bg-white/25 border border-white/40 transition-shadow duration-150"
+          style={{
+            width: 44,
+            height: 44,
+            left: 65 + joystickThumb.x - 22,
+            top: 65 + joystickThumb.y - 22,
+            boxShadow: joystickActive ? '0 0 12px rgba(255,255,255,0.2)' : 'none',
+          }}
+        />
+      </div>
     </div>
   );
 }
-
-// ============================================================================
-// Debug Panel — score/radius/camera testing (offline only, press ` to toggle)
 // ============================================================================
 
 const DEBUG_PRESETS = [
