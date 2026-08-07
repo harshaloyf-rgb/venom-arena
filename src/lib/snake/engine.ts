@@ -435,14 +435,16 @@ function moveSnake(
   }
 
   // ── Length management ──────────────────────────────────────────────
-  // prepend adds 1 every tick. This single trim handles everything:
-  //   - At targetLength: prepend(+1), trim(-1) = stable
-  //   - Below target: prepend(+1), no trim = grows by 1
-  //   - Above target (post-boost score loss): prepend(+1), trim(-1) = stable
-  //     then when boost ends: no prepend counter, trim(-1) = shrinks smoothly
-  // Max 1 pop per tick — zero pulsing, zero fluctuation.
-  if (snake.path.length > targetLength) {
-    snake.path.pop();
+  // prepend adds 1 every tick. Single pop cancels it (net zero), so the
+  // snake can grow but never shrink. Fix: allow up to 2 pops per tick so
+  // excess length drains faster than it accumulates.
+  //   - At targetLength: prepend(+1), pop(-1) = stable
+  //   - Below target: prepend(+1), no pop = grows by 1/tick
+  //   - Above target: prepend(+1), pop×2(-2) = shrinks by 1/tick
+  const excess = snake.path.length - targetLength;
+  if (excess > 0) {
+    const pops = Math.min(excess, 2);
+    for (let i = 0; i < pops; i++) snake.path.pop();
   }
 
   // ── NOTE: Inner curl (corner-cutting) is a PURELY VISUAL effect ──

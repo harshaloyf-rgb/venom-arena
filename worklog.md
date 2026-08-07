@@ -840,3 +840,21 @@ Stage Summary:
 - Works while boosting: at boost speed, effective turn goes from 0.100 to 0.180 rad/tick
 - Turning radius while boosting: 60px → 33px (45% tighter)
 - Exit: straighten mouse or change direction = instant exit
+---
+Task ID: 1-2
+Agent: Main
+Task: Fix segment growth cap at 37 and shrink inability
+
+Work Log:
+- Read engine.ts, config.ts, pool.ts to trace length management
+- Found SPACING_RATIO = 8/3 = 2.667, initial capacity = 100 path entries
+- Identified Bug 1: PathBuffer.prepend() never calls grow() — when length reaches capacity (100), prepend writes data but length stays capped. Visual segments = 100/2.667 ≈ 37, matching user report exactly.
+- Identified Bug 2: Single-pop trim (1/tick) cancels prepend (+1/tick), so snake can grow but NEVER shrink. When score drops during boost, path stays at old target.
+- Fixed prepend() to call grow() when length >= capacity
+- Fixed trim logic to pop up to 2 per tick when excess > 0, allowing net -1/tick shrink
+
+Stage Summary:
+- pool.ts: prepend() now auto-grows buffer (amortized O(1), doubles each time)
+- engine.ts: trim allows 2 pops/tick so excess drains faster than prepend adds
+- Both growth and shrinking are now smooth at 1 visual segment per tick
+- Verified: no lint errors, no console errors, game renders correctly
