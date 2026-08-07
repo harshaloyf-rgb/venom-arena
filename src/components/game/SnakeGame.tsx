@@ -112,60 +112,6 @@ export default function SnakeGame({
   const extractLastAngleRef = useRef(0);
   const extractActiveRef = useRef(false);
 
-  // Virtual joystick state
-  const joystickActiveRef = useRef(false);
-  const [joystickActive, setJoystickActive] = useState(false);
-  const joystickThumbRef = useRef({ x: 0, y: 0 });
-  const joystickCenterRef = useRef({ x: 0, y: 0 });
-  const [joystickThumb, setJoystickThumb] = useState({ x: 0, y: 0 });
-
-  // ── Joystick handlers ──
-  const JOYSTICK_RADIUS = 50;
-  const JOYSTICK_DEAD = 8;
-
-  const updateJoystickFromPointer = useCallback((clientX: number, clientY: number) => {
-    const center = joystickCenterRef.current;
-    let dx = clientX - center.x;
-    let dy = clientY - center.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist > JOYSTICK_RADIUS) {
-      dx = (dx / dist) * JOYSTICK_RADIUS;
-      dy = (dy / dist) * JOYSTICK_RADIUS;
-    }
-    joystickThumbRef.current = { x: dx, y: dy };
-    setJoystickThumb({ x: dx, y: dy });
-
-    if (dist > JOYSTICK_DEAD) {
-      const angle = Math.atan2(dy, dx);
-      inputRef.current?.setJoystickAngle(angle);
-    }
-  }, []);
-
-  const handleJoystickStart = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const rect = e.currentTarget.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    joystickCenterRef.current = { x: cx, y: cy };
-    joystickActiveRef.current = true;
-    setJoystickActive(true);
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    updateJoystickFromPointer(e.clientX, e.clientY);
-  }, [updateJoystickFromPointer]);
-
-  const handleJoystickMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!joystickActiveRef.current) return;
-    updateJoystickFromPointer(e.clientX, e.clientY);
-  }, [updateJoystickFromPointer]);
-
-  const handleJoystickEnd = useCallback(() => {
-    joystickActiveRef.current = false;
-    setJoystickActive(false);
-    joystickThumbRef.current = { x: 0, y: 0 };
-    setJoystickThumb({ x: 0, y: 0 });
-    inputRef.current?.clearJoystick();
-  }, []);
   // ── Leaderboard updater (offline) ──
 
   const handleDebugSetScore = useCallback((val: number) => {
@@ -798,36 +744,6 @@ export default function SnakeGame({
           <CircleDot className="w-5 h-5" />
           <span>Extract</span>
         </button>
-      </div>
-
-      {/* ── Virtual Joystick (bottom-right) ── */}
-      <div
-        onPointerDown={handleJoystickStart}
-        onPointerMove={handleJoystickMove}
-        onPointerUp={handleJoystickEnd}
-        onPointerLeave={handleJoystickEnd}
-        onPointerCancel={handleJoystickEnd}
-        className="absolute bottom-6 right-5 z-10 select-none touch-none"
-        style={{ width: 130, height: 130 }}
-      >
-        {/* Outer ring */}
-        <div className="absolute inset-0 rounded-full border border-white/15 bg-white/5" />
-        {/* Direction labels */}
-        <span className="absolute top-1 left-1/2 -translate-x-1/2 text-white/20 text-[10px]">W</span>
-        <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-white/20 text-[10px]">S</span>
-        <span className="absolute left-1 top-1/2 -translate-y-1/2 text-white/20 text-[10px]">A</span>
-        <span className="absolute right-1 top-1/2 -translate-y-1/2 text-white/20 text-[10px]">D</span>
-        {/* Thumb */}
-        <div
-          className="absolute rounded-full bg-white/25 border border-white/40 transition-shadow duration-150"
-          style={{
-            width: 44,
-            height: 44,
-            left: 65 + joystickThumb.x - 22,
-            top: 65 + joystickThumb.y - 22,
-            boxShadow: joystickActive ? '0 0 12px rgba(255,255,255,0.2)' : 'none',
-          }}
-        />
       </div>
     </div>
   );
