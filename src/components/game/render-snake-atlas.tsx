@@ -716,6 +716,8 @@ function drawDirectionPointer(
   headRadius: number,
   boosting: boolean,
 ): void {
+  // Direction pointer is currently hidden
+  return;
   // How much the steering deviates from current facing
   let steerDiff = steerAngle - faceAngle;
   while (steerDiff > Math.PI) steerDiff -= 2 * Math.PI;
