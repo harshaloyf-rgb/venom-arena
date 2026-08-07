@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X, Wifi, WifiOff, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { X, Wifi, WifiOff, Loader2, AlertTriangle, RefreshCw, Zap, CircleDot } from 'lucide-react';
 import { InputHandler } from './input';
 import {
   drawDeathOverlay,
@@ -27,7 +27,7 @@ import {
   SNAKE_RADIUS_MIN,
   SNAKE_RADIUS_GROWTH_RATE,
 } from '@/lib/snake';
-import { createInitialState, gameTick, respawnPlayer, setDebugScore, type PlayerSkinOverride } from '@/lib/snake/engine';
+import { createInitialState, gameTick, respawnPlayer, setDebugScore, activateExtractionZone, type PlayerSkinOverride } from '@/lib/snake/engine';
 import { createCamera, updateCamera, getViewport, worldToScreen } from '@/lib/snake/camera';
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, getPlayerSkinId, registerSkinAsset } from '@/lib/snake/skin-registry';
@@ -101,6 +101,12 @@ export default function SnakeGame({
   const [debugScore, setDebugScore] = useState('0');
   const [debugStats, setDebugStats] = useState({ score: 0, radius: 6, length: 15, zoom: 1.35, pathLen: 0 });
 
+  // External boost state (from UI button)
+  const externalBoostRef = useRef(false);
+
+  // Extraction zone tracking
+  const [extractionActive, setExtractionActive] = useState(false);
+
   // ── Leaderboard updater (offline) ──
 
   const handleDebugSetScore = useCallback((val: number) => {
@@ -154,6 +160,28 @@ export default function SnakeGame({
     setOnlineError(null);
     // The useEffect will re-trigger connect on state change
   }, []);
+
+  // ── Extract: activate extraction zone at player's position ──
+
+  const handleExtract = useCallback(() => {
+    if (effectiveMode !== 'offline') return;
+    const state = gameStateRef.current;
+    if (!state?.player) return;
+    if (state.extractionZone.active) return;
+    if (state.player.score < 50) return;
+    // Place extraction zone at player's current head position
+    const hx = state.player.path.headX;
+    const hy = state.player.path.headY;
+    activateExtractionZone(state, hx, hy);
+    setExtractionActive(true);
+    // Auto-deactivate after 30 seconds
+    setTimeout(() => {
+      if (gameStateRef.current) {
+        gameStateRef.current.extractionZone.active = false;
+      }
+      setExtractionActive(false);
+    }, 30000);
+  }, [effectiveMode]);
 
   // ── Main effect: game loop + online/offline setup ──
 
@@ -290,6 +318,11 @@ export default function SnakeGame({
       const h = parent ? parent.clientHeight : canvas.height;
       const now = Date.now();
       const inputState = input.getState();
+
+      // Merge external boost (from UI button) into input state
+      if (externalBoostRef.current) {
+        inputState.boosting = true;
+      }
 
       // Dismiss controls on first input (both modes)
       if (!controlsDismissedRef.current &&
@@ -638,6 +671,44 @@ export default function SnakeGame({
             <span>{Math.floor(entry.score)}</span>
           </div>
         ))}
+      </div>
+
+      {/* ── Bottom Action Buttons ── */}
+      <div className="absolute bottom-6 left-0 right-0 z-10 flex items-end justify-between px-5 pointer-events-none">
+        {/* Extract Button */}
+        {effectiveMode === 'offline' && (
+          <button
+            onClick={(e) => { e.stopPropagation(); handleExtract(); }}
+            disabled={extractionActive || isDead}
+            className={`pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-xl border font-bold text-sm transition-all duration-200 select-none cursor-pointer touch-manipulation
+              ${extractionActive
+                ? 'bg-amber-500/20 border-amber-500/40 text-amber-300 opacity-60 cursor-not-allowed'
+                : isDead
+                  ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
+                  : 'bg-amber-500/15 border-amber-500/30 text-amber-400 hover:bg-amber-500/25 hover:border-amber-500/50 active:scale-95'
+              }`}
+          >
+            <CircleDot className="w-5 h-5" />
+            <span>Extract</span>
+          </button>
+        )}
+
+        {/* Boost Button (hold to boost) */}
+        <button
+          onPointerDown={(e) => { e.stopPropagation(); externalBoostRef.current = true; }}
+          onPointerUp={(e) => { e.stopPropagation(); externalBoostRef.current = false; }}
+          onPointerLeave={() => { externalBoostRef.current = false; }}
+          onPointerCancel={() => { externalBoostRef.current = false; }}
+          disabled={isDead}
+          className={`pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-xl border font-bold text-sm transition-all duration-200 select-none touch-manipulation
+            ${isDead
+              ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
+              : 'bg-orange-500/15 border-orange-500/30 text-orange-400 hover:bg-orange-500/25 hover:border-orange-500/50 active:scale-95'
+            }`}
+        >
+          <Zap className="w-5 h-5" />
+          <span>Boost</span>
+        </button>
       </div>
     </div>
   );

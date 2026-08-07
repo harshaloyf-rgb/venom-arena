@@ -858,3 +858,19 @@ export function respawnPlayer(state: GameState): void {
   state.player = newPlayer;
   state.snakes.set(newPlayer.id, newPlayer);
 }
+
+/** Activate extraction zone at a given world position */
+export function activateExtractionZone(
+  state: GameState,
+  x: number,
+  y: number,
+): void {
+  state.extractionZone.x = x;
+  state.extractionZone.y = y;
+  state.extractionZone.active = true;
+}
+
+/** Deactivate extraction zone */
+export function deactivateExtractionZone(state: GameState): void {
+  state.extractionZone.active = false;
+}
