@@ -844,6 +844,7 @@ function drawCollisionChain(
     ctx.beginPath();
     ctx.arc(hp.x + Math.cos(hp.a) * hHalf, hp.y + Math.sin(hp.a) * hHalf, 2.5, 0, Math.PI * 2);
     ctx.fill();
+    ctx.fillStyle = 'rgba(239, 68, 68, 0.45)'; // restore red fill for squares
     ctx.lineWidth = 1.8; // restore
   }
 
