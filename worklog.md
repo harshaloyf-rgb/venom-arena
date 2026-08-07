@@ -504,3 +504,22 @@ Stage Summary:
 - No blur or stretching because canvas displays at native pixel size
 - Added `responsive` prop to GameSnakePreview for proper canvas sizing
 
+\n---
+Task ID: eye-system-overhaul
+Agent: Main
+Task: Implement new responsive eye system for game canvas and previews
+
+Work Log:
+- Rewrote drawResponsiveEyes() in render-snake-atlas.tsx with 5 new behaviors
+- Added time? parameter to function signature, updated both call sites
+- Updated economy and full mode eyes in game-snake-preview.tsx
+- Verified: no lint errors, no runtime errors, game launches and renders
+
+Stage Summary:
+- NORMAL MODE: pupils rest centered (deadzone 7°), gradually shift (7-26°), max at 26°+
+- BOOST MODE: eyes lock forward, pupils dilate (0.52→0.60), red with pulsing glow ring
+- RELATIVE ANGLE: deltaAngle computed as (mouseAngle - headAngle) for true left/right tracking
+- BLINK SYSTEM: each snake blinks every 3-5s for 150ms (position-seeded cycle)
+- MICRO-JITTER: tiny sinusoidal pupil wobble when idle (shiftRatio < 0.3)
+- Preview components (economy + full mode) updated with matching deadzone system
+

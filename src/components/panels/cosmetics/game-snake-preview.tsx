@@ -483,28 +483,40 @@ export function GameSnakePreview({
         ctx.fillStyle = hg;
         ctx.beginPath(); ctx.arc(headX, headY, hr, 0, Math.PI * 2); ctx.fill();
 
-        // Responsive eyes (mouse tracking, no cosmetics)
+        // Responsive eyes (deadzone + relative tracking, same as game canvas)
         const eyeOff = hr * G.eyeOff;
         const eyeR = hr * G.eyeR;
         const pupR = eyeR * G.pupR;
         const fwd = hr * G.eyeFwd;
         const perp = angle + Math.PI / 2;
+        const maxShift = eyeR * G.pupShift;
+        const now = performance.now();
 
-        let lookA = angle;
+        // Compute delta angle (mouse relative to head direction)
+        let deltaAngle = 0;
         const m = mouseRef.current;
         if (m) {
           const dx = m.x - headX, dy = m.y - headY;
-          if (Math.sqrt(dx * dx + dy * dy) > 5) lookA = Math.atan2(dy, dx);
+          if (Math.sqrt(dx * dx + dy * dy) > 5) {
+            const rawLook = Math.atan2(dy, dx);
+            deltaAngle = rawLook - angle;
+            while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
+            while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
+          }
         }
+        const absDelta = Math.abs(deltaAngle);
+        const DEADZONE = 0.12, FULL_ZONE = 0.45;
+        const shiftRatio = absDelta < DEADZONE ? 0 : absDelta < FULL_ZONE ? (absDelta - DEADZONE) / (FULL_ZONE - DEADZONE) : 1;
+        const pupilShift = maxShift * shiftRatio;
+        const lookDir = absDelta < 0.001 ? angle : angle + deltaAngle;
 
         for (const side of [-1, 1]) {
           const ex = headX + Math.cos(angle) * fwd + Math.cos(perp) * eyeOff * side;
           const ey = headY + Math.sin(angle) * fwd + Math.sin(perp) * eyeOff * side;
           ctx.fillStyle = '#ffffff';
           ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, Math.PI * 2); ctx.fill();
-          const shift = eyeR * G.pupShift;
-          const ppx = ex + Math.cos(lookA) * shift;
-          const ppy = ey + Math.sin(lookA) * shift;
+          const ppx = ex + Math.cos(lookDir) * pupilShift;
+          const ppy = ey + Math.sin(lookDir) * pupilShift;
           ctx.fillStyle = '#111111';
           ctx.beginPath(); ctx.arc(ppx, ppy, pupR, 0, Math.PI * 2); ctx.fill();
           ctx.fillStyle = `rgba(255,255,255,${G.highlight})`;
@@ -573,13 +585,25 @@ export function GameSnakePreview({
           const pupR = eyeR * G.pupR;
           const fwd = hr * G.eyeFwd;
           const perp = angle + Math.PI / 2;
+          const maxShift = eyeR * G.pupShift;
 
-          let lookA = angle;
-          const m = mouseRef.current;
-          if (m) {
-            const dx = m.x - headX, dy = m.y - headY;
-            if (Math.sqrt(dx * dx + dy * dy) > 5) lookA = Math.atan2(dy, dx);
+          // Deadzone + relative tracking (same as game canvas)
+          let deltaAngle = 0;
+          const m2 = mouseRef.current;
+          if (m2) {
+            const dx = m2.x - headX, dy = m2.y - headY;
+            if (Math.sqrt(dx * dx + dy * dy) > 5) {
+              const rawLook = Math.atan2(dy, dx);
+              deltaAngle = rawLook - angle;
+              while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
+              while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
+            }
           }
+          const absDelta = Math.abs(deltaAngle);
+          const DZ = 0.12, FZ = 0.45;
+          const sr = absDelta < DZ ? 0 : absDelta < FZ ? (absDelta - DZ) / (FZ - DZ) : 1;
+          const pupilShift = maxShift * sr;
+          const lookDir = absDelta < 0.001 ? angle : angle + deltaAngle;
 
           for (const side of [-1, 1]) {
             const ex = headX + Math.cos(angle) * fwd + Math.cos(perp) * eyeOff * side;
@@ -590,9 +614,8 @@ export function GameSnakePreview({
             ctx.lineWidth = G.eyeBorderW;
             ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
 
-            const shift = eyeR * G.pupShift;
-            const ppx = ex + Math.cos(lookA) * shift;
-            const ppy = ey + Math.sin(lookA) * shift;
+            const ppx = ex + Math.cos(lookDir) * pupilShift;
+            const ppy = ey + Math.sin(lookDir) * pupilShift;
             ctx.fillStyle = '#111111';
             ctx.beginPath(); ctx.arc(ppx, ppy, pupR, 0, Math.PI * 2); ctx.fill();
 
