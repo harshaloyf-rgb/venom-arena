@@ -407,7 +407,7 @@ function moveSnake(
   const targetLength = Math.ceil(logicalLen * SPACING_RATIO);
 
   // Boost food drop: leave a food orb at the tail every interval.
-  // Visual feedback only — actual shrinking is handled by per-tick pop + trim.
+  // Visual feedback only — actual shrinking is handled by the trim logic.
   if (canBoost && now - snake.lastBoostDrop >= BOOST_DROP_INTERVAL) {
     snake.lastBoostDrop = now;
     const tailIdx = snake.path.length - 1;
@@ -422,12 +422,6 @@ function moveSnake(
     }
   }
 
-  // Per-tick boost shrink: pop 1 to counteract prepend's +1.
-  // This keeps the path stable during boost (no growth from prepend).
-  if (canBoost && snake.path.length > BOOST_MIN_BODY_SCALED) {
-    snake.path.pop();
-  }
-
   // Boost score cost: integer-based — deduct 1 point every N ticks.
   if (canBoost) {
     snake.boostCostAccum = (snake.boostCostAccum ?? 0) + 1;
@@ -439,13 +433,31 @@ function moveSnake(
     snake.boostCostAccum = 0;
   }
 
-  // Trim to target length — MAX 1 per tick (smooth, no pulsing).
-  // While-boost: per-tick pop already handles stability; this catches
-  // score-driven targetLength drops 1 entry at a time.
-  // Post-boost: path may be over targetLength due to score loss;
-  // body gradually settles over a few ticks instead of snapping.
-  if (snake.path.length > targetLength) {
-    snake.path.pop();
+  // ── Length management ──────────────────────────────────────────────
+  // Every tick: prepend adds 1. We need exactly 1 pop to stay stable,
+  // 0 pops to grow, or 2 pops to shrink — all max 1 change per tick.
+  //
+  // Boost mode: pop to counteract prepend, but ONLY if path >= targetLength.
+  // If path < targetLength (ate food, needs to grow), skip the pop so
+  // prepend's +1 acts as growth. Then a second trim pop catches
+  // score-driven targetLength decreases.
+  //
+  // Normal mode: just trim if over target (prepend = natural growth).
+
+  if (canBoost) {
+    // Counteract prepend, but allow growth if below target
+    if (snake.path.length > Math.max(targetLength, BOOST_MIN_BODY_SCALED)) {
+      snake.path.pop();
+    }
+    // Additional trim if still above target (score dropped)
+    if (snake.path.length > targetLength) {
+      snake.path.pop();
+    }
+  } else {
+    // Normal: trim max 1 if over target
+    if (snake.path.length > targetLength) {
+      snake.path.pop();
+    }
   }
 
   // ── NOTE: Inner curl (corner-cutting) is a PURELY VISUAL effect ──
