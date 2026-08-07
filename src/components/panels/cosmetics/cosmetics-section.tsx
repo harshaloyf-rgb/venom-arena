@@ -78,21 +78,21 @@ export function CosmeticsSection({
 
   return (
     <div className="animate-fade-in">
-      <div className="mb-6">
+      <div className="mb-3">
         <GameSnakePreview
           key={activeSkinId}
           skinId={activeSkinId}
-          width={900}
-          height={360}
-          segments={20}
+          width={480}
+          height={140}
+          segments={14}
           speed={1.2}
-          scale={0.77}
+          scale={0.5}
           responsive
         />
       </div>
 
       {/* Slot sub-tabs */}
-      <div className="flex flex-wrap gap-2 mb-5">
+      <div className="flex flex-wrap gap-1.5 mb-3">
         {ALL_SLOTS.map((slot) => {
           const info = SLOT_INFO[slot];
           const isActive = activeSlot === slot;
@@ -114,7 +114,7 @@ export function CosmeticsSection({
       </div>
 
       {/* Cosmetics card grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {slotCosmetics.map((cosmetic) => {
             const isEquipped =
               equipped[activeSlot as keyof EquippedCosmetics] === cosmetic.id;
