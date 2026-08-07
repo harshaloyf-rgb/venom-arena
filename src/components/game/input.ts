@@ -1,10 +1,11 @@
 // ============================================================================
 // Input Handler — Tracks mouse, keyboard, and touch input for snake control.
 //
-// Mouse steering (delta-based):
-//   Mouse MOVEMENT steers the snake — small nudges left/right turn the snake.
-//   No need to move the mouse across the screen. The snake auto-moves forward,
-//   and you just nudge the mouse to steer. Sensitivity is adjustable.
+// Mouse steering (movement-direction based):
+//   The DIRECTION you move the mouse steers the snake. Move mouse right → snake
+//   goes right. Draw a circle with the mouse → snake draws a circle. Works
+//   from anywhere on screen, even a tiny corner. When mouse stops, snake goes
+//   straight in its current direction.
 //
 // Keyboard steering:
 //   WASD / Arrow keys set absolute direction. Space / Shift = boost. E = extract.
@@ -12,8 +13,8 @@
 
 import type { InputState } from '@/lib/snake/types';
 
-/** How many radians to turn per pixel of horizontal mouse movement */
-const DELTA_SENSITIVITY = 0.004;
+/** Minimum mouse movement (pixels) to register a direction change */
+const DEADZONE = 1.5;
 
 /**
  * Creates and manages input state for the game.
@@ -44,8 +45,9 @@ export class InputHandler {
   externalBoost = false;
   externalExtract = false;
 
-  // Mouse delta steering
-  private _accumulatedDeltaX = 0;
+  // Mouse movement-direction steering: accumulate movement vector per frame
+  private _accumDx = 0;
+  private _accumDy = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -133,8 +135,8 @@ export class InputHandler {
     if (kx !== 0 || ky !== 0) {
       this.state.targetAngle = Math.atan2(ky, kx);
       this.state.boosting = this.keys.has(' ') || this.keys.has('shift') || this.externalBoost;
-      // Consume any accumulated delta so it doesn't leak after keyboard release
-      this._accumulatedDeltaX = 0;
+      this._accumDx = 0;
+      this._accumDy = 0;
       return;
     }
 
@@ -147,18 +149,21 @@ export class InputHandler {
         this.state.targetAngle = Math.atan2(dy, dx);
       }
       this.state.boosting = dist > 80 || this.externalBoost;
-      this._accumulatedDeltaX = 0;
+      this._accumDx = 0;
+      this._accumDy = 0;
       return;
     }
 
-    // Mouse delta steering: horizontal mouse movement turns the snake
-    if (this._accumulatedDeltaX !== 0) {
-      this.state.targetAngle += this._accumulatedDeltaX * DELTA_SENSITIVITY;
-      // Normalize to [-PI, PI]
-      if (this.state.targetAngle > Math.PI) this.state.targetAngle -= 2 * Math.PI;
-      else if (this.state.targetAngle < -Math.PI) this.state.targetAngle += 2 * Math.PI;
+    // Mouse movement-direction steering:
+    // The direction of mouse movement = the direction the snake should face.
+    // If you draw a circle with the mouse, the snake draws a circle.
+    const mag = Math.sqrt(this._accumDx * this._accumDx + this._accumDy * this._accumDy);
+    if (mag > DEADZONE) {
+      this.state.targetAngle = Math.atan2(this._accumDy, this._accumDx);
     }
-    this._accumulatedDeltaX = 0;
+    // If no significant movement → keep current targetAngle (snake goes straight)
+    this._accumDx = 0;
+    this._accumDy = 0;
 
     this.state.boosting = this.mouseDown || this.keys.has(' ') || this.keys.has('shift') || this.externalBoost;
   }
@@ -177,12 +182,13 @@ export class InputHandler {
     this.keys.delete(e.key.toLowerCase());
   };
 
-  /** Accumulate mouse movement delta for delta-based steering */
+  /** Accumulate mouse movement vector for direction-based steering */
   private onMouseMove = (e: MouseEvent): void => {
     this.mouseClientX = e.clientX;
     this.mouseClientY = e.clientY;
     this.hasMouseMoved = true;
-    this._accumulatedDeltaX += e.movementX;
+    this._accumDx += e.movementX;
+    this._accumDy += e.movementY;
   };
 
   private onMouseDown = (e: MouseEvent): void => {
