@@ -317,11 +317,11 @@ export const ARENA_BOUNDARY_MARGIN = 200;
 // MOVEMENT
 export const BASE_SPEED = 4.5;
 export const BOOST_SPEED = 8.0;
-export const MAX_TURN_RATE = Math.PI * 0.12;
+export const MAX_TURN_RATE = Math.PI / 15; // U-turn in 0.25s
 export const SEGMENT_SPACING = 8;
-export const GROWTH_RATE = 0.25;
-export const START_LENGTH = 20;
-export const MAX_SNAKE_LENGTH = 2000;
+export const LENGTH_PER_SCORE = 5; // 1 segment per 5 score points
+export const START_LENGTH = 15;
+// MAX_SNAKE_LENGTH removed — length grows linearly without cap
 export const BOOST_SHRINK_RATE = 1;
 
 // FOOD

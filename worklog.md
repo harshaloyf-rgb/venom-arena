@@ -718,3 +718,29 @@ Stage Summary:
 - Growth is effectively uncapped: sqrt curve with 10000 segment safety cap (~4M score to reach)
 - Starting snake: 6px radius, 15 segments (thin and small)
 - Key files changed: config.ts, SnakeGame.tsx, snake-face-tester.tsx, camera.ts
+---
+Task ID: 1
+Agent: main
+Task: Fix length fluctuation, change growth rate to 1 seg/5 score, reduce turn radius to 0.25s, add 100K test snake in gameplay, remove face-tester
+
+Work Log:
+- Diagnosed length fluctuation: sqrt formula `floor(15 + 5*sqrt(score))` caused score 0→15 segs, score 1→20 segs (5-segment jump)
+- Changed length formula to linear: `floor(START_LENGTH + score / LENGTH_PER_SCORE)` where LENGTH_PER_SCORE=5
+- Removed MAX_SNAKE_LENGTH cap and GROWTH_LENGTH_COEFF from config
+- Updated turn rate: MAX_TURN_RATE from π*0.0375 (0.44s U-turn) to π/15 (0.25s U-turn)
+- Updated bot turn rate: BOT_MAX_TURN_RATE from π*0.0225 to π*0.04 (preserved 60% ratio)
+- Added `setDebugScore()` export in engine.ts that sets score AND immediately resizes path buffer (extends tail in straight line or trims)
+- Updated SnakeGame.tsx: handleDebugSetScore now calls setDebugScore instead of directly setting snake.score
+- Updated debug panel formula text to show new growth formula and turn time
+- Removed SnakeFaceTester: removed import, tester tab type, TABS entry, PANEL_TITLES entry, and rendering line from page.tsx
+- Removed unused Eye icon import from page.tsx
+- Updated game-server shared.ts: GROWTH_RATE/START_LENGTH/MAX_SNAKE_LENGTH → LENGTH_PER_SCORE/START_LENGTH, updated MAX_TURN_RATE
+- Updated game-server game-state.ts: formula now uses `score / LENGTH_PER_SCORE` without MAX_SNAKE_LENGTH cap
+
+Stage Summary:
+- Length now grows exactly 1 segment per 5 score points (no more 5-segment jumps at score 1)
+- Turn rate: full U-turn in 0.25s (was 0.44s)
+- 100K test snake available via F3 debug panel in-game (presets: 0, 50, 200, 1K, 5K, 10K, 50K, 100K, 500K, 1M)
+- SnakeFaceTester component removed from UI (file still exists but unused)
+- Game server formulas synced with client
+- All changes pass lint, no runtime errors

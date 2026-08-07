@@ -13,7 +13,7 @@ import {
   PathBuffer, SpatialHash,
   // Config
   ARENA_RADIUS, BASE_SPEED, BOOST_SPEED, MAX_TURN_RATE, SEGMENT_SPACING,
-  GROWTH_RATE, START_LENGTH, MAX_SNAKE_LENGTH,
+  LENGTH_PER_SCORE, START_LENGTH,
   FOOD_COUNT_TARGET, FOOD_SPAWN_WEIGHTS, FOOD_VALUES, FOOD_RADII,
   FOOD_COLORS, FOOD_GLOW_COLORS, FOOD_SPAWN_AREA_RADIUS, INITIAL_SPAWN_RADIUS,
   FOOD_RESPAWN_BATCH,
@@ -169,7 +169,7 @@ export class ArenaRoom {
     id: string, name: string, startScore: number,
     posX: number, posY: number, isBot: boolean, now: number,
   ): ServerSnake {
-    const targetLength = Math.min(Math.floor(START_LENGTH + startScore * GROWTH_RATE), MAX_SNAKE_LENGTH);
+    const targetLength = Math.floor(START_LENGTH + startScore / LENGTH_PER_SCORE);
     const palette = SNAKE_PALETTES[Math.floor(Math.random() * SNAKE_PALETTES.length)];
     const angle = Math.random() * Math.PI * 2;
 
@@ -384,7 +384,7 @@ export class ArenaRoom {
     snake.path.prepend(headX, headY);
 
     // Target length from score
-    const targetLength = Math.min(Math.floor(START_LENGTH + snake.score * GROWTH_RATE), MAX_SNAKE_LENGTH);
+    const targetLength = Math.floor(START_LENGTH + snake.score / LENGTH_PER_SCORE);
 
     // Boost: drop food from tail
     if (canBoost && now - snake.lastBoostDrop >= BOOST_DROP_INTERVAL) {
