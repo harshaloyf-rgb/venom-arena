@@ -13,7 +13,7 @@ import {
   Compass, Shield, User, Trophy, Gift, ShoppingBag, Coins,
   Sparkles, Users, ChevronLeft, Play, ListTodo, Award,
   LogOut, Film, BookOpen, Crown, Loader2, Sunrise, Star,
-  MoreHorizontal, Swords, Eye,
+  MoreHorizontal, Swords,
 } from 'lucide-react';
 
 import { useAuth } from '@/components/providers/auth-provider';
@@ -33,7 +33,6 @@ import { Championships } from '@/components/panels/championships';
 import { SeasonPass } from '@/components/panels/season-pass';
 import { ClipShowcase } from '@/components/panels/clip-showcase';
 import { AdminPanel } from '@/components/panels/admin-panel';
-import { SnakeFaceTester } from '@/components/game/snake-face-tester';
 import { PlayerInspectorModal} from '@/components/panels/player-inspector-modal';
 import { GameRulesModal } from '@/components/modals/game-rules-modal';
 // AdminGameTuning will be restored in Phase 7
@@ -56,7 +55,7 @@ import type { MatchResult } from '@/lib/types';
 type TabId =
   | 'dashboard' | 'arena' | 'shop' | 'profile' | 'leaderboard'
   | 'championships' | 'halloffame' | 'clans' | 'seasonpass'
-  | 'clips' | 'rewards' | 'store' | 'social' | 'admin' | 'tester';
+  | 'clips' | 'rewards' | 'store' | 'social' | 'admin';
 
 interface Mission {
   id: string;
@@ -92,7 +91,6 @@ const TABS: TabDef[] = [
   { id: 'store', label: 'Vault', icon: Coins, activeColor: 'text-emerald-400 bg-emerald-600/10 border-emerald-500/30' },
   { id: 'social', label: 'Friends & Search', icon: Users, activeColor: 'text-violet-400 bg-violet-600/10 border-violet-500/30' },
   { id: 'admin', label: 'Admin', icon: Shield, activeColor: 'text-red-400 bg-red-600/10 border-red-500/30' },
-  { id: 'tester', label: 'Skin Preview', icon: Eye, activeColor: 'text-cyan-400 bg-cyan-600/10 border-cyan-500/30' },
 ];
 
 const PANEL_TITLES: Record<string, string> = {
@@ -100,7 +98,7 @@ const PANEL_TITLES: Record<string, string> = {
   leaderboard: 'Global Standings', championships: 'Championships',
   halloffame: 'Hall of Fame', clans: 'Syndicates', seasonpass: 'Season Pass',
   clips: 'Highlights', rewards: 'Daily Claims', store: 'Chip Vault',
-  social: 'Friends & Social', admin: 'Admin Panel', tester: 'Skin Preview',
+  social: 'Friends & Social', admin: 'Admin Panel',
 };
 
 // ---------------------------------------------------------------------------
@@ -589,7 +587,6 @@ export default function Home() {
               {activeTab === 'store' && <ChipStore onToast={toastFn} />}
               {activeTab === 'social' && <SocialPanel onToast={toastFn} onInspectPlayer={handleInspectPlayer} />}
               {activeTab === 'admin' && player?.role === 'admin' && <AdminPanel onToast={toastFn} />}
-              {activeTab === 'tester' && <SnakeFaceTester />}
             </div>
           </div>
         )}
