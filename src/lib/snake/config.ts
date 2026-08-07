@@ -23,18 +23,18 @@ export const ARENA_GRID_COLOR = 'rgba(255, 255, 255, 0.03)';
 // ============================================================================
 
 /** Base movement speed (pixels per tick at 60fps) */
-export const BASE_SPEED = 5.5;
+export const BASE_SPEED = 3.0;
 
-/** Speed while boosting (pixels per tick at 60fps) — exactly 2.0× base */
-export const BOOST_SPEED = 11.0;
+/** Speed while boosting (pixels per tick at 60fps) — 2.0× base */
+export const BOOST_SPEED = 6.0;
 
-/** Turn rate at base speed (radians per tick) — ~13.75° per tick */
-export const BASE_TURN_RATE = 0.24;
+/** Turn rate at base speed (radians per tick) — ~11.5° per tick */
+export const BASE_TURN_RATE = 0.200;
 
-/** Turn rate at boost speed (radians per tick) — ~2.3° per tick.
+/** Turn rate at boost speed (radians per tick) — ~5.7° per tick.
  *  Dynamic: actual turn rate is lerped between BASE_TURN_RATE and MIN_TURN_RATE
  *  based on current speed. Faster = tighter turn radius. */
-export const MIN_TURN_RATE = 0.04;
+export const MIN_TURN_RATE = 0.100;
 
 /** Distance between consecutive segment positions in the path history */
 export const SEGMENT_SPACING = 8;
