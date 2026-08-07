@@ -768,7 +768,7 @@ function drawResponsiveEyes(
   hx: number,
   hy: number,
   moveAngle: number,
-  _targetAngle: number,
+  targetAngle: number,
   headRadius: number,
   boosting: boolean,
   snakeId: string,
@@ -856,50 +856,63 @@ function drawResponsiveEyes(
     return;
   }
 
-  // ── NORMAL MODE: use ANGULAR VELOCITY (how fast the snake is actually turning) ──
-  // This stays non-zero the entire time the snake is curving, unlike steering delta
-  // which converges to near-zero as the snake catches up to the mouse.
-  let angVel = 0; // positive = turning right, negative = turning left
+  // ── NORMAL MODE: circular pupil tracking ──
+  // Direction: where the snake is steering (full 360°, not just left/right)
+  // Magnitude: combo of steering delta + angular velocity for sustained shift
+  let angVel = 0;
   if (smooth.angleReady) {
     angVel = moveAngle - smooth.prevAngle;
-    // Normalize to [-PI, PI] (handle wraparound)
     while (angVel > Math.PI) angVel -= 2 * Math.PI;
     while (angVel < -Math.PI) angVel += 2 * Math.PI;
   }
   smooth.prevAngle = moveAngle;
   smooth.angleReady = true;
 
+  // Steering delta for circular DIRECTION
+  let deltaAngle = targetAngle - moveAngle;
+  while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
+  while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
+  const absDelta = Math.abs(deltaAngle);
   const absVel = Math.abs(angVel);
 
-  // Map angular velocity to pupil shift:
-  //   |vel| < 0.002 rad/frame (~0.1°/frame) → center (deadzone for noise)
-  //   |vel| < 0.015 rad/frame (~0.9°/frame) → gradual ramp
-  //   |vel| >= 0.015 rad/frame             → full extension (hard turn)
-  const DEADZONE = 0.002;
-  const FULL_ZONE = 0.015;
-  let shiftRatio: number;
-  if (absVel < DEADZONE) {
-    shiftRatio = 0;
-  } else if (absVel < FULL_ZONE) {
-    shiftRatio = (absVel - DEADZONE) / (FULL_ZONE - DEADZONE);
-  } else {
-    shiftRatio = 1;
-  }
+  // Look direction: use the full target direction (circular!), default to forward when idle
+  const lookDir = absDelta < 0.06
+    ? moveAngle        // idle → look forward
+    : targetAngle;    // steering → look toward where we're going
+
+  // Magnitude: combine steering delta with angular velocity
+  // Angular velocity keeps the shift alive during sustained turns
+  const angVelContrib = Math.min(1, absVel / 0.018);
+  const deltaContrib = Math.min(1, absDelta / (Math.PI / 2.5));
+  const combinedMag = Math.min(1, Math.max(deltaContrib, angVelContrib * 0.75));
+
+  // Deadzone: don't shift for tiny inputs
+  const DEADZONE = 0.08;
+  const shiftRatio = combinedMag < DEADZONE ? 0
+    : Math.min(1, (combinedMag - DEADZONE) / (1 - DEADZONE));
   const pupilShift = maxShift * shiftRatio;
 
-  // Direction: perpendicular to head facing.
-  // Positive angVel = turning right → pupil shifts right (perpAngle direction)
-  // Negative angVel = turning left  → pupil shifts left  (-perpAngle direction)
-  const lookDir = absVel < 0.0001 ? moveAngle
-    : angVel > 0 ? moveAngle + Math.PI / 2   // turning right → look right
-    : moveAngle - Math.PI / 2;               // turning left  → look left
-
-  // ── LERP SMOOTHING: smooth the pupil shift for organic motion ──
+  // Target offset in world space (circular — any angle!)
   const targetShiftX = Math.cos(lookDir) * pupilShift;
   const targetShiftY = Math.sin(lookDir) * pupilShift;
-  const LERP_SPEED = 0.25;
-  smooth.shiftX += (targetShiftX - smooth.shiftX) * LERP_SPEED;
-  smooth.shiftY += (targetShiftY - smooth.shiftY) * LERP_SPEED;
+
+  // ── ASYMMETRIC LERP: fast out, slow return ──
+  // Moving outward (toward target): snappy 0.10
+  // Returning to center: lazy 0.03 — pupils linger before drifting back
+  const targetDist = Math.sqrt(targetShiftX * targetShiftX + targetShiftY * targetShiftY);
+  const currentDist = Math.sqrt(smooth.shiftX * smooth.shiftX + smooth.shiftY * smooth.shiftY);
+  const isReturning = targetDist < currentDist;
+  const LERP_OUT = 0.10;
+  const LERP_BACK = 0.03;
+  const lerpSpeed = isReturning ? LERP_BACK : LERP_OUT;
+  smooth.shiftX += (targetShiftX - smooth.shiftX) * lerpSpeed;
+  smooth.shiftY += (targetShiftY - smooth.shiftY) * lerpSpeed;
+
+  // Tiny damping to prevent drift: gently pull toward zero when very close
+  if (shiftRatio === 0 && currentDist > 0.05) {
+    smooth.shiftX *= 0.97;
+    smooth.shiftY *= 0.97;
+  }
 
   for (const side of [-1, 1]) {
     const ex = hx + Math.cos(moveAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
