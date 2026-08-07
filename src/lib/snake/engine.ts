@@ -273,21 +273,41 @@ export function gameTick(state: GameState, input: InputState, _dt: number): void
   // 4. Check star chip collection
   checkStarChips(state, now);
 
-  // 5. Spawn food to maintain target count
+  // 5. Spawn food to maintain target count — spread across map, not clustered
   if (state.foods.length < FOOD_COUNT_TARGET) {
     const deficit = FOOD_COUNT_TARGET - state.foods.length;
-    let cx = 0;
-    let cy = 0;
-    const alive: Snake[] = [];
-    for (const [, s] of state.snakes) {
-      if (s.alive && s.path.length > 0) alive.push(s);
+    const batch = Math.min(deficit, FOOD_RESPAWN_BATCH);
+
+    // Find player (or a random alive snake)
+    const player = state.player;
+    const refSnake = (player && player.alive && player.path.length > 0)
+      ? player
+      : [...state.snakes.values()].find(s => s.alive && s.path.length > 0);
+
+    if (refSnake) {
+      const hx = refSnake.path.headX;
+      const hy = refSnake.path.headY;
+      const angle = refSnake.angle;
+
+      // Spawn 70% ahead of the player (slither.io style — food where you're going),
+      // 30% in a wide ring around the player for variety
+      const aheadCount = Math.ceil(batch * 0.7);
+      const aroundCount = batch - aheadCount;
+
+      // Ahead: fan in front of the snake
+      for (let i = 0; i < aheadCount; i++) {
+        const spread = (Math.random() - 0.5) * Math.PI * 0.8; // ±72° fan
+        const dist = 400 + Math.random() * (FOOD_SPAWN_AREA_RADIUS - 400);
+        const a = angle + spread;
+        spawnFoodBatch(state, 1, hx + Math.cos(a) * dist, hy + Math.sin(a) * dist, 200);
+      }
+
+      // Around: wide ring for ambient food
+      spawnFoodBatch(state, aroundCount, hx, hy, FOOD_SPAWN_AREA_RADIUS);
+    } else {
+      // Fallback: spawn near origin
+      spawnFoodBatch(state, batch, 0, 0, FOOD_SPAWN_AREA_RADIUS);
     }
-    if (alive.length > 0) {
-      const rs = alive[Math.floor(Math.random() * alive.length)];
-      cx = rs.path.headX;
-      cy = rs.path.headY;
-    }
-    spawnFoodBatch(state, Math.min(deficit, FOOD_RESPAWN_BATCH), cx, cy, FOOD_SPAWN_AREA_RADIUS);
   }
 
   // 6. Spawn star chips in extraction zone
