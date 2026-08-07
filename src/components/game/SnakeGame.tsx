@@ -101,7 +101,7 @@ export default function SnakeGame({
     const entries: { name: string; score: number }[] = [];
     for (const [, snake] of state.snakes) {
       if (snake.alive) {
-        entries.push({ name: snake.name, score: snake.score });
+        entries.push({ name: snake.name, score: Math.floor(snake.score) });
       }
     }
     entries.sort((a, b) => b.score - a.score);
@@ -114,7 +114,7 @@ export default function SnakeGame({
     const entries: { name: string; score: number }[] = [];
     for (const [, s] of snakes) {
       if (s.alive) {
-        entries.push({ name: s.name, score: s.score });
+        entries.push({ name: s.name, score: Math.floor(s.score) });
       }
     }
     entries.sort((a, b) => b.score - a.score);
@@ -589,7 +589,7 @@ export default function SnakeGame({
             }`}
           >
             <span>{i + 1}. {entry.name}</span>
-            <span>{entry.score}</span>
+            <span>{Math.floor(entry.score)}</span>
           </div>
         ))}
       </div>
@@ -696,7 +696,7 @@ function drawHUDBase(
   ctx.textBaseline = 'top';
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 16px monospace';
-  ctx.fillText(`Score: ${score}`, p + 12, p + 10);
+  ctx.fillText(`Score: ${Math.floor(score)}`, p + 12, p + 10);
 
   ctx.font = '13px monospace';
   ctx.fillStyle = '#a0a0a0';

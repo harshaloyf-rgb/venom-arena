@@ -11,7 +11,7 @@
 // ============================================================================
 
 import type { Camera, Snake, Viewport } from '@/lib/snake/types';
-import { SNAKE_RADIUS, SEGMENT_SPACING, SPAWN_PROTECTION_MS, LEGENDARY_GLOW_SIZE, START_LENGTH, GROWTH_RATE, MAX_SNAKE_LENGTH } from '@/lib/snake/config';
+import { SEGMENT_SPACING, SPAWN_PROTECTION_MS, LEGENDARY_GLOW_SIZE, START_LENGTH, GROWTH_RATE, MAX_SNAKE_LENGTH } from '@/lib/snake/config';
 import { worldToScreen } from '@/lib/snake/camera';
 import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
@@ -277,7 +277,7 @@ export function renderSnakeAtlas(
   const zoom = camera.zoom;
   const cw = viewport.width;
   const ch = viewport.height;
-  const segRadius = SNAKE_RADIUS * zoom;
+  const segRadius = snake.bodyRadius * zoom;
 
   // Spawn protection: smooth fade-in (no blinking)
   const spawnAge = time - snake.spawnTime;
@@ -520,7 +520,7 @@ export function renderSnakeFallback(
   const zoom = camera.zoom;
   const cw = viewport.width;
   const ch = viewport.height;
-  const segRadius = SNAKE_RADIUS * zoom;
+  const segRadius = snake.bodyRadius * zoom;
 
   // Spawn protection: smooth fade-in (no blinking)
   const spawnAge = now - snake.spawnTime;

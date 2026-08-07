@@ -253,6 +253,8 @@ export interface Snake {
   spiral: SpiralTurnState;
   /** Cached body radius (avoids recalculation) */
   bodyRadius: number;
+  /** Tick accumulator for integer-based boost score cost */
+  boostCostAccum?: number;
 
   // ── Skin fields (Phase A, rendering in Phase C) ──
   /** Current skin asset ID */

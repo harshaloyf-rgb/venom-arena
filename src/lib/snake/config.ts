@@ -85,8 +85,21 @@ export const FOOD_RESPAWN_BATCH = 5;
 // 4. COLLISION — snake radius, protection zones, death rules
 // ============================================================================
 
-/** Base visual radius of each snake segment (fatter = more visible) */
+/** Collision/food-eat radius — stays constant regardless of score (fair gameplay).
+ *  Bigger snakes LOOK fatter (visual radius grows) but hitbox stays the same. */
 export const SNAKE_RADIUS = 12;
+
+/** Minimum visual body radius (at score 0). Same as SNAKE_RADIUS at start. */
+export const SNAKE_RADIUS_MIN = 12;
+
+/** Maximum visual body radius (at very high scores). Snake gets 2.3× wider at max. */
+export const SNAKE_RADIUS_MAX = 28;
+
+/** Growth scale: controls how fast radius grows with score.
+ *  Formula: radius = MIN + (MAX - MIN) * sqrt(score / (score + SCALE))
+ *  At score=SCALE: radius ≈ MIN + 0.707 × (MAX − MIN)  (~71% of range)
+ *  At score=5×SCALE: radius ≈ MIN + 0.913 × (MAX − MIN)  (~91% of range) */
+export const SNAKE_RADIUS_GROWTH_SCALE = 400;
 
 /** First N segments of a snake's body that cannot kill on collision */
 export const NECK_PROTECTION = 5;
@@ -119,8 +132,14 @@ export const BOOST_MIN_BODY = 8;
 /** Minimum score required to boost — must have score to spend */
 export const BOOST_MIN_SCORE = 1;
 
-/** Score deducted per tick while boosting (~5 score/sec at 60fps) */
-export const BOOST_SCORE_COST_PER_TICK = 0.08;
+/** Score deducted each interval while boosting (integer — no decimals in score).
+ *  Combined with BOOST_SCORE_COST_INTERVAL: 1 point every 12 ticks ≈ 5/sec at 60fps. */
+export const BOOST_SCORE_COST_AMOUNT = 1;
+
+/** Ticks between each score deduction while boosting.
+ *  At 60fps: 1 point every 12 ticks = 5 points/sec.
+ *  Replaces old float-based BOOST_SCORE_COST_PER_TICK (0.08) which caused decimal scores. */
+export const BOOST_SCORE_COST_INTERVAL = 12;
 
 /** Boost speed as a multiplier of base speed */
 export const BOOST_SPEED_MULTIPLIER = BOOST_SPEED / BASE_SPEED; // ≈ 1.778
@@ -222,14 +241,19 @@ export const ANGLE_LERP_SPEED = 0.3;
 /** Fixed timestep in seconds for offline game loop (targeting 60fps) */
 export const FIXED_DT = 1 / 60;
 
-/** Camera lerp factor (0–1, lower = smoother follow) */
+/** Camera position lerp factor (0–1, lower = smoother follow). Used in online mode. */
 export const CAMERA_LERP = 0.08;
 
 /** Base camera zoom — starts closer for better visibility */
 export const CAMERA_BASE_ZOOM = 1.35;
 
-/** Minimum camera zoom level */
+/** Minimum camera zoom level (safety floor — rarely reached in normal gameplay) */
 export const CAMERA_ZOOM_MIN = 0.45;
+
+/** Camera zoom lerp factor (0–1, lower = smoother zoom transitions).
+ *  0.015 → 90% convergence in ~153 frames (2.5s at 60fps).
+ *  Combined with gradual target changes, the player barely notices zoom shifting. */
+export const CAMERA_ZOOM_LERP = 0.015;
 
 /** Position prediction factor for extrapolation (1.0 = full prediction) */
 export const POSITION_PREDICT_FACTOR = 1.0;

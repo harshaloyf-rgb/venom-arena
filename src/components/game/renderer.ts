@@ -194,7 +194,7 @@ export function drawDeathOverlay(
 
   ctx.fillStyle = '#ffffff';
   ctx.font = '24px sans-serif';
-  ctx.fillText(`Score: ${score}`, width / 2, height / 2 + 10);
+  ctx.fillText(`Score: ${Math.floor(score)}`, width / 2, height / 2 + 10);
 
   ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
   ctx.font = '16px sans-serif';
