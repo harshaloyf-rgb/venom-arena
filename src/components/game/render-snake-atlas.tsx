@@ -414,7 +414,7 @@ export function renderSnakeAtlas(
     const equipped = readEquippedCosmetics();
     const hasCustomEyes = equipped.eyes && equipped.eyes !== 'none';
     if (!hasCustomEyes) {
-      drawResponsiveEyes(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting, mouseScreenX, mouseScreenY);
+      drawResponsiveEyes(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting, mouseScreenX, mouseScreenY, time);
     }
 
     // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
@@ -675,7 +675,7 @@ export function renderSnakeFallback(
     const eq2 = readEquippedCosmetics();
     const hasCustomEyes2 = eq2.eyes && eq2.eyes !== 'none';
     if (!hasCustomEyes2) {
-      drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting, mouseScreenX, mouseScreenY);
+      drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting, mouseScreenX, mouseScreenY, now);
     }
 
     // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
@@ -770,40 +770,134 @@ function drawResponsiveEyes(
   boosting: boolean,
   mouseScreenX?: number,
   mouseScreenY?: number,
+  time?: number,
 ): void {
   // Eye positioning — on the face of the snake
   const eyeOffset = headRadius * 0.42;
   const eyeRadius = headRadius * 0.38;
-  const pupilRadius = eyeRadius * 0.52;
+  let pupilRadius = eyeRadius * 0.52;
   const perpAngle = moveAngle + Math.PI / 2;
   const eyeForward = headRadius * 0.32;
+  const maxShift = eyeRadius * 0.7;
 
-  // ── ULTRA-RESPONSIVE EYE TRACKING ──
-  // Use raw mouse screen position relative to the head for TRUE responsiveness.
-  // Even the tiniest mouse movement shifts pupils dramatically.
-  // Falls back to targetAngle only when mouse position is unavailable.
-  let lookAngle: number;
+  // ── BLINK SYSTEM ──
+  // Each snake blinks every 3-5 seconds for ~150ms.
+  // Use head position as a seed so different snakes blink at different times.
+  const blinkSeed = Math.abs(Math.round(hx * 7 + hy * 13)) % 1000;
+  const blinkCycle = 3000 + (blinkSeed % 2000); // 3-5 second cycle
+  const blinkDuration = 150;
+  const blinkPhase = time ? (time + blinkSeed * 3) % blinkCycle : 99999;
+  const isBlinking = blinkPhase < blinkDuration;
+
+  // ── BOOST MODE: locked forward, dilated pupils, intense ──
+  if (boosting) {
+    pupilRadius = eyeRadius * 0.6; // dilated pupils when boosting
+
+    for (const side of [-1, 1]) {
+      const ex = hx + Math.cos(moveAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
+      const ey = hy + Math.sin(moveAngle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
+
+      // Eye white
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(ex, ey, eyeRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Pupil — LOCKED FORWARD at max extension
+      const px = ex + Math.cos(moveAngle) * maxShift;
+      const py = ey + Math.sin(moveAngle) * maxShift;
+      ctx.fillStyle = '#cc1111';
+      ctx.beginPath();
+      ctx.arc(px, py, pupilRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.beginPath();
+      ctx.arc(px - pupilRadius * 0.3, py - pupilRadius * 0.35, pupilRadius * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Pulsing red glow ring
+      ctx.save();
+      ctx.globalAlpha = 0.3 + 0.2 * Math.sin((time ?? Date.now()) * 0.01);
+      ctx.strokeStyle = '#ff4444';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(ex, ey, eyeRadius + 2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    return;
+  }
+
+  // ── NORMAL MODE: deadzone, relative tracking, center rest ──
+  // Compute look angle relative to head direction.
+  // This way even small mouse offsets from the forward line produce visible pupil shift.
+  let deltaAngle = 0;
   if (mouseScreenX !== undefined && mouseScreenY !== undefined) {
-    // Direct mouse-to-head angle for maximum responsiveness
     const dx = mouseScreenX - hx;
     const dy = mouseScreenY - hy;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist > 2) {
-      lookAngle = Math.atan2(dy, dx);
-    } else {
-      lookAngle = moveAngle;
+    if (dist > 5) {
+      const rawLook = Math.atan2(dy, dx);
+      deltaAngle = rawLook - moveAngle;
+      // Normalize to [-PI, PI]
+      while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
+      while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
     }
   } else {
-    // Fallback: use steering direction
-    lookAngle = targetAngle;
+    // Keyboard/touch fallback: use targetAngle relative to moveAngle
+    deltaAngle = targetAngle - moveAngle;
+    while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
+    while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
   }
 
-  // Pupil always at maximum extension toward look direction
-  const pupilShift = eyeRadius * 0.7; // Slightly beyond center for extreme tracking
+  const absDelta = Math.abs(deltaAngle);
+
+  // Deadzone + gradual shift:
+  //   |delta| < 0.12 rad (~7°)  → shift = 0     (center rest)
+  //   |delta| < 0.45 rad (~26°) → shift = lerp   (gradual)
+  //   |delta| >= 0.45 rad       → shift = max    (full extension)
+  const DEADZONE = 0.12;
+  const FULL_ZONE = 0.45;
+  let shiftRatio: number;
+  if (absDelta < DEADZONE) {
+    shiftRatio = 0;
+  } else if (absDelta < FULL_ZONE) {
+    shiftRatio = (absDelta - DEADZONE) / (FULL_ZONE - DEADZONE);
+  } else {
+    shiftRatio = 1;
+  }
+  const pupilShift = maxShift * shiftRatio;
+
+  // The direction the pupil shifts toward (clamped delta, 0 when in deadzone)
+  const lookDir = absDelta < 0.001 ? moveAngle : moveAngle + deltaAngle;
+
+  // ── Micro-idle jitter: tiny random pupil wobble when centered ──
+  let jitterX = 0, jitterY = 0;
+  if (shiftRatio < 0.3 && time) {
+    const jt = time * 0.002 + blinkSeed;
+    jitterX = Math.sin(jt * 3.7) * 0.8;
+    jitterY = Math.cos(jt * 2.3) * 0.6;
+  }
 
   for (const side of [-1, 1]) {
     const ex = hx + Math.cos(moveAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
     const ey = hy + Math.sin(moveAngle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
+
+    if (isBlinking) {
+      // ── BLINK: draw a thin curved line instead of full eye ──
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(ex, ey, eyeRadius * 0.8, moveAngle - 0.6, moveAngle + 0.6);
+      ctx.stroke();
+      continue;
+    }
 
     // Eye white with border
     ctx.fillStyle = '#ffffff';
@@ -814,12 +908,11 @@ function drawResponsiveEyes(
     ctx.fill();
     ctx.stroke();
 
-    // Pupil — shifted toward lookAngle, ALWAYS at edge for extreme responsiveness
-    const px = ex + Math.cos(lookAngle) * pupilShift;
-    const py = ey + Math.sin(lookAngle) * pupilShift;
+    // Pupil — shifted based on deadzone/gradual system
+    const px = ex + Math.cos(lookDir) * pupilShift + jitterX;
+    const py = ey + Math.sin(lookDir) * pupilShift + jitterY;
 
-    // Pupil color: red tint when boosting
-    ctx.fillStyle = boosting ? '#cc1111' : '#111111';
+    ctx.fillStyle = '#111111';
     ctx.beginPath();
     ctx.arc(px, py, pupilRadius, 0, Math.PI * 2);
     ctx.fill();
@@ -829,18 +922,6 @@ function drawResponsiveEyes(
     ctx.beginPath();
     ctx.arc(px - pupilRadius * 0.3, py - pupilRadius * 0.35, pupilRadius * 0.3, 0, Math.PI * 2);
     ctx.fill();
-
-    // Boost glow ring
-    if (boosting) {
-      ctx.save();
-      ctx.globalAlpha = 0.3 + 0.2 * Math.sin(Date.now() * 0.01);
-      ctx.strokeStyle = '#ff4444';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-    ctx.arc(ex, ey, eyeRadius + 2, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
   }
 }
 
