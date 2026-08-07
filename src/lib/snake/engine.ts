@@ -19,9 +19,10 @@ import {
   BASE_SPEED, BOOST_SPEED, BASE_TURN_RATE, MIN_TURN_RATE, SEGMENT_SPACING, START_LENGTH, LENGTH_PER_SCORE,
   computeBodyLength, computeBodyRadius,
   // FOOD
-  FOOD_COUNT_TARGET, FOOD_SPAWN_WEIGHTS, FOOD_VALUES, FOOD_RADII,
-  FOOD_COLORS, FOOD_GLOW_COLORS, FOOD_SPAWN_AREA_RADIUS, INITIAL_SPAWN_RADIUS,
-  FOOD_RESPAWN_BATCH,
+  FOOD_DENSITY_TARGET, FOOD_VISIBLE_RADIUS, FOOD_DESPAWN_RADIUS,
+  FOOD_SPAWN_WEIGHTS, FOOD_VALUES, FOOD_RADII,
+  FOOD_COLORS, FOOD_GLOW_COLORS, INITIAL_SPAWN_RADIUS,
+  FOOD_RESPAWN_BATCH, FOOD_MAX_COUNT,
   // COLLISION
   SNAKE_RADIUS, SNAKE_RADIUS_MIN, SNAKE_RADIUS_GROWTH_RATE,
   NECK_PROTECTION, SPAWN_PROTECTION_MS, SPATIAL_CELL_SIZE,
@@ -147,8 +148,8 @@ export function createInitialState(playerSkin?: PlayerSkinOverride | null, initi
     state.snakes.set(bot.id, bot);
   }
 
-  // Spawn initial food
-  spawnFoodBatch(state, FOOD_COUNT_TARGET, 0, 0, INITIAL_SPAWN_RADIUS);
+  // Spawn initial food (generous spread around origin for start area)
+  spawnFoodBatch(state, 1500, 0, 0, INITIAL_SPAWN_RADIUS);
 
   return state;
 }
@@ -273,42 +274,8 @@ export function gameTick(state: GameState, input: InputState, _dt: number): void
   // 4. Check star chip collection
   checkStarChips(state, now);
 
-  // 5. Spawn food to maintain target count — spread across map, not clustered
-  if (state.foods.length < FOOD_COUNT_TARGET) {
-    const deficit = FOOD_COUNT_TARGET - state.foods.length;
-    const batch = Math.min(deficit, FOOD_RESPAWN_BATCH);
-
-    // Find player (or a random alive snake)
-    const player = state.player;
-    const refSnake = (player && player.alive && player.path.length > 0)
-      ? player
-      : [...state.snakes.values()].find(s => s.alive && s.path.length > 0);
-
-    if (refSnake) {
-      const hx = refSnake.path.headX;
-      const hy = refSnake.path.headY;
-      const angle = refSnake.angle;
-
-      // Spawn 70% ahead of the player (slither.io style — food where you're going),
-      // 30% in a wide ring around the player for variety
-      const aheadCount = Math.ceil(batch * 0.7);
-      const aroundCount = batch - aheadCount;
-
-      // Ahead: fan in front of the snake
-      for (let i = 0; i < aheadCount; i++) {
-        const spread = (Math.random() - 0.5) * Math.PI * 0.8; // ±72° fan
-        const dist = 400 + Math.random() * (FOOD_SPAWN_AREA_RADIUS - 400);
-        const a = angle + spread;
-        spawnFoodBatch(state, 1, hx + Math.cos(a) * dist, hy + Math.sin(a) * dist, 200);
-      }
-
-      // Around: wide ring for ambient food
-      spawnFoodBatch(state, aroundCount, hx, hy, FOOD_SPAWN_AREA_RADIUS);
-    } else {
-      // Fallback: spawn near origin
-      spawnFoodBatch(state, batch, 0, 0, FOOD_SPAWN_AREA_RADIUS);
-    }
-  }
+  // 5. Density-based food spawning + despawn (slither.io style — unlimited food)
+  maintainFoodAroundPlayer(state);
 
   // 6. Spawn star chips in extraction zone
   if (state.extractionZone.active && now % STAR_CHIP_SPAWN_INTERVAL < 20) {
@@ -546,6 +513,84 @@ function makeFood(state: GameState, x: number, y: number, forceSize?: number): F
     color: FOOD_COLORS[sizeIndex],
     glowColor: FOOD_GLOW_COLORS[sizeIndex],
   };
+}
+
+const DESPAWN_RADIUS_SQ = FOOD_DESPAWN_RADIUS * FOOD_DESPAWN_RADIUS;
+const VISIBLE_RADIUS_SQ = FOOD_VISIBLE_RADIUS * FOOD_VISIBLE_RADIUS;
+
+/**
+ * Slither.io-style food management:
+ * 1. Count food within player's visible radius
+ * 2. Spawn food ahead + around player to maintain density
+ * 3. Despawn food beyond despawn radius
+ * Result: infinite food that follows the player, no clusters, no empty areas
+ */
+function maintainFoodAroundPlayer(state: GameState): void {
+  const player = state.player;
+  const refSnake = (player && player.alive && player.path.length > 0)
+    ? player
+    : [...state.snakes.values()].find(s => s.alive && s.path.length > 0);
+
+  if (!refSnake) return;
+
+  const hx = refSnake.path.headX;
+  const hy = refSnake.path.headY;
+  const angle = refSnake.angle;
+  const foods = state.foods;
+
+  // --- Step 1: Count food within visible radius & despawn far food ---
+  let nearbyCount = 0;
+  let writeIdx = 0;
+  for (let i = 0; i < foods.length; i++) {
+    const f = foods[i];
+    const dx = f.x - hx;
+    const dy = f.y - hy;
+    const distSq = dx * dx + dy * dy;
+
+    if (distSq > DESPAWN_RADIUS_SQ) {
+      // Too far — despawn (skip, don't copy to write position)
+      continue;
+    }
+
+    // Keep this food
+    if (writeIdx !== i) foods[writeIdx] = f;
+    writeIdx++;
+
+    if (distSq < VISIBLE_RADIUS_SQ) nearbyCount++;
+  }
+
+  // Trim the array
+  foods.length = writeIdx;
+
+  // --- Step 2: Spawn food to maintain density ---
+  const deficit = FOOD_DENSITY_TARGET - nearbyCount;
+  if (deficit <= 0 || foods.length >= FOOD_MAX_COUNT) return;
+
+  const batch = Math.min(deficit, FOOD_RESPAWN_BATCH);
+
+  // 70% ahead of the player (slither.io style — food where you're going)
+  // 30% in a ring around the player for variety
+  const aheadCount = Math.ceil(batch * 0.7);
+  const aroundCount = batch - aheadCount;
+
+  // Ahead: fan in front of the snake
+  for (let i = 0; i < aheadCount; i++) {
+    const spread = (Math.random() - 0.5) * Math.PI * 0.8; // ±72° fan
+    const dist = 400 + Math.random() * (FOOD_VISIBLE_RADIUS - 400);
+    const a = angle + spread;
+    const sx = hx + Math.cos(a) * dist;
+    const sy = hy + Math.sin(a) * dist;
+    state.foods.push(makeFood(state, sx, sy));
+  }
+
+  // Around: wide ring for ambient food
+  for (let i = 0; i < aroundCount; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const dist = 600 + Math.random() * (FOOD_VISIBLE_RADIUS - 600);
+    const sx = hx + Math.cos(a) * dist;
+    const sy = hy + Math.sin(a) * dist;
+    state.foods.push(makeFood(state, sx, sy));
+  }
 }
 
 function spawnFoodBatch(state: GameState, count: number, cx: number, cy: number, radius: number): void {

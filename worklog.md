@@ -790,3 +790,30 @@ Stage Summary:
 - Any steering change resets extraction progress to 0%
 - No score threshold, no zone restriction
 - Files modified: input.ts, engine.ts (reverted), SnakeGame.tsx
+---
+Task ID: unlimited-food
+Agent: Main
+Task: Implement unlimited slither.io-style food spawning with dynamic despawn
+
+Work Log:
+- Analyzed current food system: FOOD_COUNT_TARGET=1000 cap, no despawn, 10 batch spawn
+- Updated config.ts: replaced fixed cap with density-based system
+  - FOOD_DENSITY_TARGET=800 (food within 5000px radius of player)
+  - FOOD_VISIBLE_RADIUS=5000 (radius for density check + spawn)
+  - FOOD_DESPAWN_RADIUS=7000 (food beyond this gets removed)
+  - FOOD_RESPAWN_BATCH=25 (up from 10)
+  - FOOD_MAX_COUNT=5000 (safety cap)
+  - Removed FOOD_COUNT_TARGET, FOOD_SPAWN_AREA_RADIUS
+- Updated engine.ts imports to use new config names
+- Changed initial spawn: 1500 food in 5000px radius (was 1000)
+- Replaced count-based food maintenance with maintainFoodAroundPlayer():
+  1. Counts food within visible radius of player
+  2. Despawns food beyond despawn radius (in-place array compaction)
+  3. Spawns food ahead (70%) + around (30%) player to maintain density
+- Updated src/lib/game-config.ts to match new config names
+- Verified: lint passes, no runtime errors, food pixels detected on canvas (green:1762, blue:412)
+
+Stage Summary:
+- Food is now unlimited — follows the player slither.io style
+- Density-based: 800 food within 5000px, food ahead of player, despawns behind
+- No more food clustering — food continuously repopulates as player moves
