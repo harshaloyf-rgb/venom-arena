@@ -17,8 +17,8 @@ import {
   FOOD_COUNT_TARGET, FOOD_SPAWN_WEIGHTS, FOOD_VALUES, FOOD_RADII,
   FOOD_COLORS, FOOD_GLOW_COLORS, FOOD_SPAWN_AREA_RADIUS, INITIAL_SPAWN_RADIUS,
   FOOD_RESPAWN_BATCH,
-  SNAKE_RADIUS, NECK_PROTECTION, SPAWN_PROTECTION_MS, SPATIAL_CELL_SIZE,
-  DEATH_FOOD_LARGE_DIVISOR, DEATH_FOOD_MEDIUM_DIVISOR, HEAD_ON_HEAD_BOOST_WINS,
+  SNAKE_RADIUS, SPAWN_PROTECTION_MS, SPATIAL_CELL_SIZE,
+  DEATH_FOOD_LARGE_DIVISOR, DEATH_FOOD_MEDIUM_DIVISOR,
   BOOST_DROP_INTERVAL, BOOST_MIN_BODY, BOOST_MIN_SCORE, BOOST_SHRINK_RATE,
   BOT_COUNT, BOT_MAX_TURN_RATE, BOT_START_SCORE_MIN, BOT_START_SCORE_MAX,
   BOT_FOOD_SCAN_RADIUS, BOT_EVADE_RADIUS, BOT_PREDICT_TICKS, BOT_WANDER_RATE,
@@ -577,14 +577,14 @@ export class ArenaRoom {
   // ── Collisions ───────────────────────────────────────────────────────
 
   private checkCollisions(now: number): void {
-    // Build body segment spatial hash
+    // Build body segment spatial hash (no neck protection — start from index 0)
     this.bodyHash.clear();
     const bodySegMap = new Map<string, string>();
 
     for (const [, snake] of this.snakes) {
       if (!snake.alive) continue;
       const len = snake.path.length;
-      for (let i = NECK_PROTECTION; i < len; i++) {
+      for (let i = 0; i < len; i++) {
         const sx = snake.path.getX(i);
         const sy = snake.path.getY(i);
         const key = `${snake.id}:${i}`;
@@ -594,17 +594,20 @@ export class ArenaRoom {
     }
 
     const deadSnakes = new Set<string>();
+    const DOT_DIST = 0.75;
 
-    // Head-to-body collision
+    // Head-to-body collision: black dot hits other snake's body
     for (const [, snake] of this.snakes) {
       if (!snake.alive || deadSnakes.has(snake.id)) continue;
-      const hx = snake.path.headX;
-      const hy = snake.path.headY;
+
+      // Black dot position (0.75 * bodyRadius from head center in direction of travel)
+      const dotX = snake.path.headX + Math.cos(snake.angle) * snake.bodyRadius * DOT_DIST;
+      const dotY = snake.path.headY + Math.sin(snake.angle) * snake.bodyRadius * DOT_DIST;
 
       // Spawn protection
       if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
-      const nearby = this.bodyHash.query(hx, hy, SNAKE_RADIUS * 2);
+      const nearby = this.bodyHash.query(dotX, dotY, SNAKE_RADIUS * 2);
       for (let i = 0; i < nearby.length; i++) {
         const entity = nearby[i];
         const key = entity.id as string;
@@ -614,16 +617,20 @@ export class ArenaRoom {
         const otherSnake = this.snakes.get(otherSnakeId);
         if (!otherSnake || !otherSnake.alive) continue;
 
-        if (distSq(hx, hy, entity.x, entity.y) <= COLLISION_DIST_SQ) {
+        if (distSq(dotX, dotY, entity.x, entity.y) <= COLLISION_DIST_SQ) {
           deadSnakes.add(snake.id);
-          // Record who killed whom
           this.killSnake(snake, otherSnakeId, otherSnake.name);
           break;
         }
       }
     }
 
-    // Head-on-head collision
+    // Head-on-head collision: black dot vs black dot
+    // Rules:
+    //   Neither boosting: Larger wins, smaller dies
+    //   Smaller boosting, larger steady: Smaller survives!
+    //   Both boosting: Larger wins
+    //   Tie (same length): Both die
     const aliveArr: ServerSnake[] = [];
     for (const [, s] of this.snakes) {
       if (s.alive && !deadSnakes.has(s.id) && s.path.length > 0) {
@@ -635,6 +642,9 @@ export class ArenaRoom {
       const a = aliveArr[i];
       if (deadSnakes.has(a.id)) continue;
 
+      const aDotX = a.path.headX + Math.cos(a.angle) * a.bodyRadius * DOT_DIST;
+      const aDotY = a.path.headY + Math.sin(a.angle) * a.bodyRadius * DOT_DIST;
+
       for (let j = i + 1; j < aliveArr.length; j++) {
         const b = aliveArr[j];
         if (deadSnakes.has(b.id)) continue;
@@ -643,24 +653,34 @@ export class ArenaRoom {
         if (now - a.spawnTime < SPAWN_PROTECTION_MS) continue;
         if (now - b.spawnTime < SPAWN_PROTECTION_MS) continue;
 
-        const dx = a.path.headX - b.path.headX;
-        const dy = a.path.headY - b.path.headY;
+        const bDotX = b.path.headX + Math.cos(b.angle) * b.bodyRadius * DOT_DIST;
+        const bDotY = b.path.headY + Math.sin(b.angle) * b.bodyRadius * DOT_DIST;
+
+        const dx = aDotX - bDotX;
+        const dy = aDotY - bDotY;
         if (dx * dx + dy * dy > COLLISION_DIST_SQ) continue;
 
         // Head-on-head: resolve by length + boost
         const lenA = a.path.length;
         const lenB = b.path.length;
+        const aBoost = a.boosting;
+        const bBoost = b.boosting;
 
         if (lenA > lenB) {
-          if (HEAD_ON_HEAD_BOOST_WINS && b.boosting && !a.boosting) {
+          // Larger is A
+          if (!aBoost && bBoost) {
+            // Larger steady, smaller boosting → smaller survives
             deadSnakes.add(a.id);
             this.killSnake(a, b.id, b.name);
           } else {
+            // (neither boosting) or (both boosting) → larger wins
             deadSnakes.add(b.id);
             this.killSnake(b, a.id, a.name);
           }
         } else if (lenB > lenA) {
-          if (HEAD_ON_HEAD_BOOST_WINS && a.boosting && !b.boosting) {
+          // Larger is B
+          if (!bBoost && aBoost) {
+            // Larger steady, smaller boosting → smaller survives
             deadSnakes.add(b.id);
             this.killSnake(b, a.id, a.name);
           } else {
@@ -668,6 +688,7 @@ export class ArenaRoom {
             this.killSnake(a, b.id, b.name);
           }
         } else {
+          // Tie: both die
           deadSnakes.add(a.id);
           deadSnakes.add(b.id);
           this.killSnake(a, b.id, b.name);

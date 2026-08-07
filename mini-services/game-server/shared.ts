@@ -434,7 +434,7 @@ export function getBotTarget(
     if (headDistSq > evadeR1_5sq) continue;
 
     const segLen = other.path.length;
-    for (let i = NECK_PROTECTION; i < segLen; i++) {
+    for (let i = 0; i < segLen; i++) {
       const sx = other.path.getX(i);
       const sy = other.path.getY(i);
       const dSq = distSq(hx, hy, sx, sy);
