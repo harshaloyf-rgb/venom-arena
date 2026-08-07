@@ -16,7 +16,7 @@ import { distSq } from './vec2';
 import { getBotTarget } from './bot-ai';
 import {
   // MOVEMENT
-  BASE_SPEED, BOOST_SPEED, SEGMENT_SPACING, START_LENGTH, MAX_SNAKE_LENGTH,
+  BASE_SPEED, BOOST_SPEED, SEGMENT_SPACING, START_LENGTH, LENGTH_PER_SCORE,
   MAX_TURN_RATE, computeBodyLength, computeBodyRadius,
   // FOOD
   FOOD_COUNT_TARGET, FOOD_SPAWN_WEIGHTS, FOOD_VALUES, FOOD_RADII,
@@ -788,6 +788,49 @@ function respawnBots(state: GameState, now: number): void {
       `bot-${now}-${i}`, BOT_NAMES[nameIdx], score, pos.x, pos.y, true, now
     );
     state.snakes.set(bot.id, bot);
+  }
+}
+
+/** Set debug score and immediately resize the path buffer to match.
+ *  Extends the path behind the tail in a straight line to reach the target length,
+ *  or trims if the new score produces a shorter snake. */
+export function setDebugScore(state: GameState, score: number): void {
+  const player = state.player;
+  if (!player) return;
+
+  player.score = score;
+  player.bodyRadius = computeBodyRadius(score);
+  player.boostCostAccum = 0;
+
+  const targetPathLen = Math.ceil(computeBodyLength(score) * SPACING_RATIO);
+  const currentLen = player.path.length;
+
+  if (targetPathLen > currentLen) {
+    // Extend path behind the tail in a straight line
+    const tailIdx = currentLen - 1;
+    const prevIdx = Math.max(0, tailIdx - 1);
+    const dx = player.path.getX(tailIdx) - player.path.getX(prevIdx);
+    const dy = player.path.getY(tailIdx) - player.path.getY(prevIdx);
+    const segLen = Math.sqrt(dx * dx + dy * dy) || BASE_SPEED;
+    const nx = (dx / segLen) * BASE_SPEED;
+    const ny = (dy / segLen) * BASE_SPEED;
+
+    let lastX = player.path.getX(tailIdx);
+    let lastY = player.path.getY(tailIdx);
+
+    player.path.ensureCapacity(targetPathLen + 10);
+
+    const needed = targetPathLen - currentLen;
+    for (let i = 0; i < needed; i++) {
+      lastX += nx;
+      lastY += ny;
+      player.path.appendTail(lastX, lastY);
+    }
+  } else if (targetPathLen < currentLen) {
+    // Trim path to new target length
+    while (player.path.length > targetPathLen) {
+      player.path.pop();
+    }
   }
 }
 

@@ -29,37 +29,34 @@ export const BASE_SPEED = 4.5;
 export const BOOST_SPEED = 8.0;
 
 /** Max angle change per tick for player steering (radians). Tuned for 60Hz ticks.
- *  Current: π*0.0375 → 0.118 rad/tick → 7.1 rad/s → 405°/s → U-turn in ~0.44s
- *  Responsive steering with tight turning capability. */
-export const MAX_TURN_RATE = Math.PI * 0.0375;
+ *  Current: π/15 → 0.209 rad/tick → 12.6 rad/s → 720°/s → U-turn in 0.25s
+ *  Very responsive steering — full 180° reversal in a quarter second. */
+export const MAX_TURN_RATE = Math.PI / 15;
 
 /** Distance between consecutive segment positions in the path history */
 export const SEGMENT_SPACING = 8;
 
-/** Growth coefficient for sqrt-based length curve.
- *  Formula: length = START_LENGTH + COEFF × √score
- *  Score 0→15  |  100→65  |  1K→173  |  10K→515  |  100K→1,596
- *  Grows fast early, naturally decelerates — different score ranges look distinct. */
-export const GROWTH_LENGTH_COEFF = 5;
+/** Score points required per additional body segment.
+ *  Formula: length = START_LENGTH + floor(score / LENGTH_PER_SCORE)
+ *  Score 0→15  |  100→35  |  1K→215  |  10K→2,015  |  100K→20,015
+ *  Linear, predictable growth — 1 extra segment every 5 points earned. */
+export const LENGTH_PER_SCORE = 5;
 
-/** Starting body segment count for new snakes */
+/** Starting body segment count for new snakes.
+ *  With LENGTH_PER_SCORE=5, the first visible growth happens at score 5 (length 16). */
 export const START_LENGTH = 15;
 
-/** Performance safety cap for snake body length (segment count).
- *  With sqrt growth (coeff=5), you'd need ~4M score to reach this.
- *  Set very high — no player should ever notice a ceiling.
- *  At 100K score: ~1,596 segments. At 1M: ~5,015 segments. */
-export const MAX_SNAKE_LENGTH = 10000;
+/** Removed: MAX_SNAKE_LENGTH.
+ *  Length now grows linearly with no hard cap (1 seg per 5 score).
+ *  Practical limit is rendering performance, not an arbitrary ceiling.
+ *  At 100K score: 20,015 segments. Server safety: path buffer auto-grows. */
 
-/** Compute visual body length (segments) from score using sqrt growth.
- *  Fast growth early, naturally decelerates — different score ranges look distinct.
- *  No player gets stuck at same size. Safety cap at MAX_SNAKE_LENGTH (practically unreachable).
- *  Score 0→15  |  100→65  |  1K→173  |  10K→515  |  100K→1,596  |  1M→5,015 */
+/** Compute visual body length (segments) from score using linear growth.
+ *  1 extra segment per LENGTH_PER_SCORE (5) score points.
+ *  Smooth, predictable growth — no sudden jumps.
+ *  Score 0→15  |  5→16  |  100→35  |  1K→215  |  10K→2,015  |  100K→20,015 */
 export function computeBodyLength(score: number): number {
-  return Math.min(
-    Math.floor(START_LENGTH + GROWTH_LENGTH_COEFF * Math.sqrt(score)),
-    MAX_SNAKE_LENGTH,
-  );
+  return Math.floor(START_LENGTH + score / LENGTH_PER_SCORE);
 }
 
 /** Compute visual body radius from score using uncapped sqrt curve.
@@ -178,8 +175,9 @@ export const BOT_START_SCORE_MIN = 10;
 /** Bot starting score maximum */
 export const BOT_START_SCORE_MAX = 80;
 
-/** Bot max turn rate (radians per tick, ~60% of player rate for natural feel) */
-export const BOT_MAX_TURN_RATE = Math.PI * 0.0225;
+/** Bot max turn rate (radians per tick, ~60% of player rate for natural feel).
+ *  Player: π/15 ≈ 0.209, Bot: π*0.04 ≈ 0.126 (60% ratio preserved). */
+export const BOT_MAX_TURN_RATE = Math.PI * 0.04;
 
 /** Bot food scan radius (how far a bot looks for food) */
 export const BOT_FOOD_SCAN_RADIUS = 300;

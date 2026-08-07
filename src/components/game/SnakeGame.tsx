@@ -27,7 +27,7 @@ import {
   SNAKE_RADIUS_MIN,
   SNAKE_RADIUS_GROWTH_RATE,
 } from '@/lib/snake';
-import { createInitialState, gameTick, respawnPlayer, type PlayerSkinOverride } from '@/lib/snake/engine';
+import { createInitialState, gameTick, respawnPlayer, setDebugScore, type PlayerSkinOverride } from '@/lib/snake/engine';
 import { createCamera, updateCamera, getViewport, worldToScreen } from '@/lib/snake/camera';
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, getPlayerSkinId, registerSkinAsset } from '@/lib/snake/skin-registry';
@@ -104,8 +104,7 @@ export default function SnakeGame({
   // ── Leaderboard updater (offline) ──
 
   const handleDebugSetScore = useCallback((val: number) => {
-    const s = gameStateRef.current?.player;
-    if (s) s.score = val;
+    if (gameStateRef.current) setDebugScore(gameStateRef.current, val);
   }, []);
 
   const updateLeaderboard = useCallback((state: GameState) => {
@@ -780,8 +779,8 @@ function DebugPanel({
         {/* Growth formula reference */}
         <div className="text-[9px] text-white/20 font-mono leading-relaxed border-t border-white/5 pt-2">
           radius = {SNAKE_RADIUS_MIN} + {SNAKE_RADIUS_GROWTH_RATE} x sqrt(score)<br />
-          length = 15 + 5 x sqrt(score)<br />
-          collision hitbox = {SNAKE_RADIUS_MIN}px (constant)
+          length = 15 + score / 5 (1 seg per 5 pts)<br />
+          turn: U-turn in 0.25s | collision = {SNAKE_RADIUS_MIN}px
         </div>
       </div>
     </div>
