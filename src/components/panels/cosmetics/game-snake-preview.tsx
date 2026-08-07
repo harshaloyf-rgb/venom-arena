@@ -308,11 +308,47 @@ export function GameSnakePreview({
       posRef.current.bufCount = bufLen;
     }
 
-    // Pre-compute colors for simple mode (avoids per-frame lightenHex/darkenHex)
-    const bodyLight = !isLabMode ? lightenHex(resolvedBody, G.lighten) : '';
-    const bodyDark = !isLabMode ? darkenHex(resolvedBody, G.darken) : '';
+    // Pre-compute colors for ALL modes (avoids per-frame lightenHex/darkenHex)
     const headLight = lightenHex(resolvedHead, G.lighten);
     const headDark = darkenHex(resolvedHead, G.darken);
+
+    // For non-lab (single color) — pre-compute once
+    const bodyLight = !isLabMode ? lightenHex(resolvedBody, G.lighten) : '';
+    const bodyDark = !isLabMode ? darkenHex(resolvedBody, G.darken) : '';
+
+    // For lab mode — pre-compute lighten/darken for each unique color
+    const labColorMap = new Map<string, { light: string; dark: string }>();
+    if (isLabMode && effectiveColors) {
+      const seen = new Set<string>();
+      for (const c of effectiveColors) {
+        if (!seen.has(c)) {
+          seen.add(c);
+          labColorMap.set(c, { light: lightenHex(c, G.lighten), dark: darkenHex(c, G.darken) });
+        }
+      }
+    }
+
+    // Cache equipped cosmetics once (avoid localStorage read every frame)
+    const cachedEquipped = readEquippedCosmetics();
+    const hasCustomEyesCached = cachedEquipped.eyes && cachedEquipped.eyes !== 'none';
+
+    // Pre-cache cosmetic draw functions (avoid getCosmeticById lookup every frame)
+    const cosmeticSlots: Array<'wings'|'flag'|'ears'|'hat'|'goggles'|'mouth'|'nose'|'eyes'> =
+      ['wings', 'flag', 'ears', 'hat', 'goggles', 'mouth', 'nose', 'eyes'];
+    const cachedCosmetics: Array<{ draw: (ctx: CanvasRenderingContext2D, p: any) => void } | null> = [];
+    for (const slot of cosmeticSlots) {
+      const id = cachedEquipped[slot as keyof EquippedCosmetics];
+      if (!id || id === 'none') { cachedCosmetics.push(null); continue; }
+      cachedCosmetics.push(getCosmeticById(id) ?? null);
+    }
+
+    // Pre-compute taper radii (avoid per-frame math for lab mode)
+    const precomputedTaper = new Float64Array(segments);
+    if (isLabMode) {
+      for (let i = 0; i < segments; i++) {
+        precomputedTaper[i] = computeTaperRadius(i, segments, effectiveTaper);
+      }
+    }
 
     // Capture current visual props in closure
     const curColors = effectiveColors;
@@ -480,15 +516,16 @@ export function GameSnakePreview({
             segColor = curBodyCol;
           }
           let rMul = 1.0;
-          if (curLabMode) rMul = computeTaperRadius(i, segments, curTaper);
+          if (curLabMode) rMul = precomputedTaper[i];
           const r = segR * rMul;
           const segShape = curLabMode ? resolveShapeStyle(curBodyStyle, i) : 'circle' as const;
 
-          if (segShape === 'circle' && !curGlow && !curLabMode) {
+          if (segShape === 'circle' && !curGlow) {
             const grad = ctx.createRadialGradient(p.x - r * 0.3, p.y - r * 0.3, r * 0.1, p.x, p.y, r);
-            grad.addColorStop(0, bodyLight);
+            const cm = curLabMode ? labColorMap.get(segColor) : null;
+            grad.addColorStop(0, cm ? cm.light : bodyLight);
             grad.addColorStop(G.lightenStop, segColor);
-            grad.addColorStop(1, bodyDark);
+            grad.addColorStop(1, cm ? cm.dark : bodyDark);
             ctx.fillStyle = grad;
             ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
           } else {
@@ -561,15 +598,16 @@ export function GameSnakePreview({
             segColor = curBodyCol;
           }
           let rMul = 1.0;
-          if (curLabMode) rMul = computeTaperRadius(i, segments, curTaper);
+          if (curLabMode) rMul = precomputedTaper[i];
           const r = segR * rMul;
           const segShape = curLabMode ? resolveShapeStyle(curBodyStyle, i) : 'circle' as const;
 
           if (segShape === 'circle' && !curGlow) {
             const grad = ctx.createRadialGradient(p.x - r * 0.3, p.y - r * 0.3, r * 0.1, p.x, p.y, r);
-            grad.addColorStop(0, lightenHex(segColor, G.lighten));
+            const cm = curLabMode ? labColorMap.get(segColor) : null;
+            grad.addColorStop(0, cm ? cm.light : bodyLight);
             grad.addColorStop(G.lightenStop, segColor);
-            grad.addColorStop(1, darkenHex(segColor, G.darken));
+            grad.addColorStop(1, cm ? cm.dark : bodyDark);
             ctx.fillStyle = grad;
             ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
           } else {
@@ -589,18 +627,15 @@ export function GameSnakePreview({
           ctx.shadowOffsetY = hr * G.shadowOffY;
         }
         const hg = ctx.createRadialGradient(headX - hr * 0.3, headY - hr * 0.3, hr * 0.05, headX, headY, hr);
-        hg.addColorStop(0, lightenHex(headCol, G.lighten));
+        hg.addColorStop(0, headLight);
         hg.addColorStop(G.lightenStop, headCol);
-        hg.addColorStop(1, darkenHex(headCol, G.darken));
+        hg.addColorStop(1, headDark);
         ctx.fillStyle = hg;
         ctx.beginPath(); ctx.arc(headX, headY, hr, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
 
-        // Responsive eyes — read equipped cosmetics ONCE per frame
-        const eq = readEquippedCosmetics();
-        const hasCustomEyes = eq.eyes && eq.eyes !== 'none';
-
-        if (!hasCustomEyes) {
+        // Eyes (use cached hasCustomEyes, no per-frame localStorage)
+        if (!hasCustomEyesCached) {
           const eyeOff = hr * G.eyeOff;
           const eyeR = hr * G.eyeR;
           const pupR = eyeR * G.pupR;
@@ -645,15 +680,10 @@ export function GameSnakePreview({
           }
         }
 
-        // All equipped face cosmetics (use cached eq — no extra localStorage read)
-        const cosmeticSlots: Array<'wings'|'flag'|'ears'|'hat'|'goggles'|'mouth'|'nose'|'eyes'> =
-          ['wings', 'flag', 'ears', 'hat', 'goggles', 'mouth', 'nose', 'eyes'];
+        // Face cosmetics (pre-cached draw functions, no per-frame lookup)
         const cosParams = { hx: headX, hy: headY, hr, angle, time: performance.now(), boosting: false };
-        for (const slot of cosmeticSlots) {
-          const id = eq[slot as keyof EquippedCosmetics];
-          if (!id || id === 'none') continue;
-          const cosmetic = getCosmeticById(id);
-          if (cosmetic) cosmetic.draw(ctx, cosParams);
+        for (let ci = 0; ci < cachedCosmetics.length; ci++) {
+          if (cachedCosmetics[ci]) cachedCosmetics[ci]!.draw(ctx, cosParams);
         }
       }
 
