@@ -30,6 +30,28 @@ function bodyDrawStep(bodyRadius: number): number {
   return Math.max(bodyRadius * 1.5, 8);
 }
 
+/** Smoothed visual segment count per snake (prevents score-driven jitter).
+ * Keyed by snake.id. Lerps toward target at ~10% per frame. */
+const _smoothSegs = new Map<string, number>();
+
+/** Clean up smoothed segment entries for a snake. */
+export function clearSmoothedSegs(snakeId: string): void {
+  _smoothSegs.delete(snakeId);
+}
+
+/** Get smoothed maxSegs — lerps toward raw target, returns rounded int. */
+function getSmoothedMaxSegs(snakeId: string, rawMaxSegs: number): number {
+  const prev = _smoothSegs.get(snakeId);
+  if (prev === undefined) {
+    _smoothSegs.set(snakeId, rawMaxSegs);
+    return rawMaxSegs;
+  }
+  // Lerp at 10% per frame — takes ~23 frames (0.38s) to converge 90%
+  const smoothed = prev + (rawMaxSegs - prev) * 0.1;
+  _smoothSegs.set(snakeId, smoothed);
+  return Math.round(smoothed);
+}
+
 // ─── Particle type (render-side) ────────────────────────────────────────────
 
 interface RenderParticle {
@@ -271,7 +293,8 @@ export function renderSnakeAtlas(
   const logicalLen = computeBodyLength(snake.score);
   const visualLen = logicalLen * SEGMENT_SPACING;
   const step = bodyDrawStep(snake.bodyRadius);
-  const maxSegs = Math.ceil(visualLen / step);
+  const rawMaxSegs = Math.ceil(visualLen / step);
+  const maxSegs = getSmoothedMaxSegs(snake.id, rawMaxSegs);
 
   // Culling
   const cullMargin = visualLen + 100;
@@ -515,7 +538,8 @@ export function renderSnakeFallback(
   const logicalLen = computeBodyLength(snake.score);
   const visualLen = logicalLen * SEGMENT_SPACING;
   const step = bodyDrawStep(snake.bodyRadius);
-  const maxSegs = Math.ceil(visualLen / step);
+  const rawMaxSegs = Math.ceil(visualLen / step);
+  const maxSegs = getSmoothedMaxSegs(snake.id, rawMaxSegs);
 
   // Culling
   const cullMargin = visualLen + 100;

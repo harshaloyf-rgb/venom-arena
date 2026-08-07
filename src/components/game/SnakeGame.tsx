@@ -12,7 +12,7 @@ import {
   drawStarChips as drawStarChipsFromRenderer,
   drawExtractionZone as drawExtractionZoneFromRenderer,
 } from './renderer';
-import { renderSnakeAtlas, renderSnakeFallback, cleanupSnakeParticles } from './render-snake-atlas';
+import { renderSnakeAtlas, renderSnakeFallback, cleanupSnakeParticles, clearSmoothedSegs } from './render-snake-atlas';
 import {
   type GameState,
   type Camera,
@@ -884,6 +884,7 @@ function DebugPanel({
 
 function cleanupDeadSnakeParticles(snakeId: string): void {
   cleanupSnakeParticles(snakeId);
+  clearSmoothedSegs(snakeId);
 }
 
 // ============================================================================
@@ -1020,7 +1021,7 @@ function renderableToSnake(rs: RenderableSnake, isPlayer: boolean, now: number, 
     headColor: rs.headColor,
     lastBoostDrop: 0,
     targetAngle: targetAngle ?? rs.angle,
-    spiral: { active: false, startAngle: 0, theta: 0, ticksElapsed: 0, a: 1, b: 0.05, direction: 1 },
+    spiral: { active: false, consecutiveTurns: 0, ticksElapsed: 0, direction: 1 },
     bodyRadius: rs.bodyRadius,
     boosting: rs.boosting,
     skinId: rs.skinId,
