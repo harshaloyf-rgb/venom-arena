@@ -509,6 +509,23 @@ export function renderSnakeAtlas(
       ctx.textBaseline = 'bottom';
       ctx.fillText(snake.name, hsx, hsy - headDrawSize / 2 - 8 * zoom);
     }
+
+    // ── Head collision point: straight line at the nose ──
+    ctx.save();
+    ctx.globalAlpha = 0.7;
+    ctx.strokeStyle = 'rgba(220, 38, 38, 0.9)';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    const headR = headDrawSize / 2;
+    const noseX = hsx + Math.cos(snake.angle) * headR;
+    const noseY = hsy + Math.sin(snake.angle) * headR;
+    const perpAngle = snake.angle + Math.PI / 2;
+    const cpHalf = headR * 0.7;
+    ctx.beginPath();
+    ctx.moveTo(noseX - Math.cos(perpAngle) * cpHalf, noseY - Math.sin(perpAngle) * cpHalf);
+    ctx.lineTo(noseX + Math.cos(perpAngle) * cpHalf, noseY + Math.sin(perpAngle) * cpHalf);
+    ctx.stroke();
+    ctx.restore();
   }
 
   // ── Render particles for legendary snakes ──
@@ -783,6 +800,22 @@ export function renderSnakeFallback(
       ctx.textBaseline = 'bottom';
       ctx.fillText(snake.name, headScreen.x, headScreen.y - headRadius - 8 * zoom);
     }
+
+    // ── Head collision point: straight line at the nose ──
+    ctx.save();
+    ctx.globalAlpha = 0.7;
+    ctx.strokeStyle = 'rgba(220, 38, 38, 0.9)';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    const fbNoseX = headScreen.x + Math.cos(snake.angle) * headRadius;
+    const fbNoseY = headScreen.y + Math.sin(snake.angle) * headRadius;
+    const fbPerpAngle = snake.angle + Math.PI / 2;
+    const fbCpHalf = headRadius * 0.7;
+    ctx.beginPath();
+    ctx.moveTo(fbNoseX - Math.cos(fbPerpAngle) * fbCpHalf, fbNoseY - Math.sin(fbPerpAngle) * fbCpHalf);
+    ctx.lineTo(fbNoseX + Math.cos(fbPerpAngle) * fbCpHalf, fbNoseY + Math.sin(fbPerpAngle) * fbCpHalf);
+    ctx.stroke();
+    ctx.restore();
   }
 
   ctx.globalAlpha = 1;
