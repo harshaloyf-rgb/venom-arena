@@ -17,19 +17,18 @@ export function resolveShapeStyle(
   index: number,
 ): SegShape {
   if (shapeStyle === 'dragon')
-    return index === 0 ? 'circle' : index % 2 === 1 ? 'spike' : 'circle';
+    return index % 2 === 1 ? 'spike' : 'circle';
   if (shapeStyle === 'armored')
-    return index === 0 ? 'circle' : index % 2 === 1 ? 'square' : 'circle';
+    return index % 2 === 1 ? 'square' : 'circle';
   if (shapeStyle === 'crystal')
-    return index === 0 ? 'circle' : index % 2 === 1 ? 'diamond' : 'circle';
+    return index % 2 === 1 ? 'diamond' : 'circle';
   if (shapeStyle === 'obsidian') return 'spike';
   if (shapeStyle === 'basilisk') return 'diamond';
   if (shapeStyle === 'stellar')
-    return index === 0 ? 'circle' : index % 2 === 1 ? 'star' : 'circle';
+    return index % 2 === 1 ? 'star' : 'circle';
   if (shapeStyle === 'fortress') return 'hexagon';
-  if (shapeStyle === 'stingray')
-    return index === 0 ? 'circle' : 'triangle';
-  if (shapeStyle === 'phantom') return index === 0 ? 'circle' : 'ring';
+  if (shapeStyle === 'stingray') return 'triangle';
+  if (shapeStyle === 'phantom') return 'ring';
   return 'circle'; // smooth or default
 }
 
@@ -52,13 +51,13 @@ export function generateCustomSegments(
 
     let sizeScale = 1.0;
     if (taperStyle === 'uniform') {
-      sizeScale = i === 0 ? 1.3 : 1.0;
+      sizeScale = 1.0;
     } else if (taperStyle === 'natural') {
-      sizeScale = i === 0 ? 1.35 : Math.max(0.65, 1.25 - (i / totalNodes) * 0.55);
+      sizeScale = Math.max(0.65, 1.25 - (i / totalNodes) * 0.55);
     } else if (taperStyle === 'wave') {
-      sizeScale = i === 0 ? 1.3 : 1.0 + Math.sin(i * 0.95) * 0.22;
+      sizeScale = 1.0 + Math.sin(i * 0.95) * 0.22;
     } else if (taperStyle === 'heavy') {
-      sizeScale = i === 0 ? 1.6 : Math.max(0.55, 1.35 - (i / totalNodes) * 0.8);
+      sizeScale = Math.max(0.55, 1.35 - (i / totalNodes) * 0.8);
     }
 
     result.push({
@@ -132,14 +131,6 @@ export function computeTaperRadius(
   totalSegments: number,
   taperStyle: TaperStyle,
 ): number {
-  if (index === 0) {
-    switch (taperStyle) {
-      case 'uniform': return 1.3;
-      case 'natural': return 1.35;
-      case 'wave':    return 1.3;
-      case 'heavy':   return 1.6;
-    }
-  }
   const t = index / totalSegments;
   switch (taperStyle) {
     case 'uniform': return 1.0;
