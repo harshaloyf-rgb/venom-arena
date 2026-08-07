@@ -988,40 +988,34 @@ function killSnake(state: GameState, snake: Snake): void {
   const step = Math.max(1, Math.floor(segLen / totalFood));
   let foodIdx = 0;
 
-  // Large food (pink)
+  // Large food (pink) — placed exactly on body path
   for (let i = 0; i < largeCount; i++) {
     const si = Math.min(foodIdx * step, segLen - 1);
-    const ox = (Math.random() - 0.5) * 20;
-    const oy = (Math.random() - 0.5) * 20;
     state.foods.push({
       id: state.nextFoodId++,
-      x: snake.path.getX(si) + ox, y: snake.path.getY(si) + oy,
+      x: snake.path.getX(si), y: snake.path.getY(si),
       size: 'large', value: FOOD_VALUES[2], radius: FOOD_RADII[2],
       color: FOOD_COLORS[2], glowColor: FOOD_GLOW_COLORS[2],
     });
     foodIdx++;
   }
-  // Medium food (blue)
+  // Medium food (blue) — placed exactly on body path
   for (let i = 0; i < medCount; i++) {
     const si = Math.min(foodIdx * step, segLen - 1);
-    const ox = (Math.random() - 0.5) * 20;
-    const oy = (Math.random() - 0.5) * 20;
     state.foods.push({
       id: state.nextFoodId++,
-      x: snake.path.getX(si) + ox, y: snake.path.getY(si) + oy,
+      x: snake.path.getX(si), y: snake.path.getY(si),
       size: 'medium', value: FOOD_VALUES[1], radius: FOOD_RADII[1],
       color: FOOD_COLORS[1], glowColor: FOOD_GLOW_COLORS[1],
     });
     foodIdx++;
   }
-  // Small food (green)
+  // Small food (green) — placed exactly on body path
   for (let i = 0; i < smallCount; i++) {
     const si = Math.min(foodIdx * step, segLen - 1);
-    const ox = (Math.random() - 0.5) * 20;
-    const oy = (Math.random() - 0.5) * 20;
     state.foods.push({
       id: state.nextFoodId++,
-      x: snake.path.getX(si) + ox, y: snake.path.getY(si) + oy,
+      x: snake.path.getX(si), y: snake.path.getY(si),
       size: 'small', value: FOOD_VALUES[0], radius: FOOD_RADII[0],
       color: FOOD_COLORS[0], glowColor: FOOD_GLOW_COLORS[0],
     });
