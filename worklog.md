@@ -974,3 +974,30 @@ Stage Summary:
 - No self-collision, no neck protection
 - Both offline engine and server updated consistently
 - Lint passes clean
+
+---
+Task ID: bodyradius-fix-and-obstacles
+Agent: Main
+Task: Fix online bodyRadius bug + redesign obstacles with hairline gaps
+
+Work Log:
+- Investigated bodyRadius growth mechanism: computeBodyRadius(score) exists in config.ts but was never called in game-server
+- Found offline engine.ts correctly updates bodyRadius at line 524
+- Found online game-state.ts hardcoded bodyRadius = SNAKE_RADIUS (=8) on spawn/respawn, never updated
+- Added SNAKE_RADIUS_MIN (6) and SNAKE_RADIUS_GROWTH_RATE (0.08) to shared.ts
+- Added computeBodyRadius() function to shared.ts
+- Updated game-state.ts to import computeBodyRadius and use it on spawn + every tick
+- Removed old test obstacles (thick 8px walls with 10-18px gaps, diagonal walls)
+- Designed new obstacle system: 6 concentric rectangular rings at 250-2100px distances
+- Each ring has 1-2 gaps per wall, sizes range from 1px (death trap) to 20px (comfortable)
+- Gaps < 12px are impassable (SNAKE_RADIUS collision = 6px, need 2× clearance)
+- Gaps 12-20px are passable with precision alignment
+- Updated wall renderer: thin 3px core + red glow + bright center line (dangerous look)
+- Verified 60 obstacles generate and render correctly (3827 red pixels confirmed)
+- Lint passes clean
+
+Stage Summary:
+- Online bodyRadius now updates every tick based on score (matching offline behavior)
+- 60 wall segments across 6 rings with gaps 1-20px
+- Collision: < 12px gaps = death traps, 12-20px gaps = passable with skill
+- Wall visual: thin red hairlines with glow effect
