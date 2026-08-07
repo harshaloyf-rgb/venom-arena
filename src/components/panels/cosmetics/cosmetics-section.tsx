@@ -83,10 +83,10 @@ export function CosmeticsSection({
           key={activeSkinId}
           skinId={activeSkinId}
           width={480}
-          height={220}
-          segments={18}
+          height={260}
+          segments={22}
           speed={1.2}
-          scale={1.0}
+          scale={1.1}
           responsive
         />
       </div>

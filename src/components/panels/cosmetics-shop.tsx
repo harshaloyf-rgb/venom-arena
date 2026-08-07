@@ -624,11 +624,11 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
                 bodyStyle={bodyStyle}
                 taperStyle={taperStyle}
                 glow={glowEnabled}
-                width={450}
-                height={180}
-                segments={20}
+                width={480}
+                height={220}
+                segments={24}
                 speed={1.2}
-                scale={1.0}
+                scale={1.1}
               />
             </div>
 
