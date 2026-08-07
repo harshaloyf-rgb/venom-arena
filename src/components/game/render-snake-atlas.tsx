@@ -396,14 +396,14 @@ export function renderSnakeAtlas(
     ctx.restore();
   }
 
-  // ── Collision Points: red circles on 2nd segment to 2nd-last segment ──
-  if (walked.count > 3) {
+  // ── Collision Points: red circles on all body segments (1st body to 2nd-last) ──
+  if (walked.count > 2) {
     ctx.save();
     ctx.globalAlpha = 0.7;
     ctx.fillStyle = '#ef4444';
     ctx.strokeStyle = 'rgba(220, 38, 38, 0.9)';
     ctx.lineWidth = 2;
-    for (let i = 1; i <= walked.count - 2; i++) {
+    for (let i = 0; i <= walked.count - 2; i++) {
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
@@ -704,14 +704,14 @@ export function renderSnakeFallback(
   // Reset shadow after drawing body
   ctx.restore();
 
-  // ── Collision Points: red circles on 2nd segment to 2nd-last segment ──
-  if (walked.count > 3) {
+  // ── Collision Points: red circles on all body segments (1st body to 2nd-last) ──
+  if (walked.count > 2) {
     ctx.save();
     ctx.globalAlpha = 0.7;
     ctx.fillStyle = '#ef4444';
     ctx.strokeStyle = 'rgba(220, 38, 38, 0.9)';
     ctx.lineWidth = 2;
-    for (let i = 1; i <= walked.count - 2; i++) {
+    for (let i = 0; i <= walked.count - 2; i++) {
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
