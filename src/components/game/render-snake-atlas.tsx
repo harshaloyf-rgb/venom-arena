@@ -839,6 +839,11 @@ function drawCollisionChain(
     ctx.lineTo(hp.x + Math.cos(hp.a) * hHalf, hp.y + Math.sin(hp.a) * hHalf);
     ctx.lineWidth = 2.5;
     ctx.stroke();
+    // Black dot at front end of diameter
+    ctx.fillStyle = '#000000';
+    ctx.beginPath();
+    ctx.arc(hp.x + Math.cos(hp.a) * hHalf, hp.y + Math.sin(hp.a) * hHalf, 2.5, 0, Math.PI * 2);
+    ctx.fill();
     ctx.lineWidth = 1.8; // restore
   }
 
