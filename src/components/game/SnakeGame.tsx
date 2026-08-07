@@ -299,6 +299,10 @@ export default function SnakeGame({
       const now = Date.now();
       const inputState = input.getState();
 
+      // ── Frame elapsed (for extraction progress, both modes) ──
+      const prevFrameTimeRef = lastTimeRef.current || timestamp;
+      const frameElapsed = Math.min(timestamp - prevFrameTimeRef, 100);
+
       // ── External boost: wire UI button into input handler ──
       input.externalBoost = externalBoostRef.current;
 
@@ -320,11 +324,12 @@ export default function SnakeGame({
           extractLastAngleRef.current = inputState.targetAngle;
         } else {
           // Accumulate progress: 3000ms = 1.0
-          extractProgressRef.current += elapsed / 3000;
+          extractProgressRef.current += frameElapsed / 3000;
           if (extractProgressRef.current >= 1.0) {
             extractProgressRef.current = 0;
             extractActiveRef.current = false;
-            // TODO: extraction complete callback
+            // Successful extraction — exit to arena screen
+            if (onExit) onExit();
           }
         }
       } else {
