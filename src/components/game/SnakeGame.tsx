@@ -27,7 +27,7 @@ import {
   SNAKE_RADIUS_MIN,
   SNAKE_RADIUS_GROWTH_RATE,
 } from '@/lib/snake';
-import { createInitialState, gameTick, respawnPlayer, setDebugScore, activateExtractionZone, type PlayerSkinOverride } from '@/lib/snake/engine';
+import { createInitialState, gameTick, respawnPlayer, setDebugScore, type PlayerSkinOverride } from '@/lib/snake/engine';
 import { createCamera, updateCamera, getViewport, worldToScreen } from '@/lib/snake/camera';
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, getPlayerSkinId, registerSkinAsset } from '@/lib/snake/skin-registry';
@@ -104,8 +104,10 @@ export default function SnakeGame({
   // External boost state (from UI button)
   const externalBoostRef = useRef(false);
 
-  // Extraction zone tracking
-  const [extractionActive, setExtractionActive] = useState(false);
+  // Extraction progress tracking
+  const extractProgressRef = useRef(0);
+  const extractLastAngleRef = useRef(0);
+  const extractActiveRef = useRef(false);
 
   // ── Leaderboard updater (offline) ──
 
@@ -160,28 +162,6 @@ export default function SnakeGame({
     setOnlineError(null);
     // The useEffect will re-trigger connect on state change
   }, []);
-
-  // ── Extract: activate extraction zone at player's position ──
-
-  const handleExtract = useCallback(() => {
-    if (effectiveMode !== 'offline') return;
-    const state = gameStateRef.current;
-    if (!state?.player) return;
-    if (state.extractionZone.active) return;
-    if (state.player.score < 50) return;
-    // Place extraction zone at player's current head position
-    const hx = state.player.path.headX;
-    const hy = state.player.path.headY;
-    activateExtractionZone(state, hx, hy);
-    setExtractionActive(true);
-    // Auto-deactivate after 30 seconds
-    setTimeout(() => {
-      if (gameStateRef.current) {
-        gameStateRef.current.extractionZone.active = false;
-      }
-      setExtractionActive(false);
-    }, 30000);
-  }, [effectiveMode]);
 
   // ── Main effect: game loop + online/offline setup ──
 
@@ -319,9 +299,37 @@ export default function SnakeGame({
       const now = Date.now();
       const inputState = input.getState();
 
-      // Merge external boost (from UI button) into input state
-      if (externalBoostRef.current) {
-        inputState.boosting = true;
+      // ── External boost: wire UI button into input handler ──
+      input.externalBoost = externalBoostRef.current;
+
+      // ── Extraction progress tracking (both modes) ──
+      const isExtracting = input.isExtracting();
+      if (isExtracting && !isDeadRef.current && !isDeadOnlineRef.current) {
+        if (!extractActiveRef.current) {
+          // Just started extracting — lock the current angle
+          extractActiveRef.current = true;
+          extractProgressRef.current = 0;
+          extractLastAngleRef.current = inputState.targetAngle;
+        }
+        // Check direction change (any angle difference resets progress)
+        const angleDelta = Math.abs(inputState.targetAngle - extractLastAngleRef.current);
+        const wrappedDelta = Math.min(angleDelta, Math.PI * 2 - angleDelta);
+        if (wrappedDelta > 0.05) {
+          // Direction changed — reset progress, lock new angle
+          extractProgressRef.current = 0;
+          extractLastAngleRef.current = inputState.targetAngle;
+        } else {
+          // Accumulate progress: 3000ms = 1.0
+          extractProgressRef.current += elapsed / 3000;
+          if (extractProgressRef.current >= 1.0) {
+            extractProgressRef.current = 0;
+            extractActiveRef.current = false;
+            // TODO: extraction complete callback
+          }
+        }
+      } else {
+        extractActiveRef.current = false;
+        extractProgressRef.current = 0;
       }
 
       // Dismiss controls on first input (both modes)
@@ -390,6 +398,11 @@ export default function SnakeGame({
         }
         if (state.player && state.player.alive) {
           renderSnakeAtlas(ctx, state.player, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY);
+        }
+
+        // Extraction progress ring on snake head
+        if (extractActiveRef.current && extractProgressRef.current > 0 && state.player && state.player.alive) {
+          drawExtractRing(ctx, state.player, cameraRef.current, viewport, extractProgressRef.current);
         }
 
         // HUD, controls, minimap, death overlay
@@ -492,6 +505,12 @@ export default function SnakeGame({
             const adapted = renderableToSnake(rs, false, now);
             renderSnakeFallback(ctx, adapted, camera, viewport, now);
           }
+        }
+
+        // Extraction progress ring on snake head (online)
+        if (extractActiveRef.current && extractProgressRef.current > 0 && playerSnake?.alive) {
+          const adapted = renderableToSnake(playerSnake, true, now, localTargetAngle);
+          drawExtractRing(ctx, adapted, camera, viewport, extractProgressRef.current);
         }
 
         // ── HUD ──
@@ -673,26 +692,8 @@ export default function SnakeGame({
         ))}
       </div>
 
-      {/* ── Bottom Action Buttons ── */}
-      <div className="absolute bottom-6 left-0 right-0 z-10 flex items-end justify-between px-5 pointer-events-none">
-        {/* Extract Button */}
-        {effectiveMode === 'offline' && (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleExtract(); }}
-            disabled={extractionActive || isDead}
-            className={`pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-xl border font-bold text-sm transition-all duration-200 select-none cursor-pointer touch-manipulation
-              ${extractionActive
-                ? 'bg-amber-500/20 border-amber-500/40 text-amber-300 opacity-60 cursor-not-allowed'
-                : isDead
-                  ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
-                  : 'bg-amber-500/15 border-amber-500/30 text-amber-400 hover:bg-amber-500/25 hover:border-amber-500/50 active:scale-95'
-              }`}
-          >
-            <CircleDot className="w-5 h-5" />
-            <span>Extract</span>
-          </button>
-        )}
-
+      {/* ── Bottom Action Buttons (stacked left) ── */}
+      <div className="absolute bottom-6 left-5 z-10 flex flex-col gap-3 pointer-events-none">
         {/* Boost Button (hold to boost) */}
         <button
           onPointerDown={(e) => { e.stopPropagation(); externalBoostRef.current = true; }}
@@ -708,6 +709,23 @@ export default function SnakeGame({
         >
           <Zap className="w-5 h-5" />
           <span>Boost</span>
+        </button>
+
+        {/* Extract Button (hold to extract) */}
+        <button
+          onPointerDown={(e) => { e.stopPropagation(); inputRef.current?.setExternalExtract(true); }}
+          onPointerUp={(e) => { e.stopPropagation(); inputRef.current?.setExternalExtract(false); }}
+          onPointerLeave={() => { inputRef.current?.setExternalExtract(false); }}
+          onPointerCancel={() => { inputRef.current?.setExternalExtract(false); }}
+          disabled={isDead}
+          className={`pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-xl border font-bold text-sm transition-all duration-200 select-none touch-manipulation
+            ${isDead
+              ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
+              : 'bg-amber-500/15 border-amber-500/30 text-amber-400 hover:bg-amber-500/25 hover:border-amber-500/50 active:scale-95'
+            }`}
+        >
+          <CircleDot className="w-5 h-5" />
+          <span>Extract</span>
         </button>
       </div>
     </div>
@@ -1186,6 +1204,55 @@ function drawConnectionOverlay(
     ctx.font = '18px sans-serif';
     ctx.fillText('Connection error — see panel for details', width / 2, height / 2);
   }
+}
+
+// ============================================================================
+// Extraction progress ring — drawn on snake head (white → green)
+// ============================================================================
+
+function drawExtractRing(
+  ctx: CanvasRenderingContext2D,
+  snake: Snake,
+  camera: Camera,
+  viewport: Viewport,
+  progress: number,
+): void {
+  const hx = snake.path.headX;
+  const hy = snake.path.headY;
+  const { x: sx, y: sy } = worldToScreen(hx, hy, camera, viewport.width, viewport.height);
+  const zoom = camera.zoom;
+  const ringRadius = (snake.bodyRadius + 10) * zoom;
+  const clampedProgress = Math.max(0, Math.min(1, progress));
+
+  // Background ring (dim track)
+  ctx.beginPath();
+  ctx.arc(sx, sy, ringRadius, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+  ctx.lineWidth = 3 * zoom;
+  ctx.stroke();
+
+  // Progress arc: white → green
+  const startAngle = -Math.PI / 2;
+  const endAngle = startAngle + clampedProgress * Math.PI * 2;
+  const r = Math.round(255 - clampedProgress * 150);   // 255 → 105
+  const g = Math.round(255 * clampedProgress + 200 * (1 - clampedProgress)); // 200 → 255
+  const b = Math.round(255 * (1 - clampedProgress));   // 255 → 0
+
+  ctx.beginPath();
+  ctx.arc(sx, sy, ringRadius, startAngle, endAngle);
+  ctx.strokeStyle = `rgb(${r}, ${g}, ${b})`;
+  ctx.lineWidth = 3 * zoom;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  ctx.lineCap = 'butt';
+
+  // Percentage text
+  const pct = Math.floor(clampedProgress * 100);
+  ctx.fillStyle = `rgba(255, 255, 255, 0.8)`;
+  ctx.font = `bold ${Math.round(11 * zoom)}px monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`${pct}%`, sx, sy - ringRadius - 10 * zoom);
 }
 
 // ============================================================================
