@@ -11,7 +11,7 @@
 // ============================================================================
 
 import type { Camera, Snake, Viewport } from '@/lib/snake/types';
-import { SEGMENT_SPACING, SPAWN_PROTECTION_MS, LEGENDARY_GLOW_SIZE, START_LENGTH, GROWTH_RATE, MAX_SNAKE_LENGTH } from '@/lib/snake/config';
+import { SEGMENT_SPACING, SPAWN_PROTECTION_MS, LEGENDARY_GLOW_SIZE, computeBodyLength } from '@/lib/snake/config';
 import { worldToScreen } from '@/lib/snake/camera';
 import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
@@ -22,10 +22,13 @@ import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-type
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
-/** Fixed pixel spacing between drawn body segments (world space).
- *  Should be slightly less than SNAKE_RADIUS*2 for overlap → solid continuous look.
- *  Adjusted for the fatter snake (RADIUS=12). */
-const BODY_DRAW_STEP = 14;
+/** Compute body draw step based on current radius.
+ *  Ensures segments overlap for solid continuous look at any size.
+ *  Thinner snakes → tighter spacing (more segments drawn).
+ *  Fatter snakes  → wider spacing  (fewer, larger circles). */
+function bodyDrawStep(bodyRadius: number): number {
+  return Math.max(bodyRadius * 1.5, 8);
+}
 
 // ─── Particle type (render-side) ────────────────────────────────────────────
 
@@ -264,10 +267,11 @@ export function renderSnakeAtlas(
   const headWx = snake.path.headX;
   const headWy = snake.path.headY;
 
-  // ── Calculate logical body length (segments) and cap ──
-  const logicalLen = Math.min(Math.floor(START_LENGTH + snake.score * GROWTH_RATE), MAX_SNAKE_LENGTH);
+  // ── Calculate logical body length (segments) using sqrt growth curve ──
+  const logicalLen = computeBodyLength(snake.score);
   const visualLen = logicalLen * SEGMENT_SPACING;
-  const maxSegs = Math.ceil(visualLen / BODY_DRAW_STEP);
+  const step = bodyDrawStep(snake.bodyRadius);
+  const maxSegs = Math.ceil(visualLen / step);
 
   // Culling
   const cullMargin = visualLen + 100;
@@ -309,8 +313,8 @@ export function renderSnakeAtlas(
     particlePools.set(snake.id, updated);
   }
 
-  // ── FIXED-SPACING BODY: Walk path at BODY_DRAW_STEP, capped to maxSegs ──
-  const walked = walkPathFixedStep(snake.path, BODY_DRAW_STEP, maxSegs, snake.angle);
+  // ── Walk path at dynamic step (based on radius), capped to maxSegs ──
+  const walked = walkPathFixedStep(snake.path, step, maxSegs, snake.angle);
 
   // ── BOOST AURA: Full-body glow effect ──
   if (snake.boosting) {
@@ -507,10 +511,11 @@ export function renderSnakeFallback(
   const headWorldX = path.headX;
   const headWorldY = path.headY;
 
-  // ── Calculate logical body length and cap ──
-  const logicalLen = Math.min(Math.floor(START_LENGTH + snake.score * GROWTH_RATE), MAX_SNAKE_LENGTH);
+  // ── Calculate logical body length using sqrt growth curve ──
+  const logicalLen = computeBodyLength(snake.score);
   const visualLen = logicalLen * SEGMENT_SPACING;
-  const maxSegs = Math.ceil(visualLen / BODY_DRAW_STEP);
+  const step = bodyDrawStep(snake.bodyRadius);
+  const maxSegs = Math.ceil(visualLen / step);
 
   // Culling
   const cullMargin = visualLen + 100;
@@ -538,8 +543,8 @@ export function renderSnakeFallback(
   const headScreen = worldToScreen(headWorldX, headWorldY, camera, cw, ch);
   const headVisible = headWorldX >= vl && headWorldX <= vr && headWorldY >= vt && headWorldY <= vb;
 
-  // ── FIXED-SPACING BODY: Walk path at BODY_DRAW_STEP, capped to maxSegs ──
-  const walked = walkPathFixedStep(path, BODY_DRAW_STEP, maxSegs, snake.angle);
+  // ── Walk path at dynamic step (based on radius), capped to maxSegs ──
+  const walked = walkPathFixedStep(path, step, maxSegs, snake.angle);
 
   // ── BOOST AURA: Full-body glow effect (fallback) ──
   if (snake.boosting) {

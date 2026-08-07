@@ -16,8 +16,8 @@ import { distSq } from './vec2';
 import { getBotTarget } from './bot-ai';
 import {
   // MOVEMENT
-  BASE_SPEED, BOOST_SPEED, SEGMENT_SPACING, GROWTH_RATE, START_LENGTH, MAX_SNAKE_LENGTH,
-  MAX_TURN_RATE,
+  BASE_SPEED, BOOST_SPEED, SEGMENT_SPACING, START_LENGTH, MAX_SNAKE_LENGTH,
+  MAX_TURN_RATE, computeBodyLength, computeBodyRadius,
   // FOOD
   FOOD_COUNT_TARGET, FOOD_SPAWN_WEIGHTS, FOOD_VALUES, FOOD_RADII,
   FOOD_COLORS, FOOD_GLOW_COLORS, FOOD_SPAWN_AREA_RADIUS, INITIAL_SPAWN_RADIUS,
@@ -46,12 +46,7 @@ import {
  */
 const SPACING_RATIO = SEGMENT_SPACING / BASE_SPEED;
 
-/** Compute visual body radius from score using uncapped sqrt curve.
- *  radius = MIN + RATE × √score
- *  Grows forever — no hard max. Slow at high scores, meaningful at every level. */
-function computeBodyRadius(score: number): number {
-  return SNAKE_RADIUS_MIN + SNAKE_RADIUS_GROWTH_RATE * Math.sqrt(score);
-}
+
 
 /** Scaled neck protection: covers same physical distance as NECK_PROTECTION * SEGMENT_SPACING */
 const NECK_PROTECTION_SCALED = Math.ceil(NECK_PROTECTION * SPACING_RATIO);
@@ -169,7 +164,7 @@ function createSnake(
   now: number,
   skinOverride?: PlayerSkinOverride | null,
 ): Snake {
-  const targetLength = Math.min(Math.floor(START_LENGTH + startScore * GROWTH_RATE), MAX_SNAKE_LENGTH);
+  const targetLength = computeBodyLength(startScore);
   const palette = SNAKE_PALETTES[Math.floor(Math.random() * SNAKE_PALETTES.length)];
   // Start facing right (angle=0) to match InputHandler's initial targetAngle=0.
   // Prevents violent spin on game start.
@@ -381,10 +376,8 @@ function moveSnake(
   // Path entries are spaced at BASE_SPEED (one per tick).
   // To maintain the same visual length as SEGMENT_SPACING-based segments,
   // we scale the path buffer length by the spacing ratio.
-  const targetLength = Math.min(
-    Math.ceil((START_LENGTH + snake.score * GROWTH_RATE) * SPACING_RATIO),
-    Math.ceil(MAX_SNAKE_LENGTH * SPACING_RATIO),
-  );
+  const logicalLen = computeBodyLength(snake.score);
+  const targetLength = Math.ceil(logicalLen * SPACING_RATIO);
 
   // Boost: drop food from tail, proportional shrink.
   // Proportional shrink (2% of path, min 1) ensures small snakes don't
