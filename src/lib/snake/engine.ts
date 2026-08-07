@@ -406,36 +406,29 @@ function moveSnake(
   const logicalLen = computeBodyLength(snake.score);
   const targetLength = Math.ceil(logicalLen * SPACING_RATIO);
 
-  // Boost: drop food from tail, proportional shrink.
-  // Proportional shrink (2% of path, min 1) ensures small snakes don't
-  // collapse to minimum instantly. Score-based trim handles the rest.
+  // Boost food drop: leave a food orb at the tail every interval.
+  // Visual feedback only — actual shrinking is handled by per-tick pop + trim.
   if (canBoost && now - snake.lastBoostDrop >= BOOST_DROP_INTERVAL) {
     snake.lastBoostDrop = now;
     const tailIdx = snake.path.length - 1;
-    state.foods.push({
-      id: state.nextFoodId++,
-      x: snake.path.getX(tailIdx),
-      y: snake.path.getY(tailIdx),
-      size: 'small', value: 1, radius: FOOD_RADII[0],
-      color: FOOD_COLORS[0], glowColor: FOOD_GLOW_COLORS[0],
-    });
-    // Proportional shrink: 2% of current path length, minimum 1.
-    // Small snake (37 entries): pops 1 per drop (very gentle)
-    // Large snake (3557 entries): pops 71 per drop (meaningful)
-    const shrinkCount = Math.max(1, Math.floor(snake.path.length * 0.02));
-    for (let i = 0; i < shrinkCount; i++) {
-      if (snake.path.length > BOOST_MIN_BODY_SCALED) snake.path.pop();
+    if (tailIdx > 0) {
+      state.foods.push({
+        id: state.nextFoodId++,
+        x: snake.path.getX(tailIdx),
+        y: snake.path.getY(tailIdx),
+        size: 'small', value: 1, radius: FOOD_RADII[0],
+        color: FOOD_COLORS[0], glowColor: FOOD_GLOW_COLORS[0],
+      });
     }
   }
 
-  // Per-tick boost shrink: pop 1 entry to counteract prepend's +1.
-  // Without this, the trim loop would grow the path back between drops.
+  // Per-tick boost shrink: pop 1 to counteract prepend's +1.
+  // This keeps the path stable during boost (no growth from prepend).
   if (canBoost && snake.path.length > BOOST_MIN_BODY_SCALED) {
     snake.path.pop();
   }
 
   // Boost score cost: integer-based — deduct 1 point every N ticks.
-  // Avoids decimal scores. Score drives targetLength, so lower score = shorter body.
   if (canBoost) {
     snake.boostCostAccum = (snake.boostCostAccum ?? 0) + 1;
     if (snake.boostCostAccum >= BOOST_SCORE_COST_INTERVAL) {
@@ -446,11 +439,12 @@ function moveSnake(
     snake.boostCostAccum = 0;
   }
 
-  // Trim to target length (always active, including during boost).
-  // During boost, score decreases → targetLength decreases → trim smoothly
-  // shortens the path. Combined with proportional pops above, length
-  // changes are gradual with no sudden jumps.
-  while (snake.path.length > targetLength) {
+  // Trim to target length — MAX 1 per tick (smooth, no pulsing).
+  // While-boost: per-tick pop already handles stability; this catches
+  // score-driven targetLength drops 1 entry at a time.
+  // Post-boost: path may be over targetLength due to score loss;
+  // body gradually settles over a few ticks instead of snapping.
+  if (snake.path.length > targetLength) {
     snake.path.pop();
   }
 
