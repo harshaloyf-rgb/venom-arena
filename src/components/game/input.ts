@@ -1,20 +1,17 @@
 // ============================================================================
 // Input Handler — Tracks mouse, keyboard, and touch input for snake control.
 //
-// Mouse steering (movement-direction based):
-//   The DIRECTION you move the mouse steers the snake. Move mouse right → snake
-//   goes right. Draw a circle with the mouse → snake draws a circle. Works
-//   from anywhere on screen, even a tiny corner. When mouse stops, snake goes
-//   straight in its current direction.
+// Mouse steering (slither.io style):
+//   The angle from the VIEWPORT CENTER to the MOUSE CURSOR determines the
+//   snake's target direction. This is intuitive — point where you want to go.
+//   Listens on `window` so it works across the full browser viewport.
+//   No mouseInView guard — mousemove on window is always valid.
 //
 // Keyboard steering:
-//   WASD / Arrow keys set absolute direction. Space / Shift = boost. E = extract.
+//   WASD / Arrow keys override mouse. Space / Shift = boost. E = extract.
 // ============================================================================
 
 import type { InputState } from '@/lib/snake/types';
-
-/** Minimum mouse movement (pixels) to register a direction change */
-const DEADZONE = 1.5;
 
 /**
  * Creates and manages input state for the game.
@@ -44,10 +41,6 @@ export class InputHandler {
   // External button overrides (set by UI buttons)
   externalBoost = false;
   externalExtract = false;
-
-  // Mouse movement-direction steering: accumulate movement vector per frame
-  private _accumDx = 0;
-  private _accumDy = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -135,8 +128,6 @@ export class InputHandler {
     if (kx !== 0 || ky !== 0) {
       this.state.targetAngle = Math.atan2(ky, kx);
       this.state.boosting = this.keys.has(' ') || this.keys.has('shift') || this.externalBoost;
-      this._accumDx = 0;
-      this._accumDy = 0;
       return;
     }
 
@@ -149,22 +140,25 @@ export class InputHandler {
         this.state.targetAngle = Math.atan2(dy, dx);
       }
       this.state.boosting = dist > 80 || this.externalBoost;
-      this._accumDx = 0;
-      this._accumDy = 0;
       return;
     }
 
-    // Mouse movement-direction steering:
-    // The direction of mouse movement = the direction the snake should face.
-    // If you draw a circle with the mouse, the snake draws a circle.
-    const mag = Math.sqrt(this._accumDx * this._accumDx + this._accumDy * this._accumDy);
-    if (mag > DEADZONE) {
-      this.state.targetAngle = Math.atan2(this._accumDy, this._accumDx);
+    // Mouse input (slither.io style): angle from viewport center to cursor
+    // No mouseInView guard — if mouse has moved at all, use its position.
+    // When mouse leaves the viewport, mousemove stops, and we keep the last
+    // known direction (snake keeps turning toward where mouse was).
+    if (this.canvasRect && this.hasMouseMoved) {
+      const centerX = this.canvasRect.width / 2;
+      const centerY = this.canvasRect.height / 2;
+      const mx = this.mouseClientX - this.canvasRect.left;
+      const my = this.mouseClientY - this.canvasRect.top;
+      const dx = mx - centerX;
+      const dy = my - centerY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > 5) {
+        this.state.targetAngle = Math.atan2(dy, dx);
+      }
     }
-    // If no significant movement → keep current targetAngle (snake goes straight)
-    this._accumDx = 0;
-    this._accumDy = 0;
-
     this.state.boosting = this.mouseDown || this.keys.has(' ') || this.keys.has('shift') || this.externalBoost;
   }
 
@@ -182,13 +176,11 @@ export class InputHandler {
     this.keys.delete(e.key.toLowerCase());
   };
 
-  /** Accumulate mouse movement vector for direction-based steering */
+  /** Track cursor position relative to viewport (slither.io style) */
   private onMouseMove = (e: MouseEvent): void => {
     this.mouseClientX = e.clientX;
     this.mouseClientY = e.clientY;
     this.hasMouseMoved = true;
-    this._accumDx += e.movementX;
-    this._accumDy += e.movementY;
   };
 
   private onMouseDown = (e: MouseEvent): void => {
