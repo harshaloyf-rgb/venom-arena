@@ -230,23 +230,23 @@ export const RESPAWN_DELAY = 3000;
 export const SPAWN_INVULN_BLINK_RATE = 200;
 
 // ============================================================================
-// 8. SPIRAL_TURN — Fibonacci spiral detection & parameters
+// 8. SPIRAL_TURN — Progressive spiral assist for tight circular motion
 // ============================================================================
 
-/** Angle delta threshold (radians) to classify a tick as a "tight turn" */
-export const TIGHT_TURN_THRESHOLD = 0.5;
+/** Min angle diff (rad) per tick to count as "turning" for spiral detection */
+export const SPIRAL_TURN_THRESHOLD = 0.08;
 
-/** Number of recent ticks to inspect for spiral pattern detection */
-export const SPIRAL_DETECT_WINDOW = 5;
+/** Consecutive tight-turn ticks needed to enter spiral mode (~0.17s at 60fps) */
+export const SPIRAL_ENTER_TICKS = 10;
 
-/** Maximum angle delta within the window to confirm spiral entry */
-export const MAX_SPIRAL_ANGLE_DELTA = 0.15;
+/** Max turn rate multiplier when spiral is fully ramped (1.0 = no boost, 1.8 = 80% faster turning) */
+export const SPIRAL_MAX_MULTIPLIER = 1.8;
 
-/** Fibonacci spiral parameter: r = a * e^(b * theta) — base radius */
-export const SPIRAL_A = 1.0;
+/** Ticks to reach full spiral multiplier (gradual ramp-up) */
+export const SPIRAL_RAMP_TICKS = 40;
 
-/** Fibonacci spiral parameter: r = a * e^(b * theta) — growth rate */
-export const SPIRAL_B = 0.05;
+/** Min angle diff (rad) to stay in spiral — below this, player is straightening out */
+export const SPIRAL_EXIT_THRESHOLD = 0.03;
 
 // ============================================================================
 // 9. EXTRAPOLATION — server/client timing, interpolation, camera

@@ -3,7 +3,7 @@
 //
 // Handles two modes:
 // 1. Linear: angle lerp + position predict (normal movement)
-// 2. Fibonacci spiral: r=a*e^(b*theta) during tight turns
+// 2. Spiral assist: tighter angle lerp (server already computed enhanced turning)
 //
 // Phase B: Client-side only. Used in ONLINE mode where the server
 // broadcasts at SERVER_TICK_RATE but the client renders at CLIENT_RENDER_FPS.
@@ -21,8 +21,6 @@ import {
   ANGLE_LERP_SPEED,
   POSITION_PREDICT_FACTOR,
   BASE_SPEED,
-  SPIRAL_A,
-  SPIRAL_B,
   SEGMENT_SPACING,
 } from './config';
 
@@ -84,12 +82,6 @@ interface ExtrapolatedSnake {
   currentAngle: number;
   // Turn metadata from the last snapshot (undefined if no spiral active).
   turn: TurnMetadata | undefined;
-  // Spiral extrapolation state — advanced each frame when turn is active.
-  spiralTheta: number;
-  spiralStartAngle: number;
-  spiralDirection: 1 | -1;
-  spiralA: number;
-  spiralB: number;
   // Static visual fields (copied from snapshot).
   name: string;
   score: number;
@@ -134,8 +126,6 @@ function createExtrapolatedSnake(): ExtrapolatedSnake {
     speed: DEFAULT_SPEED,
     currentX: 0, currentY: 0, currentAngle: 0,
     turn: undefined,
-    spiralTheta: 0, spiralStartAngle: 0, spiralDirection: 1,
-    spiralA: SPIRAL_A, spiralB: SPIRAL_B,
     name: '', score: 0, alive: false,
     color: '#ffffff', headColor: '#ffffff',
     bodyRadius: 8, boosting: false,
@@ -261,11 +251,6 @@ export class ExtrapolationEngine {
 
       // Update turn metadata.
       es.turn = snap.turn;
-      if (snap.turn && snap.turn.isSpiral) {
-        es.spiralTheta = snap.turn.theta;
-        es.spiralStartAngle = snap.turn.startAngle;
-        es.spiralDirection = snap.turn.direction;
-      }
 
       // Copy static fields.
       es.name = snap.name;
@@ -306,10 +291,8 @@ export class ExtrapolationEngine {
       // Beyond the extrapolation window — freeze at last known position.
       if (elapsedMs > MAX_EXTRAPOLATION_MS) continue;
 
-      const elapsedSec = elapsedMs / 1000;
-
       if (es.turn && es.turn.isSpiral) {
-        this.extrapolateSpiral(es, dt, elapsedSec);
+        this.extrapolateSpiral(es, dt);
       } else {
         this.extrapolateLinear(es, dt);
       }
@@ -341,45 +324,22 @@ export class ExtrapolationEngine {
   }
 
   /**
-   * Fibonacci spiral extrapolation during tight turns.
-   * Uses r = a * e^(b * theta) to compute curved movement.
+   * Spiral assist extrapolation: same as linear but with faster angle lerp.
+   * The server already computed the enhanced turn rate, so the snapshot's
+   * anchor angle already reflects the tighter turning. We just lerp faster
+   * so the client tracks the spiral more closely.
    */
-  private extrapolateSpiral(es: ExtrapolatedSnake, dt: number, _elapsedSec: number): void {
-    const a = es.spiralA;
-    const b = es.spiralB;
-    const dir = es.spiralDirection;
+  private extrapolateSpiral(es: ExtrapolatedSnake, dt: number): void {
+    // Use 2x lerp speed when spiral is active for tighter tracking.
+    const lerpFactor = 1 - Math.pow(1 - ANGLE_LERP_SPEED * 2, dt * CLIENT_RENDER_FPS);
+    const diff = angleDiff(es.currentAngle, es.anchorAngle);
+    es.currentAngle += diff * lerpFactor;
 
-    // Current radius on the spiral.
-    const r = a * Math.exp(b * es.spiralTheta);
-    const safeR = Math.max(r, 0.1);
-
-    // Angular advancement: dTheta = speed / r, scaled by dt relative to server tick.
-    // Server tick period = 1/SERVER_TICK_RATE seconds. dt is in seconds.
-    const tickDt = dt * SERVER_TICK_RATE;
-    let dTheta = (es.speed / SERVER_TICK_RATE) / safeR;
-
-    // Scale by how much time has passed relative to a server tick.
-    dTheta *= tickDt;
-
-    // Clamp to reasonable range.
-    const MIN_DTHETA = 0.01;
-    const MAX_DTHETA = Math.PI * 0.12 * 2; // MAX_TURN_RATE * 2
-    dTheta = Math.max(MIN_DTHETA, Math.min(dTheta, MAX_DTHETA));
-
-    // Advance theta.
-    es.spiralTheta += dTheta;
-
-    // Compute new angle from spiral start + accumulated theta.
-    es.currentAngle = es.spiralStartAngle + dir * es.spiralTheta;
-
-    // Normalize angle.
+    // Normalize.
     if (es.currentAngle > Math.PI) es.currentAngle -= 2 * Math.PI;
     else if (es.currentAngle < -Math.PI) es.currentAngle += 2 * Math.PI;
 
-    // Compute arc-length-based position displacement.
-    // For a logarithmic spiral, the arc length element is:
-    //   ds = r * sqrt(1 + b^2) * dTheta
-    // But for visual purposes, a simpler tangent-line approximation works:
+    // Predict position forward.
     const moveDist = es.speed * dt * POSITION_PREDICT_FACTOR;
     es.currentX = es.anchorX + Math.cos(es.currentAngle) * moveDist;
     es.currentY = es.anchorY + Math.sin(es.currentAngle) * moveDist;
