@@ -3,10 +3,11 @@
 /**
  * Snake Game Skin Tester — single canvas showing a moving snake
  * rendered with exact game parameters (zoom, eyes, shadow, gradient).
+ * Now includes a Test Score slider to preview snake fatness at any score.
  */
 
-import { useEffect, useRef, useState } from 'react';
-import { SNAKE_RADIUS, CAMERA_BASE_ZOOM, SEGMENT_SPACING } from '@/lib/snake/config';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { SNAKE_RADIUS, SNAKE_RADIUS_MIN, SNAKE_RADIUS_MAX, SNAKE_RADIUS_GROWTH_SCALE, CAMERA_BASE_ZOOM, SEGMENT_SPACING, START_LENGTH, GROWTH_RATE, MAX_SNAKE_LENGTH } from '@/lib/snake/config';
 import { getSkinAsset } from '@/lib/snake/skin-registry';
 
 // ─── Color helpers ─────────────────────────────────────────────────────
@@ -27,10 +28,15 @@ function darkenHex(hex: string, factor: number): string {
   return `#${Math.round(r * (1 - factor)).toString(16).padStart(2, '0')}${Math.round(g * (1 - factor)).toString(16).padStart(2, '0')}${Math.round(b * (1 - factor)).toString(16).padStart(2, '0')}`;
 }
 
+// ─── Body radius formula (must match engine.ts computeBodyRadius) ─────
+
+function computeBodyRadius(score: number): number {
+  return SNAKE_RADIUS_MIN + (SNAKE_RADIUS_MAX - SNAKE_RADIUS_MIN) * Math.sqrt(score / (score + SNAKE_RADIUS_GROWTH_SCALE));
+}
+
 // ─── Game rendering params (exact match to render-snake-atlas.tsx) ─────
 
 const GAME = {
-  segRadius: SNAKE_RADIUS * CAMERA_BASE_ZOOM,  // 12 * 1.35 = 16.2
   headScale: 1.3,
   segStep: 14,
   lightenFactor: 0.35,
@@ -59,18 +65,44 @@ const TEST_SKINS = [
   { id: 'skin-shadow', label: 'Shadow' },
 ];
 
+// ─── Score presets ──────────────────────────────────────────────────────
+
+const SCORE_PRESETS = [
+  { label: '0', score: 0 },
+  { label: '50', score: 50 },
+  { label: '200', score: 200 },
+  { label: '500', score: 500 },
+  { label: '2K', score: 2000 },
+  { label: '10K', score: 10000 },
+  { label: '100K', score: 100000 },
+];
+
 // ─── Main component ────────────────────────────────────────────────────
 
 export function SnakeFaceTester() {
   const [selectedSkin, setSelectedSkin] = useState('skin-emerald');
+  const [testScore, setTestScore] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef(0);
   const mouseRef = useRef<{ x: number; y: number } | null>(null);
+  const scoreRef = useRef(0);
 
   const W = 580;
-  const H = 260;
-  const SEGMENTS = 24;
+  const H = 300;
   const SPEED = 1.8;
+
+  // Compute values for display
+  const bodyRadius = computeBodyRadius(testScore);
+  const logicalLen = Math.min(Math.floor(START_LENGTH + testScore * GROWTH_RATE), MAX_SNAKE_LENGTH);
+  const segments = Math.min(Math.ceil((logicalLen * SEGMENT_SPACING) / GAME.segStep), 120); // cap for preview
+
+  // Keep ref in sync with state
+  useEffect(() => { scoreRef.current = testScore; }, [testScore]);
+
+  const handleScoreSlider = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = parseInt(e.target.value);
+    setTestScore(v);
+  }, []);
 
   useEffect(() => {
     const c = canvasRef.current;
@@ -103,7 +135,7 @@ export function SnakeFaceTester() {
     let nextTurn = 2000;
 
     // Position buffer
-    const bufLen = SEGMENTS * 6;
+    const bufLen = 120 * 6; // max segments * oversample
     const px = new Float64Array(bufLen);
     const py = new Float64Array(bufLen);
     let bufCount = 0;
@@ -113,6 +145,12 @@ export function SnakeFaceTester() {
       if (!running) return;
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const curRadius = computeBodyRadius(scoreRef.current);
+      const curSegs = Math.min(
+        Math.ceil((Math.min(Math.floor(START_LENGTH + scoreRef.current * GROWTH_RATE), MAX_SNAKE_LENGTH) * SEGMENT_SPACING) / GAME.segStep),
+        120,
+      );
 
       // ── Update movement ──
       turnTimer += 16;
@@ -152,7 +190,7 @@ export function SnakeFaceTester() {
       let srcIdx = 0;
       segs.push({ x: cx, y: cy, a: angle });
 
-      for (let s = 1; s < SEGMENTS && srcIdx < bufCount - 1; s++) {
+      for (let s = 1; s < curSegs && srcIdx < bufCount - 1; s++) {
         let remaining = GAME.segStep;
         while (remaining > 0 && srcIdx < bufCount - 1) {
           const dx = px[srcIdx + 1] - px[srcIdx];
@@ -172,6 +210,7 @@ export function SnakeFaceTester() {
             srcIdx++;
           }
         }
+        if (srcIdx >= bufCount - 1) break;
         const prev = segs[segs.length - 1];
         segs.push({ x: cx, y: cy, a: Math.atan2(cy - prev.y, cx - prev.x) });
       }
@@ -205,7 +244,8 @@ export function SnakeFaceTester() {
         bodyColor = asset.bodyColor;
       } catch { /* defaults */ }
 
-      const segR = GAME.segRadius;
+      // Use dynamic radius instead of fixed SNAKE_RADIUS
+      const segR = curRadius;
       const hr = segR * GAME.headScale;
 
       // Body shadow
@@ -300,6 +340,13 @@ export function SnakeFaceTester() {
       ctx.lineTo(headX + Math.cos(angle) * (ptrS + ptrL), headY + Math.sin(angle) * (ptrS + ptrL));
       ctx.stroke();
 
+      // ── Info overlay: radius & segment count ──
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.font = '11px monospace';
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillText(`radius: ${curRadius.toFixed(1)}px  |  segs: ${segs.length}/${curSegs}  |  score: ${scoreRef.current}`, 10, H - 22);
+
       animRef.current = requestAnimationFrame(loop);
     };
 
@@ -317,9 +364,10 @@ export function SnakeFaceTester() {
     <div className="flex flex-col gap-4 p-4 max-w-3xl mx-auto">
       <div className="text-center">
         <h2 className="text-lg font-bold text-white">Game Snake Tester</h2>
-        <p className="text-sm text-white/50 mt-1">Exact game rendering params — hover to track eyes</p>
+        <p className="text-sm text-white/50 mt-1">Exact game rendering — hover to track eyes. Test fatness at any score.</p>
       </div>
 
+      {/* Skin selector */}
       <div className="flex flex-wrap justify-center gap-2">
         {TEST_SKINS.map(s => (
           <button
@@ -335,6 +383,56 @@ export function SnakeFaceTester() {
             {s.label}
           </button>
         ))}
+      </div>
+
+      {/* Score test controls */}
+      <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-white/60 font-mono">Test Score (radius preview)</span>
+          <span className="text-xs font-mono">
+            <span className="text-amber-400">Score: {testScore.toLocaleString()}</span>
+            <span className="text-white/30 mx-2">|</span>
+            <span className="text-emerald-400">Radius: {bodyRadius.toFixed(1)}px</span>
+            <span className="text-white/30 mx-2">|</span>
+            <span className="text-white/50">Length: {logicalLen} segs</span>
+          </span>
+        </div>
+
+        {/* Score presets */}
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {SCORE_PRESETS.map(p => (
+            <button
+              key={p.score}
+              onClick={() => setTestScore(p.score)}
+              className={`px-2 py-1 rounded text-[10px] font-mono transition-all ${
+                testScore === p.score
+                  ? 'bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/50'
+                  : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/60'
+              }`
+            }
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Score slider */}
+        <input
+          type="range"
+          min={0}
+          max={100000}
+          step={50}
+          value={testScore}
+          onChange={handleScoreSlider}
+          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer bg-white/10 accent-amber-500"
+        />
+        <div className="flex justify-between text-[10px] text-white/30 font-mono mt-0.5">
+          <span>0</span>
+          <span>25K</span>
+          <span>50K</span>
+          <span>75K</span>
+          <span>100K</span>
+        </div>
       </div>
 
       <canvas

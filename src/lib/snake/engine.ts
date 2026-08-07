@@ -386,10 +386,9 @@ function moveSnake(
     Math.ceil(MAX_SNAKE_LENGTH * SPACING_RATIO),
   );
 
-  // Boost: drop food from tail, shrink snake
-  // During boost, path entries are 8px apart (vs 4.5px normal), so the path
-  // covers more distance with fewer entries. We must shrink AGGRESSIVELY
-  // to overcome the wide entry spacing and the trim loop.
+  // Boost: drop food from tail, proportional shrink.
+  // Proportional shrink (2% of path, min 1) ensures small snakes don't
+  // collapse to minimum instantly. Score-based trim handles the rest.
   if (canBoost && now - snake.lastBoostDrop >= BOOST_DROP_INTERVAL) {
     snake.lastBoostDrop = now;
     const tailIdx = snake.path.length - 1;
@@ -400,8 +399,11 @@ function moveSnake(
       size: 'small', value: 1, radius: FOOD_RADII[0],
       color: FOOD_COLORS[0], glowColor: FOOD_GLOW_COLORS[0],
     });
-    // Extra shrink: pop several entries so the visual body gets shorter
-    for (let i = 0; i < 5; i++) {
+    // Proportional shrink: 2% of current path length, minimum 1.
+    // Small snake (37 entries): pops 1 per drop (very gentle)
+    // Large snake (3557 entries): pops 71 per drop (meaningful)
+    const shrinkCount = Math.max(1, Math.floor(snake.path.length * 0.02));
+    for (let i = 0; i < shrinkCount; i++) {
       if (snake.path.length > BOOST_MIN_BODY_SCALED) snake.path.pop();
     }
   }
@@ -424,11 +426,12 @@ function moveSnake(
     snake.boostCostAccum = 0;
   }
 
-  // Trim to target length (only when NOT boosting — boost handles its own length)
-  if (!canBoost) {
-    while (snake.path.length > targetLength) {
-      snake.path.pop();
-    }
+  // Trim to target length (always active, including during boost).
+  // During boost, score decreases → targetLength decreases → trim smoothly
+  // shortens the path. Combined with proportional pops above, length
+  // changes are gradual with no sudden jumps.
+  while (snake.path.length > targetLength) {
+    snake.path.pop();
   }
 
   // ── NOTE: Inner curl (corner-cutting) is a PURELY VISUAL effect ──
