@@ -638,13 +638,27 @@ export function renderSnakeFallback(
   ctx.shadowOffsetY = segRadius * 0.3;
 
   if (customSegments) {
+    // Detect stale first-segment override: if index 0 has a different sizeScale
+    // than the rest (uniform body), normalize it to match.
+    let segs = customSegments;
+    if (segs.length > 1 && Math.abs(segs[0].sizeScale - segs[1].sizeScale) > 0.05) {
+      // Check if the rest are roughly uniform
+      let restUniform = true;
+      const ref = segs[1].sizeScale;
+      for (let k = 2; k < segs.length; k++) {
+        if (Math.abs(segs[k].sizeScale - ref) > 0.1) { restUniform = false; break; }
+      }
+      if (restUniform) {
+        segs = segs.map((s, idx) => idx === 0 ? { ...s, sizeScale: ref } : s);
+      }
+    }
     // Custom lab skin: draw shapes with taper and glow
     for (let i = walked.count - 1; i >= 0; i--) {
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
       const scr = worldToScreen(wx, wy, camera, cw, ch);
-      const seg = customSegments[i % customSegments.length];
+      const seg = segs[i % segs.length];
       const taperedR = segRadius * seg.sizeScale;
       const segAngle = walked.angles[i];
       drawSegmentShape(ctx, scr.x, scr.y, taperedR, segAngle, seg.shape, seg.color, seg.glow);
