@@ -28,8 +28,10 @@ export const BASE_SPEED = 4.5;
 /** Speed while boosting (pixels per tick at 60fps) */
 export const BOOST_SPEED = 8.0;
 
-/** Max angle change per tick for player steering (radians). Snappy for slither.io feel. */
-export const MAX_TURN_RATE = Math.PI * 0.08;
+/** Max angle change per tick for player steering (radians). Tuned for 60Hz ticks.
+ *  Current: π*0.025 → 0.079 rad/tick → 4.7 rad/s → 270°/s → U-turn in ~0.67s
+ *  Gives a comfortable ~3 body-width turn radius at base speed. */
+export const MAX_TURN_RATE = Math.PI * 0.025;
 
 /** Distance between consecutive segment positions in the path history */
 export const SEGMENT_SPACING = 8;
@@ -136,8 +138,8 @@ export const BOT_START_SCORE_MIN = 10;
 /** Bot starting score maximum */
 export const BOT_START_SCORE_MAX = 80;
 
-/** Bot max turn rate (radians per tick, slightly slower than player) */
-export const BOT_MAX_TURN_RATE = Math.PI * 0.04;
+/** Bot max turn rate (radians per tick, ~60% of player rate for natural feel) */
+export const BOT_MAX_TURN_RATE = Math.PI * 0.015;
 
 /** Bot food scan radius (how far a bot looks for food) */
 export const BOT_FOOD_SCAN_RADIUS = 300;

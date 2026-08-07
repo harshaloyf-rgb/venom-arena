@@ -591,3 +591,23 @@ Stage Summary:
 - Angular velocity keeps shift alive during sustained turns
 - Blink rate at 6/min unchanged
 
+---
+Task ID: fix-sharp-turns
+Agent: Main
+Task: Diagnose and fix sharp turns in offline mode
+
+Work Log:
+- Traced full turn pipeline: InputHandler → SnakeGame.tsx → engine.ts (offline) / game-server (online)
+- Discovered offline engine runs at 60Hz but uses per-tick turn values designed for server (30Hz)
+- Found client config MAX_TURN_RATE was π*0.08 = 864°/s effective — way too fast
+- Initially tried TICK_SCALE approach in engine.ts but reverted (breaks path buffer spacing)
+- Fixed by reducing MAX_TURN_RATE from π*0.08 to π*0.025 in config.ts
+- Also reduced BOT_MAX_TURN_RATE proportionally from π*0.04 to π*0.015
+- Verified no lint errors, no runtime errors in browser
+
+Stage Summary:
+- Turn rate: 864°/s → 270°/s (3.2x slower)
+- Turn radius: 1.5 body widths → 4.8 body widths (3.2x wider)
+- U-turn time: 0.21s → 0.67s (3.2x more gradual)
+- Feels like proper slither.io-style smooth turning now
+
