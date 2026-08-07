@@ -337,6 +337,8 @@ export const FOOD_RESPAWN_BATCH = 5;
 
 // COLLISION
 export const SNAKE_RADIUS = 8;
+export const SNAKE_RADIUS_MIN = 6;
+export const SNAKE_RADIUS_GROWTH_RATE = 0.08;
 export const NECK_PROTECTION = 5;
 export const SPAWN_PROTECTION_MS = 4000;
 export const HEAD_ON_HEAD_BOOST_WINS = true;
@@ -484,3 +486,9 @@ export function getBotTarget(
 
 // Re-export for use in game-state.ts
 export { distSq, angleDirect };
+
+/** Compute visual body radius from score (visual only — collision uses SNAKE_RADIUS).
+ *  Formula: radius = MIN + RATE × √score */
+export function computeBodyRadius(score: number): number {
+  return SNAKE_RADIUS_MIN + SNAKE_RADIUS_GROWTH_RATE * Math.sqrt(score);
+}

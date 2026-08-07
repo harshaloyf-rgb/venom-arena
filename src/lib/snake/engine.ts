@@ -66,60 +66,118 @@ const BOT_NAMES = [
   'Wiggles', 'Slithers', 'Fang', 'Venom', 'Toxin', 'Striker',
 ];
 
-// ─── Test Obstacles ────────────────────────────────────────────────────
+// ─── Hairline-Gap Obstacles ─────────────────────────────────────────────
 
-/** Generate test obstacles: wall barriers with varying gap sizes.
- *  Gaps range from 10px (impassable) to 18px (passable) to test hairline collision.
- *  Walls are placed around spawn area (0,0) at various distances. */
+/** Generate obstacle walls with hairline gaps (1px–20px).
+ *  Each barrier is a long wall with a small gap that may or may not be passable.
+ *  Collision uses SNAKE_RADIUS (6px), so:
+ *    - Gaps < 12px  → impassable death trap (looks passable but isn't)
+ *    - Gaps 12–20px → barely passable with precision alignment
+ *  Walls are arranged in concentric rectangular rings at increasing distances. */
 function generateTestObstacles(): Array<{ x1: number; y1: number; x2: number; y2: number }> {
   const walls: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
-  const R = 400; // wall half-length
-  const THICK = 8; // visual wall thickness (half)
 
-  // Helper: add a horizontal wall segment at (cx, cy)
-  const hWall = (cx: number, cy: number, halfLen: number) => {
-    walls.push({ x1: cx - halfLen, y1: cy, x2: cx + halfLen, y2: cy });
+  // Helper: horizontal wall segment centered at (cx, cy) with half-length hl
+  const hWall = (cx: number, cy: number, hl: number) => {
+    walls.push({ x1: cx - hl, y1: cy, x2: cx + hl, y2: cy });
   };
-  // Helper: add a vertical wall segment at (cx, cy)
-  const vWall = (cx: number, cy: number, halfLen: number) => {
-    walls.push({ x1: cx, y1: cy - halfLen, x2: cx, y2: cy + halfLen });
+  // Helper: vertical wall segment centered at (cx, cy) with half-length hl
+  const vWall = (cx: number, cy: number, hl: number) => {
+    walls.push({ x1: cx, y1: cy - hl, x2: cx, y2: cy + hl });
+  };
+  // Helper: full horizontal barrier at y=cy spanning from x=startX to x=endX with gap at gapX of gapSize
+  const hBarrier = (cy: number, startX: number, endX: number, gapX: number, gapSize: number) => {
+    const leftLen = gapX - gapSize / 2 - startX;
+    const rightLen = endX - (gapX + gapSize / 2);
+    if (leftLen > 0) hWall(startX + leftLen / 2, cy, leftLen / 2);
+    if (rightLen > 0) hWall(gapX + gapSize / 2 + rightLen / 2, cy, rightLen / 2);
+  };
+  // Helper: full vertical barrier at x=cx spanning from y=startY to y=endY with gap at gapY of gapSize
+  const vBarrier = (cx: number, startY: number, endY: number, gapY: number, gapSize: number) => {
+    const topLen = gapY - gapSize / 2 - startY;
+    const botLen = endY - (gapY + gapSize / 2);
+    if (topLen > 0) vWall(cx, startY + topLen / 2, topLen / 2);
+    if (botLen > 0) vWall(cx, gapY + gapSize / 2 + botLen / 2, botLen / 2);
   };
 
-  // ── Ring 1: 300px from center ──
-  // Horizontal barriers with varying gaps
-  const D1 = 300;
-  // Top wall with a gap in center (14px — hairline, should be passable)
-  hWall(-D1, -D1, R * 0.6);
-  hWall(7 + R * 0.6, -D1, R * 0.4); // 14px gap
+  // Helper: horizontal barrier with TWO gaps
+  const hBarrier2 = (cy: number, startX: number, endX: number, g1x: number, g1s: number, g2x: number, g2s: number) => {
+    const segs = [startX, g1x - g1s / 2, g1x + g1s / 2, g2x - g2s / 2, g2x + g2s / 2, endX];
+    for (let i = 0; i < segs.length - 1; i += 2) {
+      const cx = (segs[i] + segs[i + 1]) / 2;
+      const hl = (segs[i + 1] - segs[i]) / 2;
+      if (hl > 0) hWall(cx, cy, hl);
+    }
+  };
+  // Helper: vertical barrier with TWO gaps
+  const vBarrier2 = (cx: number, startY: number, endY: number, g1y: number, g1s: number, g2y: number, g2s: number) => {
+    const segs = [startY, g1y - g1s / 2, g1y + g1s / 2, g2y - g2s / 2, g2y + g2s / 2, endY];
+    for (let i = 0; i < segs.length - 1; i += 2) {
+      const cy = (segs[i] + segs[i + 1]) / 2;
+      const hl = (segs[i + 1] - segs[i]) / 2;
+      if (hl > 0) vWall(cx, cy, hl);
+    }
+  };
 
-  // Bottom wall with a gap (10px — too tight, impassable)
-  hWall(-D1, D1, R * 0.55);
-  hWall(10 + R * 0.55, D1, R * 0.45); // 10px gap
+  const W = 500; // wall half-extent (how far walls extend)
 
-  // Left wall with a gap (18px — comfortable pass)
-  vWall(-D1, -D1, R * 0.5);
-  vWall(-D1, 9 + R * 0.5, R * 0.5); // 18px gap
+  // ═══════════════════════════════════════════════════════════════════
+  // Ring 1: 250px from center — 4 walls, one gap each
+  // ═══════════════════════════════════════════════════════════════════
+  const D1 = 250;
+  hBarrier(-D1, -D1 - W, D1 + W, -20, 3);   // top: 3px gap (death trap)
+  hBarrier(D1, -D1 - W, D1 + W, 30, 16);     // bottom: 16px gap (passable)
+  vBarrier(-D1, -D1 - W, D1 + W, 0, 8);      // left: 8px gap (impassable)
+  vBarrier(D1, -D1 - W, D1 + W, 15, 14);     // right: 14px gap (barely passable)
 
-  // Right wall with a gap (12px — exact collision distance, borderline)
-  vWall(D1, -D1, R * 0.55);
-  vWall(D1, 12 + R * 0.55, R * 0.45); // 12px gap
+  // ═══════════════════════════════════════════════════════════════════
+  // Ring 2: 500px — two gaps per wall
+  // ═══════════════════════════════════════════════════════════════════
+  const D2 = 500;
+  hBarrier2(-D2, -D2 - W, D2 + W, -100, 2, 150, 18);   // top: 2px trap + 18px pass
+  hBarrier2(D2, -D2 - W, D2 + W, -80, 10, 120, 20);    // bottom: 10px trap + 20px pass
+  vBarrier2(-D2, -D2 - W, D2 + W, -50, 1, 80, 15);     // left: 1px trap + 15px pass
+  vBarrier2(D2, -D2 - W, D2 + W, -60, 6, 100, 13);     // right: 6px trap + 13px pass
 
-  // ── Ring 2: 600px ──
-  const D2 = 600;
-  hWall(-D2, -D2, R * 0.45);
-  hWall(14 + R * 0.45, -D2, R * 0.55);
-  hWall(-D2, D2, R * 0.55);
-  hWall(12 + R * 0.55, D2, R * 0.45);
-  vWall(-D2, -D2, R * 0.5);
-  vWall(-D2, 10 + R * 0.5, R * 0.5);
-  vWall(D2, -D2, R * 0.55);
-  vWall(D2, 12 + R * 0.55, R * 0.45);
+  // ═══════════════════════════════════════════════════════════════════
+  // Ring 3: 800px — wider walls, multiple gaps
+  // ═══════════════════════════════════════════════════════════════════
+  const D3 = 800;
+  const W3 = 600;
+  hBarrier2(-D3, -D3 - W3, D3 + W3, -200, 4, 200, 12);  // top: 4px trap + 12px borderline
+  hBarrier2(D3, -D3 - W3, D3 + W3, -150, 5, 100, 19);   // bottom: 5px trap + 19px pass
+  vBarrier2(-D3, -D3 - W3, D3 + W3, -180, 7, 180, 17);  // left: 7px trap + 17px pass
+  vBarrier2(D3, -D3 - W3, D3 + W3, -120, 3, 160, 20);   // right: 3px trap + 20px easy
 
-  // ── Diagonal walls for angled testing ──
-  walls.push({ x1: -200, y1: -500, x2: 200, y2: -500 });
-  walls.push({ x1: 220, y1: -500, x2: 500, y2: -220 });
-  walls.push({ x1: 200, y1: 500, x2: -200, y2: 500 });
-  walls.push({ x1: -220, y1: 500, x2: -500, y2: 220 });
+  // ═══════════════════════════════════════════════════════════════════
+  // Ring 4: 1200px — single gap each, very wide walls
+  // ═══════════════════════════════════════════════════════════════════
+  const D4 = 1200;
+  const W4 = 800;
+  hBarrier(-D4, -D4 - W4, D4 + W4, 50, 11);    // top: 11px (just under passable)
+  hBarrier(D4, -D4 - W4, D4 + W4, -30, 14);    // bottom: 14px (passable)
+  vBarrier(-D4, -D4 - W4, D4 + W4, 20, 9);     // left: 9px (impassable)
+  vBarrier(D4, -D4 - W4, D4 + W4, -10, 20);    // right: 20px (comfortable)
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Ring 5: 1600px — mixed gaps
+  // ═══════════════════════════════════════════════════════════════════
+  const D5 = 1600;
+  const W5 = 900;
+  hBarrier2(-D5, -D5 - W5, D5 + W5, -300, 1, 300, 15);  // top: 1px trap + 15px pass
+  hBarrier2(D5, -D5 - W5, D5 + W5, -250, 8, 250, 12);   // bottom: 8px trap + 12px borderline
+  vBarrier2(-D5, -D5 - W5, D5 + W5, -200, 3, 200, 16);  // left: 3px trap + 16px pass
+  vBarrier2(D5, -D5 - W5, D5 + W5, -150, 6, 150, 18);   // right: 6px trap + 18px pass
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Ring 6: 2100px — outer ring, extreme gaps
+  // ═══════════════════════════════════════════════════════════════════
+  const D6 = 2100;
+  const W6 = 1000;
+  hBarrier(-D6, -D6 - W6, D6 + W6, 0, 2);      // top: 2px death trap
+  hBarrier(D6, -D6 - W6, D6 + W6, 100, 20);     // bottom: 20px comfortable
+  vBarrier(-D6, -D6 - W6, D6 + W6, -50, 11);    // left: 11px just under
+  vBarrier(D6, -D6 - W6, D6 + W6, 50, 13);     // right: 13px passable
 
   return walls;
 }

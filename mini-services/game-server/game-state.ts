@@ -31,7 +31,7 @@ import {
   EXTRACTION_ZONE_DURATION, EXTRACTION_ZONE_SPAWN_INTERVAL,
   BODY_DOWNSAMPLE_INTERVAL, FOOD_DOWNSAMPLE_RADIUS, MAX_SNAKES_PER_SNAPSHOT,
   // Utilities
-  distSq, angleDirect, getBotTarget,
+  distSq, angleDirect, getBotTarget, computeBodyRadius,
 } from './shared';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -188,7 +188,7 @@ export class ArenaRoom {
       color: palette[0], headColor: palette[1],
       lastBoostDrop: 0, targetAngle: angle,
       spiral: { active: false, startAngle: 0, theta: 0, ticksElapsed: 0, a: SPIRAL_A, b: SPIRAL_B, direction: 1 },
-      bodyRadius: SNAKE_RADIUS,
+      bodyRadius: computeBodyRadius(startScore),
       skinId: 'skin-default', rarity: 'common' as SkinRarity,
       socketId: '', input: { targetAngle: angle, boosting: false }, lastSnapshot: null,
     };
@@ -404,7 +404,8 @@ export class ArenaRoom {
       snake.path.pop();
     }
 
-    snake.bodyRadius = SNAKE_RADIUS;
+    // Update visual body radius (grows with score — collision stays at SNAKE_RADIUS)
+    snake.bodyRadius = computeBodyRadius(snake.score);
   }
 
   private updateSpiralTurn(snake: ServerSnake, angleDelta: number): void {
