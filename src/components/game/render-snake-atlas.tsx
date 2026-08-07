@@ -707,8 +707,6 @@ export function renderSnakeFallback(
 // This pointer is just a subtle visual aid — a thin line extending from the
 // head in the direction the snake is turning, so you can see the turn intent.
 
-const _smoothDirAngle = new Map<string, number>();
-
 function drawDirectionPointer(
   ctx: CanvasRenderingContext2D,
   snakeId: string,
@@ -719,17 +717,10 @@ function drawDirectionPointer(
   headRadius: number,
   boosting: boolean,
 ): void {
-  // Smooth/lag the steer angle for slower arrow response
-  let prev = _smoothDirAngle.get(snakeId);
-  if (prev === undefined) prev = steerAngle;
-  let diff = steerAngle - prev;
-  while (diff > Math.PI) diff -= 2 * Math.PI;
-  while (diff < -Math.PI) diff += 2 * Math.PI;
-  const smoothed = prev + diff * 0.12;
-  _smoothDirAngle.set(snakeId, smoothed);
+  // steerAngle is already smoothed by the game loop — use directly
 
   // How much the steering deviates from current facing
-  let steerDiff = smoothed - faceAngle;
+  let steerDiff = steerAngle - faceAngle;
   while (steerDiff > Math.PI) steerDiff -= 2 * Math.PI;
   while (steerDiff < -Math.PI) steerDiff += 2 * Math.PI;
 

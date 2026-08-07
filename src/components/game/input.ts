@@ -42,6 +42,26 @@ export class InputHandler {
   externalBoost = false;
   externalExtract = false;
 
+  // Joystick steering (set by virtual joystick UI)
+  private _joystickActive = false;
+  private _joystickAngle = 0; // absolute angle (screen space)
+
+  /** Activate joystick steering with an absolute angle */
+  setJoystickAngle(angle: number): void {
+    this._joystickActive = true;
+    this._joystickAngle = angle;
+  }
+
+  /** Deactivate joystick steering */
+  clearJoystick(): void {
+    this._joystickActive = false;
+  }
+
+  /** Whether joystick is currently active */
+  isJoystickActive(): boolean {
+    return this._joystickActive;
+  }
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
   }
@@ -116,6 +136,13 @@ export class InputHandler {
 
   private updateAngle(): void {
     if (this.onDetached) return;
+
+    // Joystick overrides everything
+    if (this._joystickActive) {
+      this.state.targetAngle = this._joystickAngle;
+      this.state.boosting = this.externalBoost;
+      return;
+    }
 
     // Keyboard overrides touch/mouse
     let kx = 0;
