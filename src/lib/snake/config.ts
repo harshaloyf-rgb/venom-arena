@@ -36,16 +36,34 @@ export const MAX_TURN_RATE = Math.PI * 0.0375;
 /** Distance between consecutive segment positions in the path history */
 export const SEGMENT_SPACING = 8;
 
-/** Growth rate: each food point adds this many segments */
-export const GROWTH_RATE = 0.25;
+/** Growth coefficient for sqrt-based length curve.
+ *  Formula: length = START_LENGTH + COEFF × √score
+ *  Score 0→15  |  100→65  |  1K→173  |  10K→515  |  100K→1,596
+ *  Grows fast early, naturally decelerates — different score ranges look distinct. */
+export const GROWTH_LENGTH_COEFF = 5;
 
 /** Starting body segment count for new snakes */
 export const START_LENGTH = 15;
 
-/** Safety cap for snake body length (segment count).
- *  Set extremely high so no player ever reaches it in normal gameplay.
- *  At GROWTH_RATE=0.25, score 200,000 would hit this. */
-export const MAX_SNAKE_LENGTH = 50000;
+/** Performance safety cap for snake body length (segment count).
+ *  With sqrt growth, you'd need ~1M score to reach this. Practically unreachable. */
+export const MAX_SNAKE_LENGTH = 5000;
+
+/** Compute visual body length (segments) from score using sqrt growth.
+ *  Fast growth early, naturally decelerates. No player gets stuck at same size. */
+export function computeBodyLength(score: number): number {
+  return Math.min(
+    Math.floor(START_LENGTH + GROWTH_LENGTH_COEFF * Math.sqrt(score)),
+    MAX_SNAKE_LENGTH,
+  );
+}
+
+/** Compute visual body radius from score using uncapped sqrt curve.
+ *  Grows forever — no hard max. Slower at high scores, meaningful at every level.
+ *  Score 0→6  |  1K→8.5  |  10K→14  |  100K→31 */
+export function computeBodyRadius(score: number): number {
+  return SNAKE_RADIUS_MIN + SNAKE_RADIUS_GROWTH_RATE * Math.sqrt(score);
+}
 
 /** Segments lost per boost food drop */
 export const BOOST_SHRINK_RATE = 1;
