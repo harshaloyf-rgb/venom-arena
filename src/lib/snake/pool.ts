@@ -63,13 +63,14 @@ export class PathBuffer implements IPathBuffer {
     this.data = new Float32Array(capacity * 2);
   }
 
-  /** O(1) head insertion. Moves headSegIdx backward (wrapping), writes x/y, caps length. */
+  /** O(1) head insertion. Moves headSegIdx backward (wrapping), writes x/y, grows buffer if needed. */
   prepend(x: number, y: number): void {
+    if (this.length >= this.capacity) this.grow();
     this.headSegIdx = (this.headSegIdx - 1 + this.capacity) % this.capacity;
     const base = this.headSegIdx * 2;
     this.data[base] = x;
     this.data[base + 1] = y;
-    if (this.length < this.capacity) this.length++;
+    this.length++;
   }
 
   /** Get segment at logical index. Returns undefined if out of range. */
