@@ -7,7 +7,18 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { SNAKE_RADIUS_MIN, SNAKE_RADIUS_GROWTH_RATE, SEGMENT_SPACING, computeBodyRadius, computeBodyLength } from '@/lib/snake/config';
+import { SNAKE_RADIUS_MIN, SNAKE_RADIUS_GROWTH_RATE, SEGMENT_SPACING, computeBodyRadius } from '@/lib/snake/config';
+
+/** Skin-preview length formula — decoupled from gameplay balance changes.
+ *  Uses the original sqrt curve so skins always preview at consistent sizes. */
+const PREVIEW_LENGTH_COEFF = 5;
+const PREVIEW_START_LENGTH = 15;
+function previewBodyLength(score: number): number {
+  return Math.min(
+    Math.floor(PREVIEW_START_LENGTH + PREVIEW_LENGTH_COEFF * Math.sqrt(score)),
+    10000,
+  );
+}
 import { getSkinAsset } from '@/lib/snake/skin-registry';
 
 // ─── Color helpers ─────────────────────────────────────────────────────
@@ -89,7 +100,7 @@ export function SnakeFaceTester() {
 
   // Compute values for display
   const bodyRadius = computeBodyRadius(testScore);
-  const logicalLen = computeBodyLength(testScore);
+  const logicalLen = previewBodyLength(testScore);
   const segments = Math.min(Math.ceil((logicalLen * SEGMENT_SPACING) / GAME.segStep), 120); // cap for preview
 
   // Keep ref in sync with state
@@ -144,7 +155,7 @@ export function SnakeFaceTester() {
 
       const curRadius = computeBodyRadius(scoreRef.current);
       const curSegs = Math.min(
-        Math.ceil((computeBodyLength(scoreRef.current) * SEGMENT_SPACING) / GAME.segStep),
+        Math.ceil((previewBodyLength(scoreRef.current) * SEGMENT_SPACING) / GAME.segStep),
         120,
       );
 
