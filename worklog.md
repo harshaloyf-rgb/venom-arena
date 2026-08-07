@@ -611,3 +611,22 @@ Stage Summary:
 - U-turn time: 0.21s → 0.67s (3.2x more gradual)
 - Feels like proper slither.io-style smooth turning now
 
+---
+Task ID: 2
+Agent: Main
+Task: Port circular pupil tracking + smooth rotation to all snake previews (shop + lab)
+
+Work Log:
+- Analyzed 4 preview components: game-snake-preview.tsx, try-on-preview.tsx, skin-preview-game.tsx, skins-canvas-preview.tsx
+- Confirmed SkinsCanvasPreview is no longer imported (only in comments) — skipped
+- Confirmed GameSkinPreview is defined but not currently imported anywhere — updated for future use
+- Updated game-snake-preview.tsx: Added PupilSmoothState interface, pupilRef, prevAngleRef, replaced diff*0.04 turn with clamped maxTurn (π*0.025), updated both economy and full-mode eye rendering with circular 360° pupil tracking + asymmetric lerp (0.10 out, 0.03 back) + angular velocity contribution + idle damping
+- Rewrote try-on-preview.tsx: Added smooth turning (clamped maxTurn π*0.025), circular pupil tracking with asymmetric lerp, angular velocity from head angle changes, tongue and forked tongue preserved
+- Updated skin-preview-game.tsx: Added PupilSmooth interface, pupilRef, prevHeadAngleRef, replaced instant mouse-tracking eyes with circular tracking + asymmetric lerp + sine-wave angular velocity contribution
+- Ran ESLint — clean, no errors
+- Verified with agent-browser: Shop tab loads all preset/premium cards, Lab tab loads DNA engine, zero console errors
+
+Stage Summary:
+- All 3 preview components now have identical eye behavior to in-game: full 360° circular pupil tracking, asymmetric lerp (snappy out, lazy drift back), angular velocity shift during turns, idle damping
+- game-snake-preview.tsx + try-on-preview.tsx also have smooth clamped turn rate (π*0.025) matching game feel
+- No breaking changes, clean compile, clean lint, zero runtime errors
