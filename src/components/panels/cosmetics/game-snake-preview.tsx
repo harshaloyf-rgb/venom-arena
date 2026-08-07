@@ -241,7 +241,9 @@ export function GameSnakePreview({
     const { bx, by } = bufRef.current;
 
     const segR = G.segR * scale;
-    const hr = segR * G.headScale;
+    // Head matches body size when taper is uniform
+    const effectiveHeadScale = curTaper === 'uniform' ? 1.0 : G.headScale;
+    const hr = segR * effectiveHeadScale;
     const wallM = Math.max(segR + 5, Math.min(width, height) * 0.3);
 
     // Initialize with UNIQUE per-instance state + pre-simulate buffer
@@ -507,7 +509,7 @@ export function GameSnakePreview({
       // Body segments
       if (economy) {
         // ECONOMY: no shadows, flat fills for circles, skip cosmetics
-        for (let i = segCount - 1; i >= 1; i--) {
+        for (let i = segCount - 1; i >= 0; i--) {
           const p = segs[i];
           let segColor: string;
           if (curLabMode) {
@@ -589,7 +591,7 @@ export function GameSnakePreview({
           ctx.shadowOffsetY = segR * G.shadowOffY;
         }
 
-        for (let i = segCount - 1; i >= 1; i--) {
+        for (let i = segCount - 1; i >= 0; i--) {
           const p = segs[i];
           let segColor: string;
           if (curLabMode) {

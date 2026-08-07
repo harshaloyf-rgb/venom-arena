@@ -725,7 +725,15 @@ export function renderSnakeFallback(
   }
 
   // ── Head ──
-  const headRadius = segRadius * 1.3;
+  // Detect uniform taper: head matches body size when everything is uniform
+  let isUniformTaper = false;
+  if (customSegments) {
+    isUniformTaper = customSegments.every((s) => Math.abs(s.sizeScale - 1.0) < 0.01);
+  } else if (patternVis) {
+    isUniformTaper = patternVis.taperStyle === 'uniform';
+  }
+  const headScale = isUniformTaper ? 1.0 : 1.3;
+  const headRadius = segRadius * headScale;
   if (headVisible) {
     // For pattern skins, use the pattern's primary color for the head
     const effectiveHeadColor = patternVis ? (patternVis.colors[0] ?? snake.headColor) : snake.headColor;
