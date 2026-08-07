@@ -1,17 +1,19 @@
 // ============================================================================
 // Input Handler — Tracks mouse, keyboard, and touch input for snake control.
 //
-// Mouse steering (slither.io style):
-//   The angle from the VIEWPORT CENTER to the MOUSE CURSOR determines the
-//   snake's target direction. This is intuitive — point where you want to go.
-//   Listens on `window` so it works across the full browser viewport.
-//   No mouseInView guard — mousemove on window is always valid.
+// Mouse steering (delta-based):
+//   Mouse MOVEMENT steers the snake — small nudges left/right turn the snake.
+//   No need to move the mouse across the screen. The snake auto-moves forward,
+//   and you just nudge the mouse to steer. Sensitivity is adjustable.
 //
 // Keyboard steering:
-//   WASD / Arrow keys override mouse. Space / Shift = boost. E = extract.
+//   WASD / Arrow keys set absolute direction. Space / Shift = boost. E = extract.
 // ============================================================================
 
 import type { InputState } from '@/lib/snake/types';
+
+/** How many radians to turn per pixel of horizontal mouse movement */
+const DELTA_SENSITIVITY = 0.004;
 
 /**
  * Creates and manages input state for the game.
@@ -42,25 +44,8 @@ export class InputHandler {
   externalBoost = false;
   externalExtract = false;
 
-  // Joystick steering (set by virtual joystick UI)
-  private _joystickActive = false;
-  private _joystickAngle = 0; // absolute angle (screen space)
-
-  /** Activate joystick steering with an absolute angle */
-  setJoystickAngle(angle: number): void {
-    this._joystickActive = true;
-    this._joystickAngle = angle;
-  }
-
-  /** Deactivate joystick steering */
-  clearJoystick(): void {
-    this._joystickActive = false;
-  }
-
-  /** Whether joystick is currently active */
-  isJoystickActive(): boolean {
-    return this._joystickActive;
-  }
+  // Mouse delta steering
+  private _accumulatedDeltaX = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -137,13 +122,6 @@ export class InputHandler {
   private updateAngle(): void {
     if (this.onDetached) return;
 
-    // Joystick overrides everything
-    if (this._joystickActive) {
-      this.state.targetAngle = this._joystickAngle;
-      this.state.boosting = this.externalBoost;
-      return;
-    }
-
     // Keyboard overrides touch/mouse
     let kx = 0;
     let ky = 0;
@@ -155,6 +133,8 @@ export class InputHandler {
     if (kx !== 0 || ky !== 0) {
       this.state.targetAngle = Math.atan2(ky, kx);
       this.state.boosting = this.keys.has(' ') || this.keys.has('shift') || this.externalBoost;
+      // Consume any accumulated delta so it doesn't leak after keyboard release
+      this._accumulatedDeltaX = 0;
       return;
     }
 
@@ -167,25 +147,19 @@ export class InputHandler {
         this.state.targetAngle = Math.atan2(dy, dx);
       }
       this.state.boosting = dist > 80 || this.externalBoost;
+      this._accumulatedDeltaX = 0;
       return;
     }
 
-    // Mouse input (slither.io style): angle from viewport center to cursor
-    // No mouseInView guard — if mouse has moved at all, use its position.
-    // When mouse leaves the viewport, mousemove stops, and we keep the last
-    // known direction (snake keeps turning toward where mouse was).
-    if (this.canvasRect && this.hasMouseMoved) {
-      const centerX = this.canvasRect.width / 2;
-      const centerY = this.canvasRect.height / 2;
-      const mx = this.mouseClientX - this.canvasRect.left;
-      const my = this.mouseClientY - this.canvasRect.top;
-      const dx = mx - centerX;
-      const dy = my - centerY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > 5) {
-        this.state.targetAngle = Math.atan2(dy, dx);
-      }
+    // Mouse delta steering: horizontal mouse movement turns the snake
+    if (this._accumulatedDeltaX !== 0) {
+      this.state.targetAngle += this._accumulatedDeltaX * DELTA_SENSITIVITY;
+      // Normalize to [-PI, PI]
+      if (this.state.targetAngle > Math.PI) this.state.targetAngle -= 2 * Math.PI;
+      else if (this.state.targetAngle < -Math.PI) this.state.targetAngle += 2 * Math.PI;
     }
+    this._accumulatedDeltaX = 0;
+
     this.state.boosting = this.mouseDown || this.keys.has(' ') || this.keys.has('shift') || this.externalBoost;
   }
 
@@ -203,11 +177,12 @@ export class InputHandler {
     this.keys.delete(e.key.toLowerCase());
   };
 
-  /** Track cursor position relative to viewport (slither.io style) */
+  /** Accumulate mouse movement delta for delta-based steering */
   private onMouseMove = (e: MouseEvent): void => {
     this.mouseClientX = e.clientX;
     this.mouseClientY = e.clientY;
     this.hasMouseMoved = true;
+    this._accumulatedDeltaX += e.movementX;
   };
 
   private onMouseDown = (e: MouseEvent): void => {
