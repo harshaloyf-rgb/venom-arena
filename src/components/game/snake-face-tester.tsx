@@ -12,7 +12,7 @@ import { SNAKE_RADIUS_MIN, SNAKE_RADIUS_GROWTH_RATE, SEGMENT_SPACING, computeBod
 /** Skin-preview length formula — decoupled from gameplay balance changes.
  *  Uses the original sqrt curve so skins always preview at consistent sizes. */
 const PREVIEW_LENGTH_COEFF = 5;
-const PREVIEW_START_LENGTH = 15;
+const PREVIEW_START_LENGTH = 20;
 function previewBodyLength(score: number): number {
   return Math.min(
     Math.floor(PREVIEW_START_LENGTH + PREVIEW_LENGTH_COEFF * Math.sqrt(score)),
