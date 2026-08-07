@@ -932,3 +932,23 @@ Stage Summary:
 - Line uses rgba(220, 38, 38, 0.9) stroke, 2.5px width, 0.7 alpha, matching body collision point style
 - Line extends 0.7 * headRadius on each side of the nose perpendicular to direction of travel
 - First body segment issue: confirmed already fixed — no index===0 hardcoded 1.3x found in cosmetics-utils.ts
+
+---
+Task ID: 4
+Agent: Main
+Task: Redesign collision point visualization — diameter line + squares + connected chain
+
+Work Log:
+- Created unified drawCollisionChain() helper function (lines 768-860)
+- Head collision: moved from nose to DIAMETER (center) of head, perpendicular line through center
+- Body collision: changed from circles (ctx.arc) to rotated squares (ctx.rect)
+- Connection: continuous polyline through all collision point centers — head + all body segments
+- Removed old separate body collision circles and head collision line from both renderers
+- Atlas renderer: hoisted headScreen/atlasHeadR out of if-block for scoping
+- Fallback renderer: uses existing headScreen/headRadius in outer scope
+- Verified with VLM: red line through head center, square body markers, zero-gap connected chain
+
+Stage Summary:
+- drawCollisionChain() is the single source of truth for all collision visualization
+- Draws: 1) connecting polyline, 2) head diameter line, 3) body squares
+- Used by both renderSnakeAtlas and renderSnakeFallback

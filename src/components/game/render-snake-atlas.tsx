@@ -396,30 +396,13 @@ export function renderSnakeAtlas(
     ctx.restore();
   }
 
-  // ── Collision Points: red circles on all body segments (1st body to 2nd-last) ──
-  if (walked.count > 2) {
-    ctx.save();
-    ctx.globalAlpha = 0.7;
-    ctx.fillStyle = '#ef4444';
-    ctx.strokeStyle = 'rgba(220, 38, 38, 0.9)';
-    ctx.lineWidth = 2;
-    for (let i = 0; i <= walked.count - 2; i++) {
-      const wx = walked.xs[i];
-      const wy = walked.ys[i];
-      if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-      const { x: sx, y: sy } = worldToScreen(wx, wy, camera, cw, ch);
-      ctx.beginPath();
-      ctx.arc(sx, sy, segRadius * 0.6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
   // ── Head ──
   const headVisible = headWx >= vl && headWx <= vr && headWy >= vt && headWy <= vb;
-  if (headVisible) {
-    const { x: hsx, y: hsy } = worldToScreen(headWx, headWy, camera, cw, ch);
+  const headScreen = headVisible ? worldToScreen(headWx, headWy, camera, cw, ch) : null;
+  const atlasHeadR = segRadius * 1.3;
+  if (headVisible && headScreen) {
+    const hsx = headScreen.x;
+    const hsy = headScreen.y;
     const headDrawSize = segRadius * 2 * 1.3;
 
     // Legendary glow underlay
@@ -510,23 +493,13 @@ export function renderSnakeAtlas(
       ctx.fillText(snake.name, hsx, hsy - headDrawSize / 2 - 8 * zoom);
     }
 
-    // ── Head collision point: straight line at the nose ──
-    ctx.save();
-    ctx.globalAlpha = 0.7;
-    ctx.strokeStyle = 'rgba(220, 38, 38, 0.9)';
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = 'round';
-    const headR = headDrawSize / 2;
-    const noseX = hsx + Math.cos(snake.angle) * headR;
-    const noseY = hsy + Math.sin(snake.angle) * headR;
-    const perpAngle = snake.angle + Math.PI / 2;
-    const cpHalf = headR * 0.7;
-    ctx.beginPath();
-    ctx.moveTo(noseX - Math.cos(perpAngle) * cpHalf, noseY - Math.sin(perpAngle) * cpHalf);
-    ctx.lineTo(noseX + Math.cos(perpAngle) * cpHalf, noseY + Math.sin(perpAngle) * cpHalf);
-    ctx.stroke();
-    ctx.restore();
   }
+
+  // ── Collision Points: connected chain — head diameter line + body squares ──
+  drawCollisionChain(
+    ctx, headScreen, snake.angle, atlasHeadR,
+    walked, segRadius, camera, cw, ch, vl, vr, vt, vb,
+  );
 
   // ── Render particles for legendary snakes ──
   if (isLegendary) {
@@ -735,26 +708,6 @@ export function renderSnakeFallback(
   // Reset shadow after drawing body
   ctx.restore();
 
-  // ── Collision Points: red circles on all body segments (1st body to 2nd-last) ──
-  if (walked.count > 2) {
-    ctx.save();
-    ctx.globalAlpha = 0.7;
-    ctx.fillStyle = '#ef4444';
-    ctx.strokeStyle = 'rgba(220, 38, 38, 0.9)';
-    ctx.lineWidth = 2;
-    for (let i = 0; i <= walked.count - 2; i++) {
-      const wx = walked.xs[i];
-      const wy = walked.ys[i];
-      if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-      const scr = worldToScreen(wx, wy, camera, cw, ch);
-      ctx.beginPath();
-      ctx.arc(scr.x, scr.y, segRadius * 0.6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
   // ── Head ──
   // Detect uniform taper: head matches body size when everything is uniform
   let isUniformTaper = false;
@@ -801,24 +754,109 @@ export function renderSnakeFallback(
       ctx.fillText(snake.name, headScreen.x, headScreen.y - headRadius - 8 * zoom);
     }
 
-    // ── Head collision point: straight line at the nose ──
-    ctx.save();
-    ctx.globalAlpha = 0.7;
-    ctx.strokeStyle = 'rgba(220, 38, 38, 0.9)';
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = 'round';
-    const fbNoseX = headScreen.x + Math.cos(snake.angle) * headRadius;
-    const fbNoseY = headScreen.y + Math.sin(snake.angle) * headRadius;
-    const fbPerpAngle = snake.angle + Math.PI / 2;
-    const fbCpHalf = headRadius * 0.7;
+  }
+
+  // ── Collision Points: connected chain — head diameter line + body squares ──
+  drawCollisionChain(
+    ctx, headVisible ? headScreen : null, snake.angle, headRadius,
+    walked, segRadius, camera, cw, ch, vl, vr, vt, vb,
+  );
+
+  ctx.globalAlpha = 1;
+}
+
+// ─── Collision Chain: connected head diameter line + body squares ───────────────
+
+/**
+ * Draw the full collision indicator chain for a snake.
+ * 1. Head: straight line through the DIAMETER (center) of the head, perpendicular to direction
+ * 2. Body: rotated squares at each segment center
+ * 3. Connection: continuous polyline through all points — no gaps
+ */
+function drawCollisionChain(
+  ctx: CanvasRenderingContext2D,
+  headScr: { x: number; y: number } | null,
+  headAngle: number,
+  headR: number,
+  walked: WalkResult,
+  segRadius: number,
+  camera: Camera,
+  cw: number,
+  ch: number,
+  vl: number,
+  vr: number,
+  vt: number,
+  vb: number,
+): void {
+  // Collect all visible collision point screen positions + angles
+  // Index 0 = head, 1+ = body segments
+  const totalPts = 1 + Math.max(0, walked.count - 1); // head + body (up to 2nd-last)
+  if (totalPts < 2) return;
+
+  const pts: { x: number; y: number; a: number; r: number }[] = [];
+
+  // Head point
+  if (headScr) {
+    pts.push({ x: headScr.x, y: headScr.y, a: headAngle, r: headR });
+  }
+
+  // Body points (walked 0 to count-2)
+  const bodyEnd = Math.max(0, walked.count - 1);
+  for (let i = 0; i < bodyEnd; i++) {
+    const wx = walked.xs[i];
+    const wy = walked.ys[i];
+    if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
+    const scr = worldToScreen(wx, wy, camera, cw, ch);
+    pts.push({ x: scr.x, y: scr.y, a: walked.angles[i], r: segRadius });
+  }
+
+  if (pts.length < 2) return;
+
+  const sqHalf = segRadius * 0.55; // half-side of the collision square
+
+  ctx.save();
+  ctx.globalAlpha = 0.7;
+  ctx.strokeStyle = 'rgba(220, 38, 38, 0.9)';
+  ctx.fillStyle = 'rgba(239, 68, 68, 0.45)';
+  ctx.lineWidth = 1.8;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  // ── 1. Connecting polyline through all centers (no gaps) ──
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) {
+    ctx.lineTo(pts[i].x, pts[i].y);
+  }
+  ctx.stroke();
+
+  // ── 2. Head: diameter line through center, perpendicular to direction ──
+  if (pts[0].r > 0) {
+    const hp = pts[0];
+    const perpA = hp.a + Math.PI / 2;
+    const hHalf = hp.r * 0.75;
     ctx.beginPath();
-    ctx.moveTo(fbNoseX - Math.cos(fbPerpAngle) * fbCpHalf, fbNoseY - Math.sin(fbPerpAngle) * fbCpHalf);
-    ctx.lineTo(fbNoseX + Math.cos(fbPerpAngle) * fbCpHalf, fbNoseY + Math.sin(fbPerpAngle) * fbCpHalf);
+    ctx.moveTo(hp.x - Math.cos(perpA) * hHalf, hp.y - Math.sin(perpA) * hHalf);
+    ctx.lineTo(hp.x + Math.cos(perpA) * hHalf, hp.y + Math.sin(perpA) * hHalf);
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    ctx.lineWidth = 1.8; // restore
+  }
+
+  // ── 3. Body: rotated squares at each segment ──
+  for (let i = 1; i < pts.length; i++) {
+    const p = pts[i];
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.a);
+    ctx.beginPath();
+    ctx.rect(-sqHalf, -sqHalf, sqHalf * 2, sqHalf * 2);
+    ctx.fill();
     ctx.stroke();
     ctx.restore();
   }
 
-  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
 // ─── Direction Pointer (thin needle extending far ahead) ──────────────────
