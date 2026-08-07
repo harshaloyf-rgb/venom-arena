@@ -952,3 +952,25 @@ Stage Summary:
 - drawCollisionChain() is the single source of truth for all collision visualization
 - Draws: 1) connecting polyline, 2) head diameter line, 3) body squares
 - Used by both renderSnakeAtlas and renderSnakeFallback
+
+---
+Task ID: 5
+Agent: Main
+Task: Rewrite collision system with black dot, new head-to-head rules, no neck protection
+
+Work Log:
+- Updated checkCollisions() in src/lib/snake/engine.ts (offline engine)
+- Updated checkCollisions() in mini-services/game-server/game-state.ts (server)
+- Updated bot evasion in mini-services/game-server/shared.ts
+- Collision now uses BLACK DOT position (0.75 * bodyRadius from head center in travel direction)
+- Head-to-body: black dot checked against all body segments (index 0+, no neck protection)
+- Head-to-head: black dot vs black dot with new rules
+- Removed NECK_PROTECTION_SCALED, NECK_PROTECTION, HEAD_ON_HEAD_BOOST_WINS from collision code
+- killSnake() unchanged — body transforms into food orbs (large/medium/small) spread along body path
+
+Stage Summary:
+- Black dot collision: dotX = headX + cos(angle) * bodyRadius * 0.75
+- Head-to-head rules: neither boost→larger wins, small boost+large steady→small survives, both boost→larger wins, tie→both die
+- No self-collision, no neck protection
+- Both offline engine and server updated consistently
+- Lint passes clean

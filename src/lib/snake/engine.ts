@@ -25,8 +25,8 @@ import {
   FOOD_RESPAWN_BATCH, FOOD_MAX_COUNT,
   // COLLISION
   SNAKE_RADIUS, SNAKE_RADIUS_MIN, SNAKE_RADIUS_GROWTH_RATE,
-  NECK_PROTECTION, SPAWN_PROTECTION_MS, SPATIAL_CELL_SIZE,
-  DEATH_FOOD_LARGE_DIVISOR, DEATH_FOOD_MEDIUM_DIVISOR, HEAD_ON_HEAD_BOOST_WINS,
+  SPAWN_PROTECTION_MS, SPATIAL_CELL_SIZE,
+  DEATH_FOOD_LARGE_DIVISOR, DEATH_FOOD_MEDIUM_DIVISOR,
   // BOOST
   BOOST_DROP_INTERVAL, BOOST_MIN_BODY, BOOST_MIN_SCORE,
   BOOST_SCORE_COST_AMOUNT, BOOST_SCORE_COST_INTERVAL,
@@ -49,11 +49,6 @@ import {
  * This ratio scales path-length-dependent values accordingly.
  */
 const SPACING_RATIO = SEGMENT_SPACING / BASE_SPEED;
-
-
-
-/** Scaled neck protection: covers same physical distance as NECK_PROTECTION * SEGMENT_SPACING */
-const NECK_PROTECTION_SCALED = Math.ceil(NECK_PROTECTION * SPACING_RATIO);
 
 /** Scaled boost min body: covers same physical distance as BOOST_MIN_BODY * SEGMENT_SPACING */
 const BOOST_MIN_BODY_SCALED = Math.ceil(BOOST_MIN_BODY * SPACING_RATIO);
@@ -686,9 +681,7 @@ function checkFoodEating(state: GameState, now: number): void {
 // ==========================================================================
 
 function checkCollisions(state: GameState, now: number): void {
-  // ── Build body segment spatial hash ──
-  // Key optimization: entity.id = snake.id (the string, reused — no concat)
-  // No bodySegMap needed — just look up entity.id directly in state.snakes
+  // ── Build body segment spatial hash (no neck protection — start from index 0) ──
   bodyHash.clear();
   const scratch = _insertScratch;
   scratch.radius = SNAKE_RADIUS;
@@ -700,7 +693,7 @@ function checkCollisions(state: GameState, now: number): void {
     // Step by 2: adjacent path entries are only BASE_SPEED (4.5px) apart,
     // but collision radius is SNAKE_RADIUS*2 (16px). Stepping by 2 halves
     // spatial hash inserts with negligible accuracy loss.
-    for (let i = NECK_PROTECTION_SCALED; i < len; i += 2) {
+    for (let i = 0; i < len; i += 2) {
       scratch.x = snake.path.getX(i);
       scratch.y = snake.path.getY(i);
       scratch.id = sid;
@@ -708,12 +701,16 @@ function checkCollisions(state: GameState, now: number): void {
     }
   }
 
-  // ── Build head spatial hash for O(n) head-on-head check ──
+  // ── Build head spatial hash using BLACK DOT positions ──
+  // Black dot is at 0.75 * bodyRadius from head center, in direction of travel.
   headHash.clear();
+  const dotDist = 0.75;
   for (const [, snake] of state.snakes) {
     if (!snake.alive) continue;
-    scratch.x = snake.path.headX;
-    scratch.y = snake.path.headY;
+    const dotX = snake.path.headX + Math.cos(snake.angle) * snake.bodyRadius * dotDist;
+    const dotY = snake.path.headY + Math.sin(snake.angle) * snake.bodyRadius * dotDist;
+    scratch.x = dotX;
+    scratch.y = dotY;
     scratch.radius = SNAKE_RADIUS;
     scratch.id = snake.id;
     headHash.insert(scratch);
@@ -722,38 +719,45 @@ function checkCollisions(state: GameState, now: number): void {
   const deadSnakes = new Set<string>();
   const snakesMap = state.snakes;
 
-  // ── Head-to-body collision check ──
+  // ── Head-to-body collision: black dot hits other snake's body ──
   for (const [, snake] of snakesMap) {
     if (!snake.alive || deadSnakes.has(snake.id)) continue;
-    const hx = snake.path.headX;
-    const hy = snake.path.headY;
+
+    // Black dot position
+    const dotX = snake.path.headX + Math.cos(snake.angle) * snake.bodyRadius * dotDist;
+    const dotY = snake.path.headY + Math.sin(snake.angle) * snake.bodyRadius * dotDist;
 
     // Spawn protection
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
-    const nearby = bodyHash.query(hx, hy, SNAKE_RADIUS * 2);
+    const nearby = bodyHash.query(dotX, dotY, SNAKE_RADIUS * 2);
     for (let i = 0; i < nearby.length; i++) {
       const entity = nearby[i];
       const otherId = entity.id as string;
-      // Skip self-collision (body segments have same id as head)
+      // Skip self-collision
       if (otherId === snake.id) continue;
 
-      if (distSq(hx, hy, entity.x, entity.y) <= COLLISION_DIST_SQ) {
+      if (distSq(dotX, dotY, entity.x, entity.y) <= COLLISION_DIST_SQ) {
         deadSnakes.add(snake.id);
         break;
       }
     }
   }
 
-  // ── Head-on-head collision via spatial hash (O(n) instead of O(n²)) ──
+  // ── Head-on-head collision: black dot vs black dot ──
+  // Rules:
+  //   Neither boosting: Larger wins, smaller dies
+  //   Smaller boosting, larger steady: Smaller survives!
+  //   Both boosting: Larger wins
+  //   Tie (same length): Both die
   for (const [, snake] of snakesMap) {
     if (!snake.alive || deadSnakes.has(snake.id)) continue;
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
-    const hx = snake.path.headX;
-    const hy = snake.path.headY;
+    const dotX = snake.path.headX + Math.cos(snake.angle) * snake.bodyRadius * dotDist;
+    const dotY = snake.path.headY + Math.sin(snake.angle) * snake.bodyRadius * dotDist;
 
-    const nearby = headHash.query(hx, hy, SNAKE_RADIUS * 2);
+    const nearby = headHash.query(dotX, dotY, SNAKE_RADIUS * 2);
     for (let i = 0; i < nearby.length; i++) {
       const otherId = nearby[i].id as string;
       if (otherId === snake.id) continue; // skip self
@@ -763,27 +767,38 @@ function checkCollisions(state: GameState, now: number): void {
       if (!otherSnake || !otherSnake.alive) continue;
       if (now - otherSnake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
-      const dx = hx - otherSnake.path.headX;
-      const dy = hy - otherSnake.path.headY;
+      const otherDotX = otherSnake.path.headX + Math.cos(otherSnake.angle) * otherSnake.bodyRadius * dotDist;
+      const otherDotY = otherSnake.path.headY + Math.sin(otherSnake.angle) * otherSnake.bodyRadius * dotDist;
+
+      const dx = dotX - otherDotX;
+      const dy = dotY - otherDotY;
       if (dx * dx + dy * dy > COLLISION_DIST_SQ) continue;
 
-      // Head-on-head collision resolved by length + boost rules
+      // Head-on-head: resolved by length + boost rules
       const lenA = snake.path.length;
       const lenB = otherSnake.path.length;
+      const aBoost = snake.boosting;
+      const bBoost = otherSnake.boosting;
 
       if (lenA > lenB) {
-        if (HEAD_ON_HEAD_BOOST_WINS && otherSnake.boosting && !snake.boosting) {
-          deadSnakes.add(snake.id);
+        // Larger is A
+        if (!aBoost && bBoost) {
+          // Larger steady, smaller boosting → smaller survives
+          deadSnakes.add(snake.id); // larger dies
         } else {
+          // (neither boosting) or (both boosting) → larger wins
           deadSnakes.add(otherId);
         }
       } else if (lenB > lenA) {
-        if (HEAD_ON_HEAD_BOOST_WINS && snake.boosting && !otherSnake.boosting) {
-          deadSnakes.add(otherId);
+        // Larger is B
+        if (!bBoost && aBoost) {
+          // Larger steady, smaller boosting → smaller survives
+          deadSnakes.add(otherId); // larger dies
         } else {
           deadSnakes.add(snake.id);
         }
       } else {
+        // Tie: both die
         deadSnakes.add(snake.id);
         deadSnakes.add(otherId);
       }
