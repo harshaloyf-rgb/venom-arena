@@ -23,7 +23,7 @@ import {
   FOOD_COLORS, FOOD_GLOW_COLORS, FOOD_SPAWN_AREA_RADIUS, INITIAL_SPAWN_RADIUS,
   FOOD_RESPAWN_BATCH,
   // COLLISION
-  SNAKE_RADIUS, SNAKE_RADIUS_MIN, SNAKE_RADIUS_MAX, SNAKE_RADIUS_GROWTH_SCALE,
+  SNAKE_RADIUS, SNAKE_RADIUS_MIN, SNAKE_RADIUS_GROWTH_RATE,
   NECK_PROTECTION, SPAWN_PROTECTION_MS, SPATIAL_CELL_SIZE,
   DEATH_FOOD_LARGE_DIVISOR, DEATH_FOOD_MEDIUM_DIVISOR, HEAD_ON_HEAD_BOOST_WINS,
   // BOOST
@@ -46,11 +46,11 @@ import {
  */
 const SPACING_RATIO = SEGMENT_SPACING / BASE_SPEED;
 
-/** Compute visual body radius from score using smooth sqrt curve.
- *  Starts at SNAKE_RADIUS_MIN (12) and asymptotically approaches SNAKE_RADIUS_MAX (28).
- *  Fast growth early (noticeable), slow growth late (tapers off naturally). */
+/** Compute visual body radius from score using uncapped sqrt curve.
+ *  radius = MIN + RATE × √score
+ *  Grows forever — no hard max. Slow at high scores, meaningful at every level. */
 function computeBodyRadius(score: number): number {
-  return SNAKE_RADIUS_MIN + (SNAKE_RADIUS_MAX - SNAKE_RADIUS_MIN) * Math.sqrt(score / (score + SNAKE_RADIUS_GROWTH_SCALE));
+  return SNAKE_RADIUS_MIN + SNAKE_RADIUS_GROWTH_RATE * Math.sqrt(score);
 }
 
 /** Scaled neck protection: covers same physical distance as NECK_PROTECTION * SEGMENT_SPACING */
@@ -122,7 +122,7 @@ export interface PlayerSkinOverride {
 }
 
 /** Create the initial game state */
-export function createInitialState(playerSkin?: PlayerSkinOverride | null): GameState {
+export function createInitialState(playerSkin?: PlayerSkinOverride | null, initialScore?: number): GameState {
   const state: GameState = {
     snakes: new Map(),
     foods: [],
@@ -138,7 +138,7 @@ export function createInitialState(playerSkin?: PlayerSkinOverride | null): Game
   const now = Date.now();
 
   // Spawn player
-  const player = createSnake('player', 'You', 0, 0, 0, false, now, playerSkin);
+  const player = createSnake('player', 'You', initialScore ?? 0, 0, 0, false, now, playerSkin);
   state.player = player;
   state.snakes.set(player.id, player);
 

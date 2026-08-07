@@ -40,10 +40,12 @@ export const SEGMENT_SPACING = 8;
 export const GROWTH_RATE = 0.25;
 
 /** Starting body segment count for new snakes */
-export const START_LENGTH = 20;
+export const START_LENGTH = 15;
 
-/** Maximum snake body length (segment count hard cap) */
-export const MAX_SNAKE_LENGTH = 2000;
+/** Safety cap for snake body length (segment count).
+ *  Set extremely high so no player ever reaches it in normal gameplay.
+ *  At GROWTH_RATE=0.25, score 200,000 would hit this. */
+export const MAX_SNAKE_LENGTH = 50000;
 
 /** Segments lost per boost food drop */
 export const BOOST_SHRINK_RATE = 1;
@@ -87,19 +89,16 @@ export const FOOD_RESPAWN_BATCH = 5;
 
 /** Collision/food-eat radius — stays constant regardless of score (fair gameplay).
  *  Bigger snakes LOOK fatter (visual radius grows) but hitbox stays the same. */
-export const SNAKE_RADIUS = 12;
+export const SNAKE_RADIUS = 6;
 
-/** Minimum visual body radius (at score 0). Same as SNAKE_RADIUS at start. */
-export const SNAKE_RADIUS_MIN = 12;
+/** Minimum visual body radius (at score 0). Thin starting snake. */
+export const SNAKE_RADIUS_MIN = 6;
 
-/** Maximum visual body radius (at very high scores). Snake gets 2.3× wider at max. */
-export const SNAKE_RADIUS_MAX = 28;
-
-/** Growth scale: controls how fast radius grows with score.
- *  Formula: radius = MIN + (MAX - MIN) * sqrt(score / (score + SCALE))
- *  At score=SCALE: radius ≈ MIN + 0.707 × (MAX − MIN)  (~71% of range)
- *  At score=5×SCALE: radius ≈ MIN + 0.913 × (MAX − MIN)  (~91% of range) */
-export const SNAKE_RADIUS_GROWTH_SCALE = 400;
+/** Radius growth rate: how many px of width per √score.
+ *  Formula: radius = MIN + RATE × √score
+ *  No hard max — radius grows forever with score, just slower at higher scores.
+ *  Score 0: 6px  |  Score 1K: 10.5px  |  Score 10K: 14px  |  Score 100K: 31px */
+export const SNAKE_RADIUS_GROWTH_RATE = 0.08;
 
 /** First N segments of a snake's body that cannot kill on collision */
 export const NECK_PROTECTION = 5;
