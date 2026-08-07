@@ -830,14 +830,13 @@ function drawCollisionChain(
   }
   ctx.stroke();
 
-  // ── 2. Head: diameter line through center, perpendicular to direction ──
+  // ── 2. Head: diameter line through center, along direction (head→body) ──
   if (pts[0].r > 0) {
     const hp = pts[0];
-    const perpA = hp.a + Math.PI / 2;
     const hHalf = hp.r * 0.75;
     ctx.beginPath();
-    ctx.moveTo(hp.x - Math.cos(perpA) * hHalf, hp.y - Math.sin(perpA) * hHalf);
-    ctx.lineTo(hp.x + Math.cos(perpA) * hHalf, hp.y + Math.sin(perpA) * hHalf);
+    ctx.moveTo(hp.x - Math.cos(hp.a) * hHalf, hp.y - Math.sin(hp.a) * hHalf);
+    ctx.lineTo(hp.x + Math.cos(hp.a) * hHalf, hp.y + Math.sin(hp.a) * hHalf);
     ctx.lineWidth = 2.5;
     ctx.stroke();
     ctx.lineWidth = 1.8; // restore
