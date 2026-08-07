@@ -817,3 +817,26 @@ Stage Summary:
 - Food is now unlimited — follows the player slither.io style
 - Density-based: 800 food within 5000px, food ahead of player, despawns behind
 - No more food clustering — food continuously repopulates as player moves
+---
+Task ID: spiral-assist
+Agent: Main
+Task: Re-implement Fibonacci spiral assist for circular motion (works while boosting)
+
+Work Log:
+- Analyzed old disabled system: infinite spin bug caused by exit check using spiral's own output angle
+- Redesigned as Progressive Spiral Assist: gradual turn rate enhancement
+- Updated SpiralTurnState type: removed unused fields (startAngle, theta, a, b), added consecutiveTurns
+- New config params: SPIRAL_TURN_THRESHOLD=0.08, SPIRAL_ENTER_TICKS=10, SPIRAL_MAX_MULTIPLIER=1.8, SPIRAL_RAMP_TICKS=40, SPIRAL_EXIT_THRESHOLD=0.03
+- Implemented in moveSnake(): detects 10 consecutive same-direction tight turns, then ramps turn rate up to 1.8x over 40 ticks
+- Key fix: exit check uses player's INPUT angle diff (not snake's output angle) — prevents infinite spin
+- Works at both base and boost speed (multiplier applies on top of dynamic turn rate)
+- Updated snapshot.ts and extrapolation.ts to match new spiral type
+- Simplified extrapolation: spiral mode just uses 2x angle lerp speed (server already computed enhanced turning)
+- Lint clean, dev server compiles, browser test passes
+
+Stage Summary:
+- Spiral assist re-enabled: hold a consistent turn for ~0.17s to activate
+- Turn rate ramps from 1.0x to 1.8x over 0.67s — progressively tighter circles
+- Works while boosting: at boost speed, effective turn goes from 0.100 to 0.180 rad/tick
+- Turning radius while boosting: 60px → 33px (45% tighter)
+- Exit: straighten mouse or change direction = instant exit

@@ -138,20 +138,14 @@ export interface ParticleEmitterConfig {
 
 // ─── Fibonacci Spiral (Phase A types, implemented in Phase B) ───────────────
 
-/** State tracking for a Fibonacci spiral turn */
+/** Spiral turn state — tracks progressive turn enhancement for circular motion */
 export interface SpiralTurnState {
-  /** Whether a tight turn was detected */
+  /** Whether spiral assist is active */
   active: boolean;
-  /** Angle at which the turn started (radians) */
-  startAngle: number;
-  /** Current angle in the spiral (radians accumulated) */
-  theta: number;
-  /** Ticks elapsed since turn started */
+  /** Consecutive ticks turning in the same direction (for entry detection) */
+  consecutiveTurns: number;
+  /** Ticks elapsed since spiral activated (for ramp-up) */
   ticksElapsed: number;
-  /** Spiral parameter a (initial radius) */
-  a: number;
-  /** Spiral parameter b (growth rate) */
-  b: number;
   /** Direction of the turn: +1 = clockwise, -1 = counter-clockwise */
   direction: 1 | -1;
 }

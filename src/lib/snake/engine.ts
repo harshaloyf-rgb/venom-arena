@@ -38,6 +38,9 @@ import {
   EXTRACTION_ZONE_RADIUS, EXTRACTION_SCORE_THRESHOLD, EXTRACTION_SPEED_BONUS,
   STAR_CHIP_VALUE, STAR_CHIP_SPAWN_INTERVAL, STAR_CHIP_RADIUS,
   STAR_CHIP_GLOW, STAR_CHIP_COLORS,
+  // SPIRAL
+  SPIRAL_TURN_THRESHOLD, SPIRAL_ENTER_TICKS, SPIRAL_MAX_MULTIPLIER,
+  SPIRAL_RAMP_TICKS, SPIRAL_EXIT_THRESHOLD,
 } from './config';
 
 /**
@@ -94,13 +97,6 @@ const foodValueCache = new Map<number, number>();
 
 /** Scratch entity for spatial hash inserts (avoids object allocation) */
 const _insertScratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
-
-// ==========================================================================
-// Spiral turn system DISABLED — was causing infinite spinning bug.
-// The exit condition could never trigger because the spiral's own turn
-// rate (clamped to turn rate * 2) always exceeded
-// MAX_SPIRAL_ANGLE_DELTA (0.15 rad). Will be re-implemented later.
-// ==========================================================================
 
 // ==========================================================================
 // Initialization
@@ -209,7 +205,7 @@ function createSnake(
     headColor,
     lastBoostDrop: 0,
     targetAngle: angle,
-    spiral: { active: false, startAngle: 0, theta: 0, ticksElapsed: 0, a: 0, b: 0, direction: 1 },
+    spiral: { active: false, consecutiveTurns: 0, ticksElapsed: 0, direction: 1 },
     bodyRadius: computeBodyRadius(startScore),
     skinId,
     rarity,
@@ -309,9 +305,11 @@ function moveSnake(
   // Store previous angle for turn detection
   snake.prevAngle = snake.angle;
 
-  // ── Angle computation ──────────────────────────────────────────────
+  // ── Angle computation with Spiral Assist ───────────────────────────
   // Dynamic turn rate: faster speed = less turning ability.
-  // Lerp between BASE_TURN_RATE (at base speed) and MIN_TURN_RATE (at boost speed).
+  // Spiral assist: when player holds a consistent tight turn, gradually
+  // enhance the turn rate so the snake can make progressively tighter
+  // circles — works at both base and boost speed.
 
   let diff = targetAngle - snake.angle;
   while (diff > Math.PI) diff -= 2 * Math.PI;
@@ -323,10 +321,48 @@ function moveSnake(
     snake.path.length > BOOST_MIN_BODY_SCALED;
   const currentSpeed = canBoost ? BOOST_SPEED : BASE_SPEED;
   const speedT = Math.min(1, Math.max(0, (currentSpeed - BASE_SPEED) / (BOOST_SPEED - BASE_SPEED)));
-  const maxTurn = snake.isBot
+  let maxTurn = snake.isBot
     ? BOT_MAX_TURN_RATE
     : BASE_TURN_RATE + (MIN_TURN_RATE - BASE_TURN_RATE) * speedT;
 
+  // ── Spiral assist (players only) ────────────────────────────────────
+  // Key fix vs old system: exit check uses INPUT diff, not the spiral's
+  // own output angle. This prevents the infinite-spin bug.
+  if (!snake.isBot) {
+    const absDiff = Math.abs(diff);
+    const turnDir: 1 | -1 = diff >= 0 ? 1 : -1;
+    const sp = snake.spiral;
+
+    if (!sp.active) {
+      // ── Entry detection ──
+      if (absDiff >= SPIRAL_TURN_THRESHOLD && turnDir === sp.direction) {
+        sp.consecutiveTurns++;
+      } else {
+        // Different direction or too small — reset counter
+        sp.direction = turnDir;
+        sp.consecutiveTurns = absDiff >= SPIRAL_TURN_THRESHOLD ? 1 : 0;
+      }
+      if (sp.consecutiveTurns >= SPIRAL_ENTER_TICKS) {
+        sp.active = true;
+        sp.ticksElapsed = 0;
+      }
+    } else {
+      // ── Active spiral ──
+      // Exit: player straightened out or changed direction (check INPUT, not output)
+      if (absDiff < SPIRAL_EXIT_THRESHOLD || turnDir !== sp.direction) {
+        sp.active = false;
+        sp.consecutiveTurns = 0;
+      } else {
+        // Ramp up: gradually increase turn rate multiplier
+        sp.ticksElapsed++;
+        const t = Math.min(1, sp.ticksElapsed / SPIRAL_RAMP_TICKS);
+        const multiplier = 1 + (SPIRAL_MAX_MULTIPLIER - 1) * t;
+        maxTurn *= multiplier;
+      }
+    }
+  }
+
+  // Apply turn (clamped to effective maxTurn, which may be spiral-boosted)
   if (Math.abs(diff) <= maxTurn) {
     snake.angle = targetAngle;
   } else {

@@ -142,10 +142,10 @@ function buildSnakeSnapshot(snake: Snake, tickCount: number): SnakeSnapshot {
       tick: tickCount,
       snakeId: snake.id,
       isSpiral: true,
-      startAngle: snake.spiral.startAngle,
+      startAngle: snake.angle,
       direction: snake.spiral.direction,
-      theta: snake.spiral.theta,
-      expectedDuration: 0, // Populated by higher-level logic if known.
+      theta: snake.spiral.ticksElapsed,
+      expectedDuration: 0,
     };
   }
 
@@ -218,11 +218,8 @@ export function snapshotToSnake(snapshot: SnakeSnapshot): Partial<Snake> {
     rarity: snapshot.rarity,
     spiral: {
       active: snapshot.turn?.isSpiral ?? false,
-      startAngle: snapshot.turn?.startAngle ?? 0,
-      theta: snapshot.turn?.theta ?? 0,
-      ticksElapsed: 0,
-      a: 1.0,
-      b: 0.05,
+      consecutiveTurns: 0,
+      ticksElapsed: snapshot.turn?.theta ?? 0,
       direction: snapshot.turn?.direction ?? 1,
     },
   };
