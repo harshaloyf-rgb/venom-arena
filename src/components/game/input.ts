@@ -8,7 +8,7 @@
 //   No mouseInView guard — mousemove on window is always valid.
 //
 // Keyboard steering:
-//   WASD / Arrow keys override mouse. Space / Shift = boost.
+//   WASD / Arrow keys override mouse. Space / Shift = boost. E = extract.
 // ============================================================================
 
 import type { InputState } from '@/lib/snake/types';
@@ -38,8 +38,17 @@ export class InputHandler {
   private canvasRect: DOMRect | null = null;
   private onDetached = false;
 
+  // External button overrides (set by UI buttons)
+  externalBoost = false;
+  externalExtract = false;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
+  }
+
+  /** Whether E key is held (or external extract button) */
+  isExtracting(): boolean {
+    return this.keys.has('e') || this.externalExtract;
   }
 
   /** Bind all event listeners */
@@ -92,7 +101,12 @@ export class InputHandler {
 
   /** Set boosting from an external source (e.g. UI button) */
   setExternalBoost(active: boolean): void {
-    this.state.boosting = active;
+    this.externalBoost = active;
+  }
+
+  /** Set extracting from an external source (e.g. UI button) */
+  setExternalExtract(active: boolean): void {
+    this.externalExtract = active;
   }
 
   /** Update canvas rect (call on resize) */
@@ -113,7 +127,7 @@ export class InputHandler {
 
     if (kx !== 0 || ky !== 0) {
       this.state.targetAngle = Math.atan2(ky, kx);
-      this.state.boosting = this.keys.has(' ') || this.keys.has('shift');
+      this.state.boosting = this.keys.has(' ') || this.keys.has('shift') || this.externalBoost;
       return;
     }
 
@@ -125,7 +139,7 @@ export class InputHandler {
       if (dist > 10) {
         this.state.targetAngle = Math.atan2(dy, dx);
       }
-      this.state.boosting = dist > 80;
+      this.state.boosting = dist > 80 || this.externalBoost;
       return;
     }
 
@@ -145,7 +159,7 @@ export class InputHandler {
         this.state.targetAngle = Math.atan2(dy, dx);
       }
     }
-    this.state.boosting = this.mouseDown || this.keys.has(' ') || this.keys.has('shift');
+    this.state.boosting = this.mouseDown || this.keys.has(' ') || this.keys.has('shift') || this.externalBoost;
   }
 
   // --- Event handlers (arrow functions for stable `this`) ---

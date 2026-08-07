@@ -766,3 +766,27 @@ Stage Summary:
 - Both buttons disable when player is dead
 - Files modified: input.ts, engine.ts, SnakeGame.tsx
 
+---
+Task ID: 2
+Agent: main
+Task: Redo Extract mechanic and reposition buttons
+
+Work Log:
+- Removed activateExtractionZone/deactivateExtractionZone from engine.ts (reverted)
+- Removed handleExtract callback, extractionActive state, activateExtractionZone import from SnakeGame.tsx
+- Rewrote InputHandler: added isExtracting() method (checks E key or externalExtract flag), added setExternalExtract() and setExternalBoost() as public properties, updated boost logic to include externalBoost
+- Implemented hold-to-extract mechanic in game loop: tracks extractProgressRef (0→1 over 3s), extractLastAngleRef (locks angle on start), any direction change > 0.05rad resets progress to 0
+- Added drawExtractRing() function: circular progress ring on snake head, white→green color transition, dim background track, percentage text above ring
+- Extract ring drawn in both offline and online modes (only visible to local player)
+- Extract: no minimum score, no zone restriction, works anywhere
+- Repositioned buttons: both stacked vertically on bottom-left, Boost on top, Extract below
+- Extract button is now hold-to-extract (onPointerDown/Up/Leave/Cancel) instead of click
+- Verified in browser: both buttons render, no console errors, lint passes clean
+
+Stage Summary:
+- Boost button (bottom-left, top): Hold to boost (orange, Zap icon)
+- Extract button (bottom-left, below Boost): Hold E key or button (amber, CircleDot icon)
+- 3-second progress ring appears on snake head when extracting (white→green)
+- Any steering change resets extraction progress to 0%
+- No score threshold, no zone restriction
+- Files modified: input.ts, engine.ts (reverted), SnakeGame.tsx
