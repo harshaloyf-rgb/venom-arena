@@ -104,9 +104,6 @@ export default function SnakeGame({
   // External boost state (from UI button)
   const externalBoostRef = useRef(false);
 
-  // Smoothed steering angle — snake body follows this (arrow leads)
-  const smoothedAngleRef = useRef(NaN);
-
   // Extraction progress tracking
   const extractProgressRef = useRef(0);
   const extractLastAngleRef = useRef(0);
@@ -302,14 +299,6 @@ export default function SnakeGame({
       const now = Date.now();
       const inputState = input.getState();
 
-      // ── Smooth the target angle (snake body follows arrow) ──
-      if (isNaN(smoothedAngleRef.current)) smoothedAngleRef.current = inputState.targetAngle;
-      let sDiff = inputState.targetAngle - smoothedAngleRef.current;
-      while (sDiff > Math.PI) sDiff -= 2 * Math.PI;
-      while (sDiff < -Math.PI) sDiff += 2 * Math.PI;
-      smoothedAngleRef.current += sDiff * 0.12;
-      const smoothedTarget = smoothedAngleRef.current;
-
       // ── Frame elapsed (for extraction progress, both modes) ──
       const prevFrameTimeRef = lastTimeRef.current || timestamp;
       const frameElapsed = Math.min(timestamp - prevFrameTimeRef, 100);
@@ -324,15 +313,15 @@ export default function SnakeGame({
           // Just started extracting — lock the current angle
           extractActiveRef.current = true;
           extractProgressRef.current = 0;
-          extractLastAngleRef.current = smoothedTarget;
+          extractLastAngleRef.current = inputState.targetAngle;
         }
         // Check direction change (any angle difference resets progress)
-        const angleDelta = Math.abs(smoothedTarget - extractLastAngleRef.current);
+        const angleDelta = Math.abs(inputState.targetAngle - extractLastAngleRef.current);
         const wrappedDelta = Math.min(angleDelta, Math.PI * 2 - angleDelta);
         if (wrappedDelta > 0.05) {
           // Direction changed — reset progress, lock new angle
           extractProgressRef.current = 0;
-          extractLastAngleRef.current = smoothedTarget;
+          extractLastAngleRef.current = inputState.targetAngle;
         } else {
           // Accumulate progress: 3000ms = 1.0
           extractProgressRef.current += frameElapsed / 3000;
@@ -376,8 +365,7 @@ export default function SnakeGame({
         // Run fixed ticks
         const tickMs = FIXED_DT * 1000;
         while (accumulatorRef.current >= tickMs) {
-          const smoothedInput = { targetAngle: smoothedTarget, boosting: inputState.boosting };
-          gameTick(state, smoothedInput, FIXED_DT);
+          gameTick(state, inputState, FIXED_DT);
           accumulatorRef.current -= tickMs;
 
           // Check player death
@@ -461,7 +449,7 @@ export default function SnakeGame({
       else if (effectiveMode === 'online' && extrapolation && onlineEngine) {
         // Forward input to server
         if (onlineEngine.isConnected) {
-          onlineEngine.setInput(smoothedTarget, inputState.boosting);
+          onlineEngine.setInput(inputState.targetAngle, inputState.boosting);
         }
 
         // Extrapolate between snapshots
