@@ -550,3 +550,23 @@ Stage Summary:
 - Fixed blink seed to use snakeId hash (stable per-snake)
 - Blink rate: 30/min (1800-2200ms cycle, 120ms duration)
 - Blink visual: thin 1px dual eyelid arcs instead of thick single line
+---
+Task ID: 3
+Agent: Main
+Task: Switch eye tracking to angular velocity, fix blink rate to 6/min
+
+Work Log:
+- Diagnosed that steering delta (targetAngle - moveAngle) converges to near-zero during sustained turns because the snake catches up to the mouse
+- Replaced steering delta with angular velocity (moveAngle - prevAngle per frame)
+- Added prevAngle and angleReady fields to pupilSmoothMap state
+- Angular velocity stays non-zero during entire curve, giving full pupil extension
+- Pupil direction: perpendicular to head (left turn → pupils shift left, right turn → right)
+- Changed blink from 30/min to 6/min (9000-11000ms cycle)
+- Verified with VLM: hard left → pupils at left edge, hard right → pupils at right edge, straight → center
+
+Stage Summary:
+- Angular velocity signal: angVel = moveAngle - prevAngle, normalized [-PI, PI]
+- Deadzone: 0.002 rad/frame, Full zone: 0.015 rad/frame
+- Lerp speed: 0.25 for snappy but smooth response
+- Blink: 9000-11000ms cycle (6/min), 120ms duration, thin eyelid arcs
+- File: /home/z/my-project/src/components/game/render-snake-atlas.tsx

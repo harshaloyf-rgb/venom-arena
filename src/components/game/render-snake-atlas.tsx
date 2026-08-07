@@ -44,7 +44,7 @@ interface RenderParticle {
 const particlePools: Map<string, RenderParticle[]> = new Map();
 
 /** Per-snake smoothed pupil state for lerp-based eye tracking */
-const pupilSmoothMap: Map<string, { shiftX: number; shiftY: number }> = new Map();
+const pupilSmoothMap: Map<string, { shiftX: number; shiftY: number; prevAngle: number; angleReady: boolean }> = new Map();
 
 // ─── Path Walker ────────────────────────────────────────────────────────────
 
@@ -768,7 +768,7 @@ function drawResponsiveEyes(
   hx: number,
   hy: number,
   moveAngle: number,
-  targetAngle: number,
+  _targetAngle: number,
   headRadius: number,
   boosting: boolean,
   snakeId: string,
@@ -785,7 +785,7 @@ function drawResponsiveEyes(
   // ── SMOOTHING STATE (per-snake, keyed by snake ID) ──
   let smooth = pupilSmoothMap.get(snakeId);
   if (!smooth) {
-    smooth = { shiftX: 0, shiftY: 0 };
+    smooth = { shiftX: 0, shiftY: 0, prevAngle: moveAngle, angleReady: false };
     pupilSmoothMap.set(snakeId, smooth);
   }
   // Prune stale entries (keep map small)
@@ -795,12 +795,12 @@ function drawResponsiveEyes(
   }
 
   // ── BLINK SYSTEM ──
-  // ~30 blinks per minute = 1 blink every 2000ms, with ±200ms randomness
+  // 6 blinks per minute = 1 blink every 10000ms, with ±1000ms randomness
   // Use snakeId for a stable seed (head position changes every frame!)
   let idHash = 0;
   for (let i = 0; i < snakeId.length; i++) idHash = ((idHash << 5) - idHash + snakeId.charCodeAt(i)) | 0;
   const blinkSeed = Math.abs(idHash) % 1000;
-  const blinkCycle = 1800 + (blinkSeed % 400); // 1800-2200ms
+  const blinkCycle = 9000 + (blinkSeed % 2000); // 9000-11000ms
   const blinkDuration = 120; // snappy blink
   const blinkPhase = time ? (time + blinkSeed * 3) % blinkCycle : 99999;
   const isBlinking = blinkPhase < blinkDuration;
@@ -813,6 +813,8 @@ function drawResponsiveEyes(
     const bTargetY = Math.sin(moveAngle) * maxShift;
     smooth.shiftX += (bTargetX - smooth.shiftX) * 0.25;
     smooth.shiftY += (bTargetY - smooth.shiftY) * 0.25;
+    smooth.prevAngle = moveAngle;
+    smooth.angleReady = true;
 
     for (const side of [-1, 1]) {
       const ex = hx + Math.cos(moveAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
@@ -854,37 +856,48 @@ function drawResponsiveEyes(
     return;
   }
 
-  // ── NORMAL MODE: use steering delta (targetAngle - moveAngle) ──
-  let deltaAngle = targetAngle - moveAngle;
-  // Normalize to [-PI, PI]
-  while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
-  while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
+  // ── NORMAL MODE: use ANGULAR VELOCITY (how fast the snake is actually turning) ──
+  // This stays non-zero the entire time the snake is curving, unlike steering delta
+  // which converges to near-zero as the snake catches up to the mouse.
+  let angVel = 0; // positive = turning right, negative = turning left
+  if (smooth.angleReady) {
+    angVel = moveAngle - smooth.prevAngle;
+    // Normalize to [-PI, PI] (handle wraparound)
+    while (angVel > Math.PI) angVel -= 2 * Math.PI;
+    while (angVel < -Math.PI) angVel += 2 * Math.PI;
+  }
+  smooth.prevAngle = moveAngle;
+  smooth.angleReady = true;
 
-  const absDelta = Math.abs(deltaAngle);
+  const absVel = Math.abs(angVel);
 
-  // Deadzone + gradual shift (tuned for steering delta range of 0 to ±π):
-  //   |delta| < 0.05 rad (~3°)   → shift = 0     (center rest)
-  //   |delta| < 0.30 rad (~17°)  → shift = lerp   (gradual)
-  //   |delta| >= 0.30 rad        → shift = max    (full extension)
-  const DEADZONE = 0.05;
-  const FULL_ZONE = 0.30;
+  // Map angular velocity to pupil shift:
+  //   |vel| < 0.002 rad/frame (~0.1°/frame) → center (deadzone for noise)
+  //   |vel| < 0.015 rad/frame (~0.9°/frame) → gradual ramp
+  //   |vel| >= 0.015 rad/frame             → full extension (hard turn)
+  const DEADZONE = 0.002;
+  const FULL_ZONE = 0.015;
   let shiftRatio: number;
-  if (absDelta < DEADZONE) {
+  if (absVel < DEADZONE) {
     shiftRatio = 0;
-  } else if (absDelta < FULL_ZONE) {
-    shiftRatio = (absDelta - DEADZONE) / (FULL_ZONE - DEADZONE);
+  } else if (absVel < FULL_ZONE) {
+    shiftRatio = (absVel - DEADZONE) / (FULL_ZONE - DEADZONE);
   } else {
     shiftRatio = 1;
   }
   const pupilShift = maxShift * shiftRatio;
 
-  // Direction the pupil shifts toward
-  const lookDir = absDelta < 0.001 ? moveAngle : moveAngle + deltaAngle;
+  // Direction: perpendicular to head facing.
+  // Positive angVel = turning right → pupil shifts right (perpAngle direction)
+  // Negative angVel = turning left  → pupil shifts left  (-perpAngle direction)
+  const lookDir = absVel < 0.0001 ? moveAngle
+    : angVel > 0 ? moveAngle + Math.PI / 2   // turning right → look right
+    : moveAngle - Math.PI / 2;               // turning left  → look left
 
   // ── LERP SMOOTHING: smooth the pupil shift for organic motion ──
   const targetShiftX = Math.cos(lookDir) * pupilShift;
   const targetShiftY = Math.sin(lookDir) * pupilShift;
-  const LERP_SPEED = 0.22;
+  const LERP_SPEED = 0.25;
   smooth.shiftX += (targetShiftX - smooth.shiftX) * LERP_SPEED;
   smooth.shiftY += (targetShiftY - smooth.shiftY) * LERP_SPEED;
 
