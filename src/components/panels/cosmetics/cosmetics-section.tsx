@@ -86,7 +86,7 @@ export function CosmeticsSection({
           height={140}
           segments={14}
           speed={1.2}
-          scale={0.5}
+          scale={0.75}
           responsive
         />
       </div>

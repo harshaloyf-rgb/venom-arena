@@ -628,7 +628,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
                 height={180}
                 segments={20}
                 speed={1.2}
-                scale={0.77}
+                scale={1.0}
               />
             </div>
 
