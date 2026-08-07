@@ -241,9 +241,6 @@ export function GameSnakePreview({
     const { bx, by } = bufRef.current;
 
     const segR = G.segR * scale;
-    // Head matches body size when taper is uniform
-    const effectiveHeadScale = curTaper === 'uniform' ? 1.0 : G.headScale;
-    const hr = segR * effectiveHeadScale;
     const wallM = Math.max(segR + 5, Math.min(width, height) * 0.3);
 
     // Initialize with UNIQUE per-instance state + pre-simulate buffer
@@ -357,6 +354,9 @@ export function GameSnakePreview({
     const curBodyStyle = effectiveBodyStyle;
     const curTaper = effectiveTaper;
     const curGlow = effectiveGlow;
+    // Head matches body size when taper is uniform
+    const effectiveHeadScale = curTaper === 'uniform' ? 1.0 : G.headScale;
+    const hr = segR * effectiveHeadScale;
     const curHeadCol = resolvedHead;
     const curBodyCol = resolvedBody;
     const curLabMode = isLabMode;
