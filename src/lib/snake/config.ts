@@ -23,15 +23,18 @@ export const ARENA_GRID_COLOR = 'rgba(255, 255, 255, 0.03)';
 // ============================================================================
 
 /** Base movement speed (pixels per tick at 60fps) */
-export const BASE_SPEED = 4.5;
+export const BASE_SPEED = 5.5;
 
-/** Speed while boosting (pixels per tick at 60fps) */
-export const BOOST_SPEED = 8.0;
+/** Speed while boosting (pixels per tick at 60fps) — exactly 2.0× base */
+export const BOOST_SPEED = 11.0;
 
-/** Max angle change per tick for player steering (radians). Tuned for 60Hz ticks.
- *  Current: π/15 → 0.209 rad/tick → 12.6 rad/s → 720°/s → U-turn in 0.25s
- *  Very responsive steering — full 180° reversal in a quarter second. */
-export const MAX_TURN_RATE = Math.PI / 15;
+/** Turn rate at base speed (radians per tick) — ~13.75° per tick */
+export const BASE_TURN_RATE = 0.24;
+
+/** Turn rate at boost speed (radians per tick) — ~2.3° per tick.
+ *  Dynamic: actual turn rate is lerped between BASE_TURN_RATE and MIN_TURN_RATE
+ *  based on current speed. Faster = tighter turn radius. */
+export const MIN_TURN_RATE = 0.04;
 
 /** Distance between consecutive segment positions in the path history */
 export const SEGMENT_SPACING = 8;
@@ -160,7 +163,7 @@ export const BOOST_SCORE_COST_AMOUNT = 1;
 export const BOOST_SCORE_COST_INTERVAL = 12;
 
 /** Boost speed as a multiplier of base speed */
-export const BOOST_SPEED_MULTIPLIER = BOOST_SPEED / BASE_SPEED; // ≈ 1.778
+export const BOOST_SPEED_MULTIPLIER = BOOST_SPEED / BASE_SPEED; // = 2.0
 
 // ============================================================================
 // 6. BOT — AI count, starting stats, steering, behavior parameters
