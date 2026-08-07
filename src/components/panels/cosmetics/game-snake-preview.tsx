@@ -14,6 +14,12 @@ import { resolveShapeStyle, computeTaperRadius, drawSegmentShape, readCustomSkin
 import type { BodyStyle, TaperStyle, CustomSegment } from './cosmetics-types';
 import { renderEquippedCosmetics, readEquippedCosmetics, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
 
+// HMR code-version: increments on every module re-evaluation so the
+// animation-loop useEffect re-runs with the latest closure code.
+const _HMR_VER = typeof globalThis !== 'undefined'
+  ? ((globalThis as any).__gspHMR = ((globalThis as any).__gspHMR || 0) + 1)
+  : 0;
+
 // ─── Color helpers ─────────────────────────────────────────────────────
 
 function lightenHex(hex: string, factor: number): string {
@@ -724,7 +730,7 @@ export function GameSnakePreview({
       c.removeEventListener('mousemove', onMove);
       c.removeEventListener('mouseleave', onLeave);
     };
-  }, [width, height, segments, speed, scale, resolvedHead, resolvedBody, effectiveBodyStyle, effectiveTaper, effectiveGlow, isLabMode, effectiveColors, instanceSeed, economy]);
+  }, [width, height, segments, speed, scale, resolvedHead, resolvedBody, effectiveBodyStyle, effectiveTaper, effectiveGlow, isLabMode, effectiveColors, instanceSeed, economy, _HMR_VER]);
 
   // Get skin name for label
   let skinName = '';

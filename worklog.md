@@ -630,3 +630,23 @@ Stage Summary:
 - All 3 preview components now have identical eye behavior to in-game: full 360° circular pupil tracking, asymmetric lerp (snappy out, lazy drift back), angular velocity shift during turns, idle damping
 - game-snake-preview.tsx + try-on-preview.tsx also have smooth clamped turn rate (π*0.025) matching game feel
 - No breaking changes, clean compile, clean lint, zero runtime errors
+---
+Task ID: 3
+Agent: HMR-Fix
+Task: Fix HMR stale closure in snake preview animation loops
+
+Work Log:
+- Added module-level `_HMR_VER` counter to game-snake-preview.tsx (global key `__gspHMR`)
+- Added `_HMR_VER` to animation-loop useEffect dependency array (ends with `economy, _HMR_VER`)
+- Added module-level `_HMR_VER` counter to try-on-preview.tsx (global key `__topHMR`)
+- Added `_HMR_VER` to animation-loop useEffect dependency array (ends with `glow, _HMR_VER`)
+- Added module-level `_HMR_VER` counter to skin-preview-game.tsx (global key `__gskHMR`)
+- Added `_HMR_VER` to second useEffect dependency array only (the rAF loop, ends with `animated, _HMR_VER`) — first useEffect (useCallback for draw) left untouched
+- Ran ESLint — clean, no errors
+- Verified dev.log shows successful recompile ("✓ Compiled in 310ms")
+
+Stage Summary:
+- HMR stale closure bug fixed across all 3 snake preview components
+- Each file uses a unique globalThis key to avoid cross-file collisions
+- On every HMR re-evaluation the counter increments, forcing React to tear down the old animation loop and re-run with the latest closure code
+- No logic changes — only dependency array additions and module-level counters

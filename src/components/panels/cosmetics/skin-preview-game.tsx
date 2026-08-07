@@ -15,6 +15,12 @@ import { renderEquippedCosmetics, getCosmeticById, type EquippedCosmetics } from
 import { readCustomSkinStateSafe, drawSegmentShape } from '@/components/panels/cosmetics/cosmetics-utils';
 import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-types';
 
+// HMR code-version: increments on every module re-evaluation so the
+// animation-loop useEffect re-runs with the latest closure code.
+const _HMR_VER = typeof globalThis !== 'undefined'
+  ? ((globalThis as any).__gskHMR = ((globalThis as any).__gskHMR || 0) + 1)
+  : 0;
+
 // ─── Game-accurate constants (mirrors render-snake-atlas.tsx) ───────────
 
 const HEAD_SCALE = 1.3;
@@ -317,7 +323,7 @@ export function GameSkinPreview({
     const loop = (t: number) => { if (!running) return; draw(ctx, width, height, t); animRef.current = requestAnimationFrame(loop); };
     animRef.current = requestAnimationFrame(loop);
     return () => { running = false; cancelAnimationFrame(animRef.current); c.removeEventListener('mousemove', onMove); c.removeEventListener('mouseleave', onLeave); };
-  }, [draw, width, height, animated]);
+  }, [draw, width, height, animated, _HMR_VER]);
 
   return <canvas ref={canvasRef} style={{ width: `${width}px`, height: `${height}px` }} className={`block ${className}`} />;
 }
