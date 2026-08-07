@@ -73,11 +73,20 @@ export function computeBodyRadius(score: number): number {
 export const BOOST_SHRINK_RATE = 1;
 
 // ============================================================================
-// 3. FOOD — orbs: count, weights, values, sizes, colors, spawn areas
+// 3. FOOD — orbs: weights, values, sizes, colors, spawn/despawn areas
 // ============================================================================
 
-/** Total food orbs to maintain in the arena */
-export const FOOD_COUNT_TARGET = 1000;
+/** Target food count within the player's visible radius (density-based spawning). */
+export const FOOD_DENSITY_TARGET = 800;
+
+/** Radius around the player to count food for density checks and spawn food into. */
+export const FOOD_VISIBLE_RADIUS = 5000;
+
+/** Food beyond this distance from the player gets despawned (memory management). */
+export const FOOD_DESPAWN_RADIUS = 7000;
+
+/** Number of food orbs to spawn per tick when density is below target. */
+export const FOOD_RESPAWN_BATCH = 25;
 
 /** Spawn weight probabilities for [small, medium, large] food */
 export const FOOD_SPAWN_WEIGHTS: [number, number, number] = [0.93, 0.04, 0.03];
@@ -94,16 +103,11 @@ export const FOOD_COLORS: [string, string, string] = ['#34d399', '#38bdf8', '#f4
 /** Glow colors for [small, medium, large] food */
 export const FOOD_GLOW_COLORS: [string, string, string] = ['#10b981', '#0ea5e9', '#ec4899'];
 
-/** Food spawn radius around random center point */
-export const FOOD_SPAWN_AREA_RADIUS = 5000;
-
 /** Initial food spawn area radius (around origin at game start) */
 export const INITIAL_SPAWN_RADIUS = 5000;
 
-/** Number of food orbs to spawn per tick when below target */
-export const FOOD_RESPAWN_BATCH = 10;
-
-// FOOD_DESPAWN_RADIUS removed — was unused (no despawn logic implemented)
+/** Maximum food array length (safety cap to prevent unbounded memory growth). */
+export const FOOD_MAX_COUNT = 5000;
 
 // ============================================================================
 // 4. COLLISION — snake radius, protection zones, death rules

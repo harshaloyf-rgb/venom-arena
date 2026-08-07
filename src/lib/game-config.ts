@@ -241,7 +241,9 @@ export const ALL_FOOD_ORBS: FoodOrbConfig[] = [FOOD_ORB_SMALL, FOOD_ORB_MEDIUM, 
 // Food spawn distribution weights: 93% small, 4% medium, 3% large
 export const FOOD_ORB_WEIGHTS: number[] = [0.93, 0.04, 0.03];
 
-export const FOOD_COUNT_TARGET = 1200; // total food orbs per arena
+export const FOOD_DENSITY_TARGET = 800; // food count near player (density-based)
+export const FOOD_VISIBLE_RADIUS = 5000; // radius around player for density check
+export const FOOD_DESPAWN_RADIUS = 7000; // despawn food beyond this
 export const REGULAR_FOOD_GROW = 1; // legacy alias (food value IS the grow amount)
 
 // Star collectibles — always exactly 10 dropped on player death
