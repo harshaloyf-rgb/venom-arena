@@ -4,28 +4,15 @@ import { useEffect, useRef } from 'react';
 import type { BodyStyle, TaperStyle } from './cosmetics-types';
 import { drawSegmentShape, resolveShapeStyle, lightenHex, darkenHex } from './cosmetics-utils';
 
-// HMR code-version: increments on every module re-evaluation so the
-// animation-loop useEffect re-runs with the latest closure code.
-const _HMR_VER = typeof globalThis !== 'undefined'
-  ? ((globalThis as any).__topHMR = ((globalThis as any).__topHMR || 0) + 1)
-  : 0;
-
 // ---------------------------------------------------------------------------
 // INTERACTIVE TRY-ON PLAYGROUND (steer with mouse)
 // Uses the SAME 3D gradient circles and eyes as the in-game renderer.
-// Circular pupil tracking + asymmetric lerp + smooth turning (matching game).
 // ---------------------------------------------------------------------------
 interface TryOnPreviewProps {
   colors: string[];
   shapeStyle: BodyStyle;
   taperStyle: TaperStyle;
   glow: boolean;
-}
-
-// Smooth pupil state
-interface PupilSmooth {
-  shiftX: number;
-  shiftY: number;
 }
 
 export function TryOnPreview({
@@ -37,8 +24,6 @@ export function TryOnPreview({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mousePos = useRef({ x: 220, y: 100 });
   const isHovered = useRef(false);
-  const pupilRef = useRef<PupilSmooth | null>(null);
-  const prevAngleRef = useRef(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -75,9 +60,6 @@ export function TryOnPreview({
 
     let headX = 220;
     let headY = 100;
-    let headAngle = 0;
-    prevAngleRef.current = 0;
-    pupilRef.current = null;
 
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -95,23 +77,12 @@ export function TryOnPreview({
       const dy = targetY - headY;
       const dist = Math.hypot(dx, dy);
 
-      // Smooth turning with clamped turn rate (matching game feel)
-      const maxTurn = Math.PI * 0.025;
       if (dist > 3) {
         const speed = isHovered.current ? 4.8 : 3.4;
-        const targetAngle = Math.atan2(dy, dx);
-        let diff = targetAngle - headAngle;
-        while (diff > Math.PI) diff -= 2 * Math.PI;
-        while (diff < -Math.PI) diff += 2 * Math.PI;
-        if (Math.abs(diff) <= maxTurn) headAngle = targetAngle;
-        else headAngle += Math.sign(diff) * maxTurn;
-        headX += Math.cos(headAngle) * speed;
-        headY += Math.sin(headAngle) * speed;
+        const angle = Math.atan2(dy, dx);
+        headX += Math.cos(angle) * speed;
+        headY += Math.sin(angle) * speed;
       }
-
-      // Angular velocity for pupil tracking
-      const angVel = headAngle - prevAngleRef.current;
-      prevAngleRef.current = headAngle;
 
       points.unshift({ x: headX, y: headY });
       if (points.length > numPoints) points.pop();
@@ -169,13 +140,14 @@ export function TryOnPreview({
       // Head — GAME-ACCURATE with 3D gradient and 1.3x scale
       const head = points[0];
       const nextPt = points[1] || head;
-      const headCol = colors[0] || '#ffffff';
+      const headAngle = Math.atan2(head.y - nextPt.y, head.x - nextPt.x);
+      const headColor = colors[0] || '#ffffff';
       const headR = 12;
 
       ctx.save();
       if (glow) {
         ctx.shadowBlur = 18;
-        ctx.shadowColor = headCol;
+        ctx.shadowColor = headColor;
       }
 
       // 3D head gradient (same as atlas head rendering)
@@ -183,9 +155,9 @@ export function TryOnPreview({
         head.x - headR * 0.3, head.y - headR * 0.3, headR * 0.1,
         head.x, head.y, headR,
       );
-      headGrad.addColorStop(0, lightenHex(headCol, 0.35));
-      headGrad.addColorStop(0.6, headCol);
-      headGrad.addColorStop(1, darkenHex(headCol, 0.3));
+      headGrad.addColorStop(0, lightenHex(headColor, 0.35));
+      headGrad.addColorStop(0.6, headColor);
+      headGrad.addColorStop(1, darkenHex(headColor, 0.3));
       ctx.fillStyle = headGrad;
       ctx.beginPath();
       ctx.arc(head.x, head.y, headR, 0, Math.PI * 2);
@@ -219,63 +191,12 @@ export function TryOnPreview({
         ctx.restore();
       }
 
-      // Eyes — circular pupil tracking with asymmetric lerp
+      // Eyes — GAME-ACCURATE responsive eyes with white, pupil, and highlight
       const eyeForward = headR * 0.3;
       const eyeOffset = headR * 0.45;
       const eyeR = headR * 0.28;
       const pupilR = eyeR * 0.55;
-      const maxShift = eyeR * 0.7;
       const perpAngle = headAngle + Math.PI / 2;
-
-      // Compute target pupil shift (circular 360°)
-      let targetShiftX = 0, targetShiftY = 0;
-      if (isHovered.current) {
-        const mdx = mousePos.current.x - head.x;
-        const mdy = mousePos.current.y - head.y;
-        const mDist = Math.sqrt(mdx * mdx + mdy * mdy);
-        if (mDist > 5) {
-          const rawLook = Math.atan2(mdy, mdx);
-          let deltaA = rawLook - headAngle;
-          while (deltaA > Math.PI) deltaA -= 2 * Math.PI;
-          while (deltaA < -Math.PI) deltaA += 2 * Math.PI;
-          const absD = Math.abs(deltaA);
-          const DZ = 0.12, FZ = 0.45;
-          const sr = absD < DZ ? 0 : absD < FZ ? (absD - DZ) / (FZ - DZ) : 1;
-          // Combine with angular velocity
-          const angVelC = Math.min(1, Math.abs(angVel) / 0.018);
-          const combined = Math.min(1, Math.max(sr, angVelC * 0.75));
-          const lookDir = Math.abs(deltaA) < 0.06 ? headAngle : rawLook;
-          targetShiftX = Math.cos(lookDir) * maxShift * combined;
-          targetShiftY = Math.sin(lookDir) * maxShift * combined;
-        }
-      }
-      // Angular velocity shift during turns (auto-pilot or steering)
-      if (!isHovered.current || Math.abs(angVel) > 0.005) {
-        // Use movement direction as targetAngle proxy
-        const moveDir = dist > 3 ? Math.atan2(targetY - headY, targetX - headX) : headAngle;
-        const angVelC = Math.min(1, Math.abs(angVel) / 0.018);
-        const turnShiftX = Math.cos(moveDir) * maxShift * angVelC * 0.75;
-        const turnShiftY = Math.sin(moveDir) * maxShift * angVelC * 0.75;
-        const curDist = Math.sqrt(targetShiftX * targetShiftX + targetShiftY * targetShiftY);
-        const turnDist = Math.sqrt(turnShiftX * turnShiftX + turnShiftY * turnShiftY);
-        if (turnDist > curDist) { targetShiftX = turnShiftX; targetShiftY = turnShiftY; }
-      }
-
-      // Asymmetric lerp
-      if (!pupilRef.current) pupilRef.current = { shiftX: 0, shiftY: 0 };
-      const ps = pupilRef.current;
-      const targetDist = Math.sqrt(targetShiftX * targetShiftX + targetShiftY * targetShiftY);
-      const currentDist = Math.sqrt(ps.shiftX * ps.shiftX + ps.shiftY * ps.shiftY);
-      const isReturning = targetDist < currentDist;
-      const LERP_OUT = 0.10, LERP_BACK = 0.03;
-      const lerpSpeed = isReturning ? LERP_BACK : LERP_OUT;
-      if (targetDist < 0.1 && currentDist < 0.1) {
-        ps.shiftX *= 0.97;
-        ps.shiftY *= 0.97;
-      } else {
-        ps.shiftX += (targetShiftX - ps.shiftX) * lerpSpeed;
-        ps.shiftY += (targetShiftY - ps.shiftY) * lerpSpeed;
-      }
 
       for (const side of [-1, 1]) {
         const ex = head.x + Math.cos(headAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
@@ -290,18 +211,18 @@ export function TryOnPreview({
         ctx.fill();
         ctx.stroke();
 
-        // Pupil (smooth shift)
-        const ppx = ex + ps.shiftX;
-        const ppy = ey + ps.shiftY;
+        // Pupil
+        const px = ex + Math.cos(headAngle) * pupilR * 0.3;
+        const py = ey + Math.sin(headAngle) * pupilR * 0.3;
         ctx.fillStyle = '#111111';
         ctx.beginPath();
-        ctx.arc(ppx, ppy, pupilR, 0, Math.PI * 2);
+        ctx.arc(px, py, pupilR, 0, Math.PI * 2);
         ctx.fill();
 
         // Tiny highlight (same as in-game)
         ctx.fillStyle = 'rgba(255,255,255,0.7)';
         ctx.beginPath();
-        ctx.arc(ppx - pupilR * 0.3, ppy - pupilR * 0.35, pupilR * 0.3, 0, Math.PI * 2);
+        ctx.arc(px - pupilR * 0.3, py - pupilR * 0.35, pupilR * 0.3, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -315,7 +236,7 @@ export function TryOnPreview({
       canvas.removeEventListener('mouseenter', handleMouseEnter);
       canvas.removeEventListener('mouseleave', handleMouseLeave);
     };
-  }, [colors, shapeStyle, taperStyle, glow, _HMR_VER]);
+  }, [colors, shapeStyle, taperStyle, glow]);
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-indigo-500/20 bg-slate-950 p-1 shadow-2xl">

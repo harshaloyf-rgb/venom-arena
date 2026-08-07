@@ -14,13 +14,7 @@ import { resolveShapeStyle, computeTaperRadius, drawSegmentShape, readCustomSkin
 import type { BodyStyle, TaperStyle, CustomSegment } from './cosmetics-types';
 import { renderEquippedCosmetics, readEquippedCosmetics, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
 
-// HMR code-version: increments on every module re-evaluation so the
-// animation-loop useEffect re-runs with the latest closure code.
-const _HMR_VER = typeof globalThis !== 'undefined'
-  ? ((globalThis as any).__gspHMR = ((globalThis as any).__gspHMR || 0) + 1)
-  : 0;
-
-// ─── Color helpers ─────────────────────────────────────────────────────
+// ─── Color helpers ─────────────────────────────────────────
 
 function lightenHex(hex: string, factor: number): string {
   const n = parseInt(hex.replace('#', ''), 16);
@@ -34,7 +28,7 @@ function darkenHex(hex: string, factor: number): string {
   return `#${Math.round(r * (1 - factor)).toString(16).padStart(2, '0')}${Math.round(g * (1 - factor)).toString(16).padStart(2, '0')}${Math.round(b * (1 - factor)).toString(16).padStart(2, '0')}`;
 }
 
-// ─── Seeded random for deterministic per-instance behavior ─────────────
+// ─── Seeded random for deterministic per-instance behavior ─────
 
 function hashString(str: string): number {
   let h = 0;
@@ -73,7 +67,7 @@ const G = {
   shadowOffY: 0.3,
 };
 
-// ─── Persistent position state (survives across effect re-runs) ───────
+// ─── Persistent position state (survives across effect re-runs) ────
 interface SnakePosState {
   headX: number;
   headY: number;
@@ -83,14 +77,6 @@ interface SnakePosState {
   nextTurn: number;
   bufCount: number;
   initialized: boolean;
-}
-
-// Per-instance smooth pupil state for asymmetric lerp circular tracking
-interface PupilSmoothState {
-  shiftX: number;
-  shiftY: number;
-  prevAngle: number;
-  angleReady: boolean;
 }
 
 interface SnakeBuf {
@@ -107,7 +93,7 @@ function ensureSegs(n: number) {
   return _segs;
 }
 
-// ─── Component ─────────────────────────────────────────────────────────
+// ─── Component ──────────────────────────────────
 
 export function GameSnakePreview({
   skinId,
@@ -156,10 +142,6 @@ export function GameSnakePreview({
   const posRef = useRef<SnakePosState | null>(null);
   const bufRef = useRef<SnakeBuf | null>(null);
   const prevSegRef = useRef(segments);
-
-  // Smooth pupil tracking state (asymmetric lerp, circular 360°)
-  const pupilRef = useRef<PupilSmoothState | null>(null);
-  const prevAngleRef = useRef<number>(0);
 
   // Resolve colors for this render (stable, no side effects)
   const resolvedHead = (() => {
@@ -300,9 +282,7 @@ export function GameSnakePreview({
         let d = sta - sa;
         while (d > Math.PI) d -= 2 * Math.PI;
         while (d < -Math.PI) d += 2 * Math.PI;
-        const preMaxTurn = Math.PI * 0.025;
-        if (Math.abs(d) <= preMaxTurn) sa = sta;
-        else sa += Math.sign(d) * preMaxTurn;
+        sa += d * 0.04;
 
         sx += Math.cos(sa) * speed;
         sy += Math.sin(sa) * speed;
@@ -325,8 +305,6 @@ export function GameSnakePreview({
       posRef.current.turnTimer = stTimer;
       posRef.current.nextTurn = stNext;
       posRef.current.bufCount = bufLen;
-      prevAngleRef.current = sa;
-      pupilRef.current = null; // Reset smooth pupil on fresh init
     }
 
     // Pre-compute colors for simple mode (avoids per-frame lightenHex/darkenHex)
@@ -377,14 +355,7 @@ export function GameSnakePreview({
       let diff = targetAngle - angle;
       while (diff > Math.PI) diff -= 2 * Math.PI;
       while (diff < -Math.PI) diff += 2 * Math.PI;
-      // Smooth turn rate matching game feel (was 0.04, now 0.025 = ~270°/s at 60fps)
-      const maxTurn = Math.PI * 0.025;
-      if (Math.abs(diff) <= maxTurn) angle = targetAngle;
-      else angle += Math.sign(diff) * maxTurn;
-
-      // Angular velocity for pupil tracking
-      const angVel = angle - prevAngleRef.current;
-      prevAngleRef.current = angle;
+      angle += diff * 0.04;
 
       headX += Math.cos(angle) * speed;
       headY += Math.sin(angle) * speed;
@@ -512,71 +483,40 @@ export function GameSnakePreview({
         ctx.fillStyle = hg;
         ctx.beginPath(); ctx.arc(headX, headY, hr, 0, Math.PI * 2); ctx.fill();
 
-        // Responsive eyes — circular pupil tracking with asymmetric lerp
+        // Responsive eyes (deadzone + relative tracking, same as game canvas)
         const eyeOff = hr * G.eyeOff;
         const eyeR = hr * G.eyeR;
         const pupR = eyeR * G.pupR;
         const fwd = hr * G.eyeFwd;
         const perp = angle + Math.PI / 2;
         const maxShift = eyeR * G.pupShift;
+        const now = performance.now();
 
-        // Compute target pupil shift (circular 360°)
-        let targetShiftX = 0, targetShiftY = 0;
+        // Compute delta angle (mouse relative to head direction)
+        let deltaAngle = 0;
         const m = mouseRef.current;
         if (m) {
           const dx = m.x - headX, dy = m.y - headY;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist > 5) {
+          if (Math.sqrt(dx * dx + dy * dy) > 5) {
             const rawLook = Math.atan2(dy, dx);
-            let deltaA = rawLook - angle;
-            while (deltaA > Math.PI) deltaA -= 2 * Math.PI;
-            while (deltaA < -Math.PI) deltaA += 2 * Math.PI;
-            const absD = Math.abs(deltaA);
-            const DZ = 0.12, FZ = 0.45;
-            const sr = absD < DZ ? 0 : absD < FZ ? (absD - DZ) / (FZ - DZ) : 1;
-            // Combine steering delta with angular velocity
-            const angVelC = Math.min(1, Math.abs(angVel) / 0.018);
-            const combined = Math.min(1, Math.max(sr, angVelC * 0.75));
-            // Look direction: full circular (targetAngle for steering, forward for idle)
-            const lookDir = Math.abs(deltaA) < 0.06 ? angle : rawLook;
-            targetShiftX = Math.cos(lookDir) * maxShift * combined;
-            targetShiftY = Math.sin(lookDir) * maxShift * combined;
+            deltaAngle = rawLook - angle;
+            while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
+            while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
           }
         }
-        // Angular velocity shifts pupil during turns even without mouse
-        if (!m || Math.abs(angVel) > 0.005) {
-          const angVelC = Math.min(1, Math.abs(angVel) / 0.018);
-          const turnShiftX = Math.cos(targetAngle) * maxShift * angVelC * 0.75;
-          const turnShiftY = Math.sin(targetAngle) * maxShift * angVelC * 0.75;
-          const curDist = Math.sqrt(targetShiftX * targetShiftX + targetShiftY * targetShiftY);
-          const turnDist = Math.sqrt(turnShiftX * turnShiftX + turnShiftY * turnShiftY);
-          if (turnDist > curDist) { targetShiftX = turnShiftX; targetShiftY = turnShiftY; }
-        }
-
-        // Asymmetric lerp toward target (snappy out, lazy return)
-        if (!pupilRef.current) pupilRef.current = { shiftX: 0, shiftY: 0, prevAngle: angle, angleReady: false };
-        const ps = pupilRef.current;
-        const targetDist = Math.sqrt(targetShiftX * targetShiftX + targetShiftY * targetShiftY);
-        const currentDist = Math.sqrt(ps.shiftX * ps.shiftX + ps.shiftY * ps.shiftY);
-        const isReturning = targetDist < currentDist;
-        const LERP_OUT = 0.10, LERP_BACK = 0.03;
-        const lerpSpeed = isReturning ? LERP_BACK : LERP_OUT;
-        if (targetDist < 0.1 && currentDist < 0.1) {
-          // Idle damping
-          ps.shiftX *= 0.97;
-          ps.shiftY *= 0.97;
-        } else {
-          ps.shiftX += (targetShiftX - ps.shiftX) * lerpSpeed;
-          ps.shiftY += (targetShiftY - ps.shiftY) * lerpSpeed;
-        }
+        const absDelta = Math.abs(deltaAngle);
+        const DEADZONE = 0.12, FULL_ZONE = 0.45;
+        const shiftRatio = absDelta < DEADZONE ? 0 : absDelta < FULL_ZONE ? (absDelta - DEADZONE) / (FULL_ZONE - DEADZONE) : 1;
+        const pupilShift = maxShift * shiftRatio;
+        const lookDir = absDelta < 0.001 ? angle : angle + deltaAngle;
 
         for (const side of [-1, 1]) {
           const ex = headX + Math.cos(angle) * fwd + Math.cos(perp) * eyeOff * side;
           const ey = headY + Math.sin(angle) * fwd + Math.sin(perp) * eyeOff * side;
           ctx.fillStyle = '#ffffff';
           ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, Math.PI * 2); ctx.fill();
-          const ppx = ex + ps.shiftX;
-          const ppy = ey + ps.shiftY;
+          const ppx = ex + Math.cos(lookDir) * pupilShift;
+          const ppy = ey + Math.sin(lookDir) * pupilShift;
           ctx.fillStyle = '#111111';
           ctx.beginPath(); ctx.arc(ppx, ppy, pupR, 0, Math.PI * 2); ctx.fill();
           ctx.fillStyle = `rgba(255,255,255,${G.highlight})`;
@@ -635,7 +575,7 @@ export function GameSnakePreview({
         ctx.beginPath(); ctx.arc(headX, headY, hr, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
 
-        // Responsive eyes — circular pupil tracking with asymmetric lerp
+        // Responsive eyes
         const eq = readEquippedCosmetics();
         const hasCustomEyes = eq.eyes && eq.eyes !== 'none';
 
@@ -647,52 +587,23 @@ export function GameSnakePreview({
           const perp = angle + Math.PI / 2;
           const maxShift = eyeR * G.pupShift;
 
-          // Compute target pupil shift (circular 360°)
-          let targetShiftX = 0, targetShiftY = 0;
+          // Deadzone + relative tracking (same as game canvas)
+          let deltaAngle = 0;
           const m2 = mouseRef.current;
           if (m2) {
             const dx = m2.x - headX, dy = m2.y - headY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist > 5) {
+            if (Math.sqrt(dx * dx + dy * dy) > 5) {
               const rawLook = Math.atan2(dy, dx);
-              let deltaA = rawLook - angle;
-              while (deltaA > Math.PI) deltaA -= 2 * Math.PI;
-              while (deltaA < -Math.PI) deltaA += 2 * Math.PI;
-              const absD = Math.abs(deltaA);
-              const DZ = 0.12, FZ = 0.45;
-              const sr = absD < DZ ? 0 : absD < FZ ? (absD - DZ) / (FZ - DZ) : 1;
-              const angVelC = Math.min(1, Math.abs(angVel) / 0.018);
-              const combined = Math.min(1, Math.max(sr, angVelC * 0.75));
-              const lookDir = Math.abs(deltaA) < 0.06 ? angle : rawLook;
-              targetShiftX = Math.cos(lookDir) * maxShift * combined;
-              targetShiftY = Math.sin(lookDir) * maxShift * combined;
+              deltaAngle = rawLook - angle;
+              while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
+              while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
             }
           }
-          // Angular velocity shifts pupil during turns even without mouse
-          if (!m2 || Math.abs(angVel) > 0.005) {
-            const angVelC = Math.min(1, Math.abs(angVel) / 0.018);
-            const turnShiftX = Math.cos(targetAngle) * maxShift * angVelC * 0.75;
-            const turnShiftY = Math.sin(targetAngle) * maxShift * angVelC * 0.75;
-            const curDist = Math.sqrt(targetShiftX * targetShiftX + targetShiftY * targetShiftY);
-            const turnDist = Math.sqrt(turnShiftX * turnShiftX + turnShiftY * turnShiftY);
-            if (turnDist > curDist) { targetShiftX = turnShiftX; targetShiftY = turnShiftY; }
-          }
-
-          // Asymmetric lerp
-          if (!pupilRef.current) pupilRef.current = { shiftX: 0, shiftY: 0, prevAngle: angle, angleReady: false };
-          const ps = pupilRef.current;
-          const targetDist = Math.sqrt(targetShiftX * targetShiftX + targetShiftY * targetShiftY);
-          const currentDist = Math.sqrt(ps.shiftX * ps.shiftX + ps.shiftY * ps.shiftY);
-          const isReturning = targetDist < currentDist;
-          const LERP_OUT = 0.10, LERP_BACK = 0.03;
-          const lerpSpeed = isReturning ? LERP_BACK : LERP_OUT;
-          if (targetDist < 0.1 && currentDist < 0.1) {
-            ps.shiftX *= 0.97;
-            ps.shiftY *= 0.97;
-          } else {
-            ps.shiftX += (targetShiftX - ps.shiftX) * lerpSpeed;
-            ps.shiftY += (targetShiftY - ps.shiftY) * lerpSpeed;
-          }
+          const absDelta = Math.abs(deltaAngle);
+          const DZ = 0.12, FZ = 0.45;
+          const sr = absDelta < DZ ? 0 : absDelta < FZ ? (absDelta - DZ) / (FZ - DZ) : 1;
+          const pupilShift = maxShift * sr;
+          const lookDir = absDelta < 0.001 ? angle : angle + deltaAngle;
 
           for (const side of [-1, 1]) {
             const ex = headX + Math.cos(angle) * fwd + Math.cos(perp) * eyeOff * side;
@@ -703,8 +614,8 @@ export function GameSnakePreview({
             ctx.lineWidth = G.eyeBorderW;
             ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
 
-            const ppx = ex + ps.shiftX;
-            const ppy = ey + ps.shiftY;
+            const ppx = ex + Math.cos(lookDir) * pupilShift;
+            const ppy = ey + Math.sin(lookDir) * pupilShift;
             ctx.fillStyle = '#111111';
             ctx.beginPath(); ctx.arc(ppx, ppy, pupR, 0, Math.PI * 2); ctx.fill();
 
@@ -730,7 +641,7 @@ export function GameSnakePreview({
       c.removeEventListener('mousemove', onMove);
       c.removeEventListener('mouseleave', onLeave);
     };
-  }, [width, height, segments, speed, scale, resolvedHead, resolvedBody, effectiveBodyStyle, effectiveTaper, effectiveGlow, isLabMode, effectiveColors, instanceSeed, economy, _HMR_VER]);
+  }, [width, height, segments, speed, scale, resolvedHead, resolvedBody, effectiveBodyStyle, effectiveTaper, effectiveGlow, isLabMode, effectiveColors, instanceSeed, economy]);
 
   // Get skin name for label
   let skinName = '';

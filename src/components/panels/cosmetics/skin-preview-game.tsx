@@ -15,12 +15,6 @@ import { renderEquippedCosmetics, getCosmeticById, type EquippedCosmetics } from
 import { readCustomSkinStateSafe, drawSegmentShape } from '@/components/panels/cosmetics/cosmetics-utils';
 import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-types';
 
-// HMR code-version: increments on every module re-evaluation so the
-// animation-loop useEffect re-runs with the latest closure code.
-const _HMR_VER = typeof globalThis !== 'undefined'
-  ? ((globalThis as any).__gskHMR = ((globalThis as any).__gskHMR || 0) + 1)
-  : 0;
-
 // ─── Game-accurate constants (mirrors render-snake-atlas.tsx) ───────────
 
 const HEAD_SCALE = 1.3;
@@ -48,9 +42,6 @@ interface GameSkinPreviewProps {
   className?: string;
   equippedCosmetics?: EquippedCosmetics | null;
 }
-
-// Smooth pupil state for circular tracking
-interface PupilSmooth { shiftX: number; shiftY: number; }
 
 let sharedAtlasManager: SkinAtlasManager | null = null;
 function getSharedAtlasManager(): SkinAtlasManager {
@@ -80,8 +71,6 @@ export function GameSkinPreview({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef(0);
   const mouseRef = useRef<{ x: number; y: number } | null>(null);
-  const pupilRef = useRef<PupilSmooth | null>(null);
-  const prevHeadAngleRef = useRef<number>(0);
 
   const draw = useCallback((ctx: CanvasRenderingContext2D, W: number, H: number, time: number) => {
     const asset = assetOverride ?? getSkinAsset(skinId);
@@ -198,64 +187,12 @@ export function GameSkinPreview({
         ctx.restore();
       }
 
-      // ── Eyes (game-accurate) — circular pupil tracking with asymmetric lerp ──
+      // ── Eyes (game-accurate) ──
       const eyeOff = hr * EYE_OFFSET_RATIO;
       const eyeR = hr * EYE_RADIUS_RATIO;
       const pupR = eyeR * PUPIL_RADIUS_RATIO;
       const fwd = hr * EYE_FORWARD_RATIO;
       const perp = hp.a + Math.PI / 2;
-      const maxShift = eyeR * PUPIL_SHIFT_RATIO;
-
-      // Angular velocity from head angle changes (sine wave wiggle)
-      const angVel = hp.a - prevHeadAngleRef.current;
-      prevHeadAngleRef.current = hp.a;
-
-      // Compute target pupil shift (circular 360°)
-      let targetShiftX = 0, targetShiftY = 0;
-      const m = mouseRef.current;
-      if (m) {
-        const dx = m.x - hp.x, dy = m.y - hp.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > 5) {
-          const rawLook = Math.atan2(dy, dx);
-          let deltaA = rawLook - hp.a;
-          while (deltaA > Math.PI) deltaA -= 2 * Math.PI;
-          while (deltaA < -Math.PI) deltaA += 2 * Math.PI;
-          const absD = Math.abs(deltaA);
-          const DZ = 0.12, FZ = 0.45;
-          const sr = absD < DZ ? 0 : absD < FZ ? (absD - DZ) / (FZ - DZ) : 1;
-          const angVelC = Math.min(1, Math.abs(angVel) / 0.018);
-          const combined = Math.min(1, Math.max(sr, angVelC * 0.75));
-          const lookDir = Math.abs(deltaA) < 0.06 ? hp.a : rawLook;
-          targetShiftX = Math.cos(lookDir) * maxShift * combined;
-          targetShiftY = Math.sin(lookDir) * maxShift * combined;
-        }
-      }
-      // Angular velocity wiggle contribution (sine wave)
-      if (!m || Math.abs(angVel) > 0.005) {
-        const angVelC = Math.min(1, Math.abs(angVel) / 0.018);
-        const turnShiftX = Math.cos(hp.a) * maxShift * angVelC * 0.75;
-        const turnShiftY = Math.sin(hp.a) * maxShift * angVelC * 0.75;
-        const curDist = Math.sqrt(targetShiftX * targetShiftX + targetShiftY * targetShiftY);
-        const turnDist = Math.sqrt(turnShiftX * turnShiftX + turnShiftY * turnShiftY);
-        if (turnDist > curDist) { targetShiftX = turnShiftX; targetShiftY = turnShiftY; }
-      }
-
-      // Asymmetric lerp
-      if (!pupilRef.current) pupilRef.current = { shiftX: 0, shiftY: 0 };
-      const ps = pupilRef.current;
-      const targetDist = Math.sqrt(targetShiftX * targetShiftX + targetShiftY * targetShiftY);
-      const currentDist = Math.sqrt(ps.shiftX * ps.shiftX + ps.shiftY * ps.shiftY);
-      const isReturning = targetDist < currentDist;
-      const LERP_OUT = 0.10, LERP_BACK = 0.03;
-      const lerpSpeed = isReturning ? LERP_BACK : LERP_OUT;
-      if (targetDist < 0.1 && currentDist < 0.1) {
-        ps.shiftX *= 0.97;
-        ps.shiftY *= 0.97;
-      } else {
-        ps.shiftX += (targetShiftX - ps.shiftX) * lerpSpeed;
-        ps.shiftY += (targetShiftY - ps.shiftY) * lerpSpeed;
-      }
 
       for (const side of [-1, 1]) {
         const ex = hp.x + Math.cos(hp.a) * fwd + Math.cos(perp) * eyeOff * side;
@@ -266,8 +203,15 @@ export function GameSkinPreview({
         ctx.lineWidth = EYE_BORDER_W;
         ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
 
-        const ppx = ex + ps.shiftX;
-        const ppy = ey + ps.shiftY;
+        let lookA = hp.a;
+        const m = mouseRef.current;
+        if (m) {
+          const dx = m.x - ex, dy = m.y - ey;
+          if (Math.sqrt(dx * dx + dy * dy) > 2) lookA = Math.atan2(dy, dx);
+        }
+        const shift = eyeR * PUPIL_SHIFT_RATIO;
+        const ppx = ex + Math.cos(lookA) * shift;
+        const ppy = ey + Math.sin(lookA) * shift;
         ctx.fillStyle = '#111111';
         ctx.beginPath(); ctx.arc(ppx, ppy, pupR, 0, Math.PI * 2); ctx.fill();
 
@@ -323,7 +267,7 @@ export function GameSkinPreview({
     const loop = (t: number) => { if (!running) return; draw(ctx, width, height, t); animRef.current = requestAnimationFrame(loop); };
     animRef.current = requestAnimationFrame(loop);
     return () => { running = false; cancelAnimationFrame(animRef.current); c.removeEventListener('mousemove', onMove); c.removeEventListener('mouseleave', onLeave); };
-  }, [draw, width, height, animated, _HMR_VER]);
+  }, [draw, width, height, animated]);
 
   return <canvas ref={canvasRef} style={{ width: `${width}px`, height: `${height}px` }} className={`block ${className}`} />;
 }
