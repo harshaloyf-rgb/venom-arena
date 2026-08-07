@@ -4,6 +4,12 @@ import { useEffect, useRef } from 'react';
 import type { BodyStyle, TaperStyle } from './cosmetics-types';
 import { drawSegmentShape, resolveShapeStyle, lightenHex, darkenHex } from './cosmetics-utils';
 
+// HMR code-version: increments on every module re-evaluation so the
+// animation-loop useEffect re-runs with the latest closure code.
+const _HMR_VER = typeof globalThis !== 'undefined'
+  ? ((globalThis as any).__topHMR = ((globalThis as any).__topHMR || 0) + 1)
+  : 0;
+
 // ---------------------------------------------------------------------------
 // INTERACTIVE TRY-ON PLAYGROUND (steer with mouse)
 // Uses the SAME 3D gradient circles and eyes as the in-game renderer.
@@ -309,7 +315,7 @@ export function TryOnPreview({
       canvas.removeEventListener('mouseenter', handleMouseEnter);
       canvas.removeEventListener('mouseleave', handleMouseLeave);
     };
-  }, [colors, shapeStyle, taperStyle, glow]);
+  }, [colors, shapeStyle, taperStyle, glow, _HMR_VER]);
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-indigo-500/20 bg-slate-950 p-1 shadow-2xl">
