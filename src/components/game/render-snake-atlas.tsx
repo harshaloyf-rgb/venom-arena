@@ -716,8 +716,6 @@ function drawDirectionPointer(
   headRadius: number,
   boosting: boolean,
 ): void {
-  // Direction pointer is currently hidden
-  return;
   // How much the steering deviates from current facing
   let steerDiff = steerAngle - faceAngle;
   while (steerDiff > Math.PI) steerDiff -= 2 * Math.PI;
@@ -728,13 +726,8 @@ function drawDirectionPointer(
   // Line grows slightly with snake size: base 5x headRadius, scales up to 7x at large sizes
   // headRadius ranges from ~6 (start) to ~31 (100K score)
   const sizeScale = Math.min(1.4, 1.0 + (headRadius - 6) * 0.015);
-  const lineLen = headRadius * 5.0 * sizeScale;
   const startDist = headRadius * 1.1;
-  const endDist = startDist + lineLen;
-
-  // Start point: just in front of the head
-  const sx = hx + Math.cos(faceAngle) * startDist;
-  const sy = hy + Math.sin(faceAngle) * startDist;
+  const endDist = startDist + headRadius * 1.2 * sizeScale;
 
   // Tip points in the steer direction (clamped to 60° off face)
   const maxDeflection = Math.PI / 3;
@@ -743,28 +736,12 @@ function drawDirectionPointer(
   const ex = hx + Math.cos(tipAngle) * endDist;
   const ey = hy + Math.sin(tipAngle) * endDist;
 
-  // Midpoint — blend between face and steer direction
-  const midDist = startDist + lineLen * 0.5;
-  const midAngle = faceAngle + clampedDiff * 0.4;
-  const mx = hx + Math.cos(midAngle) * midDist;
-  const my = hy + Math.sin(midAngle) * midDist;
-
   // Opacity: always visible (subtle when straight, brighter when turning/boosting)
   const turnIntensity = Math.min(absDiff / 0.6, 1.0);
   const alpha = boosting ? 0.7 : 0.15 + 0.45 * turnIntensity;
-  const lineW = boosting ? 2.5 : 1.5;
 
-  // Draw the curved direction line
-  ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-  ctx.lineWidth = lineW;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.beginPath();
-  ctx.moveTo(sx, sy);
-  ctx.quadraticCurveTo(mx, my, ex, ey);
-  ctx.stroke();
-
-  // Arrowhead at the tip
+  // Direction line hidden — only arrowhead drawn
+  // Arrowhead at the tip (closer to head since no line)
   const arrowLen = headRadius * 0.9 * sizeScale;
   const arrowHalfAngle = 0.4; // ~23° spread
   const arrowAlpha = Math.min(alpha * 1.1, 0.85);
