@@ -18,7 +18,6 @@ import {
   FOOD_COLORS, FOOD_GLOW_COLORS, FOOD_SPAWN_AREA_RADIUS, INITIAL_SPAWN_RADIUS,
   FOOD_RESPAWN_BATCH,
   SNAKE_RADIUS, SPAWN_PROTECTION_MS, SPATIAL_CELL_SIZE,
-  DEATH_FOOD_LARGE_DIVISOR, DEATH_FOOD_MEDIUM_DIVISOR,
   BOOST_DROP_INTERVAL, BOOST_MIN_BODY, BOOST_MIN_SCORE, BOOST_SHRINK_RATE,
   BOT_COUNT, BOT_MAX_TURN_RATE, BOT_START_SCORE_MIN, BOT_START_SCORE_MAX,
   BOT_FOOD_SCAN_RADIUS, BOT_EVADE_RADIUS, BOT_PREDICT_TICKS, BOT_WANDER_RATE,
@@ -69,6 +68,22 @@ function pointToSegDistSq(px: number, py: number, x1: number, y1: number, x2: nu
   const cx = x1 + t * dx;
   const cy = y1 + t * dy;
   return (px - cx) * (px - cx) + (py - cy) * (py - cy);
+}
+
+/** Exact line-segment vs line-segment intersection test.
+ *  Returns true if segment (ax1,ay1)→(ax2,ay2) crosses segment (bx1,by1)→(bx2,by2). */
+function segSegIntersect(
+  ax1: number, ay1: number, ax2: number, ay2: number,
+  bx1: number, by1: number, bx2: number, by2: number,
+): boolean {
+  const d1x = ax2 - ax1, d1y = ay2 - ay1;
+  const d2x = bx2 - bx1, d2y = by2 - by1;
+  const cross = d1x * d2y - d1y * d2x;
+  if (Math.abs(cross) < 1e-10) return false;
+  const dx = bx1 - ax1, dy = by1 - ay1;
+  const t = (dx * d2y - dy * d2x) / cross;
+  const u = (dx * d1y - dy * d1x) / cross;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
 }
 
 // ─── ServerSnake ─────────────────────────────────────────────────────────────
@@ -807,11 +822,11 @@ export class ArenaRoom {
     }
 
     // ── Obstacle collision: black dot (1px) vs wall segments ──
-    // Sub-step check prevents tunneling through thin walls.
+    // Uses EXACT swept collision (line-segment vs line-segment intersection)
+    // plus point-to-segment check at current position.
     const obstacles = this.obstacles;
     if (obstacles.length > 0) {
       const wallHitDistSq = 1;
-      const SUB_STEPS = 4;
       for (const [, snake] of this.snakes) {
         if (!snake.alive || deadSnakes.has(snake.id)) continue;
         if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
@@ -821,22 +836,21 @@ export class ArenaRoom {
         const dotY = snake.path.headY + Math.sin(snake.angle) * snake.bodyRadius * DOT_DIST;
         const prevDotX = snake.path.getX(1) + Math.cos(snake.angle) * snake.bodyRadius * DOT_DIST;
         const prevDotY = snake.path.getY(1) + Math.sin(snake.angle) * snake.bodyRadius * DOT_DIST;
-        const ddx = dotX - prevDotX;
-        const ddy = dotY - prevDotY;
 
         let hit = false;
-        for (let s = 0; s <= SUB_STEPS && !hit; s++) {
-          const t = s / SUB_STEPS;
-          const cx = prevDotX + ddx * t;
-          const cy = prevDotY + ddy * t;
-          for (let w = 0; w < obstacles.length; w++) {
-            const ob = obstacles[w];
-            if (pointToSegDistSq(cx, cy, ob.x1, ob.y1, ob.x2, ob.y2) <= wallHitDistSq) {
-              deadSnakes.add(snake.id);
-              this.killSnake(snake, 'obstacle', 'Obstacle');
-              hit = true;
-              break;
-            }
+        for (let w = 0; w < obstacles.length; w++) {
+          const ob = obstacles[w];
+          if (segSegIntersect(prevDotX, prevDotY, dotX, dotY, ob.x1, ob.y1, ob.x2, ob.y2)) {
+            deadSnakes.add(snake.id);
+            this.killSnake(snake, 'obstacle', 'Obstacle');
+            hit = true;
+            break;
+          }
+          if (pointToSegDistSq(dotX, dotY, ob.x1, ob.y1, ob.x2, ob.y2) <= wallHitDistSq) {
+            deadSnakes.add(snake.id);
+            this.killSnake(snake, 'obstacle', 'Obstacle');
+            hit = true;
+            break;
           }
         }
       }
@@ -848,16 +862,16 @@ export class ArenaRoom {
   private killSnake(snake: ServerSnake, killerId: string, killerName: string): void {
     snake.alive = false;
 
-    // Death food: 15 base value + score = total. Always a mix of 1/3/5 value orbs.
-    // Example: score 22 → 37 value → 3L(15) + 4M(12) + 10S(10) = 37
+    // Death food: 15 base + score = total value. Mixed 1/2/5 value orbs.
+    // Example: score 22 → 37 value → shuffled mix of small(1), medium(2), large(5)
     const score = snake.score;
     const dropValue = 15 + score;
-    const largeVal = Math.floor(dropValue * 0.4 / 5) * 5;
-    const medVal = Math.floor(dropValue * 0.3 / 3) * 3;
-    const smallVal = dropValue - largeVal - medVal;
-    const largeCount = Math.max(1, largeVal / 5);
-    const medCount = Math.max(1, medVal / 3);
-    const smallCount = Math.max(1, smallVal);
+    // ~40% as large (5 each), ~30% as medium (2 each), rest as small (1 each)
+    const largeCount = Math.max(1, Math.floor(dropValue * 0.4 / 5));
+    const medCount = Math.max(1, Math.floor(dropValue * 0.3 / 2));
+    let remaining = dropValue - largeCount * 5 - medCount * 2;
+    const smallCount = Math.max(1, remaining);
+    remaining -= smallCount;
     const totalFood = largeCount + medCount + smallCount;
 
     // Record kill event
@@ -870,40 +884,33 @@ export class ArenaRoom {
       timestamp: Date.now(),
     });
 
-    // Distribute food along body path
+    // Build shuffled size array — mix small/medium/large randomly
+    const FOOD_SIZES: FoodSize[] = ['small', 'medium', 'large'];
+    const sizes: Array<0 | 1 | 2> = [];
+    for (let i = 0; i < largeCount; i++) sizes.push(2);
+    for (let i = 0; i < medCount; i++) sizes.push(1);
+    for (let i = 0; i < smallCount; i++) sizes.push(0);
+    // Fisher-Yates shuffle
+    for (let i = sizes.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = sizes[i];
+      sizes[i] = sizes[j];
+      sizes[j] = tmp;
+    }
+
+    // Distribute food along body path in shuffled order
     const segLen = snake.path.length;
     const step = Math.max(1, Math.floor(segLen / totalFood));
-    let foodIdx = 0;
 
-    for (let i = 0; i < largeCount; i++) {
-      const si = Math.min(foodIdx * step, segLen - 1);
+    for (let i = 0; i < sizes.length; i++) {
+      const si = Math.min(i * step, segLen - 1);
+      const sizeIdx = sizes[i];
       this.foods.push({
         id: this.nextFoodId++,
         x: snake.path.getX(si), y: snake.path.getY(si),
-        size: 'large', value: FOOD_VALUES[2], radius: FOOD_RADII[2],
-        color: FOOD_COLORS[2], glowColor: FOOD_GLOW_COLORS[2],
+        size: FOOD_SIZES[sizeIdx], value: FOOD_VALUES[sizeIdx], radius: FOOD_RADII[sizeIdx],
+        color: FOOD_COLORS[sizeIdx], glowColor: FOOD_GLOW_COLORS[sizeIdx],
       });
-      foodIdx++;
-    }
-    for (let i = 0; i < medCount; i++) {
-      const si = Math.min(foodIdx * step, segLen - 1);
-      this.foods.push({
-        id: this.nextFoodId++,
-        x: snake.path.getX(si), y: snake.path.getY(si),
-        size: 'medium', value: FOOD_VALUES[1], radius: FOOD_RADII[1],
-        color: FOOD_COLORS[1], glowColor: FOOD_GLOW_COLORS[1],
-      });
-      foodIdx++;
-    }
-    for (let i = 0; i < smallCount; i++) {
-      const si = Math.min(foodIdx * step, segLen - 1);
-      this.foods.push({
-        id: this.nextFoodId++,
-        x: snake.path.getX(si), y: snake.path.getY(si),
-        size: 'small', value: FOOD_VALUES[0], radius: FOOD_RADII[0],
-        color: FOOD_COLORS[0], glowColor: FOOD_GLOW_COLORS[0],
-      });
-      foodIdx++;
     }
 
     if (snake.isBot) this.snakes.delete(snake.id);

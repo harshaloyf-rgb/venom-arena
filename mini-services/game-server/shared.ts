@@ -328,13 +328,13 @@ export const BOOST_SHRINK_RATE = 1;
 // FOOD
 export const FOOD_COUNT_TARGET = 1200;
 export const FOOD_SPAWN_WEIGHTS: [number, number, number] = [0.93, 0.04, 0.03];
-export const FOOD_VALUES: [number, number, number] = [1, 3, 5];
+export const FOOD_VALUES: [number, number, number] = [1, 2, 5];
 export const FOOD_RADII: [number, number, number] = [3, 5, 8];
 export const FOOD_COLORS: [string, string, string] = ['#34d399', '#38bdf8', '#f472b6'];
 export const FOOD_GLOW_COLORS: [string, string, string] = ['#10b981', '#0ea5e9', '#ec4899'];
 export const FOOD_SPAWN_AREA_RADIUS = 3000;
 export const INITIAL_SPAWN_RADIUS = 3000;
-export const FOOD_RESPAWN_BATCH = 5;
+export const FOOD_RESPAWN_BATCH = 25;
 
 // COLLISION
 export const SNAKE_RADIUS = 8;
