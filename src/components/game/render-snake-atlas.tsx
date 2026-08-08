@@ -995,16 +995,9 @@ function drawResponsiveEyes(
   const blinkPhase = time ? (time + blinkSeed * 3) % blinkCycle : 99999;
   const isBlinking = blinkPhase < blinkDuration;
 
-  // ── BOOST MODE: locked forward, dilated pupils, intense ──
+  // ── BOOST MODE: dilated pupils, intense — but eyes STILL track the target ──
   if (boosting) {
     pupilRadius = eyeRadius * 0.6;
-    // Reset smooth toward forward when boosting
-    const bTargetX = Math.cos(moveAngle) * maxShift;
-    const bTargetY = Math.sin(moveAngle) * maxShift;
-    smooth.shiftX += (bTargetX - smooth.shiftX) * 0.25;
-    smooth.shiftY += (bTargetY - smooth.shiftY) * 0.25;
-    smooth.prevAngle = moveAngle;
-    smooth.angleReady = true;
 
     for (const side of [-1, 1]) {
       const ex = hx + Math.cos(moveAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
@@ -1043,7 +1036,7 @@ function drawResponsiveEyes(
       ctx.stroke();
       ctx.restore();
     }
-    return;
+    // Fall through to normal tracking — pupils still follow targetAngle while boosting
   }
 
   // ── NORMAL MODE: circular pupil tracking ──
