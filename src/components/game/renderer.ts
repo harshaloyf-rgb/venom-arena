@@ -230,7 +230,50 @@ export function drawObstacles(
 }
 
 // ==========================================================================
-// Death overlay
+// Elimination banner (shown for 3s after death, game still visible behind)
+// ==========================================================================
+
+export function drawEliminatedBanner(
+  ctx: CanvasRenderingContext2D,
+  viewport: Viewport,
+  elapsed: number, // ms since death
+): void {
+  const { width, height } = viewport;
+
+  // Fade in over 200ms
+  const alpha = Math.min(1, elapsed / 200);
+
+  // Pulsing red glow behind text
+  const pulse = 0.5 + 0.5 * Math.sin(elapsed * 0.006);
+  ctx.globalAlpha = alpha * 0.15 * pulse;
+  ctx.fillStyle = '#ef4444';
+  ctx.fillRect(0, 0, width, height);
+  ctx.globalAlpha = 1;
+
+  // Dark bar at top
+  ctx.globalAlpha = alpha * 0.7;
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, width, 80);
+  ctx.globalAlpha = 1;
+
+  // Red accent line
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#ef4444';
+  ctx.fillRect(0, 80, width, 3);
+  ctx.globalAlpha = 1;
+
+  // ELIMINATED text
+  ctx.globalAlpha = alpha;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ef4444';
+  ctx.font = 'bold 32px sans-serif';
+  ctx.fillText('ELIMINATED', width / 2, 40);
+  ctx.globalAlpha = 1;
+}
+
+// ==========================================================================
+// Death overlay (shown after 3s elimination period)
 // ==========================================================================
 
 export function drawDeathOverlay(

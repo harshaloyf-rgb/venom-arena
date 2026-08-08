@@ -1034,3 +1034,23 @@ Stage Summary:
 - Online mode now has full obstacle support (generation + collision + rendering)
 - Arena boundary in online mode now uses black dot instead of head center
 - Lint passes, no runtime errors, game verified in browser
+---
+Task ID: 2
+Agent: Main
+Task: Fix tunneling, death food formula, elimination screen
+
+Work Log:
+- Identified tunneling: black dot moves ~4.5px/tick but wallHitDistSq=1, so it can jump past walls
+- Added 4-point sub-step check along dot movement path (prev→current position)
+- Changed death food from max(score,20) to 15+score (e.g. score 22 → 37 value)
+- Added drawEliminatedBanner() renderer: pulsing red glow + dark top bar + ELIMINATED text
+- Added deathTimeRef/onlineDeathTimeRef to track when player died
+- First 3s: game renders normally with elimination banner overlay
+- After 3s: full dark death overlay with respawn prompt
+- Blocked respawn input (space/click) during 3s elimination period
+
+Stage Summary:
+- Wall tunneling fixed with 4 sub-step collision checks in both engine.ts and game-state.ts
+- Death food: 15 base + score, always mixed sizes (large 5, medium 3, small 1)
+- 3-second ELIMINATED banner shows on game canvas, game visible behind, respawn blocked until 3s
+- Lint clean, no runtime errors
