@@ -19,7 +19,6 @@ import {
   type Viewport,
   type Snake,
   FIXED_DT,
-  computeBodyRadius,
 } from '@/lib/snake';
 import { createInitialState, gameTick, respawnPlayer, type PlayerSkinOverride } from '@/lib/snake/engine';
 import { createCamera, updateCamera, getViewport, worldToScreen } from '@/lib/snake/camera';
@@ -538,13 +537,10 @@ export default function SnakeGame({
           drawExtractRing(ctx, adapted, camera, viewport, extractProgressRef.current);
         }
 
-        // ── HUD (online) ──
+        // ── HUD (online — same layout as offline: minimap top-left, rank, score bottom-center, kills) ──
         if (playerSnake) {
-          drawOnlineHUD(ctx, playerSnake, fc.fps, viewport);
+          drawOnlineHUD(ctx, renderableSnakes, playerSnake, viewport, fc.fps);
         }
-
-        // ── Minimap (online, bottom-right) ──
-        drawOnlineMinimap(ctx, renderableSnakes, playerSnake ?? null);
 
         // Mouse cursor indicator (slither.io style crosshair)
         drawMouseCursor(ctx, input);
@@ -721,25 +717,15 @@ export default function SnakeGame({
           onPointerLeave={() => { externalBoostRef.current = false; }}
           onPointerCancel={() => { externalBoostRef.current = false; }}
           disabled={isDead}
-          className={
-            effectiveMode === 'offline'
-              ? `pointer-events-auto flex flex-col items-center gap-0.5 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all duration-200 select-none touch-manipulation
-                ${isDead
-                  ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
-                  : 'bg-orange-500/15 border-orange-500/30 text-orange-400 hover:bg-orange-500/25 hover:border-orange-500/50 active:scale-95'
-                }`
-              : `pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-xl border font-bold text-sm transition-all duration-200 select-none touch-manipulation
-                ${isDead
-                  ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
-                  : 'bg-orange-500/15 border-orange-500/30 text-orange-400 hover:bg-orange-500/25 hover:border-orange-500/50 active:scale-95'
-                }`
-          }
+          className={`pointer-events-auto flex flex-col items-center gap-0.5 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all duration-200 select-none touch-manipulation
+            ${isDead
+              ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
+              : 'bg-orange-500/15 border-orange-500/30 text-orange-400 hover:bg-orange-500/25 hover:border-orange-500/50 active:scale-95'
+            }`}
         >
           <Zap className="w-5 h-5" />
           <span>Boost</span>
-          {effectiveMode === 'offline' && (
-            <span className="text-[10px] font-normal opacity-60">B / Left Click</span>
-          )}
+          <span className="text-[10px] font-normal opacity-60">B / Left Click</span>
         </button>
 
         {/* Extract Button (hold to extract) */}
@@ -749,25 +735,15 @@ export default function SnakeGame({
           onPointerLeave={() => { inputRef.current?.setExternalExtract(false); }}
           onPointerCancel={() => { inputRef.current?.setExternalExtract(false); }}
           disabled={isDead}
-          className={
-            effectiveMode === 'offline'
-              ? `pointer-events-auto flex flex-col items-center gap-0.5 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all duration-200 select-none touch-manipulation
-                ${isDead
-                  ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
-                  : 'bg-amber-500/15 border-amber-500/30 text-amber-400 hover:bg-amber-500/25 hover:border-amber-500/50 active:scale-95'
-                }`
-              : `pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-xl border font-bold text-sm transition-all duration-200 select-none touch-manipulation
-                ${isDead
-                  ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
-                  : 'bg-amber-500/15 border-amber-500/30 text-amber-400 hover:bg-amber-500/25 hover:border-amber-500/50 active:scale-95'
-                }`
-          }
+          className={`pointer-events-auto flex flex-col items-center gap-0.5 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all duration-200 select-none touch-manipulation
+            ${isDead
+              ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
+              : 'bg-amber-500/15 border-amber-500/30 text-amber-400 hover:bg-amber-500/25 hover:border-amber-500/50 active:scale-95'
+            }`}
         >
           <CircleDot className="w-5 h-5" />
           <span>Extract</span>
-          {effectiveMode === 'offline' && (
-            <span className="text-[10px] font-normal opacity-60">E / Right Click</span>
-          )}
+          <span className="text-[10px] font-normal opacity-60">E / Right Click</span>
         </button>
       </div>
     </div>
@@ -887,55 +863,59 @@ function renderOfflineHUD(
 }
 
 // ============================================================================
-// Helper: Render online HUD (original — score/length/radius top-left, minimap bottom-right)
+// Helper: Render online HUD (same layout as offline: minimap top-left, rank, score, kills)
 // ============================================================================
 
 function drawOnlineHUD(
   ctx: CanvasRenderingContext2D,
+  snakes: Map<string, RenderableSnake>,
   player: RenderableSnake,
-  fps: number,
   viewport: Viewport,
-): void {
-  drawHUDBase(ctx, player.score, player.path.length, fps, viewport);
-}
-
-// ============================================================================
-// Helper: Shared HUD drawing (online mode only)
-// ============================================================================
-
-function drawHUDBase(
-  ctx: CanvasRenderingContext2D,
-  score: number,
-  length: number,
   fps: number,
-  viewport: Viewport,
 ): void {
-  const p = 16;
-  const lh = 22;
+  const cw = viewport.width;
+  const ch = viewport.height;
 
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  // ── Minimap: top-left ──
+  drawOnlineMinimapTopLeft(ctx, snakes, player, cw, ch);
+
+  // ── Rank below minimap ──
+  const aliveSnakes = snakes.size;
+  let rank = 1;
+  for (const [, s] of snakes) {
+    if (s.alive && s.score > player.score) rank++;
+  }
+  const mapPad = 12;
+  const mapSize = 120;
+  const rankY = mapPad + mapSize + 6;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
   ctx.beginPath();
-  ctx.roundRect(p, p, 180, lh * 3 + p * 2 - 4, 8);
+  ctx.roundRect(mapPad, rankY, mapSize, 24, 6);
   ctx.fill();
-
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 16px monospace';
-  ctx.fillText(`Score: ${Math.floor(score)}`, p + 12, p + 10);
-
-  ctx.font = '13px monospace';
-  ctx.fillStyle = '#a0a0a0';
-  ctx.fillText(`Length: ${length}`, p + 12, p + 10 + lh);
-
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   ctx.font = '11px monospace';
-  ctx.fillStyle = '#888888';
-  ctx.fillText(`Radius: ${computeBodyRadius(score).toFixed(1)}px`, p + 12, p + 10 + lh * 2);
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillText(`Rank ${rank} / ${aliveSnakes}`, mapPad + mapSize / 2, rankY + 12);
 
+  // ── Score: bottom-center ──
+  const scoreVal = Math.floor(player.score);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.font = 'bold 28px monospace';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+  ctx.beginPath();
+  ctx.roundRect(cw / 2 - 80, ch - 56, 160, 44, 10);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(scoreVal.toLocaleString(), cw / 2, ch - 18);
+
+  // ── FPS: top-right (subtle) ──
   ctx.textAlign = 'right';
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-  ctx.font = '12px monospace';
-  ctx.fillText(`${fps} FPS`, viewport.width - p, p);
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+  ctx.font = '10px monospace';
+  ctx.fillText(`${fps} FPS`, cw - 12, 12);
 }
 
 // ============================================================================
@@ -1121,21 +1101,20 @@ function drawMinimapTopLeft(
 }
 
 // ============================================================================
-// Online minimap (bottom-right — original online layout)
+// Online minimap (top-left — matches offline layout)
 // ============================================================================
 
-function drawOnlineMinimap(
+function drawOnlineMinimapTopLeft(
   ctx: CanvasRenderingContext2D,
   snakes: Map<string, RenderableSnake>,
   player: RenderableSnake | null,
+  cw: number,
+  _ch: number,
 ): void {
-  const size = 120;
-  const pad = 12;
-
-  const cw = ctx.canvas.width / (window.devicePixelRatio || 1);
-  const ch = ctx.canvas.height / (window.devicePixelRatio || 1);
-  const mx = cw - size - pad;
-  const my = ch - size - pad;
+  const size = MAP_SIZE;
+  const pad = MAP_PAD;
+  const mx = pad;
+  const my = pad;
 
   ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
   ctx.beginPath();

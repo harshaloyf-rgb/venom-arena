@@ -4,6 +4,7 @@
 // Supports multiple arena shards, 1000 players/bots per shard.
 // ============================================================================
 
+import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { ArenaRoom, type KillEvent } from './game-state';
 import type { ArenaSnapshot, SkinRarity } from './shared';
@@ -16,15 +17,21 @@ const BROADCAST_INTERVAL_MS = Math.round(1000 / 20); // 20Hz broadcast
 const ARENA_CLEANUP_INTERVAL_MS = 60000; // Clean empty arenas every 60s
 
 // ─── Server Setup ───────────────────────────────────────────────────────────
+// Use explicit HTTP server (bun requires this for Socket.IO to bind correctly)
 
-const io = new Server(PORT, {
+const httpServer = createServer();
+const io = new Server(httpServer, {
   cors: {
     origin: '*',
     methods: ['GET', 'POST'],
   },
   // Performance tuning for 1000+ connections
-  transports: ['websocket'],
+  transports: ['websocket', 'polling'],
   perMessageDeflate: false,
+});
+
+httpServer.listen(PORT, '::', () => {
+  console.log(`Venom Game Server listening on port ${PORT}`);
 });
 
 // ─── Arena Shards ────────────────────────────────────────────────────────────
@@ -223,6 +230,6 @@ setInterval(() => {
 console.log('╔══════════════════════════════════════════════════════╗');
 console.log('║          Venom Game Server — Multiplayer             ║');
 console.log('║  Port: 3001 | Tick: 30Hz | Broadcast: 20Hz          ║');
-console.log('║  Max bots/shard: 1000 | Sharding: dynamic           ║');
+console.log('║  Bots: 20/shard | Tick: 30Hz | Broadcast: 20Hz           ║',);
 console.log('╚══════════════════════════════════════════════════════╝');
 console.log(`Venom Game Server running on port ${PORT}`);

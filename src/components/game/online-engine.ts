@@ -3,7 +3,9 @@
  * receives 20Hz snapshots, forwards player input.
  *
  * Connection uses the gateway relay: io('/?XTransformPort=3001').
- * All events follow the structured { event, data } envelope.
+ * Auth token and arenaId are sent via Socket.IO handshake auth.
+ * Server events use raw event names (snapshot, init, kill, respawned).
+ * Client sends raw event names (input, respawn, setSkin).
  */
 
 import { io, type Socket } from 'socket.io-client';
@@ -50,6 +52,9 @@ export class OnlineEngine {
   public onConnectionChange: ((state: ConnectionState) => void) | null = null;
   public onPlayerDied: (() => void) | null = null;
 
+  // Track our snake ID (sent by server in 'init' event)
+  private mySnakeId: string | null = null;
+
   // ── Connection lifecycle ───────────────────────────────────────────────────
 
   /** Connect to the game server for a specific arena. */
@@ -57,27 +62,61 @@ export class OnlineEngine {
     this.setConnectionState('connecting');
 
     // Gateway relay: relative path with port in query
+    // Auth token and arenaId sent via Socket.IO handshake auth
+    // so the server middleware can validate before accepting the connection
     this.socket = io('/?XTransformPort=3001', {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
+      auth: {
+        token,
+        arenaId,
+      },
     });
 
-    // ── Socket event handlers ──
+    // ── Socket event handlers (raw event names matching server protocol) ──
 
     this.socket.on('connect', () => {
       this.setConnectionState('connected');
-      // Send join request
-      this.socket!.emit('event', {
-        event: 'join',
-        data: { token, arenaId, skinId },
-      });
     });
 
-    this.socket.on('event', (payload: { event: string; data: unknown }) => {
-      this.handleServerEvent(payload.event, payload.data);
+    // Server sends 'init' with our snake ID and arena info
+    this.socket.on('init', (data: { snakeId: string; arenaId: string; tickRate: number; broadcastRate: number }) => {
+      this.mySnakeId = data.snakeId;
+      console.log('[OnlineEngine] Initialized:', data);
+    });
+
+    // Server sends 'snapshot' at 20Hz with full arena state
+    this.socket.on('snapshot', (data: unknown) => {
+      const snapshot = data as ArenaSnapshot;
+      this._lastSnapshot = snapshot;
+      this.onSnapshot?.(snapshot);
+    });
+
+    // Server sends 'kill' when a kill event occurs
+    this.socket.on('kill', (data: { killer: string; killerName: string; victim: string; victimName: string; score: number }) => {
+      const entry: KillFeedEntry = {
+        killerId: data.killer,
+        killerName: data.killerName,
+        victimId: data.victim,
+        victimName: data.victimName,
+        score: data.score,
+        timestamp: Date.now(),
+      };
+      this.onKill?.(entry);
+
+      // If we are the victim, notify death
+      if (data.victim === this.mySnakeId) {
+        this.onPlayerDied?.();
+      }
+    });
+
+    // Server sends 'respawned' after successful respawn
+    this.socket.on('respawned', (data: { snakeId: string }) => {
+      this.mySnakeId = data.snakeId;
+      console.log('[OnlineEngine] Respawned:', data);
     });
 
     this.socket.on('disconnect', (reason) => {
@@ -99,6 +138,7 @@ export class OnlineEngine {
       this.socket = null;
     }
     this._lastSnapshot = null;
+    this.mySnakeId = null;
     this.setConnectionState('disconnected');
   }
 
@@ -120,12 +160,10 @@ export class OnlineEngine {
   /** Force-send any buffered input immediately. */
   private flushInput(): void {
     if (!this.socket?.connected) return;
-    this.socket.emit('event', {
-      event: 'input',
-      data: {
-        targetAngle: this.inputBuffer.targetAngle,
-        boosting: this.inputBuffer.boosting,
-      },
+    // Server listens for raw 'input' event
+    this.socket.emit('input', {
+      targetAngle: this.inputBuffer.targetAngle,
+      boosting: this.inputBuffer.boosting,
     });
     this.inputDirty = false;
     this.lastInputSend = performance.now();
@@ -134,10 +172,8 @@ export class OnlineEngine {
   /** Request respawn after death. */
   requestRespawn(): void {
     if (!this.socket?.connected) return;
-    this.socket.emit('event', {
-      event: 'respawn',
-      data: {},
-    });
+    // Server listens for raw 'respawn' event
+    this.socket.emit('respawn');
   }
 
   // ── Snapshot access ────────────────────────────────────────────────────────
@@ -162,39 +198,7 @@ export class OnlineEngine {
     return this._connectionState === 'connected';
   }
 
-  // ── Private: Server event handler ──────────────────────────────────────────
-
-  private handleServerEvent(event: string, data: unknown): void {
-    switch (event) {
-      case 'snapshot': {
-        const snapshot = data as ArenaSnapshot;
-        this._lastSnapshot = snapshot;
-        this.onSnapshot?.(snapshot);
-        break;
-      }
-
-      case 'kill': {
-        const entry = data as KillFeedEntry;
-        this.onKill?.(entry);
-        break;
-      }
-
-      case 'player-died': {
-        this.onPlayerDied?.();
-        break;
-      }
-
-      case 'error': {
-        const msg = (data as { message: string }).message || 'Unknown server error';
-        this.onError?.(msg);
-        break;
-      }
-
-      default:
-        // Ignore unknown events
-        break;
-    }
-  }
+  // ── Private: Connection state setter ───────────────────────────────────────
 
   private setConnectionState(state: ConnectionState): void {
     if (this._connectionState === state) return;

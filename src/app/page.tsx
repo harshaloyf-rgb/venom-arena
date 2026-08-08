@@ -260,7 +260,7 @@ export default function Home() {
           onExit={() => handleExitGame()}
           mode={gameMode}
           arenaId={activeArenaId}
-          authToken={undefined}
+          authToken={player?.id}
         />
       </div>
     );
