@@ -30,7 +30,7 @@ const io = new Server(httpServer, {
   perMessageDeflate: false,
 });
 
-httpServer.listen(PORT, '::', () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`Venom Game Server listening on port ${PORT}`);
 });
 

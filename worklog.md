@@ -1454,3 +1454,25 @@ Stage Summary:
 - Fixed: shared.ts missing import statements for locally-used config constants
 - Game server now running on port 3001
 - Online arena connection works — player can buy in and see the game
+---
+Task ID: 2
+Agent: Main
+Task: Fix online arena connection error (window timeout)
+
+Work Log:
+- Diagnosed game server was not running/persisting between tool invocations
+- Found shared.ts had export-only re-exports without local imports (fixed in previous session)
+- Found game server listening on IPv6 (::) but Caddy gateway connects via IPv4 (127.0.0.1)
+- Changed httpServer.listen(PORT, \"::\") to httpServer.listen(PORT, \"0.0.0.0\") in index.ts
+- Discovered OOM killer was terminating the game server process
+- Created game-server-supervisor.py (double-fork daemon) modeled after next-supervisor.py
+- Supervisor auto-restarts the game server on crash, persists across shell sessions
+- Verified Socket.IO handshake works both directly (port 3001) and through gateway (port 81)
+- Verified real user connections reach the game server through the gateway
+- Server uses only 72MB RSS, well within memory constraints
+
+Stage Summary:
+- Fixed: index.ts listen address changed from :: to 0.0.0.0
+- Created: game-server-supervisor.py for persistent process management
+- Game server now persists and auto-restarts on crash
+- Online arena connections confirmed working through the Caddy gateway
