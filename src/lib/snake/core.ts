@@ -16,6 +16,7 @@ import { distSq } from './vec2';
 import {
   // MOVEMENT
   BASE_SPEED, BOOST_SPEED, BASE_TURN_RATE, MIN_TURN_RATE, SEGMENT_SPACING,
+  STEERING_LERP, SHARP_TURN_BRAKE,
   computeBodyLength, computeBodyRadius,
   // FOOD
   FOOD_SPAWN_WEIGHTS, FOOD_VALUES, FOOD_RADII,
@@ -297,21 +298,31 @@ export function moveSnake(
     }
   }
 
-  // Apply turn (clamped to effective maxTurn, which may be spiral-boosted)
-  if (Math.abs(diff) <= maxTurn) {
-    snake.angle = targetAngle;
-  } else {
-    snake.angle += Math.sign(diff) * maxTurn;
-  }
+  // ── Steering Inertia + Dynamic Speed Braking ──────────────────────
+  // Proportional dampening: apply a fraction of remaining angle diff.
+  // Near target → tiny turn (buttery convergence). Far target → clamped to maxTurn.
+  // This replaces the old binary snap-or-clamp that caused twitchy feel.
+  const turnAmount = diff * STEERING_LERP;
+  const clampedTurn = Math.max(-maxTurn, Math.min(maxTurn, turnAmount));
+  snake.angle += clampedTurn;
 
   // Normalize angle to [-PI, PI]
   if (snake.angle > Math.PI) snake.angle -= 2 * Math.PI;
   else if (snake.angle < -Math.PI) snake.angle += 2 * Math.PI;
 
-  snake.boosting = canBoost;
-  snake.speed = canBoost ? BOOST_SPEED : BASE_SPEED;
+  // Dynamic speed braking: sharp turns reduce forward speed.
+  // Uses smoothstep curve so braking kicks in gradually, not abruptly.
+  // sharpness 0 = going straight, 1 = turning at max rate.
+  const absClampedTurn = Math.abs(clampedTurn);
+  const sharpness = maxTurn > 0 ? Math.min(absClampedTurn / maxTurn, 1.0) : 0;
+  const smoothT = sharpness * sharpness * (3 - 2 * sharpness); // smoothstep
+  const brakeFactor = 1 - SHARP_TURN_BRAKE * smoothT;
 
-  // Extraction zone speed bonus
+  snake.boosting = canBoost;
+  const baseSpeedForState = canBoost ? BOOST_SPEED : BASE_SPEED;
+  snake.speed = baseSpeedForState * brakeFactor;
+
+  // Extraction zone speed bonus (applied on top of braking)
   if (ctx.extractionZone?.active && snake.score >= EXTRACTION_SCORE_THRESHOLD) {
     const ez = ctx.extractionZone;
     const dx = snake.path.getX(0) - ez.x;
