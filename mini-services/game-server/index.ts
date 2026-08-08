@@ -230,6 +230,6 @@ setInterval(() => {
 console.log('╔══════════════════════════════════════════════════════╗');
 console.log('║          Venom Game Server — Multiplayer             ║');
 console.log('║  Port: 3001 | Tick: 30Hz | Broadcast: 20Hz          ║');
-console.log('║  Bots: 20/shard | Tick: 30Hz | Broadcast: 20Hz           ║',);
+console.log('║  No bots — player-only arenas                      ║');
 console.log('╚══════════════════════════════════════════════════════╝');
 console.log(`Venom Game Server running on port ${PORT}`);

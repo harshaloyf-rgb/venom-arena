@@ -70,25 +70,7 @@ export {
   BODY_DOWNSAMPLE_INTERVAL,
 } from '../../src/lib/snake/config';
 
-// Server-specific config constants (not in shared config.ts — online-only concepts)
-
-/** Arena radius in pixels — circular boundary for the server arena */
-export const ARENA_RADIUS = 5000;
-
-/** Target food count maintained by count-based spawning (offline uses density-based) */
-export const FOOD_COUNT_TARGET = 500;
-
-/** Radius around a position to spawn food into */
-export const FOOD_SPAWN_AREA_RADIUS = 4000;
-
-/** How long the extraction zone stays active (ms) */
-export const EXTRACTION_ZONE_DURATION = 60000;
-
-/** How often a new extraction zone spawns (ms) */
-export const EXTRACTION_ZONE_SPAWN_INTERVAL = 120000;
-
-/** Server bot count — reduced for sandbox environment stability */
-export const SERVER_BOT_COUNT = 20;
+// (Online-only constants removed — using same config as offline)
 
 // Re-export utilities (pure functions, no game logic)
 export { distSq, angleDirect } from '../../src/lib/snake/vec2';
@@ -710,17 +692,6 @@ export function buildSnakeSnapshot(snake: SnakeLike, tickCount: number): SnakeSn
   };
 }
 
-function nearAnyPlayer(
-  x: number, y: number,
-  players: ReadonlyArray<{ x: number; y: number }>, radiusSq: number,
-): boolean {
-  for (let i = 0; i < players.length; i++) {
-    const dx = players[i].x - x; const dy = players[i].y - y;
-    if (dx * dx + dy * dy <= radiusSq) return true;
-  }
-  return false;
-}
-
 export function buildArenaSnapshot(
   snakes: Map<string, SnakeLike>, foods: FoodOrb[],
   starChips: StarChip[], tickCount: number,
@@ -735,23 +706,14 @@ export function buildArenaSnapshot(
   });
   const cappedSnakes = aliveSnakes.slice(0, MAX_SNAKES_PER_SNAPSHOT);
 
-  const playerPositions: Array<{ x: number; y: number }> = [];
-  for (const snake of aliveSnakes) {
-    if (snake.isPlayer && snake.path.length > 0) {
-      playerPositions.push({ x: snake.path.headX, y: snake.path.headY });
-    }
-  }
-
   const snakeSnapshots: SnakeSnapshot[] = [];
   for (const snake of cappedSnakes) snakeSnapshots.push(buildSnakeSnapshot(snake, tickCount));
 
-  const foodRadiusSq = FOOD_DOWNSAMPLE_RADIUS * FOOD_DOWNSAMPLE_RADIUS;
+  // Send all food (no player-position filtering — same as offline)
   const filteredFoods: Array<{ id: number; x: number; y: number; size: FoodSize; value: number }> = [];
   for (let i = 0; i < foods.length; i++) {
     const f = foods[i];
-    if (playerPositions.length === 0 || nearAnyPlayer(f.x, f.y, playerPositions, foodRadiusSq)) {
-      filteredFoods.push({ id: f.id, x: f.x, y: f.y, size: f.size, value: f.value });
-    }
+    filteredFoods.push({ id: f.id, x: f.x, y: f.y, size: f.size, value: f.value });
   }
 
   const starChipsOut = starChips.map(c => ({ id: c.id, x: c.x, y: c.y, value: c.value }));

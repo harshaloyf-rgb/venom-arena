@@ -33,6 +33,8 @@ export interface RenderableSnake {
   headX: number;
   headY: number;
   angle: number;
+  prevAngle: number;
+  speed: number;
   path: IPathBuffer;
   score: number;
   alive: boolean;
@@ -80,6 +82,8 @@ interface ExtrapolatedSnake {
   currentX: number;
   currentY: number;
   currentAngle: number;
+  // Previous frame's angle (for turn detection / smooth body rendering).
+  prevAngle: number;
   // Turn metadata from the last snapshot (undefined if no spiral active).
   turn: TurnMetadata | undefined;
   // Static visual fields (copied from snapshot).
@@ -125,6 +129,7 @@ function createExtrapolatedSnake(): ExtrapolatedSnake {
     prevX: 0, prevY: 0, prevTimestamp: 0,
     speed: DEFAULT_SPEED,
     currentX: 0, currentY: 0, currentAngle: 0,
+    prevAngle: 0,
     turn: undefined,
     name: '', score: 0, alive: false,
     color: '#ffffff', headColor: '#ffffff',
@@ -239,6 +244,7 @@ export class ExtrapolationEngine {
       es.currentX = snap.hx;
       es.currentY = snap.hy;
       es.currentAngle = snap.angle;
+      es.prevAngle = snap.angle;
 
       // Estimate speed from position delta.
       if (es.prevTimestamp > 0) {
@@ -290,6 +296,9 @@ export class ExtrapolationEngine {
 
       // Beyond the extrapolation window — freeze at last known position.
       if (elapsedMs > MAX_EXTRAPOLATION_MS) continue;
+
+      // Save previous angle before extrapolation modifies it
+      es.prevAngle = es.currentAngle;
 
       if (es.turn && es.turn.isSpiral) {
         this.extrapolateSpiral(es, dt);
@@ -358,6 +367,8 @@ export class ExtrapolationEngine {
         headX: es.currentX,
         headY: es.currentY,
         angle: es.currentAngle,
+        prevAngle: es.prevAngle,
+        speed: es.speed,
         path: es.path,
         score: es.score,
         alive: es.alive,
