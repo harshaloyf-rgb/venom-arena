@@ -5,7 +5,7 @@
 //   The head stays at dead screen center → zero relative motion → zero jitter.
 //   Grid line crawl is handled by renderer.ts (own pixel-snapping).
 //   Name labels use Math.round for integer-pixel rendering.
-// Zoom: smooth lerp with coarse snap. Only changes on score growth.
+// Zoom: smooth lerp — no quantization snap (was causing visible jumps).
 // ============================================================================
 
 import type { Camera, Snake, Viewport } from './types';
@@ -13,10 +13,6 @@ import {
   CAMERA_ZOOM_MIN, CAMERA_BASE_ZOOM, CAMERA_ZOOM_LERP,
   START_LENGTH, SNAKE_RADIUS_MIN, computeBodyLength,
 } from './config';
-
-/** Zoom snap precision — 50 = 0.02 increments.
- *  Coarse enough that zoom changes are rare and deliberate. */
-const ZOOM_SNAP = 50;
 
 /** Update camera to follow a snake. Camera locks directly to head position.
  *  No lerp, no snap — the head is always at exact screen center.
@@ -40,9 +36,10 @@ export function updateCamera(camera: Camera, snake: Snake, _canvasWidth: number,
   const totalGrowth = lengthFactor + widthFactor;
   const targetZoom = Math.max(CAMERA_ZOOM_MIN, CAMERA_BASE_ZOOM - totalGrowth * 0.16);
 
-  // Lerp zoom toward target, snapped to coarse precision.
-  const rawZoom = camera.zoom + (targetZoom - camera.zoom) * CAMERA_ZOOM_LERP;
-  camera.zoom = Math.round(rawZoom * ZOOM_SNAP) / ZOOM_SNAP;
+  // Smooth lerp toward target — no snap quantization.
+  // The slow lerp (0.015) provides naturally smooth transitions;
+  // snap quantization was causing visible 0.02 jumps at boundaries.
+  camera.zoom += (targetZoom - camera.zoom) * CAMERA_ZOOM_LERP;
 }
 
 /** Compute the viewport bounds in world coordinates for culling */
