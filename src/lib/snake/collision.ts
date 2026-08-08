@@ -62,6 +62,9 @@ export function checkCollisions(
   scratch.radius = SNAKE_RADIUS;
   for (const [, snake] of snakes) {
     if (!snake.alive) continue;
+    // Skip body segments from recently spawned snakes — their body is
+    // invisible to the player and causes surprise deaths
+    if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
     const len = snake.path.length;
     scratch.id = snake.id;
     for (let i = 0; i < len; i += 2) {
