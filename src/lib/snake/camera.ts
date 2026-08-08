@@ -9,27 +9,28 @@ import {
   START_LENGTH, SNAKE_RADIUS_MIN, computeBodyLength,
 } from './config';
 
-/** Fixed world-space snap precision for camera position.
- *  Using a FIXED value (not 1/zoom) means the snap grid never shifts when
- *  zoom changes. This eliminates the primary source of jitter: zoom changes
- *  causing the position snap grid to jump.
- *  0.5 world units = imperceptible offset, eliminates sub-pixel crawl. */
-const POS_SNAP = 0.5;
+/** Camera position lerp factor (0–1, higher = tighter follow).
+ *  0.15 → head stays within ~1-2px of center at 60fps.
+ *  Smooth enough to eliminate all quantization jitter,
+ *  fast enough that the player never notices the lag. */
+const POS_LERP = 0.15;
 
 /** Zoom snap precision — prevents continuous micro-rescaling that shifts
  *  grid line positions and causes visible crawling.
- *  50 = snap to 0.02 increments. Zoom only changes in visible steps,
- *  not continuously. Much less visual disturbance. */
+ *  50 = snap to 0.02 increments. Zoom only changes in visible steps. */
 const ZOOM_SNAP = 50;
 
-/** Update camera to follow a snake. Snaps directly to head (no lag = no vibration). */
+/** Update camera to follow a snake with smooth lerp.
+ *  Lerp eliminates quantization jitter that snapping caused.
+ *  Grid lines have their own pixel-snapping in renderer.ts. */
 export function updateCamera(camera: Camera, snake: Snake, _canvasWidth: number, _canvasHeight: number): void {
   if (snake.path.length === 0) return;
 
-  // Snap camera to head position using FIXED precision.
-  // Critical: does NOT depend on zoom, so zoom changes don't shift the snap grid.
-  camera.x = Math.round(snake.path.headX / POS_SNAP) * POS_SNAP;
-  camera.y = Math.round(snake.path.headY / POS_SNAP) * POS_SNAP;
+  // Smooth lerp camera toward head position.
+  // No snapping — the lerp itself eliminates jitter by smoothing
+  // the discrete per-tick movement into a continuous glide.
+  camera.x += (snake.path.headX - camera.x) * POS_LERP;
+  camera.y += (snake.path.headY - camera.y) * POS_LERP;
 
   // Dynamic zoom: zoom out as snake grows in BOTH length and width.
   // IMPORTANT: use computeBodyLength(score) instead of snake.path.length.
@@ -47,8 +48,6 @@ export function updateCamera(camera: Camera, snake: Snake, _canvasWidth: number,
   const targetZoom = Math.max(CAMERA_ZOOM_MIN, CAMERA_BASE_ZOOM - totalGrowth * 0.11);
 
   // Lerp zoom toward target, snapped to coarse precision.
-  // Coarse snap (0.02) means zoom changes are in visible steps,
-  // not a constant stream of micro-shifts.
   const rawZoom = camera.zoom + (targetZoom - camera.zoom) * CAMERA_ZOOM_LERP;
   camera.zoom = Math.round(rawZoom * ZOOM_SNAP) / ZOOM_SNAP;
 }
