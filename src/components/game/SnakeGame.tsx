@@ -84,6 +84,8 @@ export default function SnakeGame({
   const showControlsRef = useRef(true);
   const controlsDismissedRef = useRef(false);
   const leaderboardTimerRef = useRef(0);
+  const killsRef = useRef(0); // player kills this session
+  const highScoreRef = useRef(0); // highest ever score (localStorage)
 
   // Online state
   const onlineEngineRef = useRef<OnlineEngine | null>(null);
@@ -223,6 +225,9 @@ export default function SnakeGame({
     leaderboardTimerRef.current = 0;
     isDeadOnlineRef.current = false;
     onlineDeathTimeRef.current = 0;
+    killsRef.current = 0;
+    // Load highest ever score from localStorage
+    try { highScoreRef.current = parseInt(localStorage.getItem('venom-high-score') || '0', 10); } catch { highScoreRef.current = 0; }
 
     // Input handler
     const input = new InputHandler(canvas);
@@ -367,10 +372,22 @@ export default function SnakeGame({
         // the next frame. Capping ensures consistent 1-tick-per-frame motion.
         const tickMs = FIXED_DT * 1000;
         if (accumulatorRef.current >= tickMs) {
-          gameTick(state, inputState, FIXED_DT);
+          const killEvents = gameTick(state, inputState, FIXED_DT);
           accumulatorRef.current -= tickMs;
           // Cap accumulator to prevent spiral-of-death catch-up frames
           if (accumulatorRef.current > tickMs) accumulatorRef.current = tickMs * 0.5;
+
+          // Track player kills
+          if (state.player) {
+            for (const ev of killEvents) {
+              if (ev.killerId === state.player.id) killsRef.current++;
+            }
+            // Track high score
+            if (state.player.score > highScoreRef.current) {
+              highScoreRef.current = Math.floor(state.player.score);
+              try { localStorage.setItem('venom-high-score', String(highScoreRef.current)); } catch { /* ignore */ }
+            }
+          }
 
           // Check player death
           if (state.player && !state.player.alive && !isDeadRef.current) {
@@ -416,7 +433,7 @@ export default function SnakeGame({
         }
 
         // HUD, controls, minimap, death overlay
-        renderOfflineHUD(ctx, state, cameraRef.current, viewport, fc.fps);
+        renderOfflineHUD(ctx, state, cameraRef.current, viewport, fc.fps, now, killsRef.current, highScoreRef.current);
         if (showControlsRef.current && state.player && state.player.alive) {
           drawControlsHint(ctx, viewport);
         }
@@ -778,14 +795,64 @@ function renderOfflineHUD(
   camera: Camera,
   viewport: Viewport,
   fps: number,
+  now: number,
+  kills: number,
+  highScore: number,
 ): void {
-  if (state.player) {
-    const logicalLen = computeBodyLength(state.player.score);
-    const spacingRatio = SEGMENT_SPACING / BASE_SPEED;
-    const pathBasedLen = Math.floor(state.player.path.length / spacingRatio);
-    const displayLen = Math.min(logicalLen, pathBasedLen);
-    drawHUDBase(ctx, state.player.score, displayLen, fps, viewport);
-  }
+  if (!state.player) return;
+
+  const logicalLen = computeBodyLength(state.player.score);
+  const spacingRatio = SEGMENT_SPACING / BASE_SPEED;
+  const pathBasedLen = Math.floor(state.player.path.length / spacingRatio);
+  const displayLen = Math.min(logicalLen, pathBasedLen);
+
+  // Session timer: seconds since spawn
+  const elapsed = Math.floor((now - state.player.spawnTime) / 1000);
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  const timerStr = mins > 0 ? `${mins}:${secs.toString().padStart(2, '0')}` : `${secs}s`;
+
+  drawHUDBase(ctx, state.player.score, displayLen, fps, viewport);
+
+  // ── Extended offline stats (below the base HUD panel) ──
+  const p = 16;
+  const lh = 18;
+  const panelX = p;
+  const panelY = p + lh * 3 + p * 2 + 4; // below the base panel
+  const panelW = 180;
+  const panelH = lh * 3 + 8;
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+  ctx.beginPath();
+  ctx.roundRect(panelX, panelY, panelW, panelH, 6);
+  ctx.fill();
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.font = '12px monospace';
+
+  // Timer
+  ctx.fillStyle = '#a0a0a0';
+  ctx.fillText('Time', panelX + 12, panelY + 6);
+  ctx.fillStyle = '#e2e8f0';
+  ctx.textAlign = 'right';
+  ctx.fillText(timerStr, panelX + panelW - 12, panelY + 6);
+
+  // Kills
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#a0a0a0';
+  ctx.fillText('Kills', panelX + 12, panelY + 6 + lh);
+  ctx.fillStyle = '#f87171';
+  ctx.textAlign = 'right';
+  ctx.fillText(String(kills), panelX + panelW - 12, panelY + 6 + lh);
+
+  // High Score
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#a0a0a0';
+  ctx.fillText('Best', panelX + 12, panelY + 6 + lh * 2);
+  ctx.fillStyle = '#fbbf24';
+  ctx.textAlign = 'right';
+  ctx.fillText(String(highScore), panelX + panelW - 12, panelY + 6 + lh * 2);
 }
 
 // ============================================================================
