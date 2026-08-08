@@ -48,7 +48,7 @@ export {
 export const ARENA_RADIUS = 5000;
 
 /** Target food count maintained by count-based spawning (offline uses density-based) */
-export const FOOD_COUNT_TARGET = 3000;
+export const FOOD_COUNT_TARGET = 500;
 
 /** Radius around a position to spawn food into */
 export const FOOD_SPAWN_AREA_RADIUS = 4000;
@@ -59,8 +59,8 @@ export const EXTRACTION_ZONE_DURATION = 60000;
 /** How often a new extraction zone spawns (ms) */
 export const EXTRACTION_ZONE_SPAWN_INTERVAL = 120000;
 
-/** Server bot count — overrides config.ts BOT_COUNT (which is 0 for offline) */
-export const SERVER_BOT_COUNT = 1000;
+/** Server bot count — reduced for sandbox environment stability */
+export const SERVER_BOT_COUNT = 20;
 
 // Re-export utilities
 export { distSq, angleDirect } from '../../src/lib/snake/vec2';
