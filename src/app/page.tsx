@@ -110,6 +110,7 @@ export default function Home() {
 
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [activeArenaId, setActiveArenaId] = useState<string | null>(null);
+  const [gameMode, setGameMode] = useState<'online' | 'offline'>('offline');
 
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [isTuningOpen, setIsTuningOpen] = useState(false);
@@ -196,7 +197,7 @@ export default function Home() {
   );
 
   const handlePlayArena = useCallback(
-    (arenaId: string) => { if (!player) return; setActiveArenaId(arenaId); },
+    (arenaId: string, isOnline?: boolean) => { if (!player) return; setActiveArenaId(arenaId); setGameMode(isOnline ? 'online' : 'offline'); },
     [player],
   );
 
