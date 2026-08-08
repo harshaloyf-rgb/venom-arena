@@ -1072,7 +1072,9 @@ function drawResponsiveEyes(
 
   // Magnitude: combine steering delta with angular velocity
   // Angular velocity keeps the shift alive during sustained turns
-  const angVelContrib = Math.min(1, absVel / 0.018);
+  // Threshold 0.060 calibrated for BASE_TURN_RATE=0.120 (half the max rate
+  // gives ~50% contribution at moderate turns — responsive without saturation).
+  const angVelContrib = Math.min(1, absVel / 0.060);
   const deltaContrib = Math.min(1, absDelta / (Math.PI / 2.5));
   const combinedMag = Math.min(1, Math.max(deltaContrib, angVelContrib * 0.75));
 
@@ -1087,13 +1089,15 @@ function drawResponsiveEyes(
   const targetShiftY = Math.sin(lookDir) * pupilShift;
 
   // ── ASYMMETRIC LERP: fast out, slow return ──
-  // Moving outward (toward target): snappy 0.10
-  // Returning to center: lazy 0.03 — pupils linger before drifting back
+  // Snappier than before to compensate for heavier steering inertia —
+  // the eyes should be the responsive counterpoint to the heavy body.
+  // Moving outward (toward target): snappy 0.18
+  // Returning to center: moderate 0.06
   const targetDist = Math.sqrt(targetShiftX * targetShiftX + targetShiftY * targetShiftY);
   const currentDist = Math.sqrt(smooth.shiftX * smooth.shiftX + smooth.shiftY * smooth.shiftY);
   const isReturning = targetDist < currentDist;
-  const LERP_OUT = 0.10;
-  const LERP_BACK = 0.03;
+  const LERP_OUT = 0.18;
+  const LERP_BACK = 0.06;
   const lerpSpeed = isReturning ? LERP_BACK : LERP_OUT;
   smooth.shiftX += (targetShiftX - smooth.shiftX) * lerpSpeed;
   smooth.shiftY += (targetShiftY - smooth.shiftY) * lerpSpeed;
