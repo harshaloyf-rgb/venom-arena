@@ -82,15 +82,18 @@ export function renderHUD(
 
   // ── Score: bottom-center ──
   const scoreVal = Math.floor(state.player.score);
+  const scoreText = `Score ${scoreVal.toLocaleString()}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
-  ctx.font = 'bold 28px monospace';
+  ctx.font = 'bold 13px monospace';
   ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+  const tw = ctx.measureText(scoreText).width;
+  const boxW = Math.max(tw + 28, 120);
   ctx.beginPath();
-  ctx.roundRect(cw / 2 - 80, ch - 56, 160, 44, 10);
+  ctx.roundRect(cw / 2 - boxW / 2, ch - 44, boxW, 32, 8);
   ctx.fill();
   ctx.fillStyle = '#ffffff';
-  ctx.fillText(scoreVal.toLocaleString(), cw / 2, ch - 18);
+  ctx.fillText(scoreText, cw / 2, ch - 18);
 
   // ── Kills: bottom-right ──
   const krPad = 12;
