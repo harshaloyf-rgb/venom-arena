@@ -9,6 +9,7 @@ export * from './pool';
 export * from './spatial-hash';
 export * from './camera';
 export * from './bot-ai';
+export * from './core';
 export * from './engine';
 export * from './extrapolation';
 export * from './snapshot';
