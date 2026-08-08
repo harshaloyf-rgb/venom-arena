@@ -330,15 +330,15 @@ export function computeBodyLength(score: number): number {
 }
 
 // FOOD
-export const FOOD_COUNT_TARGET = 1200;
+export const FOOD_COUNT_TARGET = 3000;
 export const FOOD_SPAWN_WEIGHTS: [number, number, number] = [0.93, 0.04, 0.03];
 export const FOOD_VALUES: [number, number, number] = [1, 2, 5];
 export const FOOD_RADII: [number, number, number] = [3, 5, 8];
 export const FOOD_COLORS: [string, string, string] = ['#34d399', '#38bdf8', '#f472b6'];
 export const FOOD_GLOW_COLORS: [string, string, string] = ['#10b981', '#0ea5e9', '#ec4899'];
-export const FOOD_SPAWN_AREA_RADIUS = 3000;
-export const INITIAL_SPAWN_RADIUS = 3000;
-export const FOOD_RESPAWN_BATCH = 25;
+export const FOOD_SPAWN_AREA_RADIUS = 4000;
+export const INITIAL_SPAWN_RADIUS = 4000;
+export const FOOD_RESPAWN_BATCH = 100;
 
 // COLLISION
 export const SNAKE_RADIUS = 8;
@@ -380,7 +380,7 @@ export const SPIRAL_B = 0.05;
 
 // SNAPSHOT
 export const BODY_DOWNSAMPLE_INTERVAL = 3;
-export const FOOD_DOWNSAMPLE_RADIUS = 500;
+export const FOOD_DOWNSAMPLE_RADIUS = 2000;
 export const MAX_SNAKES_PER_SNAPSHOT = 100;
 
 // EXTRACTION
