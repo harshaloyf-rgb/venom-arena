@@ -39,27 +39,21 @@ export const MIN_TURN_RATE = 0.100;
 /** Distance between consecutive segment positions in the path history */
 export const SEGMENT_SPACING = 8;
 
-/** Score points required per additional body segment.
- *  Formula: length = START_LENGTH + floor(score / LENGTH_PER_SCORE)
- *  Score 0→15  |  100→35  |  1K→215  |  10K→2,015  |  100K→20,015
- *  Linear, predictable growth — 1 extra segment every 5 points earned. */
-export const LENGTH_PER_SCORE = 5;
-
-/** Starting body segment count for new snakes.
- *  With LENGTH_PER_SCORE=5, the first visible growth happens at score 5 (length 16). */
+/** Starting body segment count for new snakes. */
 export const START_LENGTH = 15;
 
-/** Removed: MAX_SNAKE_LENGTH.
- *  Length now grows linearly with no hard cap (1 seg per 5 score).
- *  Practical limit is rendering performance, not an arbitrary ceiling.
- *  At 100K score: 20,015 segments. Server safety: path buffer auto-grows. */
+/** Logarithmic body length growth — same pattern as bodyRadius.
+ *  Formula: length = START_LENGTH + RATE × ln(1 + score / OFFSET)
+ *  No hard cap — naturally flattens but ALWAYS grows (different scores = different lengths).
+ *  Fitted to checkpoints: 0→15 | 1K→100 | 10K→288 | 50K→451 | 100K→523 | 1M→764 */
+export const LENGTH_GROWTH_RATE = 105;
+export const LENGTH_GROWTH_OFFSET = 800;
 
-/** Compute visual body length (segments) from score using linear growth.
- *  1 extra segment per LENGTH_PER_SCORE (5) score points.
- *  Smooth, predictable growth — no sudden jumps.
- *  Score 0→15  |  5→16  |  100→35  |  1K→215  |  10K→2,015  |  100K→20,015 */
+/** Compute visual body length (segments) from score using logarithmic growth.
+ *  Same structure as computeBodyRadius — fast early, flattens at high scores, no cap.
+ *  Score 0→15 | 100→27 | 500→66 | 1K→100 | 5K→223 | 10K→288 | 50K→451 | 100K→523 | 1M→764 */
 export function computeBodyLength(score: number): number {
-  return Math.floor(START_LENGTH + score / LENGTH_PER_SCORE);
+  return Math.floor(START_LENGTH + LENGTH_GROWTH_RATE * Math.log(1 + score / LENGTH_GROWTH_OFFSET));
 }
 
 /** Compute visual body radius from score using logarithmic growth curve.

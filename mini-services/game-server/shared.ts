@@ -319,10 +319,15 @@ export const BASE_SPEED = 4.5;
 export const BOOST_SPEED = 8.0;
 export const MAX_TURN_RATE = Math.PI / 15; // U-turn in 0.25s
 export const SEGMENT_SPACING = 8;
-export const LENGTH_PER_SCORE = 5; // 1 segment per 5 score points
 export const START_LENGTH = 15;
-// MAX_SNAKE_LENGTH removed — length grows linearly without cap
+export const LENGTH_GROWTH_RATE = 105;
+export const LENGTH_GROWTH_OFFSET = 800;
 export const BOOST_SHRINK_RATE = 1;
+
+/** Compute body length from score — logarithmic, no cap. */
+export function computeBodyLength(score: number): number {
+  return Math.floor(START_LENGTH + LENGTH_GROWTH_RATE * Math.log(1 + score / LENGTH_GROWTH_OFFSET));
+}
 
 // FOOD
 export const FOOD_COUNT_TARGET = 1200;

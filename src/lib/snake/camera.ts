@@ -29,7 +29,7 @@ export function updateCamera(camera: Camera, snake: Snake, _canvasWidth: number,
   camera.y = snake.path.headY;
 
   // Dynamic zoom: zoom out as snake grows in BOTH length and width.
-  // use computeBodyLength(score) — only changes when score crosses a 5-point boundary.
+  // computeBodyLength uses logarithmic curve — smooth, no sudden jumps.
   const targetLength = computeBodyLength(snake.score);
   const baseLength = START_LENGTH;
 
@@ -38,7 +38,7 @@ export function updateCamera(camera: Camera, snake: Snake, _canvasWidth: number,
   const widthFactor = Math.log2(Math.max(bodyRatio, 1)) * 0.8;
 
   const totalGrowth = lengthFactor + widthFactor;
-  const targetZoom = Math.max(CAMERA_ZOOM_MIN, CAMERA_BASE_ZOOM - totalGrowth * 0.11);
+  const targetZoom = Math.max(CAMERA_ZOOM_MIN, CAMERA_BASE_ZOOM - totalGrowth * 0.16);
 
   // Lerp zoom toward target, snapped to coarse precision.
   const rawZoom = camera.zoom + (targetZoom - camera.zoom) * CAMERA_ZOOM_LERP;
