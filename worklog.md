@@ -1435,3 +1435,22 @@ Stage Summary:
 - Changes to offline engine.ts will NEVER affect online mode
 - Changes to online shared.ts will NEVER affect offline mode
 - Both share only pure utilities: types.ts, config.ts, vec2.ts, spatial-hash.ts, pool.ts, bot-ai.ts
+---
+Task ID: 1
+Agent: Main
+Task: Fix online arena connection error
+
+Work Log:
+- Diagnosed that the game server mini-service on port 3001 was not running
+- Attempted to start it and found a ReferenceError in shared.ts
+- Found root cause: `export { X } from module` only re-exports, does not make X available locally
+- shared.ts was using config constants (SEGMENT_SPACING, BASE_SPEED, SNAKE_RADIUS, etc.) locally without importing them
+- Added proper `import` statements for all locally-used constants and utilities before the `export` re-exports
+- Started the game server successfully on port 3001
+- Verified via browser that online arena connects, loads game canvas, and shows HUD (Boost/Extract buttons)
+- No browser console errors
+
+Stage Summary:
+- Fixed: shared.ts missing import statements for locally-used config constants
+- Game server now running on port 3001
+- Online arena connection works — player can buy in and see the game

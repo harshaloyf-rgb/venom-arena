@@ -8,6 +8,36 @@
 // to import — they are pure data types and utilities with no game logic.
 // ============================================================================
 
+// Import config constants for local use (re-export below for game-state.ts)
+import {
+  BASE_SPEED, BOOST_SPEED, SEGMENT_SPACING,
+  START_LENGTH, computeBodyLength, computeBodyRadius,
+  INITIAL_SPAWN_RADIUS,
+  FOOD_RESPAWN_BATCH, FOOD_DOWNSAMPLE_RADIUS, MAX_SNAKES_PER_SNAPSHOT,
+  SNAKE_RADIUS, SPAWN_PROTECTION_MS, SPATIAL_CELL_SIZE,
+  BOOST_DROP_INTERVAL, BOOST_MIN_BODY, BOOST_MIN_SCORE,
+  BOOST_DROP_COUNT, BOT_COUNT, BOT_MAX_TURN_RATE,
+  BOT_START_SCORE_MIN, BOT_START_SCORE_MAX,
+  SAFE_SPAWN_DIST, SAFE_SPAWN_ATTEMPTS,
+  EXTRACTION_ZONE_RADIUS, EXTRACTION_SCORE_THRESHOLD,
+  EXTRACTION_SPEED_BONUS, STAR_CHIP_SPAWN_INTERVAL,
+  FOOD_MAGNET_PULL_RADIUS, FOOD_MAGNET_DEATH_RADIUS,
+  FOOD_MAGNET_MIN_SPEED, FOOD_MAGNET_MAX_SPEED,
+  BOOST_SCORE_COST_AMOUNT, BOOST_SCORE_COST_INTERVAL,
+  BASE_TURN_RATE, MIN_TURN_RATE,
+  STEERING_LERP, SHARP_TURN_BRAKE,
+  SPIRAL_TURN_THRESHOLD, SPIRAL_ENTER_TICKS, SPIRAL_MAX_MULTIPLIER,
+  SPIRAL_RAMP_TICKS, SPIRAL_EXIT_THRESHOLD,
+  FOOD_SPAWN_WEIGHTS, FOOD_VALUES, FOOD_RADII,
+  FOOD_COLORS, FOOD_GLOW_COLORS,
+  STAR_CHIP_VALUE, STAR_CHIP_RADIUS, STAR_CHIP_GLOW, STAR_CHIP_COLORS,
+  BODY_DOWNSAMPLE_INTERVAL,
+} from '../../src/lib/snake/config';
+
+// Import utilities for local use
+import { PathBuffer, type IPathBuffer } from '../../src/lib/snake/pool';
+import { SpatialHash, type SpatialEntity } from '../../src/lib/snake/spatial-hash';
+
 // Re-export types from types.ts (pure types, no logic)
 export type {
   FoodOrb, StarChip, SkinRarity, FoodSize,
