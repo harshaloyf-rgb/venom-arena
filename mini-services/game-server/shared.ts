@@ -23,7 +23,8 @@ export {
   // Constants
   BOT_NAMES, SNAKE_PALETTES, FOOD_SIZES,
   SPACING_RATIO, BOOST_MIN_BODY_SCALED,
-  COLLISION_DIST_SQ, EAT_DIST_SQ, STAR_CHIP_DIST_SQ,
+  COLLISION_DIST_SQ, STAR_CHIP_DIST_SQ,
+  MAGNET_PULL_DIST_SQ, MAGNET_DEATH_DIST_SQ,
 } from '../../src/lib/snake/core';
 
 // Re-export config (needed by index.ts and game-state.ts)

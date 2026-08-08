@@ -1304,3 +1304,28 @@ Stage Summary:
 - Key behavioral unifications: Fibonacci spiral assist (not log-spiral), dynamic turn rate, boost score cost, pop×2 length management
 - Online-only features preserved: arena bounds, extraction zone timer, count-based food spawning, Socket.IO player management
 
+---
+Task ID: food-magnet-vacuum
+Agent: Main
+Task: Implement food magnet/vacuum mechanic with pull zone + death zone + quadratic acceleration
+
+Work Log:
+- Pushed previous commits (steering inertia, collision points hidden, eye tracking fixes, debug panel removal)
+- Investigated current food system: checkFoodEating in core.ts, EAT_DIST_SQ = (SNAKE_RADIUS+10)², spatial hash query
+- Added 4 magnet config constants to config.ts: FOOD_MAGNET_PULL_RADIUS=35, FOOD_MAGNET_DEATH_RADIUS=2, FOOD_MAGNET_MIN_SPEED=1.0, FOOD_MAGNET_MAX_SPEED=10.0
+- Added `magnetized: boolean` field to FoodOrb type in types.ts
+- Updated all 3 FoodOrb creation sites (makeFood, boost drop, killSnake) to include magnetized: false
+- Removed old EAT_DIST_SQ constant, added MAGNET_PULL_DIST, MAGNET_DEATH_DIST, MAGNET_PULL_DIST_SQ, MAGNET_DEATH_DIST_SQ
+- Rewrote checkFoodEating with two-zone vacuum: Pull Zone (41px from center) pulls food with quadratic acceleration, Death Zone (8px) eats instantly
+- Used foodById Map for O(1) food lookups (instead of linear scan)
+- Updated shared.ts re-exports (removed EAT_DIST_SQ, added MAGNET constants)
+- Updated renderer.ts: magnetized food gets white glow, white ring, white fill (vs normal colored glow)
+- Verified in browser: no compilation errors, no console errors, game runs correctly
+
+Stage Summary:
+- Food magnet/vacuum mechanic fully implemented
+- Pull zone: SNAKE_RADIUS + 35px = 41px from head center
+- Death zone: SNAKE_RADIUS + 2px = 8px from head center  
+- Quadratic acceleration: speed = MIN + (MAX - MIN) * closeness² (1.0 to 10.0 px/tick)
+- Visual: magnetized food turns white with enhanced glow ring
+- All config values tunable from config.ts

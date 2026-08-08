@@ -51,6 +51,8 @@ export interface FoodOrb {
   radius: number;
   color: string;
   glowColor: string;
+  /** True when food is within the magnet pull zone and being attracted toward a head */
+  magnetized: boolean;
 }
 
 /** A star chip (extraction zone collectible) */

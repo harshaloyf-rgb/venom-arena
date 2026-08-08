@@ -23,6 +23,9 @@ import {
   FOOD_COLORS, FOOD_GLOW_COLORS,
   // COLLISION
   SNAKE_RADIUS, SPAWN_PROTECTION_MS, SPATIAL_CELL_SIZE,
+  // FOOD MAGNET
+  FOOD_MAGNET_PULL_RADIUS, FOOD_MAGNET_DEATH_RADIUS,
+  FOOD_MAGNET_MIN_SPEED, FOOD_MAGNET_MAX_SPEED,
   // BOOST
   BOOST_DROP_INTERVAL, BOOST_MIN_BODY, BOOST_MIN_SCORE, BOOST_DROP_COUNT,
   BOOST_SCORE_COST_AMOUNT, BOOST_SCORE_COST_INTERVAL,
@@ -102,8 +105,15 @@ export const SNAKE_PALETTES: [string, string][] = [
 export const FOOD_SIZES: Array<FoodSize> = ['small', 'medium', 'large'];
 
 export const COLLISION_DIST_SQ = SNAKE_RADIUS * 2 * SNAKE_RADIUS * 2;
-export const EAT_DIST_SQ = (SNAKE_RADIUS + 10) * (SNAKE_RADIUS + 10);
 export const STAR_CHIP_DIST_SQ = (SNAKE_RADIUS + STAR_CHIP_RADIUS) * (SNAKE_RADIUS + STAR_CHIP_RADIUS);
+
+/** Pre-computed squared radii for the magnet zones.
+ *  Pull zone = SNAKE_RADIUS + PULL_RADIUS (41px from center for default values).
+ *  Death zone = SNAKE_RADIUS + DEATH_RADIUS (8px from center for default values). */
+export const MAGNET_PULL_DIST = SNAKE_RADIUS + FOOD_MAGNET_PULL_RADIUS;
+export const MAGNET_DEATH_DIST = SNAKE_RADIUS + FOOD_MAGNET_DEATH_RADIUS;
+export const MAGNET_PULL_DIST_SQ = MAGNET_PULL_DIST * MAGNET_PULL_DIST;
+export const MAGNET_DEATH_DIST_SQ = MAGNET_DEATH_DIST * MAGNET_DEATH_DIST;
 
 // ─── Skin Override ───────────────────────────────────────────────────────────
 
@@ -358,6 +368,7 @@ export function moveSnake(
           y: snake.path.getY(idx),
           size: 'small', value: 1, radius: FOOD_RADII[0],
           color: FOOD_COLORS[0], glowColor: FOOD_GLOW_COLORS[0],
+          magnetized: false,
         });
       }
     }
@@ -415,6 +426,7 @@ export function makeFood(
     radius: FOOD_RADII[sizeIndex],
     color: FOOD_COLORS[sizeIndex],
     glowColor: FOOD_GLOW_COLORS[sizeIndex],
+    magnetized: false,
   };
 }
 
@@ -435,7 +447,15 @@ export function spawnFoodBatch(
 // Food Eating
 // ==========================================================================
 
-/** Check food eating for all snakes. Returns set of eaten food IDs. */
+/** Food magnet + eating for all snakes.
+ *  
+ *  Two-zone vacuum system:
+ *  • Pull Zone (SNAKE_RADIUS + 35px): food is attracted toward the head
+ *    with QUADRATIC acceleration — slow drift at the edge, snappy snap at the mouth.
+ *  • Death Zone (SNAKE_RADIUS + 2px): food is eaten instantly.
+ *  
+ *  Returns set of eaten food IDs. Mutates food positions for pulling.
+ */
 export function checkFoodEating(
   snakes: Iterable<SnakeLike>,
   foods: FoodOrb[],
@@ -443,31 +463,70 @@ export function checkFoodEating(
   foodValueCache: Map<number, number>,
   now: number,
 ): Set<number> {
-  // Build food spatial hash + value cache
+  // Reset all magnetized flags from previous tick
+  for (let i = 0; i < foods.length; i++) {
+    foods[i].magnetized = false;
+  }
+
+  // Build food spatial hash + value cache + ID→index map
   foodHash.clear();
   foodValueCache.clear();
+  const foodById = new Map<number, FoodOrb>();
   const scratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
   for (let i = 0; i < foods.length; i++) {
     const f = foods[i];
     scratch.x = f.x; scratch.y = f.y; scratch.radius = f.radius; scratch.id = f.id;
     foodHash.insert(scratch);
     foodValueCache.set(f.id, f.value);
+    foodById.set(f.id, f);
   }
 
   const eatenIds = new Set<number>();
+  const speedRange = FOOD_MAGNET_MAX_SPEED - FOOD_MAGNET_MIN_SPEED;
+  const zoneWidth = MAGNET_PULL_DIST - MAGNET_DEATH_DIST;
+
   for (const snake of snakes) {
     if (!snake.alive) continue;
     const hx = snake.path.headX;
     const hy = snake.path.headY;
     if (snake.isPlayer && now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
-    const nearby = foodHash.query(hx, hy, SNAKE_RADIUS + 10);
+
+    // Query all food within the pull zone
+    const nearby = foodHash.query(hx, hy, MAGNET_PULL_DIST);
     for (let i = 0; i < nearby.length; i++) {
       const entity = nearby[i];
       const fid = entity.id as number;
       if (eatenIds.has(fid)) continue;
-      if (distSq(hx, hy, entity.x, entity.y) <= EAT_DIST_SQ) {
+
+      // Find the actual food in the array (positions may have been updated by pull)
+      const food = foodById.get(fid);
+      if (!food) continue;
+
+      const dx = hx - food.x;
+      const dy = hy - food.y;
+      const dSq = dx * dx + dy * dy;
+
+      // ── Death Zone: eat the food ──
+      if (dSq <= MAGNET_DEATH_DIST_SQ) {
         eatenIds.add(fid);
         snake.score += foodValueCache.get(fid) ?? 1;
+        continue;
+      }
+
+      // ── Pull Zone: attract food toward head ──
+      if (dSq <= MAGNET_PULL_DIST_SQ) {
+        food.magnetized = true;
+
+        const dist = Math.sqrt(dSq);
+        // Normalized closeness: 0 at pull edge, 1 at death zone
+        const closeness = Math.min(1, Math.max(0, 1 - (dist - MAGNET_DEATH_DIST) / zoneWidth));
+        // Quadratic acceleration: speed ramps up with closeness²
+        const pullSpeed = FOOD_MAGNET_MIN_SPEED + speedRange * closeness * closeness;
+
+        // Move food toward head center
+        const invDist = 1 / dist;
+        food.x += dx * invDist * pullSpeed;
+        food.y += dy * invDist * pullSpeed;
       }
     }
   }
@@ -679,6 +738,7 @@ export function killSnake(
       x: snake.path.getX(si), y: snake.path.getY(si),
       size: FOOD_SIZES[sizeIdx], value: FOOD_VALUES[sizeIdx], radius: FOOD_RADII[sizeIdx],
       color: FOOD_COLORS[sizeIdx], glowColor: FOOD_GLOW_COLORS[sizeIdx],
+      magnetized: false,
     });
   }
 }
