@@ -484,13 +484,15 @@ export function renderSnakeAtlas(
       ctx.restore();
     }
 
-    // Name label
+    // Name label — round to integer pixels to prevent sub-pixel text jitter.
     if (segRadius > 3) {
       ctx.fillStyle = snake.isPlayer ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.5)';
       ctx.font = `${Math.max(10, 12 * zoom)}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      ctx.fillText(snake.name, hsx, hsy - headDrawSize / 2 - 8 * zoom);
+      const nameX = Math.round(hsx);
+      const nameY = Math.round(hsy - headDrawSize / 2 - 8 * zoom);
+      ctx.fillText(snake.name, nameX, nameY);
     }
 
   }
@@ -745,13 +747,15 @@ export function renderSnakeFallback(
     // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
     renderEquippedCosmetics(ctx, { hx: headScreen.x, hy: headScreen.y, hr: headRadius, angle: snake.angle, time: now, boosting: snake.boosting, mouseScreenX, mouseScreenY });
 
-    // Name
+    // Name — round to integer pixels to prevent sub-pixel text jitter.
     if (segRadius > 3) {
       ctx.fillStyle = snake.isPlayer ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.5)';
       ctx.font = `${Math.max(10, 12 * zoom)}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      ctx.fillText(snake.name, headScreen.x, headScreen.y - headRadius - 8 * zoom);
+      const nameX = Math.round(headScreen.x);
+      const nameY = Math.round(headScreen.y - headRadius - 8 * zoom);
+      ctx.fillText(snake.name, nameX, nameY);
     }
 
   }

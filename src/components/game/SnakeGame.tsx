@@ -487,11 +487,10 @@ export default function SnakeGame({
           break;
         }
         if (playerSnake) {
-          // Snap camera to extrapolated head with fixed precision.
-          // Do NOT use 1/zoom — zoom changes would shift the snap grid.
-          const p = 0.5;
-          cameraRef.current.x = Math.round(playerSnake.headX / p) * p;
-          cameraRef.current.y = Math.round(playerSnake.headY / p) * p;
+          // Smooth lerp camera — same as offline mode.
+          const lerp = 0.15;
+          cameraRef.current.x += (playerSnake.headX - cameraRef.current.x) * lerp;
+          cameraRef.current.y += (playerSnake.headY - cameraRef.current.y) * lerp;
         }
 
         const viewport: Viewport = getViewport(cameraRef.current, w, h);
