@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Zap, CircleDot } from 'lucide-react';
 import { createExtractionState, updateExtractionProgress, drawExtractRing } from '@/lib/snake/extraction';
-import { createInitialState, gameTick, respawnPlayer, type PlayerSkinOverride } from '@/lib/snake/engine';
+import { createInitialState, gameTick, respawnPlayer, initBots, type PlayerSkinOverride } from '@/lib/snake/engine';
 import { createCamera, updateCamera, getViewport } from '@/lib/snake/camera';
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, registerSkinAsset } from '@/lib/snake/skin-registry';
@@ -147,6 +147,8 @@ export default function GameCanvas({
 
     // ── Init game state with player skin ──
     gameStateRef.current = createInitialState(skinOverride, undefined, playerName);
+    // ── Spawn bots ──
+    initBots(gameStateRef.current);
     cameraRef.current = createCamera(0, 0);
     isDeadRef.current = false;
     deathTimeRef.current = 0;
