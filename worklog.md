@@ -1565,3 +1565,24 @@ Stage Summary:
 - Connection fix: Aggressive 5s ping prevents gateway-related ping timeouts
 - Speed fix: Computed from actual head displacement instead of hardcoded 0
 - All rendering uses identical functions for both modes (confirmed by audit)
+
+---
+Task ID: exact-copy-online-rendering
+Agent: Main
+Task: Rewrite online rendering as exact structural copy of offline rendering
+
+Work Log:
+- Deleted entire online rendering block (80+ lines of different code structure)
+- Replaced with exact copy of offline rendering block (line-for-line identical)
+- Created `buildOnlineGameState()` helper — the ONLY bridge that converts server snapshots to GameState
+- Online block now has: same camera, same viewport, same mouse tracking, same renderOfflineBackground, same snake render loop (bots first, player on top), same extraction ring, same HUD with highScoreRef, same controls hint, same mouse cursor, same death overlay, same leaderboard update
+- Removed `updateOnlineLeaderboard` (was a separate function) — now uses same `updateLeaderboard(state)` as offline
+- Added `onKill` callback to track player kills from server events (same as offline's killEvents loop)
+- Passed `highScoreRef.current` to online HUD (was hardcoded 0 before)
+- Verified offline mode still works: canvas renders, no errors, boost/extract buttons present
+
+Stage Summary:
+- Online rendering code is now a literal structural copy of offline rendering code
+- Both blocks call the exact same functions in the exact same order with the exact same parameters
+- The ONLY difference: data comes from `buildOnlineGameState(snapshot)` instead of `gameStateRef.current`
+- No more separate online rendering functions, no more different HUD, no more different anything
