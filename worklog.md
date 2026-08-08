@@ -1540,3 +1540,28 @@ Stage Summary:
 - Connection: working through Caddy gateway on port 81 -> game server on port 3001
 - Player name/skin: correctly passed from client to server via Socket.IO auth handshake
 
+
+---
+Task ID: fix-online-parity-final
+Agent: Main
+Task: Fix remaining online/offline differences — body jitter, connection drops, speed field
+
+Work Log:
+- Audited all code paths: confirmed rendering functions already identical (previous session)
+- Identified 3 remaining issues: (1) body jitter from non-interpolated body segments, (2) ping timeout disconnects, (3) speed:0 in adapted snake
+- Replaced `rebuildPathFromSnapshot` with `rebuildPathInterpolated` that lerps every body segment between prev/curr snapshots at 60fps
+- Added `onlinePrevBodyRef` to cache previous snapshot body positions per snake
+- Modified `onSnapshot` handler to store current body data as previous before accepting new snapshot
+- Changed `speed: 0` to computed speed derived from head displacement between snapshots
+- Reduced server Socket.IO ping interval from 25s to 5s and pingTimeout from 20s to 10s
+- Updated client reconnection: 20 attempts, 500ms initial delay (was 5 attempts, 1000ms)
+- Added client-side pingInterval/pingTimeout matching server settings
+- Verified: offline mode works (canvas renders, no errors)
+- Verified: Socket.IO connection stable 25s+ through Caddy gateway (no ping timeout)
+- Verified: user 'Bossbrother' connected and stayed connected for 20+ seconds in live game
+
+Stage Summary:
+- Body jitter fix: Every body segment now interpolated at 60fps between 20Hz server snapshots
+- Connection fix: Aggressive 5s ping prevents gateway-related ping timeouts
+- Speed fix: Computed from actual head displacement instead of hardcoded 0
+- All rendering uses identical functions for both modes (confirmed by audit)

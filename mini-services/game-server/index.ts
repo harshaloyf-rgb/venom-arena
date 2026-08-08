@@ -28,6 +28,9 @@ const io = new Server(httpServer, {
   // Performance tuning for 1000+ connections
   transports: ['websocket', 'polling'],
   perMessageDeflate: false,
+  // Aggressive ping to prevent "ping timeout" disconnects through gateway
+  pingInterval: 5000,
+  pingTimeout: 10000,
 });
 
 httpServer.listen(PORT, '0.0.0.0', () => {

@@ -75,9 +75,12 @@ export class OnlineEngine {
     this.socket = io('/?XTransformPort=3001', {
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 20,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 3000,
+      // Match server's aggressive ping settings
+      pingInterval: 5000,
+      pingTimeout: 10000,
       auth: {
         token,
         arenaId,
