@@ -123,8 +123,8 @@ export const SNAKE_RADIUS_MIN = 6;
 /** Radius growth rate: how many px of width per √score.
  *  Formula: radius = MIN + RATE × √score
  *  No hard max — radius grows forever with score, just slower at higher scores.
- *  Score 0: 6px  |  Score 1K: 10.5px  |  Score 10K: 14px  |  Score 100K: 31px */
-export const SNAKE_RADIUS_GROWTH_RATE = 0.08;
+ *  Score 0: 6px  |  Score 100: 9px  |  Score 500: 12.7px  |  Score 1K: 15.5px  |  Score 10K: 30px */
+export const SNAKE_RADIUS_GROWTH_RATE = 0.3;
 
 /** First N segments of a snake's body that cannot kill on collision */
 export const NECK_PROTECTION = 5;

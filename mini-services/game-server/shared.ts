@@ -339,7 +339,7 @@ export const FOOD_RESPAWN_BATCH = 25;
 // COLLISION
 export const SNAKE_RADIUS = 8;
 export const SNAKE_RADIUS_MIN = 6;
-export const SNAKE_RADIUS_GROWTH_RATE = 0.08;
+export const SNAKE_RADIUS_GROWTH_RATE = 0.3;
 export const NECK_PROTECTION = 5;
 export const SPAWN_PROTECTION_MS = 4000;
 export const HEAD_ON_HEAD_BOOST_WINS = true;
