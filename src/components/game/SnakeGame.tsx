@@ -107,6 +107,8 @@ export default function SnakeGame({
   const onlineMySnakeIdRef = useRef<string | null>(null);
   // Cached PathBuffers per snake (reused across frames to avoid GC)
   const onlinePathCacheRef = useRef<Map<string, PathBuffer>>(new Map());
+  // Cached previous body positions per snake for smooth body interpolation
+  const onlinePrevBodyRef = useRef<Map<string, { bodyX: number[]; bodyY: number[]; bodyLen: number }>>(new Map());
 
   // Atlas manager (shared across modes)
   const atlasManagerRef = useRef<SkinAtlasManager | null>(null);
@@ -272,6 +274,17 @@ export default function SnakeGame({
       };
 
       onlineEngine.onSnapshot = (snapshot) => {
+        // Cache current body positions as "previous" for interpolation
+        if (onlineCurrSnapRef.current) {
+          for (const s of onlineCurrSnapRef.current.snakes) {
+            if (!s.alive) continue;
+            onlinePrevBodyRef.current.set(s.id, {
+              bodyX: Array.from(s.bodyX),
+              bodyY: Array.from(s.bodyY),
+              bodyLen: s.bodyLen,
+            });
+          }
+        }
         onlinePrevSnapRef.current = onlineCurrSnapRef.current;
         onlineCurrSnapRef.current = snapshot;
         onlineSnapTimeRef.current = performance.now();
@@ -518,7 +531,7 @@ export default function SnakeGame({
         const SNAPSHOT_INTERVAL = 50; // 20Hz broadcast
         const t = Math.min(snapAge / SNAPSHOT_INTERVAL, 1.0);
 
-        // ── Build interpolated snakes ──
+        // ── Build interpolated snakes (same visual quality as offline) ──
         const adaptedSnakes = new Map<string, Snake>();
         let adaptedPlayer: Snake | null = null;
         const localTargetAngle = inputState.targetAngle;
@@ -529,24 +542,34 @@ export default function SnakeGame({
 
           // Find matching snake in previous snapshot for interpolation
           const prevSnake = prevSnap?.snakes.find(s => s.id === snapSnake.id);
+          const prevBody = onlinePrevBodyRef.current.get(snapSnake.id);
 
-          // Interpolate head position
+          // Interpolate head position (same as before)
           let hx = snapSnake.hx;
           let hy = snapSnake.hy;
           let angle = snapSnake.angle;
           if (prevSnake && prevSnake.alive && t < 1.0) {
             hx = lerp(prevSnake.hx, snapSnake.hx, t);
             hy = lerp(prevSnake.hy, snapSnake.hy, t);
-            // Don't interpolate angle across wraps — just use current
             angle = snapSnake.angle;
           }
 
-          // Build PathBuffer from (interpolated) snapshot data
+          // Build PathBuffer with INTERPOLATED body segments (not just snapping)
           const path = getOrCreatePath(onlinePathCacheRef.current, snapSnake.id, snapSnake.bodyLen + 1);
-          rebuildPathFromSnapshot(path, hx, hy, snapSnake);
+          rebuildPathInterpolated(path, hx, hy, snapSnake, prevBody, t);
 
           // For player snake, override angle with local input (responsive steering)
           const finalAngle = isPlayer ? localTargetAngle : angle;
+
+          // Compute speed from head movement (matches offline visual behavior)
+          let computedSpeed = 0;
+          if (prevSnake && prevSnake.alive) {
+            const dx = snapSnake.hx - prevSnake.hx;
+            const dy = snapSnake.hy - prevSnake.hy;
+            const snapDist = Math.sqrt(dx * dx + dy * dy);
+            const snapDt = 50; // 20Hz = 50ms per snapshot
+            computedSpeed = snapDist / (snapDt / 1000);
+          }
 
           const adapted: Snake = {
             id: snapSnake.id,
@@ -554,7 +577,7 @@ export default function SnakeGame({
             path,
             angle: finalAngle,
             prevAngle: prevSnake?.angle ?? snapSnake.angle,
-            speed: 0, // Not used by renderer
+            speed: computedSpeed,
             score: snapSnake.score,
             alive: snapSnake.alive,
             isBot: !isPlayer,
@@ -706,6 +729,7 @@ export default function SnakeGame({
       }
       onlineEngineRef.current = null;
       onlinePathCacheRef.current.clear();
+      onlinePrevBodyRef.current.clear();
     };
   }, [mode, arenaId, authToken, handleRespawn, updateLeaderboard, updateOnlineLeaderboard, authPlayer]);
 
@@ -885,27 +909,45 @@ function getOrCreatePath(cache: Map<string, PathBuffer>, snakeId: string, length
 // Helper: Rebuild a PathBuffer from a SnakeSnapshot + interpolated head position
 // ============================================================================
 
-function rebuildPathFromSnapshot(
+function rebuildPathInterpolated(
   path: PathBuffer,
   headX: number,
   headY: number,
   snap: SnakeSnapshot,
+  prevBody: { bodyX: number[]; bodyY: number[]; bodyLen: number } | undefined,
+  t: number,
 ): void {
-  const totalLen = snap.bodyLen + 1; // +1 for the head position
+  const totalLen = snap.bodyLen + 1;
   path.ensureCapacity(totalLen);
   path.length = 0;
   path.headSegIdx = 0;
 
-  // Head at index 0
+  // Head at index 0 (already interpolated by caller)
   path.data[0] = headX;
   path.data[1] = headY;
   path.length = 1;
 
-  // Body segments (already downsampled, index 0 = nearest to head)
-  for (let i = 0; i < snap.bodyLen; i++) {
-    const base = (i + 1) * 2;
-    path.data[base] = snap.bodyX[i];
-    path.data[base + 1] = snap.bodyY[i];
+  // Body segments — interpolate between previous and current snapshot
+  if (prevBody && t < 1.0) {
+    // Interpolate: for each segment in current, lerp with previous
+    for (let i = 0; i < snap.bodyLen; i++) {
+      const base = (i + 1) * 2;
+      if (i < prevBody.bodyLen) {
+        path.data[base] = lerp(prevBody.bodyX[i], snap.bodyX[i], t);
+        path.data[base + 1] = lerp(prevBody.bodyY[i], snap.bodyY[i], t);
+      } else {
+        // New segment (snake grew) — use current position
+        path.data[base] = snap.bodyX[i];
+        path.data[base + 1] = snap.bodyY[i];
+      }
+    }
+  } else {
+    // No previous data — use current snapshot positions directly
+    for (let i = 0; i < snap.bodyLen; i++) {
+      const base = (i + 1) * 2;
+      path.data[base] = snap.bodyX[i];
+      path.data[base + 1] = snap.bodyY[i];
+    }
   }
   path.length = totalLen;
 }
