@@ -487,10 +487,9 @@ export default function SnakeGame({
           break;
         }
         if (playerSnake) {
-          // Smooth lerp camera — same as offline mode.
-          const lerp = 0.15;
-          cameraRef.current.x += (playerSnake.headX - cameraRef.current.x) * lerp;
-          cameraRef.current.y += (playerSnake.headY - cameraRef.current.y) * lerp;
+          // Direct lock — head at dead center, zero jitter.
+          cameraRef.current.x = playerSnake.headX;
+          cameraRef.current.y = playerSnake.headY;
         }
 
         const viewport: Viewport = getViewport(cameraRef.current, w, h);
