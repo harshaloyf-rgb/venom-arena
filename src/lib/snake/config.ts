@@ -62,11 +62,12 @@ export function computeBodyLength(score: number): number {
   return Math.floor(START_LENGTH + score / LENGTH_PER_SCORE);
 }
 
-/** Compute visual body radius from score using uncapped sqrt curve.
- *  Grows forever — no hard max. Slower at high scores, meaningful at every level.
- *  Score 0→6  |  1K→8.5  |  10K→14  |  100K→31 */
+/** Compute visual body radius from score using logarithmic growth curve.
+ *  Fitted to exact data checkpoints for smooth, controlled growth that
+ *  never gets too fat. Flattens naturally at high scores.
+ *  Score 0→6  |  100→9  |  500→12  |  1K→13.4  |  10K→18.4  |  100K→23.3  |  300K→25.7 */
 export function computeBodyRadius(score: number): number {
-  return SNAKE_RADIUS_MIN + SNAKE_RADIUS_GROWTH_RATE * Math.sqrt(score);
+  return SNAKE_RADIUS_MIN + SNAKE_RADIUS_GROWTH_RATE * Math.log(1 + score / SNAKE_RADIUS_GROWTH_OFFSET);
 }
 
 /** Segments lost per boost food drop */
@@ -120,11 +121,15 @@ export const SNAKE_RADIUS = 6;
 /** Minimum visual body radius (at score 0). Thin starting snake. */
 export const SNAKE_RADIUS_MIN = 6;
 
-/** Radius growth rate: how many px of width per √score.
- *  Formula: radius = MIN + RATE × √score
- *  No hard max — radius grows forever with score, just slower at higher scores.
- *  Score 0: 6px  |  Score 100: 9px  |  Score 500: 12.7px  |  Score 1K: 15.5px  |  Score 10K: 30px */
-export const SNAKE_RADIUS_GROWTH_RATE = 0.3;
+/** Radius growth offset: logarithmic curve parameter.
+ *  Formula: radius = MIN + RATE × ln(1 + score / OFFSET)
+ *  Derived from exact data-point fitting (see checkpoints in RATE). */
+export const SNAKE_RADIUS_GROWTH_OFFSET = 100 / 3; // ≈ 33.333
+
+/** Radius growth rate: logarithmic curve coefficient.
+ *  Formula: radius = 6 + 2.164 × ln(1 + score / 33.333)
+ *  Score 0→6  |  100→9  |  500→12  |  1K→13.4  |  10K→18.4  |  100K→23.3  |  300K→25.7 */
+export const SNAKE_RADIUS_GROWTH_RATE = 3 / Math.LN4; // ≈ 2.164
 
 /** First N segments of a snake's body that cannot kill on collision */
 export const NECK_PROTECTION = 5;
