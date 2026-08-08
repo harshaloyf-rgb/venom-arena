@@ -170,65 +170,6 @@ export function drawExtractionZone(
 
   ctx.globalAlpha = 1;
 }
-
-export function drawObstacles(
-  ctx: CanvasRenderingContext2D,
-  obstacles: Array<{ x1: number; y1: number; x2: number; y2: number }>,
-  camera: Camera,
-  viewport: Viewport,
-): void {
-  const zoom = camera.zoom;
-  const cw = viewport.width;
-  const ch = viewport.height;
-  const thick = 3 * zoom; // thin hairline walls
-
-  ctx.save();
-  ctx.lineCap = 'butt';
-
-  for (let i = 0; i < obstacles.length; i++) {
-    const o = obstacles[i];
-    // Cull off-screen
-    const minX = Math.min(o.x1, o.x2);
-    const maxX = Math.max(o.x1, o.x2);
-    const minY = Math.min(o.y1, o.y2);
-    const maxY = Math.max(o.y1, o.y2);
-    if (maxX < viewport.left - 20 || minX > viewport.right + 20) continue;
-    if (maxY < viewport.top - 20 || minY > viewport.bottom + 20) continue;
-
-    const s1 = worldToScreen(o.x1, o.y1, camera, cw, ch);
-    const s2 = worldToScreen(o.x2, o.y2, camera, cw, ch);
-
-    // Outer glow
-    ctx.strokeStyle = 'rgba(239, 68, 68, 0.25)';
-    ctx.lineWidth = thick + 6 * zoom;
-    ctx.shadowColor = 'rgba(239, 68, 68, 0.5)';
-    ctx.shadowBlur = 12 * zoom;
-    ctx.beginPath();
-    ctx.moveTo(s1.x, s1.y);
-    ctx.lineTo(s2.x, s2.y);
-    ctx.stroke();
-
-    // Core wall
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = thick;
-    ctx.beginPath();
-    ctx.moveTo(s1.x, s1.y);
-    ctx.lineTo(s2.x, s2.y);
-    ctx.stroke();
-
-    // Bright center line
-    ctx.strokeStyle = 'rgba(255, 200, 200, 0.6)';
-    ctx.lineWidth = Math.max(1, thick * 0.3);
-    ctx.beginPath();
-    ctx.moveTo(s1.x, s1.y);
-    ctx.lineTo(s2.x, s2.y);
-    ctx.stroke();
-  }
-
-  ctx.restore();
-}
-
 // ==========================================================================
 // Elimination banner (shown for 3s after death, game still visible behind)
 // ==========================================================================

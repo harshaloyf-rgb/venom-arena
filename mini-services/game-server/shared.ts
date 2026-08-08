@@ -92,7 +92,6 @@ export interface ArenaSnapshot {
   foods: Array<{ id: number; x: number; y: number; size: FoodSize; value: number }>;
   starChips: Array<{ id: number; x: number; y: number; value: number }>;
   extraction: { x: number; y: number; radius: number; active: boolean };
-  obstacles: Array<{ x1: number; y1: number; x2: number; y2: number }>;
 }
 
 export interface SpatialEntity {

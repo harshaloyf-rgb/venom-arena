@@ -12,7 +12,6 @@ import {
   drawFood as drawFoodFromRenderer,
   drawStarChips as drawStarChipsFromRenderer,
   drawExtractionZone as drawExtractionZoneFromRenderer,
-  drawObstacles as drawObstaclesFromRenderer,
 } from './renderer';
 import { renderSnakeAtlas, renderSnakeFallback, cleanupSnakeParticles, clearSmoothedSegs } from './render-snake-atlas';
 import {
@@ -92,7 +91,6 @@ export default function SnakeGame({
   // Online state
   const onlineEngineRef = useRef<OnlineEngine | null>(null);
   const extrapolationRef = useRef<ExtrapolationEngine | null>(null);
-  const onlineObstaclesRef = useRef<Array<{ x1: number; y1: number; x2: number; y2: number }>>([]);
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [onlineError, setOnlineError] = useState<string | null>(null);
   const isDeadOnlineRef = useRef(false);
@@ -258,10 +256,6 @@ export default function SnakeGame({
 
       onlineEngine.onSnapshot = (snapshot) => {
         extrapolation!.update(snapshot, performance.now());
-        // Cache obstacles from first snapshot (they don't change)
-        if (snapshot.obstacles && snapshot.obstacles.length > 0) {
-          onlineObstaclesRef.current = snapshot.obstacles;
-        }
       };
 
       onlineEngine.onError = (msg) => {
@@ -502,11 +496,6 @@ export default function SnakeGame({
         ctx.fillStyle = '#0a0a0f';
         ctx.fillRect(0, 0, w, h);
         drawGridFromRenderer(ctx, camera, viewport);
-
-        // ── Obstacles (hairline-gap walls) ──
-        if (onlineObstaclesRef.current.length > 0) {
-          drawObstaclesFromRenderer(ctx, onlineObstaclesRef.current, camera, viewport);
-        }
 
         // ── Extraction zone ──
         if (extraction.active) {
@@ -944,11 +933,6 @@ function renderOfflineBackground(
 
   // Grid
   drawGridFromRenderer(ctx, camera, viewport);
-
-  // Obstacles (test walls)
-  if (state.obstacles.length > 0) {
-    drawObstaclesFromRenderer(ctx, state.obstacles, camera, viewport);
-  }
 
   // Extraction zone
   if (state.extractionZone.active) {

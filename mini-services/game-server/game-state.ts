@@ -57,35 +57,6 @@ const COLLISION_DIST_SQ = SNAKE_RADIUS * 2 * SNAKE_RADIUS * 2;
 const EAT_DIST_SQ = (SNAKE_RADIUS + 10) * (SNAKE_RADIUS + 10);
 const STAR_CHIP_DIST_SQ = (SNAKE_RADIUS + STAR_CHIP_RADIUS) * (SNAKE_RADIUS + STAR_CHIP_RADIUS);
 
-/** Point-to-line-segment closest distance (squared) */
-function pointToSegDistSq(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const lenSq = dx * dx + dy * dy;
-  if (lenSq < 0.001) return (px - x1) * (px - x1) + (py - y1) * (py - y1);
-  let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
-  t = Math.max(0, Math.min(1, t));
-  const cx = x1 + t * dx;
-  const cy = y1 + t * dy;
-  return (px - cx) * (px - cx) + (py - cy) * (py - cy);
-}
-
-/** Exact line-segment vs line-segment intersection test.
- *  Returns true if segment (ax1,ay1)→(ax2,ay2) crosses segment (bx1,by1)→(bx2,by2). */
-function segSegIntersect(
-  ax1: number, ay1: number, ax2: number, ay2: number,
-  bx1: number, by1: number, bx2: number, by2: number,
-): boolean {
-  const d1x = ax2 - ax1, d1y = ay2 - ay1;
-  const d2x = bx2 - bx1, d2y = by2 - by1;
-  const cross = d1x * d2y - d1y * d2x;
-  if (Math.abs(cross) < 1e-10) return false;
-  const dx = bx1 - ax1, dy = by1 - ay1;
-  const t = (dx * d2y - dy * d2x) / cross;
-  const u = (dx * d1y - dy * d1x) / cross;
-  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
-}
-
 // ─── ServerSnake ─────────────────────────────────────────────────────────────
 
 export interface ServerSnake {
@@ -136,98 +107,6 @@ export interface KillEvent {
   timestamp: number;
 }
 
-// ─── Hairline-Gap Obstacles ─────────────────────────────────────────────
-
-/** Generate obstacle walls with hairline gaps (1px–20px).
- *  Collision uses the BLACK DOT (1px radius), so:
- *    - Gaps >= 2px  → passable with reasonable alignment
- *    - Gaps 1px     → barely passable (pixel-perfect precision needed)
- *  Walls are arranged in concentric rectangular rings at increasing distances. */
-function generateTestObstacles(): Array<{ x1: number; y1: number; x2: number; y2: number }> {
-  const walls: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
-
-  const hWall = (cx: number, cy: number, hl: number) => {
-    walls.push({ x1: cx - hl, y1: cy, x2: cx + hl, y2: cy });
-  };
-  const vWall = (cx: number, cy: number, hl: number) => {
-    walls.push({ x1: cx, y1: cy - hl, x2: cx, y2: cy + hl });
-  };
-  const hBarrier = (cy: number, startX: number, endX: number, gapX: number, gapSize: number) => {
-    const leftLen = gapX - gapSize / 2 - startX;
-    const rightLen = endX - (gapX + gapSize / 2);
-    if (leftLen > 0) hWall(startX + leftLen / 2, cy, leftLen / 2);
-    if (rightLen > 0) hWall(gapX + gapSize / 2 + rightLen / 2, cy, rightLen / 2);
-  };
-  const vBarrier = (cx: number, startY: number, endY: number, gapY: number, gapSize: number) => {
-    const topLen = gapY - gapSize / 2 - startY;
-    const botLen = endY - (gapY + gapSize / 2);
-    if (topLen > 0) vWall(cx, startY + topLen / 2, topLen / 2);
-    if (botLen > 0) vWall(cx, gapY + gapSize / 2 + botLen / 2, botLen / 2);
-  };
-  const hBarrier2 = (cy: number, startX: number, endX: number, g1x: number, g1s: number, g2x: number, g2s: number) => {
-    const segs = [startX, g1x - g1s / 2, g1x + g1s / 2, g2x - g2s / 2, g2x + g2s / 2, endX];
-    for (let i = 0; i < segs.length - 1; i += 2) {
-      const cx = (segs[i] + segs[i + 1]) / 2;
-      const hl = (segs[i + 1] - segs[i]) / 2;
-      if (hl > 0) hWall(cx, cy, hl);
-    }
-  };
-  const vBarrier2 = (cx: number, startY: number, endY: number, g1y: number, g1s: number, g2y: number, g2s: number) => {
-    const segs = [startY, g1y - g1s / 2, g1y + g1s / 2, g2y - g2s / 2, g2y + g2s / 2, endY];
-    for (let i = 0; i < segs.length - 1; i += 2) {
-      const cy = (segs[i] + segs[i + 1]) / 2;
-      const hl = (segs[i + 1] - segs[i]) / 2;
-      if (hl > 0) vWall(cx, cy, hl);
-    }
-  };
-
-  const W = 500;
-
-  // Ring 1: 250px from center — 4 walls, one gap each
-  const D1 = 250;
-  hBarrier(-D1, -D1 - W, D1 + W, -20, 3);   // 3px gap
-  hBarrier(D1, -D1 - W, D1 + W, 30, 16);     // 16px gap
-  vBarrier(-D1, -D1 - W, D1 + W, 0, 8);      // 8px gap
-  vBarrier(D1, -D1 - W, D1 + W, 15, 14);     // 14px gap
-
-  // Ring 2: 500px — two gaps per wall
-  const D2 = 500;
-  hBarrier2(-D2, -D2 - W, D2 + W, -100, 2, 150, 18);
-  hBarrier2(D2, -D2 - W, D2 + W, -80, 10, 120, 20);
-  vBarrier2(-D2, -D2 - W, D2 + W, -50, 1, 80, 15);
-  vBarrier2(D2, -D2 - W, D2 + W, -60, 6, 100, 13);
-
-  // Ring 3: 800px — wider walls, multiple gaps
-  const D3 = 800; const W3 = 600;
-  hBarrier2(-D3, -D3 - W3, D3 + W3, -200, 4, 200, 12);
-  hBarrier2(D3, -D3 - W3, D3 + W3, -150, 5, 100, 19);
-  vBarrier2(-D3, -D3 - W3, D3 + W3, -180, 7, 180, 17);
-  vBarrier2(D3, -D3 - W3, D3 + W3, -120, 3, 160, 20);
-
-  // Ring 4: 1200px — single gap each, very wide walls
-  const D4 = 1200; const W4 = 800;
-  hBarrier(-D4, -D4 - W4, D4 + W4, 50, 11);
-  hBarrier(D4, -D4 - W4, D4 + W4, -30, 14);
-  vBarrier(-D4, -D4 - W4, D4 + W4, 20, 9);
-  vBarrier(D4, -D4 - W4, D4 + W4, -10, 20);
-
-  // Ring 5: 1600px — mixed gaps
-  const D5 = 1600; const W5 = 900;
-  hBarrier2(-D5, -D5 - W5, D5 + W5, -300, 1, 300, 15);
-  hBarrier2(D5, -D5 - W5, D5 + W5, -250, 8, 250, 12);
-  vBarrier2(-D5, -D5 - W5, D5 + W5, -200, 3, 200, 16);
-  vBarrier2(D5, -D5 - W5, D5 + W5, -150, 6, 150, 18);
-
-  // Ring 6: 2100px — outer ring
-  const D6 = 2100; const W6 = 1000;
-  hBarrier(-D6, -D6 - W6, D6 + W6, 0, 2);
-  hBarrier(D6, -D6 - W6, D6 + W6, 100, 20);
-  vBarrier(-D6, -D6 - W6, D6 + W6, -50, 11);
-  vBarrier(D6, -D6 - W6, D6 + W6, 50, 13);
-
-  return walls;
-}
-
 // ─── ArenaRoom ───────────────────────────────────────────────────────────────
 
 export class ArenaRoom {
@@ -243,8 +122,6 @@ export class ArenaRoom {
   pendingKills: KillEvent[] = [];
   /** Track the extraction zone timer */
   private lastExtractionSpawn = 0;
-  /** Obstacle walls — line segments with hairline gaps */
-  obstacles: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
   /** Spatial hashes reused each tick */
   private foodHash: SpatialHash = new SpatialHash(SPATIAL_CELL_SIZE);
   private bodyHash: SpatialHash = new SpatialHash(SPATIAL_CELL_SIZE);
@@ -259,7 +136,6 @@ export class ArenaRoom {
       activatedAt: 0,
     };
     this.lastExtractionSpawn = Date.now();
-    this.obstacles = generateTestObstacles();
     this.initArena();
   }
 
@@ -821,40 +697,6 @@ export class ArenaRoom {
       }
     }
 
-    // ── Obstacle collision: black dot (1px) vs wall segments ──
-    // Uses EXACT swept collision (line-segment vs line-segment intersection)
-    // plus point-to-segment check at current position.
-    const obstacles = this.obstacles;
-    if (obstacles.length > 0) {
-      const wallHitDistSq = 1;
-      for (const [, snake] of this.snakes) {
-        if (!snake.alive || deadSnakes.has(snake.id)) continue;
-        if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
-        if (snake.path.length < 2) continue;
-
-        const dotX = snake.path.headX + Math.cos(snake.angle) * snake.bodyRadius * DOT_DIST;
-        const dotY = snake.path.headY + Math.sin(snake.angle) * snake.bodyRadius * DOT_DIST;
-        const prevDotX = snake.path.getX(1) + Math.cos(snake.angle) * snake.bodyRadius * DOT_DIST;
-        const prevDotY = snake.path.getY(1) + Math.sin(snake.angle) * snake.bodyRadius * DOT_DIST;
-
-        let hit = false;
-        for (let w = 0; w < obstacles.length; w++) {
-          const ob = obstacles[w];
-          if (segSegIntersect(prevDotX, prevDotY, dotX, dotY, ob.x1, ob.y1, ob.x2, ob.y2)) {
-            deadSnakes.add(snake.id);
-            this.killSnake(snake, 'obstacle', 'Obstacle');
-            hit = true;
-            break;
-          }
-          if (pointToSegDistSq(dotX, dotY, ob.x1, ob.y1, ob.x2, ob.y2) <= wallHitDistSq) {
-            deadSnakes.add(snake.id);
-            this.killSnake(snake, 'obstacle', 'Obstacle');
-            hit = true;
-            break;
-          }
-        }
-      }
-    }
   }
 
   // ── Death & Food Distribution ─────────────────────────────────────────
@@ -1021,7 +863,7 @@ export class ArenaRoom {
         radius: this.extractionZone.radius,
         active: this.extractionZone.active,
       },
-      obstacles: this.obstacles,
+      obstacles: [],
     };
   }
 
