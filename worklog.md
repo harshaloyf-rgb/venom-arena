@@ -1476,3 +1476,25 @@ Stage Summary:
 - Created: game-server-supervisor.py for persistent process management
 - Game server now persists and auto-restarts on crash
 - Online arena connections confirmed working through the Caddy gateway
+---
+Task ID: 3
+Agent: Main
+Task: Strip online-only features to match offline mode
+
+Work Log:
+- Removed online-only constants from shared.ts: ARENA_RADIUS, FOOD_COUNT_TARGET, FOOD_SPAWN_AREA_RADIUS, EXTRACTION_ZONE_DURATION, EXTRACTION_ZONE_SPAWN_INTERVAL, SERVER_BOT_COUNT
+- Removed nearAnyPlayer food filtering optimization from buildArenaSnapshot
+- Rewrote game-state.ts: removed all bot spawning/movement/respawning, removed arena boundary enforcement, removed timed extraction zone management
+- Implemented density-based food spawning in game-state.ts (same algorithm as offline maintainFoodAroundPlayer)
+- Subagent unified SnakeGame.tsx rendering: online now uses same drawFoodFromRenderer, renderSnakeAtlas, drawStarChipsFromRenderer, updateCamera, renderOfflineHUD as offline
+- Fixed renderableToSnake to pass real speed and prevAngle instead of fake values
+- Deleted drawOnlineFood, drawOnlineStarChips, drawOnlineHUD, ONLINE_FOOD_STYLES (~120 lines)
+- Updated extrapolation.ts to track prevAngle and speed per snake
+- Updated server banner to reflect no-bots
+- Restarted game server via supervisor daemon
+
+Stage Summary:
+- Online mode now matches offline: no bots, no arena boundary, density-based food, same rendering
+- Game logic remains independent (separate copies in engine.ts vs shared.ts)
+- Rendering unified — same draw functions for both modes
+- Server confirmed working: player connects, total=1 (no bots)

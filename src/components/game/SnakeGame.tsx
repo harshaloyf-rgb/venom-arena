@@ -18,7 +18,15 @@ import {
   type Camera,
   type Viewport,
   type Snake,
+  type FoodOrb,
+  type StarChip,
   FIXED_DT,
+  FOOD_COLORS,
+  FOOD_RADII,
+  FOOD_GLOW_COLORS,
+  STAR_CHIP_RADIUS,
+  STAR_CHIP_GLOW,
+  STAR_CHIP_COLORS,
 } from '@/lib/snake';
 import { createInitialState, gameTick, respawnPlayer, type PlayerSkinOverride } from '@/lib/snake/engine';
 import { createCamera, updateCamera, getViewport, worldToScreen } from '@/lib/snake/camera';
@@ -463,7 +471,7 @@ export default function SnakeGame({
       }
 
       // ────────────────────────────────────────────────────────────────────
-      // ONLINE MODE — server snapshots + extrapolation
+      // ONLINE MODE — server snapshots + extrapolation (same renderers as offline)
       // ────────────────────────────────────────────────────────────────────
       else if (effectiveMode === 'online' && extrapolation && onlineEngine) {
         // Forward input to server
@@ -480,66 +488,96 @@ export default function SnakeGame({
         const renderableStarChips = extrapolation.getRenderableStarChips();
         const extraction = extrapolation.extraction;
 
-        // Camera: follow the first snake (player)
-        let playerSnake: RenderableSnake | undefined;
-        for (const [, s] of renderableSnakes) {
-          playerSnake = s;
-          break;
-        }
-        if (playerSnake) {
-          // Direct lock — head at dead center, zero jitter.
-          cameraRef.current.x = playerSnake.headX;
-          cameraRef.current.y = playerSnake.headY;
-        }
-
-        const viewport: Viewport = getViewport(cameraRef.current, w, h);
-        const camera = cameraRef.current;
-
-        // ── Clear + grid ──
-        ctx.fillStyle = '#0a0a0f';
-        ctx.fillRect(0, 0, w, h);
-        drawGridFromRenderer(ctx, camera, viewport);
-
-        // ── Extraction zone ──
-        if (extraction.active) {
-          drawExtractionZoneFromRenderer(ctx, extraction, camera, viewport);
-        }
-
-        // ── Food ──
-        drawOnlineFood(ctx, renderableFoods, camera, viewport);
-
-        // ── Star chips ──
-        drawOnlineStarChips(ctx, renderableStarChips, camera, viewport, now);
-
-        // ── Snakes: all bots use fallback, player uses atlas ──
-        let isFirst = true;
+        // ── Convert RenderableSnakes to Snake objects for unified rendering ──
+        const adaptedSnakes = new Map<string, Snake>();
+        let adaptedPlayer: Snake | null = null;
         const localTargetAngle = inputState.targetAngle;
-        const onlineMousePos = input.getMousePos();
-        const onlineMouseSX = onlineMousePos?.x;
-        const onlineMouseSY = onlineMousePos?.y;
+        let isFirst = true;
         for (const [, rs] of renderableSnakes) {
           if (!rs.alive) continue;
-          if (isFirst) {
-            // Player's snake — use atlas renderer
-            const adapted = renderableToSnake(rs, true, now, localTargetAngle);
-            renderSnakeAtlas(ctx, adapted, camera, viewport, atlasManager, now, onlineMouseSX, onlineMouseSY);
+          const isPlayer = isFirst;
+          const adapted = renderableToSnake(rs, isPlayer, now, isPlayer ? localTargetAngle : undefined);
+          adaptedSnakes.set(rs.id, adapted);
+          if (isPlayer) {
+            adaptedPlayer = adapted;
             isFirst = false;
-          } else {
-            // Bot snakes — fallback renderer for performance
-            const adapted = renderableToSnake(rs, false, now);
-            renderSnakeFallback(ctx, adapted, camera, viewport, now);
           }
         }
 
-        // Extraction progress ring on snake head (online)
-        if (extractActiveRef.current && extractProgressRef.current > 0 && playerSnake?.alive) {
-          const adapted = renderableToSnake(playerSnake, true, now, localTargetAngle);
-          drawExtractRing(ctx, adapted, camera, viewport, extractProgressRef.current);
+        // ── Camera: use same updateCamera as offline (smooth zoom) ──
+        if (adaptedPlayer) {
+          updateCamera(cameraRef.current, adaptedPlayer, w, h);
         }
 
-        // ── HUD (online — same layout as offline: minimap top-left, rank, score bottom-center, kills) ──
-        if (playerSnake) {
-          drawOnlineHUD(ctx, renderableSnakes, playerSnake, viewport, fc.fps);
+        const viewport: Viewport = getViewport(cameraRef.current, w, h);
+
+        // Get mouse position for ultra-responsive eye tracking
+        const mousePos = input.getMousePos();
+        const mouseSX = mousePos?.x;
+        const mouseSY = mousePos?.y;
+
+        // ── Render: background (clear, grid, extraction zone, food, star chips) ──
+        ctx.fillStyle = '#0a0a0f';
+        ctx.fillRect(0, 0, w, h);
+        drawGridFromRenderer(ctx, cameraRef.current, viewport);
+
+        if (extraction.active) {
+          drawExtractionZoneFromRenderer(ctx, extraction, cameraRef.current, viewport);
+        }
+
+        // Food — convert RenderableFood[] to FoodOrb[] for unified renderer
+        const foodSizeIdx = (size: string) => size === 'medium' ? 1 : size === 'large' ? 2 : 0;
+        const foodOrbs: FoodOrb[] = renderableFoods.map(f => ({
+          id: f.id,
+          x: f.x,
+          y: f.y,
+          size: f.size,
+          value: f.value,
+          radius: FOOD_RADII[foodSizeIdx(f.size)],
+          color: FOOD_COLORS[foodSizeIdx(f.size)],
+          glowColor: FOOD_GLOW_COLORS[foodSizeIdx(f.size)],
+          magnetized: false,
+        }));
+        drawFoodFromRenderer(ctx, foodOrbs, cameraRef.current, viewport);
+
+        // Star chips — convert RenderableStarChip[] to StarChip[] for unified renderer
+        if (renderableStarChips.length > 0) {
+          const starChips: StarChip[] = renderableStarChips.map((c, i) => ({
+            id: c.id,
+            x: c.x,
+            y: c.y,
+            value: c.value,
+            radius: STAR_CHIP_RADIUS,
+            color: STAR_CHIP_COLORS[i % STAR_CHIP_COLORS.length],
+            glowColor: STAR_CHIP_GLOW,
+            spawnTime: now - 10000, // Approximate — no spawn time from server
+          }));
+          drawStarChipsFromRenderer(ctx, starChips, cameraRef.current, viewport, now);
+        }
+
+        // ── Render snakes — all use atlas renderer (bots removed) ──
+        for (const [, s] of adaptedSnakes) {
+          renderSnakeAtlas(ctx, s, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY);
+        }
+
+        // Extraction progress ring on snake head
+        if (extractActiveRef.current && extractProgressRef.current > 0 && adaptedPlayer?.alive) {
+          drawExtractRing(ctx, adaptedPlayer, cameraRef.current, viewport, extractProgressRef.current);
+        }
+
+        // ── HUD — use same layout as offline (minimap, rank, score, kills) ──
+        if (adaptedPlayer) {
+          renderOfflineHUD(ctx, {
+            snakes: adaptedSnakes,
+            foods: foodOrbs,
+            starChips: [],
+            player: adaptedPlayer,
+            nextFoodId: 0,
+            nextStarChipId: 0,
+            showControls: false,
+            tickCount: 0,
+            extractionZone: extraction,
+          } as GameState, cameraRef.current, viewport, fc.fps, now, killsRef.current, 0);
         }
 
         // Mouse cursor indicator (slither.io style crosshair)
@@ -863,62 +901,6 @@ function renderOfflineHUD(
 }
 
 // ============================================================================
-// Helper: Render online HUD (same layout as offline: minimap top-left, rank, score, kills)
-// ============================================================================
-
-function drawOnlineHUD(
-  ctx: CanvasRenderingContext2D,
-  snakes: Map<string, RenderableSnake>,
-  player: RenderableSnake,
-  viewport: Viewport,
-  fps: number,
-): void {
-  const cw = viewport.width;
-  const ch = viewport.height;
-
-  // ── Minimap: top-left ──
-  drawOnlineMinimapTopLeft(ctx, snakes, player, cw, ch);
-
-  // ── Rank below minimap ──
-  const aliveSnakes = snakes.size;
-  let rank = 1;
-  for (const [, s] of snakes) {
-    if (s.alive && s.score > player.score) rank++;
-  }
-  const mapPad = 12;
-  const mapSize = 120;
-  const rankY = mapPad + mapSize + 6;
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-  ctx.beginPath();
-  ctx.roundRect(mapPad, rankY, mapSize, 24, 6);
-  ctx.fill();
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = '11px monospace';
-  ctx.fillStyle = '#94a3b8';
-  ctx.fillText(`Rank ${rank} / ${aliveSnakes}`, mapPad + mapSize / 2, rankY + 12);
-
-  // ── Score: bottom-center ──
-  const scoreVal = Math.floor(player.score);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
-  ctx.font = 'bold 28px monospace';
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-  ctx.beginPath();
-  ctx.roundRect(cw / 2 - 80, ch - 56, 160, 44, 10);
-  ctx.fill();
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText(scoreVal.toLocaleString(), cw / 2, ch - 18);
-
-  // ── FPS: top-right (subtle) ──
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'top';
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-  ctx.font = '10px monospace';
-  ctx.fillText(`${fps} FPS`, cw - 12, 12);
-}
-
-// ============================================================================
 // Helper: Convert RenderableSnake to Snake for atlas/fallback renderers
 // ============================================================================
 
@@ -928,8 +910,8 @@ function renderableToSnake(rs: RenderableSnake, isPlayer: boolean, now: number, 
     name: rs.name,
     path: rs.path,
     angle: rs.angle,
-    prevAngle: rs.angle,
-    speed: 0,
+    prevAngle: rs.prevAngle,
+    speed: rs.speed,
     score: rs.score,
     alive: rs.alive,
     isBot: !isPlayer,
@@ -945,106 +927,6 @@ function renderableToSnake(rs: RenderableSnake, isPlayer: boolean, now: number, 
     skinId: rs.skinId,
     rarity: rs.rarity,
   };
-}
-
-// ============================================================================
-// Online food renderer (from RenderableFood[])
-// ============================================================================
-
-const ONLINE_FOOD_STYLES: Record<string, { color: string; glow: string; radius: number }> = {
-  small:  { color: '#34d399', glow: '#10b981', radius: 3 },
-  medium: { color: '#38bdf8', glow: '#0ea5e9', radius: 5 },
-  large:  { color: '#f472b6', glow: '#ec4899', radius: 8 },
-};
-
-function drawOnlineFood(
-  ctx: CanvasRenderingContext2D,
-  foods: RenderableFood[],
-  camera: Camera,
-  viewport: Viewport,
-): void {
-  const zoom = camera.zoom;
-  const cw = viewport.width;
-  const ch = viewport.height;
-
-  for (const f of foods) {
-    if (f.x < viewport.left - 20 || f.x > viewport.right + 20) continue;
-    if (f.y < viewport.top - 20 || f.y > viewport.bottom + 20) continue;
-
-    const { x: sx, y: sy } = worldToScreen(f.x, f.y, camera, cw, ch);
-    const style = ONLINE_FOOD_STYLES[f.size] ?? ONLINE_FOOD_STYLES.small;
-    const r = style.radius * zoom;
-    if (r < 1) continue;
-
-    // Glow
-    if (r > 2) {
-      ctx.globalAlpha = 0.3;
-      ctx.fillStyle = style.glow;
-      ctx.beginPath();
-      ctx.arc(sx, sy, r * 2.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-
-    ctx.fillStyle = style.color;
-    ctx.beginPath();
-    ctx.arc(sx, sy, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-// ============================================================================
-// Online star chips renderer
-// ============================================================================
-
-function drawOnlineStarChips(
-  ctx: CanvasRenderingContext2D,
-  chips: RenderableStarChip[],
-  camera: Camera,
-  viewport: Viewport,
-  now: number,
-): void {
-  const zoom = camera.zoom;
-  const cw = viewport.width;
-  const ch = viewport.height;
-
-  for (const c of chips) {
-    if (c.x < viewport.left - 30 || c.x > viewport.right + 30) continue;
-    if (c.y < viewport.top - 30 || c.y > viewport.bottom + 30) continue;
-
-    const { x: sx, y: sy } = worldToScreen(c.x, c.y, camera, cw, ch);
-    const r = 12 * zoom;
-    if (r < 1) continue;
-
-    const pulse = 0.7 + 0.3 * Math.sin(now * 0.004);
-
-    ctx.globalAlpha = 0.35 * pulse;
-    ctx.fillStyle = '#fbbf24';
-    ctx.beginPath();
-    ctx.arc(sx, sy, r * 3, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.globalAlpha = 0.2 * pulse;
-    ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 1.5 * zoom;
-    ctx.beginPath();
-    ctx.arc(sx, sy, r * 2, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.globalAlpha = 1;
-
-    ctx.fillStyle = '#fbbf24';
-    ctx.beginPath();
-    ctx.arc(sx, sy, r, 0, Math.PI * 2);
-    ctx.fill();
-
-    if (r > 3) {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-      ctx.beginPath();
-      ctx.arc(sx - r * 0.15, sy - r * 0.2, r * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
 }
 
 // ============================================================================
@@ -1090,55 +972,6 @@ function drawMinimapTopLeft(
     if (snake.path.length === 0) continue;
     const dx = (snake.path.headX - px) * scale;
     const dy = (snake.path.headY - py) * scale;
-    if (Math.abs(dx) > halfSize || Math.abs(dy) > halfSize) continue;
-    ctx.fillRect(cx + dx - 1, cy + dy - 1, 2, 2);
-  }
-
-  ctx.fillStyle = '#22c55e';
-  ctx.beginPath();
-  ctx.arc(cx, cy, 3, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-// ============================================================================
-// Online minimap (top-left — matches offline layout)
-// ============================================================================
-
-function drawOnlineMinimapTopLeft(
-  ctx: CanvasRenderingContext2D,
-  snakes: Map<string, RenderableSnake>,
-  player: RenderableSnake | null,
-  cw: number,
-  _ch: number,
-): void {
-  const size = MAP_SIZE;
-  const pad = MAP_PAD;
-  const mx = pad;
-  const my = pad;
-
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-  ctx.beginPath();
-  ctx.roundRect(mx, my, size, size, 6);
-  ctx.fill();
-
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  if (!player || !player.alive) return;
-
-  const scale = 0.02;
-  const cx = mx + size / 2;
-  const cy = my + size / 2;
-  const px = player.headX;
-  const py = player.headY;
-  const halfSize = size / 2 - 4;
-
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-  for (const [, snake] of snakes) {
-    if (!snake.alive || snake === player) continue;
-    const dx = (snake.headX - px) * scale;
-    const dy = (snake.headY - py) * scale;
     if (Math.abs(dx) > halfSize || Math.abs(dy) > halfSize) continue;
     ctx.fillRect(cx + dx - 1, cy + dy - 1, 2, 2);
   }
