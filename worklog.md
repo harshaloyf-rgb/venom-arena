@@ -1126,3 +1126,51 @@ Stage Summary:
 - Root cause was snake.path.length (changes every tick) driving camera zoom → perpetual micro-jitter
 - 2 files changed: camera.ts (rewritten), SnakeGame.tsx (1 edit)
 - Browser verification confirms stable zoom and smooth rendering
+---
+Task ID: 3
+Agent: Main
+Task: Fix food auto-spawning issue and increase food density
+
+Work Log:
+- Investigated both offline (engine.ts) and online (game-server) food spawning systems
+- Identified root causes:
+  1. Offline: FOOD_DENSITY_TARGET=800 in 5000px radius = only ~3 food visible on screen (too sparse)
+  2. Offline: FOOD_RESPAWN_BATCH=25 = slow replenishment (only 1500 food/sec max)
+  3. Offline: Food spawn min distance 400-600px = dead zone near player (food barely reaches screen edge)
+  4. Online: FOOD_DOWNSAMPLE_RADIUS=500 = only food within 500px sent to client (way too small, player sees empty areas)
+  5. Online: FOOD_COUNT_TARGET=1200 with 1000 bots = food consumed 4x faster than respawned (500/sec vs 2000+/sec)
+  6. Online: Food spawned around only ONE random snake per tick = concentrated in random areas
+
+- Fixed offline config.ts:
+  - FOOD_DENSITY_TARGET: 800 → 2000
+  - FOOD_VISIBLE_RADIUS: 5000 → 4000
+  - FOOD_DESPAWN_RADIUS: 7000 → 6000
+  - FOOD_RESPAWN_BATCH: 25 → 80
+  - FOOD_MAX_COUNT: 5000 → 10000
+  - INITIAL_SPAWN_RADIUS: 5000 → 4000
+  - FOOD_DOWNSAMPLE_RADIUS: 500 → 2000
+
+- Fixed offline engine.ts:
+  - Initial spawn: 1500 → 3000 food
+  - Changed spawn distribution from 70%ahead/30%around (min 400-600px) to 50%uniform/30%ahead/20%around (min 200px)
+  - This eliminates the dead zone near the player
+
+- Fixed online shared.ts:
+  - FOOD_COUNT_TARGET: 1200 → 3000
+  - FOOD_SPAWN_AREA_RADIUS: 3000 → 4000
+  - INITIAL_SPAWN_RADIUS: 3000 → 4000
+  - FOOD_RESPAWN_BATCH: 25 → 100
+  - FOOD_DOWNSAMPLE_RADIUS: 500 → 2000
+
+- Fixed online game-state.ts:
+  - Changed food spawning to prioritize player snakes (distribute food evenly among all players)
+  - Falls back to random bot when no players online
+
+- Verified in browser: 25-30 food items visible on screen, well-distributed, no errors
+
+Stage Summary:
+- Food auto-spawning now works correctly in both offline and online modes
+- Food density significantly increased (from ~3 visible to ~25-30 visible on screen)
+- Food spawns closer to the player (min 200px instead of 400-600px)
+- Online mode sends food within 2000px (was 500px) to cover full visible area
+- Server spawns food around ALL players, not just one random snake

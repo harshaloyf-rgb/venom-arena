@@ -140,7 +140,7 @@ export function createInitialState(playerSkin?: PlayerSkinOverride | null, initi
   }
 
   // Spawn initial food (generous spread around origin for start area)
-  spawnFoodBatch(state, 1500, 0, 0, INITIAL_SPAWN_RADIUS);
+  spawnFoodBatch(state, 3000, 0, 0, INITIAL_SPAWN_RADIUS);
 
   return state;
 }
@@ -591,15 +591,26 @@ function maintainFoodAroundPlayer(state: GameState): void {
 
   const batch = Math.min(deficit, FOOD_RESPAWN_BATCH);
 
-  // 70% ahead of the player (slither.io style — food where you're going)
-  // 30% in a ring around the player for variety
-  const aheadCount = Math.ceil(batch * 0.7);
-  const aroundCount = batch - aheadCount;
+  // 50% scattered uniformly around the player (all distances including close)
+  // 30% ahead of the player (slither.io style — food where you're going)
+  // 20% in a mid-range ring for ambient coverage
+  const uniformCount = Math.ceil(batch * 0.5);
+  const aheadCount = Math.ceil(batch * 0.3);
+  const aroundCount = batch - uniformCount - aheadCount;
+
+  // Uniform: random distance 200-4000px, all directions — fills gaps near player
+  for (let i = 0; i < uniformCount; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const dist = 200 + Math.random() * (FOOD_VISIBLE_RADIUS - 200);
+    const sx = hx + Math.cos(a) * dist;
+    const sy = hy + Math.sin(a) * dist;
+    state.foods.push(makeFood(state, sx, sy));
+  }
 
   // Ahead: fan in front of the snake
   for (let i = 0; i < aheadCount; i++) {
     const spread = (Math.random() - 0.5) * Math.PI * 0.8; // ±72° fan
-    const dist = 400 + Math.random() * (FOOD_VISIBLE_RADIUS - 400);
+    const dist = 200 + Math.random() * (FOOD_VISIBLE_RADIUS - 200);
     const a = angle + spread;
     const sx = hx + Math.cos(a) * dist;
     const sy = hy + Math.sin(a) * dist;
@@ -609,7 +620,7 @@ function maintainFoodAroundPlayer(state: GameState): void {
   // Around: wide ring for ambient food
   for (let i = 0; i < aroundCount; i++) {
     const a = Math.random() * Math.PI * 2;
-    const dist = 600 + Math.random() * (FOOD_VISIBLE_RADIUS - 600);
+    const dist = 800 + Math.random() * (FOOD_VISIBLE_RADIUS - 800);
     const sx = hx + Math.cos(a) * dist;
     const sy = hy + Math.sin(a) * dist;
     state.foods.push(makeFood(state, sx, sy));

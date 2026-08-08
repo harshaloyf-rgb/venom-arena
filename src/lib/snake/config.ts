@@ -71,17 +71,21 @@ export const BOOST_SHRINK_RATE = 1;
 // 3. FOOD — orbs: weights, values, sizes, colors, spawn/despawn areas
 // ============================================================================
 
-/** Target food count within the player's visible radius (density-based spawning). */
-export const FOOD_DENSITY_TARGET = 800;
+/** Target food count within the player's visible radius (density-based spawning).
+ *  2000 in a 4000px radius ≈ 0.04 food per 1000 sq px ≈ ~50 food visible on screen at zoom 1.0.
+ */
+export const FOOD_DENSITY_TARGET = 2000;
 
 /** Radius around the player to count food for density checks and spawn food into. */
-export const FOOD_VISIBLE_RADIUS = 5000;
+export const FOOD_VISIBLE_RADIUS = 4000;
 
 /** Food beyond this distance from the player gets despawned (memory management). */
-export const FOOD_DESPAWN_RADIUS = 7000;
+export const FOOD_DESPAWN_RADIUS = 6000;
 
-/** Number of food orbs to spawn per tick when density is below target. */
-export const FOOD_RESPAWN_BATCH = 25;
+/** Number of food orbs to spawn per tick when density is below target.
+ *  80 × 60fps = 4800 food/sec max respawn rate — fast enough to keep screen full.
+ */
+export const FOOD_RESPAWN_BATCH = 80;
 
 /** Spawn weight probabilities for [small, medium, large] food */
 export const FOOD_SPAWN_WEIGHTS: [number, number, number] = [0.93, 0.04, 0.03];
@@ -99,10 +103,10 @@ export const FOOD_COLORS: [string, string, string] = ['#34d399', '#38bdf8', '#f4
 export const FOOD_GLOW_COLORS: [string, string, string] = ['#10b981', '#0ea5e9', '#ec4899'];
 
 /** Initial food spawn area radius (around origin at game start) */
-export const INITIAL_SPAWN_RADIUS = 5000;
+export const INITIAL_SPAWN_RADIUS = 4000;
 
 /** Maximum food array length (safety cap to prevent unbounded memory growth). */
-export const FOOD_MAX_COUNT = 5000;
+export const FOOD_MAX_COUNT = 10000;
 
 // ============================================================================
 // 4. COLLISION — snake radius, protection zones, death rules
@@ -347,8 +351,11 @@ export const MAX_SNAKES_PER_SNAPSHOT = 100;
 /** Send every Nth body segment in snapshots (1 = all, 3 = every 3rd) */
 export const BODY_DOWNSAMPLE_INTERVAL = 3;
 
-/** Only include food within this radius of any player in the snapshot */
-export const FOOD_DOWNSAMPLE_RADIUS = 500;
+/** Only include food within this radius of any player in the snapshot.
+ *  2000px covers the visible screen area at all zoom levels with comfortable buffer.
+ *  Was 500 — way too small, player could see areas with no food data.
+ */
+export const FOOD_DOWNSAMPLE_RADIUS = 2000;
 
 // ============================================================================
 // 13. EXTRACTION — zone, scoring, star chips, speed bonus

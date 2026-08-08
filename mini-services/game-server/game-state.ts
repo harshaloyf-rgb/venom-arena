@@ -276,20 +276,37 @@ export class ArenaRoom {
     // 3. Star chip collection
     this.checkStarChips(now);
 
-    // 4. Spawn food to maintain target
+    // 4. Spawn food to maintain target — prioritize spawning near players
     if (this.foods.length < FOOD_COUNT_TARGET) {
       const deficit = FOOD_COUNT_TARGET - this.foods.length;
-      let cx = 0, cy = 0;
-      const alive: ServerSnake[] = [];
+      const batch = Math.min(deficit, FOOD_RESPAWN_BATCH);
+
+      // Collect player positions (non-bot alive snakes)
+      const playerPositions: Array<{ x: number; y: number }> = [];
       for (const [, s] of this.snakes) {
-        if (s.alive && s.path.length > 0) alive.push(s);
+        if (s.alive && !s.isBot && s.path.length > 0) {
+          playerPositions.push({ x: s.path.headX, y: s.path.headY });
+        }
       }
-      if (alive.length > 0) {
-        const rs = alive[Math.floor(Math.random() * alive.length)];
-        cx = rs.path.headX;
-        cy = rs.path.headY;
+
+      if (playerPositions.length > 0) {
+        // Distribute food evenly among all players
+        const perPlayer = Math.ceil(batch / playerPositions.length);
+        for (const pos of playerPositions) {
+          const count = Math.min(perPlayer, batch);
+          this.spawnFoodBatch(count, pos.x, pos.y, FOOD_SPAWN_AREA_RADIUS);
+        }
+      } else {
+        // No players — spawn around a random alive bot
+        const alive: ServerSnake[] = [];
+        for (const [, s] of this.snakes) {
+          if (s.alive && s.path.length > 0) alive.push(s);
+        }
+        if (alive.length > 0) {
+          const rs = alive[Math.floor(Math.random() * alive.length)];
+          this.spawnFoodBatch(batch, rs.path.headX, rs.path.headY, FOOD_SPAWN_AREA_RADIUS);
+        }
       }
-      this.spawnFoodBatch(Math.min(deficit, FOOD_RESPAWN_BATCH), cx, cy, FOOD_SPAWN_AREA_RADIUS);
     }
 
     // 5. Extraction zone management
