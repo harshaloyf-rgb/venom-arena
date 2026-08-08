@@ -353,9 +353,10 @@ export const DEATH_FOOD_MEDIUM_DIVISOR = 3;
 export const SPATIAL_CELL_SIZE = 100;
 
 // BOOST
-export const BOOST_DROP_INTERVAL = 333;
+export const BOOST_DROP_INTERVAL = 200;
+export const BOOST_DROP_COUNT = 5;
 export const BOOST_MIN_BODY = 8;
-export const BOOST_MIN_SCORE = 20;
+export const BOOST_MIN_SCORE = 0;
 
 // BOT
 export const BOT_COUNT = 1000;

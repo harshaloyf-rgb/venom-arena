@@ -18,7 +18,7 @@ import {
   FOOD_COLORS, FOOD_GLOW_COLORS, FOOD_SPAWN_AREA_RADIUS, INITIAL_SPAWN_RADIUS,
   FOOD_RESPAWN_BATCH,
   SNAKE_RADIUS, SPAWN_PROTECTION_MS, SPATIAL_CELL_SIZE,
-  BOOST_DROP_INTERVAL, BOOST_MIN_BODY, BOOST_MIN_SCORE, BOOST_SHRINK_RATE,
+  BOOST_DROP_INTERVAL, BOOST_MIN_BODY, BOOST_MIN_SCORE, BOOST_DROP_COUNT, BOOST_SHRINK_RATE,
   BOT_COUNT, BOT_MAX_TURN_RATE, BOT_START_SCORE_MIN, BOT_START_SCORE_MAX,
   BOT_FOOD_SCAN_RADIUS, BOT_EVADE_RADIUS, BOT_PREDICT_TICKS, BOT_WANDER_RATE,
   SAFE_SPAWN_DIST, SAFE_SPAWN_ATTEMPTS,
@@ -402,16 +402,26 @@ export class ArenaRoom {
     // Target length from score
     const targetLength = computeBodyLength(snake.score);
 
-    // Boost: drop food from tail
+    // Boost: drop food along the body (not just tail — creates visible on-screen trail)
     if (canBoost && now - snake.lastBoostDrop >= BOOST_DROP_INTERVAL) {
       snake.lastBoostDrop = now;
-      const tailX = snake.path.tailX;
-      const tailY = snake.path.tailY;
-      this.foods.push({
-        id: this.nextFoodId++, x: tailX, y: tailY,
-        size: 'small', value: 1, radius: FOOD_RADII[0],
-        color: FOOD_COLORS[0], glowColor: FOOD_GLOW_COLORS[0],
-      });
+      const pathLen = snake.path.length;
+      const dropCount = Math.min(BOOST_DROP_COUNT, pathLen - 1);
+      if (dropCount > 0) {
+        const startFrac = 0.15;
+        for (let d = 0; d < dropCount; d++) {
+          const frac = startFrac + (1 - startFrac) * (d / (dropCount - 1 || 1));
+          const idx = Math.min(Math.floor(frac * pathLen), pathLen - 1);
+          this.foods.push({
+            id: this.nextFoodId++,
+            x: snake.path.getX(idx),
+            y: snake.path.getY(idx),
+            size: 'small', value: 1, radius: FOOD_RADII[0],
+            color: FOOD_COLORS[0], glowColor: FOOD_GLOW_COLORS[0],
+          });
+        }
+      }
+      // Pop one segment per drop (body shrinks as food is shed)
       if (snake.path.length > 1) snake.path.pop();
     }
 
