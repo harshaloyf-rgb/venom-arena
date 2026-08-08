@@ -1329,3 +1329,30 @@ Stage Summary:
 - Quadratic acceleration: speed = MIN + (MAX - MIN) * closeness² (1.0 to 10.0 px/tick)
 - Visual: magnetized food turns white with enhanced glow ring
 - All config values tunable from config.ts
+---
+Task ID: 1
+Agent: main
+Task: HUD overhaul — remove old elements, reposition minimap, add rank/score/kills/best-ever, update input controls
+
+Work Log:
+- Read full SnakeGame.tsx (1197 lines) and input.ts to understand current HUD layout
+- Updated input.ts: added B key for boost, right-click (button 2) for extract, updated mouseUp handler to track button
+- Removed X exit button from top-left of game canvas
+- Removed old drawHUDBase (score/length/radius panel top-left), removed timer/kills/best from canvas HUD
+- Moved minimap from bottom-right to top-left (canvas-drawn)
+- Added "Rank x / y" bar below minimap (canvas-drawn)
+- Added score display at bottom-center (canvas-drawn, large bold text)
+- Added kills counter at bottom-right (canvas-drawn)
+- Added "Best Ever" per-arena high score panel above leaderboard (React HTML, right side)
+- High score persisted per arena via localStorage key `venom-high-score-{arenaId}`
+- Used `displayHighScore` state (not ref) for React rendering to satisfy react-hooks/refs lint rule
+- Updated boost button text: "B / Left Click" hint below label
+- Updated extract button text: "E / Right Click" hint below label
+- Removed unused imports: drawMinimap, SEGMENT_SPACING, BASE_SPEED, computeBodyLength, computeBodyRadius
+- Verified: lint clean, no console errors, no dev log errors, game renders correctly
+
+Stage Summary:
+- Complete HUD redesign: minimap top-left, rank below, score bottom-center, kills bottom-right, best-ever above leaderboard
+- Input controls: B key = boost, Left Click = boost, E key = extract, Right Click = extract
+- All controls verified working in browser (buttons show correct labels, no runtime errors)
+- Per-arena high score persistence via localStorage

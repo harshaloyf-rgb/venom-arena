@@ -8,7 +8,8 @@
 //   No mouseInView guard — mousemove on window is always valid.
 //
 // Keyboard steering:
-//   WASD / Arrow keys override mouse. Space / Shift = boost. E = extract.
+//   WASD / Arrow keys override mouse. Space / Shift / B = boost. Left Click = boost.
+//   E / Right Click = extract.
 // ============================================================================
 
 import type { InputState } from '@/lib/snake/types';
@@ -26,6 +27,7 @@ export class InputHandler {
   private canvas: HTMLCanvasElement;
   private keys: Set<string> = new Set();
   private mouseDown = false;
+  private rightMouseDown = false;
   private mouseClientX = 0;
   private mouseClientY = 0;
   private hasMouseMoved = false;
@@ -46,9 +48,9 @@ export class InputHandler {
     this.canvas = canvas;
   }
 
-  /** Whether E key is held (or external extract button) */
+  /** Whether E key or right mouse is held (or external extract button) */
   isExtracting(): boolean {
-    return this.keys.has('e') || this.externalExtract;
+    return this.keys.has('e') || this.rightMouseDown || this.externalExtract;
   }
 
   /** Bind all event listeners */
@@ -127,7 +129,7 @@ export class InputHandler {
 
     if (kx !== 0 || ky !== 0) {
       this.state.targetAngle = Math.atan2(ky, kx);
-      this.state.boosting = this.keys.has(' ') || this.keys.has('shift') || this.externalBoost;
+      this.state.boosting = this.keys.has(' ') || this.keys.has('shift') || this.keys.has('b') || this.externalBoost;
       return;
     }
 
@@ -139,7 +141,7 @@ export class InputHandler {
       if (dist > 10) {
         this.state.targetAngle = Math.atan2(dy, dx);
       }
-      this.state.boosting = dist > 80 || this.externalBoost;
+      this.state.boosting = dist > 80 || this.keys.has('b') || this.externalBoost;
       return;
     }
 
@@ -159,7 +161,7 @@ export class InputHandler {
         this.state.targetAngle = Math.atan2(dy, dx);
       }
     }
-    this.state.boosting = this.mouseDown || this.keys.has(' ') || this.keys.has('shift') || this.externalBoost;
+    this.state.boosting = this.mouseDown || this.keys.has(' ') || this.keys.has('shift') || this.keys.has('b') || this.externalBoost;
   }
 
   // --- Event handlers (arrow functions for stable `this`) ---
@@ -170,6 +172,7 @@ export class InputHandler {
     if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(key)) {
       e.preventDefault();
     }
+    if (key === 'b') e.preventDefault();
   };
 
   private onKeyUp = (e: KeyboardEvent): void => {
@@ -186,11 +189,17 @@ export class InputHandler {
   private onMouseDown = (e: MouseEvent): void => {
     if (e.button === 0) {
       this.mouseDown = true;
+    } else if (e.button === 2) {
+      this.rightMouseDown = true;
     }
   };
 
-  private onMouseUp = (): void => {
-    this.mouseDown = false;
+  private onMouseUp = (e: MouseEvent): void => {
+    if (e.button === 0) {
+      this.mouseDown = false;
+    } else if (e.button === 2) {
+      this.rightMouseDown = false;
+    }
   };
 
   private onTouchStart = (e: TouchEvent): void => {
