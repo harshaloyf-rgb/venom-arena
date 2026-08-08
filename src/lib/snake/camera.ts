@@ -1,6 +1,11 @@
 // ============================================================================
-// Camera — Follows player head with smooth lerp. Zooms out as snake grows.
-// Width-aware: accounts for both snake length AND body radius for zoom.
+// Camera — Locks to player head position. Zooms out as snake grows.
+// ============================================================================
+// Position: camera = exact head position (no lerp, no snap).
+//   The head stays at dead screen center → zero relative motion → zero jitter.
+//   Grid line crawl is handled by renderer.ts (own pixel-snapping).
+//   Name labels use Math.round for integer-pixel rendering.
+// Zoom: smooth lerp with coarse snap. Only changes on score growth.
 // ============================================================================
 
 import type { Camera, Snake, Viewport } from './types';
@@ -9,34 +14,22 @@ import {
   START_LENGTH, SNAKE_RADIUS_MIN, computeBodyLength,
 } from './config';
 
-/** Camera position lerp factor (0–1, higher = tighter follow).
- *  0.15 → head stays within ~1-2px of center at 60fps.
- *  Smooth enough to eliminate all quantization jitter,
- *  fast enough that the player never notices the lag. */
-const POS_LERP = 0.15;
-
-/** Zoom snap precision — prevents continuous micro-rescaling that shifts
- *  grid line positions and causes visible crawling.
- *  50 = snap to 0.02 increments. Zoom only changes in visible steps. */
+/** Zoom snap precision — 50 = 0.02 increments.
+ *  Coarse enough that zoom changes are rare and deliberate. */
 const ZOOM_SNAP = 50;
 
-/** Update camera to follow a snake with smooth lerp.
- *  Lerp eliminates quantization jitter that snapping caused.
- *  Grid lines have their own pixel-snapping in renderer.ts. */
+/** Update camera to follow a snake. Camera locks directly to head position.
+ *  No lerp, no snap — the head is always at exact screen center.
+ *  This eliminates ALL relative jitter between snake, name, and camera. */
 export function updateCamera(camera: Camera, snake: Snake, _canvasWidth: number, _canvasHeight: number): void {
   if (snake.path.length === 0) return;
 
-  // Smooth lerp camera toward head position.
-  // No snapping — the lerp itself eliminates jitter by smoothing
-  // the discrete per-tick movement into a continuous glide.
-  camera.x += (snake.path.headX - camera.x) * POS_LERP;
-  camera.y += (snake.path.headY - camera.y) * POS_LERP;
+  // Direct lock — head stays at dead center of screen.
+  camera.x = snake.path.headX;
+  camera.y = snake.path.headY;
 
   // Dynamic zoom: zoom out as snake grows in BOTH length and width.
-  // IMPORTANT: use computeBodyLength(score) instead of snake.path.length.
-  // path.length changes every tick as head moves (new point prepended),
-  // which caused the zoom target to shift every frame → constant jittering.
-  // computeBodyLength only changes when score crosses a 5-point boundary.
+  // use computeBodyLength(score) — only changes when score crosses a 5-point boundary.
   const targetLength = computeBodyLength(snake.score);
   const baseLength = START_LENGTH;
 
