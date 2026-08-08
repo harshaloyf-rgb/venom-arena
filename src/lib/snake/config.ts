@@ -28,13 +28,28 @@ export const BASE_SPEED = 3.0;
 /** Speed while boosting (pixels per tick at 60fps) — 2.0× base */
 export const BOOST_SPEED = 6.0;
 
-/** Turn rate at base speed (radians per tick) — ~11.5° per tick */
-export const BASE_TURN_RATE = 0.200;
+/** Turn rate at base speed (radians per tick) — ~6.9° per tick.
+ *  Reduced from 0.200 for wider, more majestic turning arcs. */
+export const BASE_TURN_RATE = 0.120;
 
-/** Turn rate at boost speed (radians per tick) — ~5.7° per tick.
+/** Turn rate at boost speed (radians per tick) — ~3.4° per tick.
  *  Dynamic: actual turn rate is lerped between BASE_TURN_RATE and MIN_TURN_RATE
- *  based on current speed. Faster = tighter turn radius. */
-export const MIN_TURN_RATE = 0.100;
+ *  based on current speed. Faster = wider turn radius (realistic).
+ *  Reduced from 0.100 to match the heavier steering feel. */
+export const MIN_TURN_RATE = 0.060;
+
+/** Steering inertia — fraction of remaining angle applied per tick (0–1).
+ *  Controls how "heavy" the snake feels when changing direction.
+ *  0.12 = 12% of remaining angle each tick → ~90% convergence in ~19 ticks (~0.3s at 60fps).
+ *  Lower = heavier/more sluggish. Higher = more responsive (0.5+ = nearly instant). */
+export const STEERING_LERP = 0.12;
+
+/** Maximum speed reduction during sharp turns (0–1).
+ *  When the snake turns at its maximum rate, speed drops by this fraction.
+ *  Uses smoothstep curve so braking kicks in gradually, not abruptly.
+ *  0.30 = up to 30% speed reduction at full turn.
+ *  0.0 = no braking (old behavior). */
+export const SHARP_TURN_BRAKE = 0.30;
 
 /** Distance between consecutive segment positions in the path history */
 export const SEGMENT_SPACING = 8;
