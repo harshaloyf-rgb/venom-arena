@@ -487,9 +487,9 @@ export default function SnakeGame({
           break;
         }
         if (playerSnake) {
-          // Snap camera to extrapolated head with sub-pixel precision
-          const z = cameraRef.current.zoom;
-          const p = 1.0 / z;
+          // Snap camera to extrapolated head with fixed precision.
+          // Do NOT use 1/zoom — zoom changes would shift the snap grid.
+          const p = 0.5;
           cameraRef.current.x = Math.round(playerSnake.headX / p) * p;
           cameraRef.current.y = Math.round(playerSnake.headY / p) * p;
         }

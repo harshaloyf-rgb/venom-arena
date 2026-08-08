@@ -1101,3 +1101,28 @@ Stage Summary:
 - Bug: `Math.LN4` does not exist in JS — caused NaN bodyRadius → invisible snake + grid
 - Fix: Replaced with `Math.log(4)` (evaluates to ~1.386, same mathematical value)
 - Verified working in offline mode via agent-browser + VLM
+---
+Task ID: 3
+Agent: main
+Task: Fix snake/grid jittering and shaking during gameplay, especially when growing/shrinking
+
+Work Log:
+- Read and audited camera.ts, config.ts, renderer.ts, SnakeGame.tsx, engine.ts
+- Identified 3 root causes of jittering:
+  1. **snake.path.length used for zoom calc** — path.length increases by 1 EVERY tick (head moves), causing zoom target to shift every frame → constant micro-zoom changes → everything jitters
+  2. **Position snap precision depends on zoom** — `precision = 1/zoom` means when zoom changes (from bug 1), the snap grid itself shifts, causing camera to jump between different grid points
+  3. **Online mode had same zoom-dependent snap** — SnakeGame.tsx line 491-494 used `1/zoom` precision
+- Fixed camera.ts:
+  - Replaced `snake.path.length` with `computeBodyLength(snake.score)` for zoom calc — only changes when score crosses 5-point boundary
+  - Changed position snap from `SNAP_INV/zoom` (zoom-dependent) to fixed `POS_SNAP = 0.5` (zoom-independent)
+  - Coarsened ZOOM_SNAP from 1000 (0.001) to 50 (0.02) — fewer discrete steps, less visual disturbance
+  - Removed unused imports (SEGMENT_SPACING, BASE_SPEED)
+- Fixed SnakeGame.tsx online mode:
+  - Changed camera snap from `1/zoom` to fixed `0.5` precision
+- Verified with VLM screenshot analysis: zoom is now CONSISTENT across frames, snake body smooth, no artifacts
+- Lint clean, no console errors
+
+Stage Summary:
+- Root cause was snake.path.length (changes every tick) driving camera zoom → perpetual micro-jitter
+- 2 files changed: camera.ts (rewritten), SnakeGame.tsx (1 edit)
+- Browser verification confirms stable zoom and smooth rendering
