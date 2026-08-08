@@ -73,37 +73,34 @@ export function drawFood(
     if (f.y < viewport.top - 20 || f.y > viewport.bottom + 20) continue;
 
     const { x: sx, y: sy } = worldToScreen(f.x, f.y, camera, cw, ch);
-    const r = f.radius * zoom;
+    const baseR = f.radius * zoom;
 
-    if (r < 1) continue;
+    // Magnetized food shrinks to 1/6 size
+    const r = f.magnetized ? baseR / 6 : baseR;
+
+    if (r < 0.5) continue;
 
     if (f.magnetized) {
-      // Magnetized food: brighter glow + white ring to show it's being pulled
-      ctx.globalAlpha = 0.5;
-      ctx.fillStyle = '#ffffff';
+      // Magnetized food: subtle glow ring (keeps original color)
+      ctx.globalAlpha = 0.4;
+      ctx.strokeStyle = f.glowColor;
+      ctx.lineWidth = 1.0 * zoom;
       ctx.beginPath();
-      ctx.arc(sx, sy, r * 3.0, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.globalAlpha = 0.7;
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.5 * zoom;
-      ctx.beginPath();
-      ctx.arc(sx, sy, r * 1.8, 0, Math.PI * 2);
+      ctx.arc(sx, sy, baseR * 1.8, 0, Math.PI * 2);
       ctx.stroke();
       ctx.globalAlpha = 1;
-    } else if (r > 2) {
+    } else if (baseR > 2) {
       // Normal glow
       ctx.globalAlpha = 0.3;
       ctx.fillStyle = f.glowColor;
       ctx.beginPath();
-      ctx.arc(sx, sy, r * 2.5, 0, Math.PI * 2);
+      ctx.arc(sx, sy, baseR * 2.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1;
     }
 
-    // Circle
-    ctx.fillStyle = f.magnetized ? '#ffffff' : f.color;
+    // Circle — always keeps its natural color
+    ctx.fillStyle = f.color;
     ctx.beginPath();
     ctx.arc(sx, sy, r, 0, Math.PI * 2);
     ctx.fill();
