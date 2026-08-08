@@ -375,9 +375,9 @@ export default function GameCanvas({
       {/* Leaderboard */}
       <div className="absolute top-4 right-4 w-44 pointer-events-none select-none flex flex-col gap-2">
         {/* Best Ever */}
-        <div className="bg-black/50 backdrop-blur-sm rounded-lg p-2">
-          <div className="text-xs text-amber-400/70 font-mono mb-0.5 text-center">Best Ever</div>
-          <div className="text-sm text-amber-400 font-bold font-mono text-center">{displayHighScore.toLocaleString()}</div>
+        <div className="bg-black/50 backdrop-blur-sm rounded-lg px-2 py-1.5">
+          <div className="text-[9px] text-amber-400/70 font-mono text-center">Best Ever</div>
+          <div className="text-[10px] text-amber-400 font-bold font-mono text-center leading-tight">{displayHighScore.toLocaleString()}</div>
         </div>
         {/* Leaderboard */}
         <div className="bg-black/50 backdrop-blur-sm rounded-lg p-2">
