@@ -272,3 +272,51 @@ Stage Summary:
 - Player name is now shared via `playerName` prop on GameCanvas
 - All 53 features now edit-once (shared), except the `mode` prop controls high score key prefix
 - External files (cosmetics-section, skin-preview-game, game-snake-preview, snake-face-tester) updated to shared imports
+
+---
+Task ID: 3
+Agent: main
+Task: Implement 3 HUD text changes (Best Ever label, font sizes, score label)
+
+Work Log:
+- Changed Best Ever section in GameCanvas.tsx: font 9px→8px label, 10px→9px number, appended 'score' word after the number (dimmed opacity)
+- Reduced leaderboard title font from text-xs (12px) to text-[10px], entry text from text-xs to text-[10px]
+- Reduced canvas HUD fonts in hud.ts: rank 11px→9px, score 13px→10px, kills label 11px→9px, kills number 13px→10px
+- Center-bottom score already showed 'Score xxxxx' — confirmed correct
+- Lint clean, dev server no errors
+
+Stage Summary:
+- Best Ever now shows: 'Best Ever' label + '1,234 score' underneath
+- All HUD fonts reduced by 2-3px for smaller, cleaner look
+- Center bottom score displays 'Score xxxxx' as before
+
+---
+Task ID: 4
+Agent: main
+Task: Create 6 bot AI types with distinct behaviors
+
+Work Log:
+- Created src/lib/snake/bot-ai.ts (~430 lines) with 6 bot types:
+  - Hunter: chases prey, predicts movement, circles to cut off, flees larger threats
+  - Gatherer: seeks food clusters, avoids all combat, never boosts
+  - Ambusher: waits near food clusters, strikes when prey enters range, retreats after
+  - Kamikaze: always boosts toward nearest snake, aggressive straight-line charges
+  - Wanderer: random gentle movement with slight food attraction, no combat
+  - Opportunist: targets only smaller snakes, flees larger ones, seeks death drop food
+- Each type has unique color palette, name pool (10 names each), and AI behavior
+- Module-level Map stores per-bot AI state (target, boost, timers, type-specific data)
+- Performance: retarget timers (15-30 ticks), distance-squared checks (no sqrt), 1 bot respawn/tick
+- Modified engine.ts: added bot AI update step, bot movement step, dead bot cleanup, auto-respawn
+- Added createBotSnakeFactory (avoids exposing private createSnake), initBots export
+- Bot colors: type-specific via BOT_TYPE_COLORS lookup in createSnake
+- Wired initBots() call in GameCanvas.tsx after createInitialState
+- Default mix: 2 Hunters, 3 Gatherers, 1 Ambusher, 2 Kamikazes, 3 Wanderers, 2 Opportunists (13 total)
+- Wall avoidance for all bot types (steer away from arena boundary)
+- Lint clean, browser verified via VLM: 13 bots spawned, leaderboard shows bot names (Taipan, Wisp, Sprout, Harvest, Dash), bots actively eating food (scores 95-148)
+
+Stage Summary:
+- New file: src/lib/snake/bot-ai.ts (6 bot AI types, spawning, respawning)
+- Modified: engine.ts (bot integration in gameTick, initBots export)
+- Modified: GameCanvas.tsx (initBots call)
+- Shared code — works for both offline and online modes
+- Bot population self-maintains: dead bots respawn 1/tick to maintain target count
