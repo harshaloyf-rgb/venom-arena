@@ -1517,3 +1517,26 @@ Stage Summary:
 - Flickering fix: Removed ExtrapolationEngine entirely; smooth lerp interpolation between server snapshots eliminates snap-predict-snap jitter
 - Controls fix: Input rate increased to 30Hz (matches server tick rate)
 - All 4 issues verified working via browser testing: snake is green (correct skin), name is 'Guest' (correct), no flickering, food rendering works
+---
+Task ID: online-rendering-parity
+Agent: Main
+Task: Verify and fix online/offline rendering parity, fix connection stability
+
+Work Log:
+- Read all relevant files: SnakeGame.tsx (1171 lines), shared.ts (728 lines), game-state.ts (347 lines), index.ts (244 lines), online-engine.ts (228 lines), input.ts (246 lines)
+- Confirmed online rendering already uses SAME functions as offline: renderOfflineBackground, renderSnakeAtlas/renderSnakeFallback, updateCamera, renderOfflineHUD, drawExtractRing, drawMouseCursor, drawControlsHint, drawEliminatedBanner/drawDeathOverlay
+- Confirmed server-side already cleaned: no ARENA_RADIUS, no FOOD_COUNT_TARGET, no SERVER_BOT_COUNT, no EXTRACTION_ZONE schedule, no bots, density-based food, player name/skin passed through
+- Found game server running on port 3001, Socket.IO handshake works through Caddy gateway
+- Tested online mode in browser: game connects successfully, receives snapshots, renders canvas
+- Found auto-exit bug: extraction progress code could complete and call onExit() even without an active extraction zone, causing game to exit after ~3 seconds
+- Fixed extraction guard: added hasExtractionZone check before tracking extraction progress (line 346-347)
+- Verified fix: online game stays running stably for 15+ seconds with canvas rendering colored pixels
+- Server logs confirm stable connection (no disconnect after fix)
+
+Stage Summary:
+- Rendering code: ALREADY identical between online and offline (both use same renderer functions)
+- Server-side: ALREADY cleaned (no bots, no online-only features)
+- Bug fixed: extraction auto-exit without active extraction zone
+- Connection: working through Caddy gateway on port 81 -> game server on port 3001
+- Player name/skin: correctly passed from client to server via Socket.IO auth handshake
+

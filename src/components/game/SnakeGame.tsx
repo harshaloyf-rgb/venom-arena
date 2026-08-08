@@ -340,7 +340,11 @@ export default function SnakeGame({
       input.externalBoost = externalBoostRef.current;
 
       // ── Extraction progress tracking (both modes) ──
-      const isExtracting = input.isExtracting();
+      // Only track extraction if there's an active extraction zone
+      const gameState = effectiveMode === 'offline' ? gameStateRef.current : null;
+      const onlineSnap = effectiveMode === 'online' ? onlineCurrSnapRef.current : null;
+      const hasExtractionZone = gameState?.extractionZone?.active || onlineSnap?.extraction?.active;
+      const isExtracting = hasExtractionZone && input.isExtracting();
       if (isExtracting && !isDeadRef.current && !isDeadOnlineRef.current) {
         if (!extractActiveRef.current) {
           // Just started extracting — lock the current angle
