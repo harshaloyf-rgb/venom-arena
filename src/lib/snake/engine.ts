@@ -65,153 +65,6 @@ const BOT_NAMES = [
   'Wiggles', 'Slithers', 'Fang', 'Venom', 'Toxin', 'Striker',
 ];
 
-// ─── Hairline-Gap Obstacles ─────────────────────────────────────────────
-
-/** Generate obstacle walls with hairline gaps (1px–20px).
- *  Each barrier is a long wall with a small gap that may or may not be passable.
- *  Collision uses the BLACK DOT (1px radius), so:
- *    - Gaps >= 2px  → passable with reasonable alignment
- *    - Gaps 1px     → barely passable (pixel-perfect precision needed)
- *  Walls are arranged in concentric rectangular rings at increasing distances. */
-function generateTestObstacles(): Array<{ x1: number; y1: number; x2: number; y2: number }> {
-  const walls: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
-
-  // Helper: horizontal wall segment centered at (cx, cy) with half-length hl
-  const hWall = (cx: number, cy: number, hl: number) => {
-    walls.push({ x1: cx - hl, y1: cy, x2: cx + hl, y2: cy });
-  };
-  // Helper: vertical wall segment centered at (cx, cy) with half-length hl
-  const vWall = (cx: number, cy: number, hl: number) => {
-    walls.push({ x1: cx, y1: cy - hl, x2: cx, y2: cy + hl });
-  };
-  // Helper: full horizontal barrier at y=cy spanning from x=startX to x=endX with gap at gapX of gapSize
-  const hBarrier = (cy: number, startX: number, endX: number, gapX: number, gapSize: number) => {
-    const leftLen = gapX - gapSize / 2 - startX;
-    const rightLen = endX - (gapX + gapSize / 2);
-    if (leftLen > 0) hWall(startX + leftLen / 2, cy, leftLen / 2);
-    if (rightLen > 0) hWall(gapX + gapSize / 2 + rightLen / 2, cy, rightLen / 2);
-  };
-  // Helper: full vertical barrier at x=cx spanning from y=startY to y=endY with gap at gapY of gapSize
-  const vBarrier = (cx: number, startY: number, endY: number, gapY: number, gapSize: number) => {
-    const topLen = gapY - gapSize / 2 - startY;
-    const botLen = endY - (gapY + gapSize / 2);
-    if (topLen > 0) vWall(cx, startY + topLen / 2, topLen / 2);
-    if (botLen > 0) vWall(cx, gapY + gapSize / 2 + botLen / 2, botLen / 2);
-  };
-
-  // Helper: horizontal barrier with TWO gaps
-  const hBarrier2 = (cy: number, startX: number, endX: number, g1x: number, g1s: number, g2x: number, g2s: number) => {
-    const segs = [startX, g1x - g1s / 2, g1x + g1s / 2, g2x - g2s / 2, g2x + g2s / 2, endX];
-    for (let i = 0; i < segs.length - 1; i += 2) {
-      const cx = (segs[i] + segs[i + 1]) / 2;
-      const hl = (segs[i + 1] - segs[i]) / 2;
-      if (hl > 0) hWall(cx, cy, hl);
-    }
-  };
-  // Helper: vertical barrier with TWO gaps
-  const vBarrier2 = (cx: number, startY: number, endY: number, g1y: number, g1s: number, g2y: number, g2s: number) => {
-    const segs = [startY, g1y - g1s / 2, g1y + g1s / 2, g2y - g2s / 2, g2y + g2s / 2, endY];
-    for (let i = 0; i < segs.length - 1; i += 2) {
-      const cy = (segs[i] + segs[i + 1]) / 2;
-      const hl = (segs[i + 1] - segs[i]) / 2;
-      if (hl > 0) vWall(cx, cy, hl);
-    }
-  };
-
-  const W = 500; // wall half-extent (how far walls extend)
-
-  // ═══════════════════════════════════════════════════════════════════
-  // Ring 1: 250px from center — 4 walls, one gap each
-  // ═══════════════════════════════════════════════════════════════════
-  const D1 = 250;
-  hBarrier(-D1, -D1 - W, D1 + W, -20, 3);   // top: 3px gap (death trap)
-  hBarrier(D1, -D1 - W, D1 + W, 30, 16);     // bottom: 16px gap (passable)
-  vBarrier(-D1, -D1 - W, D1 + W, 0, 8);      // left: 8px gap (impassable)
-  vBarrier(D1, -D1 - W, D1 + W, 15, 14);     // right: 14px gap (barely passable)
-
-  // ═══════════════════════════════════════════════════════════════════
-  // Ring 2: 500px — two gaps per wall
-  // ═══════════════════════════════════════════════════════════════════
-  const D2 = 500;
-  hBarrier2(-D2, -D2 - W, D2 + W, -100, 2, 150, 18);   // top: 2px trap + 18px pass
-  hBarrier2(D2, -D2 - W, D2 + W, -80, 10, 120, 20);    // bottom: 10px trap + 20px pass
-  vBarrier2(-D2, -D2 - W, D2 + W, -50, 1, 80, 15);     // left: 1px trap + 15px pass
-  vBarrier2(D2, -D2 - W, D2 + W, -60, 6, 100, 13);     // right: 6px trap + 13px pass
-
-  // ═══════════════════════════════════════════════════════════════════
-  // Ring 3: 800px — wider walls, multiple gaps
-  // ═══════════════════════════════════════════════════════════════════
-  const D3 = 800;
-  const W3 = 600;
-  hBarrier2(-D3, -D3 - W3, D3 + W3, -200, 4, 200, 12);  // top: 4px trap + 12px borderline
-  hBarrier2(D3, -D3 - W3, D3 + W3, -150, 5, 100, 19);   // bottom: 5px trap + 19px pass
-  vBarrier2(-D3, -D3 - W3, D3 + W3, -180, 7, 180, 17);  // left: 7px trap + 17px pass
-  vBarrier2(D3, -D3 - W3, D3 + W3, -120, 3, 160, 20);   // right: 3px trap + 20px easy
-
-  // ═══════════════════════════════════════════════════════════════════
-  // Ring 4: 1200px — single gap each, very wide walls
-  // ═══════════════════════════════════════════════════════════════════
-  const D4 = 1200;
-  const W4 = 800;
-  hBarrier(-D4, -D4 - W4, D4 + W4, 50, 11);    // top: 11px (just under passable)
-  hBarrier(D4, -D4 - W4, D4 + W4, -30, 14);    // bottom: 14px (passable)
-  vBarrier(-D4, -D4 - W4, D4 + W4, 20, 9);     // left: 9px (impassable)
-  vBarrier(D4, -D4 - W4, D4 + W4, -10, 20);    // right: 20px (comfortable)
-
-  // ═══════════════════════════════════════════════════════════════════
-  // Ring 5: 1600px — mixed gaps
-  // ═══════════════════════════════════════════════════════════════════
-  const D5 = 1600;
-  const W5 = 900;
-  hBarrier2(-D5, -D5 - W5, D5 + W5, -300, 1, 300, 15);  // top: 1px trap + 15px pass
-  hBarrier2(D5, -D5 - W5, D5 + W5, -250, 8, 250, 12);   // bottom: 8px trap + 12px borderline
-  vBarrier2(-D5, -D5 - W5, D5 + W5, -200, 3, 200, 16);  // left: 3px trap + 16px pass
-  vBarrier2(D5, -D5 - W5, D5 + W5, -150, 6, 150, 18);   // right: 6px trap + 18px pass
-
-  // ═══════════════════════════════════════════════════════════════════
-  // Ring 6: 2100px — outer ring, extreme gaps
-  // ═══════════════════════════════════════════════════════════════════
-  const D6 = 2100;
-  const W6 = 1000;
-  hBarrier(-D6, -D6 - W6, D6 + W6, 0, 2);      // top: 2px death trap
-  hBarrier(D6, -D6 - W6, D6 + W6, 100, 20);     // bottom: 20px comfortable
-  vBarrier(-D6, -D6 - W6, D6 + W6, -50, 11);    // left: 11px just under
-  vBarrier(D6, -D6 - W6, D6 + W6, 50, 13);     // right: 13px passable
-
-  return walls;
-}
-
-/** Point-to-line-segment closest distance (squared) */
-function pointToSegDistSq(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const lenSq = dx * dx + dy * dy;
-  if (lenSq < 0.001) return (px - x1) * (px - x1) + (py - y1) * (py - y1);
-  let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
-  t = Math.max(0, Math.min(1, t));
-  const cx = x1 + t * dx;
-  const cy = y1 + t * dy;
-  return (px - cx) * (px - cx) + (py - cy) * (py - cy);
-}
-
-/** Exact line-segment vs line-segment intersection test.
- *  Returns true if segment (ax1,ay1)→(ax2,ay2) crosses segment (bx1,by1)→(bx2,by2).
- *  Uses cross-product orientation test — zero allocation, no divisions. */
-function segSegIntersect(
-  ax1: number, ay1: number, ax2: number, ay2: number,
-  bx1: number, by1: number, bx2: number, by2: number,
-): boolean {
-  const d1x = ax2 - ax1, d1y = ay2 - ay1;
-  const d2x = bx2 - bx1, d2y = by2 - by1;
-  const cross = d1x * d2y - d1y * d2x;
-  // Parallel or near-parallel segments — skip (walls are axis-aligned so this is rare)
-  if (Math.abs(cross) < 1e-10) return false;
-  const dx = bx1 - ax1, dy = by1 - ay1;
-  const t = (dx * d2y - dy * d2x) / cross;
-  const u = (dx * d1y - dy * d1x) / cross;
-  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
-}
-
 /** Color palette for snakes (body, head) */
 const SNAKE_PALETTES: [string, string][] = [
   ['#ef4444', '#f87171'], ['#f97316', '#fb923c'],
@@ -266,7 +119,7 @@ export function createInitialState(playerSkin?: PlayerSkinOverride | null, initi
     showControls: true,
     tickCount: 0,
     extractionZone: { x: 0, y: 0, radius: EXTRACTION_ZONE_RADIUS, active: false },
-    obstacles: generateTestObstacles(),
+    obstacles: [],
   };
 
   const now = Date.now();
@@ -948,44 +801,6 @@ function checkCollisions(state: GameState, now: number): void {
         // Tie: both die
         deadSnakes.add(snake.id);
         deadSnakes.add(otherId);
-      }
-    }
-  }
-
-  // ── Obstacle collision: black dot (1px) vs wall segments ──
-  // Uses EXACT swept collision (line-segment vs line-segment intersection)
-  // plus point-to-segment check at the current position.
-  // This completely eliminates tunneling — no matter how fast the snake moves,
-  // if the black dot's movement path crosses a wall, it's detected.
-  const obstacles = state.obstacles;
-  if (obstacles.length > 0) {
-    const wallHitDistSq = 1;
-    for (const [, snake] of snakesMap) {
-      if (!snake.alive || deadSnakes.has(snake.id)) continue;
-      if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
-      if (snake.path.length < 2) continue;
-
-      const dotX = snake.path.headX + Math.cos(snake.angle) * snake.bodyRadius * dotDist;
-      const dotY = snake.path.headY + Math.sin(snake.angle) * snake.bodyRadius * dotDist;
-      // Previous dot position (head was at path[1] last tick, using current angle)
-      const prevDotX = snake.path.getX(1) + Math.cos(snake.angle) * snake.bodyRadius * dotDist;
-      const prevDotY = snake.path.getY(1) + Math.sin(snake.angle) * snake.bodyRadius * dotDist;
-
-      let hit = false;
-      for (let w = 0; w < obstacles.length; w++) {
-        const ob = obstacles[w];
-        // Swept test: did the dot's movement line cross the wall segment?
-        if (segSegIntersect(prevDotX, prevDotY, dotX, dotY, ob.x1, ob.y1, ob.x2, ob.y2)) {
-          deadSnakes.add(snake.id);
-          hit = true;
-          break;
-        }
-        // Static check: is the dot currently touching the wall?
-        if (pointToSegDistSq(dotX, dotY, ob.x1, ob.y1, ob.x2, ob.y2) <= wallHitDistSq) {
-          deadSnakes.add(snake.id);
-          hit = true;
-          break;
-        }
       }
     }
   }

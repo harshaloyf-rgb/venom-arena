@@ -276,8 +276,6 @@ export interface GameState {
   tickCount: number;
   /** Extraction zone: center x, center y, current radius */
   extractionZone: { x: number; y: number; radius: number; active: boolean };
-  /** Obstacle walls for collision testing — array of line segments [{x1,y1,x2,y2}] */
-  obstacles: Array<{ x1: number; y1: number; x2: number; y2: number }>;
 }
 
 // ─── Input ──────────────────────────────────────────────────────────────────
