@@ -20,6 +20,7 @@ import { useAuth } from '@/components/providers/auth-provider';
 import { PASS_TIER_LEVEL } from '@/lib/game-config';
 import AuthGate from '@/components/auth/auth-gate';
 import SnakeGame from '@/components/game/SnakeGame';
+import OnlineSnakeGame from '@/components/game/OnlineSnakeGame';
 import { ArenaSelector } from '@/components/panels/arena-selector';
 import { CosmeticsShop } from '@/components/panels/cosmetics-shop';
 import { PlayerProfilePanel } from '@/components/panels/player-profile';
@@ -257,10 +258,17 @@ export default function Home() {
   if (activeArenaId) {
     return (
       <div className="w-screen h-screen overflow-hidden bg-slate-950">
-        <SnakeGame
-          onExit={() => handleExitGame()}
-          arenaId={activeArenaId}
-        />
+        {gameMode === 'online' ? (
+          <OnlineSnakeGame
+            onExit={() => handleExitGame()}
+            arenaId={activeArenaId}
+          />
+        ) : (
+          <SnakeGame
+            onExit={() => handleExitGame()}
+            arenaId={activeArenaId}
+          />
+        )}
       </div>
     );
   }
