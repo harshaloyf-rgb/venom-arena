@@ -85,3 +85,31 @@ Stage Summary:
 - createSnake always produces player snakes (isBot: false, isPlayer: true)
 - Pre-existing unused imports (SPATIAL_CELL_SIZE, IPathBuffer) left untouched — out of scope
 
+
+---
+Task ID: 2
+Agent: main + subagent-844a0a4d
+Task: Full offline/online codebase split, remove bots, remove extraction zone
+
+Work Log:
+- Copied 7 shared files to offline/online versions (engine, camera, renderer, atlas, skin-registry, face-cosmetics, render-snake-atlas)
+- Used subagent to clean engine-offline.ts: removed bot imports, BOT_NAMES, bot spawn/move/respawn logic, extraction zone speed bonus, extraction zone from MoveContext and initialState
+- Copied cleaned engine-offline.ts to engine-online.ts with updated header
+- Updated all file headers to mark OFFLINE/ONLINE mode only
+- Removed drawExtractionZone from both renderer files
+- Updated all imports in SnakeGame.tsx (→ *-offline), OnlineSnakeGame.tsx (→ *-online)
+- Updated shop/lab preview components to use offline versions
+- Deleted original shared files: engine.ts, camera.ts, atlas.ts, skin-registry.ts, face-cosmetics.ts, renderer.ts, render-snake-atlas.tsx, bot-ai.ts
+- Removed dead BOT_* and EXTRACTION_* constants from config.ts
+- Updated index.ts barrel to only export shared files (types, config, vec2, pool, spatial-hash, snapshot)
+- Lint passes clean, browser verification successful (game loads with canvas, zero errors)
+
+Stage Summary:
+- 7 files × 2 modes = 14 independent mode-specific files created
+- Shared files (Layer 1): types.ts, config.ts, vec2.ts, pool.ts, spatial-hash.ts, snapshot.ts, constants.ts
+- Offline files: engine-offline.ts, camera-offline.ts, renderer-offline.ts, atlas-offline.ts, skin-registry-offline.ts, face-cosmetics-offline.ts, render-snake-atlas-offline.ts, SnakeGame.tsx
+- Online files: engine-online.ts, camera-online.ts, renderer-online.ts, atlas-online.ts, skin-registry-online.ts, face-cosmetics-online.ts, render-snake-atlas-online.ts, OnlineSnakeGame.tsx
+- Bots completely removed (bot-ai.ts deleted, all bot logic stripped from engines)
+- Extraction zone removed from engines, renderers, and config
+- Committed and pushed as 4581a8c
+
