@@ -24,10 +24,8 @@ import {
   BASE_SPEED,
   computeBodyLength,
   computeBodyRadius,
-  SNAKE_RADIUS_MIN,
-  SNAKE_RADIUS_GROWTH_RATE,
 } from '@/lib/snake';
-import { createInitialState, gameTick, respawnPlayer, setDebugScore, type PlayerSkinOverride } from '@/lib/snake/engine';
+import { createInitialState, gameTick, respawnPlayer, type PlayerSkinOverride } from '@/lib/snake/engine';
 import { createCamera, updateCamera, getViewport, worldToScreen } from '@/lib/snake/camera';
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, getPlayerSkinId, registerSkinAsset } from '@/lib/snake/skin-registry';
@@ -98,10 +96,7 @@ export default function SnakeGame({
   // Atlas manager (shared across modes)
   const atlasManagerRef = useRef<SkinAtlasManager | null>(null);
 
-  // Debug panel (offline only — press ` backtick to toggle)
-  const [debugOpen, setDebugOpen] = useState(false);
-  const [debugScore, setDebugScore] = useState('0');
-  const [debugStats, setDebugStats] = useState({ score: 0, radius: 6, length: 15, zoom: 1.35, pathLen: 0 });
+  
 
   // External boost state (from UI button)
   const externalBoostRef = useRef(false);
@@ -113,9 +108,7 @@ export default function SnakeGame({
 
   // ── Leaderboard updater (offline) ──
 
-  const handleDebugSetScore = useCallback((val: number) => {
-    if (gameStateRef.current) setDebugScore(gameStateRef.current, val);
-  }, []);
+  
 
   const updateLeaderboard = useCallback((state: GameState) => {
     const entries: { name: string; score: number }[] = [];
@@ -450,16 +443,6 @@ export default function SnakeGame({
           updateLeaderboard(state);
         }
 
-        // Update debug stats every ~0.5s
-        if (state.player) {
-          setDebugStats({
-            score: Math.floor(state.player.score),
-            radius: +state.player.bodyRadius.toFixed(1),
-            length: computeBodyLength(state.player.score),
-            zoom: +cameraRef.current.zoom.toFixed(3),
-            pathLen: state.player.path.length,
-          });
-        }
       }
 
       // ────────────────────────────────────────────────────────────────────
@@ -592,19 +575,6 @@ export default function SnakeGame({
     window.addEventListener('keydown', onRespawnKey);
     canvas.addEventListener('click', onRespawnClick);
 
-    // ── Debug toggle (F3 key) ──
-    const onDebugKey = (e: KeyboardEvent) => {
-      if (e.key === 'F3') {
-        e.preventDefault();
-        setDebugOpen(prev => !prev);
-        // Sync current score to input when opening
-        if (state.player) {
-          setDebugScore(String(Math.floor(state.player.score)));
-        }
-      }
-    };
-    window.addEventListener('keydown', onDebugKey);
-
     animFrameRef.current = requestAnimationFrame(loop);
 
     return () => {
@@ -613,7 +583,6 @@ export default function SnakeGame({
       input.detach();
       window.removeEventListener('resize', resize);
       window.removeEventListener('keydown', onRespawnKey);
-      window.removeEventListener('keydown', onDebugKey);
       canvas.removeEventListener('click', onRespawnClick);
 
       // Cleanup online connections
@@ -699,17 +668,6 @@ export default function SnakeGame({
         </div>
       )}
 
-      {/* Debug Panel (offline only — press ` to toggle) */}
-      {debugOpen && effectiveMode === 'offline' && (
-        <DebugPanel
-          score={debugScore}
-          onScoreChange={setDebugScore}
-          onApplyScore={handleDebugSetScore}
-          stats={debugStats}
-          onClose={() => setDebugOpen(false)}
-        />
-      )}
-
       {/* Leaderboard */}
       <div className="absolute top-4 right-4 w-44 bg-black/50 backdrop-blur-sm rounded-lg p-2 pointer-events-none select-none">
         <div className="text-xs text-white/60 font-mono mb-1 text-center">Leaderboard</div>
@@ -761,147 +719,6 @@ export default function SnakeGame({
           <CircleDot className="w-5 h-5" />
           <span>Extract</span>
         </button>
-      </div>
-    </div>
-  );
-}
-// ============================================================================
-
-const DEBUG_PRESETS = [
-  { label: '0', score: 0 },
-  { label: '50', score: 50 },
-  { label: '200', score: 200 },
-  { label: '1K', score: 1000 },
-  { label: '5K', score: 5000 },
-  { label: '10K', score: 10000 },
-  { label: '50K', score: 50000 },
-  { label: '100K', score: 100000 },
-  { label: '500K', score: 500000 },
-  { label: '1M', score: 1000000 },
-];
-
-function DebugPanel({
-  score,
-  onScoreChange,
-  onApplyScore,
-  stats,
-  onClose,
-}: {
-  score: string;
-  onScoreChange: (v: string) => void;
-  onApplyScore: (v: number) => void;
-  stats: { score: number; radius: number; length: number; zoom: number; pathLen: number };
-  onClose: () => void;
-}) {
-  return (
-    <div className="absolute top-14 left-4 z-10 w-72 bg-black/80 backdrop-blur-md rounded-xl border border-white/10 shadow-2xl select-none">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
-        <span className="text-xs font-mono text-amber-400 font-bold">DEBUG PANEL</span>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-white/30 font-mono">F3 to close</span>
-          <button onClick={onClose} className="text-white/40 hover:text-white/70 transition-colors cursor-pointer">
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-
-      <div className="p-3 space-y-3">
-        {/* Live stats */}
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] font-mono">
-          <div className="text-white/40">Score</div>
-          <div className="text-amber-400 text-right">{stats.score.toLocaleString()}</div>
-          <div className="text-white/40">Body Radius</div>
-          <div className="text-emerald-400 text-right">{stats.radius}px</div>
-          <div className="text-white/40">Target Length</div>
-          <div className="text-sky-400 text-right">{stats.length} segs</div>
-          <div className="text-white/40">Path Entries</div>
-          <div className="text-sky-400/60 text-right">{stats.pathLen}</div>
-          <div className="text-white/40">Camera Zoom</div>
-          <div className="text-purple-400 text-right">{stats.zoom}x</div>
-        </div>
-
-        {/* Separator */}
-        <div className="border-t border-white/10" />
-
-        {/* Score input */}
-        <div>
-          <div className="text-[10px] text-white/40 font-mono mb-1.5">SET SCORE</div>
-          <div className="flex gap-2">
-            <input
-              type="number"
-              value={score}
-              onChange={(e) => onScoreChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const val = Math.max(0, Math.floor(Number(score) || 0));
-                  onApplyScore(val);
-                  onScoreChange(String(val));
-                }
-              }}
-              className="flex-1 bg-white/5 border border-white/10 rounded-md px-2 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-amber-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              placeholder="Enter score..."
-              min={0}
-            />
-            <button
-              onClick={() => {
-                const val = Math.max(0, Math.floor(Number(score) || 0));
-                onApplyScore(val);
-                onScoreChange(String(val));
-              }}
-              className="px-3 py-1.5 rounded-md bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-400 text-xs font-mono font-bold transition-colors cursor-pointer"
-            >
-              SET
-            </button>
-          </div>
-        </div>
-
-        {/* Presets */}
-        <div className="flex flex-wrap gap-1.5">
-          {DEBUG_PRESETS.map(p => (
-            <button
-              key={p.score}
-              onClick={() => {
-                onScoreChange(String(p.score));
-                onApplyScore(p.score);
-              }}
-              className="px-2 py-1 rounded text-[10px] font-mono bg-white/5 hover:bg-white/10 text-white/50 hover:text-white/80 border border-white/5 hover:border-white/15 transition-all cursor-pointer"
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Score slider */}
-        <div>
-          <input
-            type="range"
-            min={0}
-            max={1000000}
-            step={100}
-            value={Math.min(Number(score) || 0, 1000000)}
-            onChange={(e) => {
-              const val = parseInt(e.target.value);
-              onScoreChange(String(val));
-              onApplyScore(val);
-            }}
-            className="w-full h-1.5 rounded-lg appearance-none cursor-pointer bg-white/10 accent-amber-500"
-          />
-          <div className="flex justify-between text-[9px] text-white/20 font-mono mt-0.5">
-            <span>0</span>
-            <span>250K</span>
-            <span>500K</span>
-            <span>750K</span>
-            <span>1M</span>
-          </div>
-        </div>
-
-        {/* Growth formula reference */}
-        <div className="text-[9px] text-white/20 font-mono leading-relaxed border-t border-white/5 pt-2">
-          radius = {SNAKE_RADIUS_MIN} + {SNAKE_RADIUS_GROWTH_RATE} × ln(1 + score/33.3)<br />
-          length = 15 + score / 5 (1 seg per 5 pts)<br />
-          turn: U-turn in 0.25s | collision = {SNAKE_RADIUS_MIN}px
-        </div>
       </div>
     </div>
   );
@@ -1022,11 +839,7 @@ function drawHUDBase(
   ctx.font = '12px monospace';
   ctx.fillText(`${fps} FPS`, viewport.width - p, p);
 
-  // Debug hint (subtle — bottom left)
-  ctx.textAlign = 'left';
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-  ctx.font = '10px monospace';
-  ctx.fillText('F3: Debug', p, viewport.height - p - 4);
+
 }
 
 // ============================================================================

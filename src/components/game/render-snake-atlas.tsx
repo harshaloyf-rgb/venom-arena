@@ -995,51 +995,12 @@ function drawResponsiveEyes(
   const blinkPhase = time ? (time + blinkSeed * 3) % blinkCycle : 99999;
   const isBlinking = blinkPhase < blinkDuration;
 
-  // ── BOOST MODE: dilated pupils, intense — but eyes STILL track the target ──
+  // ── BOOST: dilated pupils only — visual effects applied in drawing loop below ──
   if (boosting) {
     pupilRadius = eyeRadius * 0.6;
-
-    for (const side of [-1, 1]) {
-      const ex = hx + Math.cos(moveAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
-      const ey = hy + Math.sin(moveAngle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
-
-      // Eye white
-      ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(ex, ey, eyeRadius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      // Pupil — LOCKED FORWARD
-      const px = ex + smooth.shiftX;
-      const py = ey + smooth.shiftY;
-      ctx.fillStyle = '#cc1111';
-      ctx.beginPath();
-      ctx.arc(px, py, pupilRadius, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Highlight
-      ctx.fillStyle = 'rgba(255,255,255,0.8)';
-      ctx.beginPath();
-      ctx.arc(px - pupilRadius * 0.3, py - pupilRadius * 0.35, pupilRadius * 0.3, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Pulsing red glow ring
-      ctx.save();
-      ctx.globalAlpha = 0.3 + 0.2 * Math.sin((time ?? Date.now()) * 0.01);
-      ctx.strokeStyle = '#ff4444';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(ex, ey, eyeRadius + 2, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
-    // Fall through to normal tracking — pupils still follow targetAngle while boosting
   }
 
-  // ── NORMAL MODE: circular pupil tracking ──
+  // ── PUPIL TRACKING: circular, works for both normal and boost ──
   // Direction: where the snake is steering (full 360°, not just left/right)
   // Magnitude: combo of steering delta + angular velocity for sustained shift
   let angVel = 0;
@@ -1134,7 +1095,7 @@ function drawResponsiveEyes(
     const px = ex + smooth.shiftX;
     const py = ey + smooth.shiftY;
 
-    ctx.fillStyle = '#111111';
+    ctx.fillStyle = boosting ? '#cc1111' : '#111111';
     ctx.beginPath();
     ctx.arc(px, py, pupilRadius, 0, Math.PI * 2);
     ctx.fill();
@@ -1144,6 +1105,18 @@ function drawResponsiveEyes(
     ctx.beginPath();
     ctx.arc(px - pupilRadius * 0.3, py - pupilRadius * 0.35, pupilRadius * 0.3, 0, Math.PI * 2);
     ctx.fill();
+
+    // Boost: pulsing red glow ring
+    if (boosting) {
+      ctx.save();
+      ctx.globalAlpha = 0.3 + 0.2 * Math.sin((time ?? Date.now()) * 0.01);
+      ctx.strokeStyle = '#ff4444';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(ex, ey, eyeRadius + 2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 }
 
