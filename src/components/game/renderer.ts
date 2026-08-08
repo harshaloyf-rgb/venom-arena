@@ -15,7 +15,7 @@ import { worldToScreen } from '@/lib/snake/camera';
 // ==========================================================================
 
 const GRID_SIZE = ARENA_GRID_SIZE;
-const GRID_COLOR = 'rgba(255, 255, 255, 0.04)';
+const GRID_COLOR = 'rgba(255, 255, 255, 0.06)';
 
 export function drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, viewport: Viewport): void {
   ctx.strokeStyle = GRID_COLOR;
@@ -24,17 +24,29 @@ export function drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, viewport
   const zoomedGrid = GRID_SIZE * camera.zoom;
   if (zoomedGrid < 4) return;
 
-  const offsetX = (-camera.x * camera.zoom + viewport.width / 2) % zoomedGrid;
-  const offsetY = (-camera.y * camera.zoom + viewport.height / 2) % zoomedGrid;
+  // Snap grid origin to pixel boundaries to prevent sub-pixel line crawling.
+  // The modulo gives us the fractional offset within one grid cell;
+  // rounding that to integer pixels means lines only move in 1px jumps
+  // (imperceptible at 3px/frame head movement).
+  let offsetX = (-camera.x * camera.zoom + viewport.width / 2) % zoomedGrid;
+  let offsetY = (-camera.y * camera.zoom + viewport.height / 2) % zoomedGrid;
+  // Ensure positive modulo (JS % can be negative)
+  if (offsetX < 0) offsetX += zoomedGrid;
+  if (offsetY < 0) offsetY += zoomedGrid;
+  // Snap to nearest pixel — eliminates crawling while keeping smooth scroll
+  offsetX = Math.round(offsetX);
+  offsetY = Math.round(offsetY);
 
   ctx.beginPath();
   for (let x = offsetX; x < viewport.width; x += zoomedGrid) {
-    ctx.moveTo(Math.round(x) + 0.5, 0);
-    ctx.lineTo(Math.round(x) + 0.5, viewport.height);
+    const px = Math.round(x) + 0.5;
+    ctx.moveTo(px, 0);
+    ctx.lineTo(px, viewport.height);
   }
   for (let y = offsetY; y < viewport.height; y += zoomedGrid) {
-    ctx.moveTo(0, Math.round(y) + 0.5);
-    ctx.lineTo(viewport.width, Math.round(y) + 0.5);
+    const py = Math.round(y) + 0.5;
+    ctx.moveTo(0, py);
+    ctx.lineTo(viewport.width, py);
   }
   ctx.stroke();
 }
