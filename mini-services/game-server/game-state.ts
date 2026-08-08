@@ -95,14 +95,24 @@ export class ArenaRoom {
 
   // ── Player Management ─────────────────────────────────────────────────
 
-  addPlayer(socketId: string, name: string, skinId: string = 'skin-default', rarity: SkinRarity = 'common'): ServerSnake {
+  addPlayer(
+    socketId: string, name: string,
+    skinId: string = 'skin-default', rarity: SkinRarity = 'common',
+    bodyColor: string = '', headColor: string = '',
+  ): ServerSnake {
     const now = Date.now();
     const pos = findSafeSpawn(this.snakes as unknown as Map<string, SnakeLike>, 0, 0);
-    const base = createSnake(socketId, name, 0, pos.x, pos.y, false, now);
+
+    // Build skin override if colors are provided
+    const skinOverride = (bodyColor && headColor) ? {
+      skinId, bodyColor, headColor, accentColor: '', rarity,
+    } : null;
+
+    const base = createSnake(socketId, name, 0, pos.x, pos.y, false, now, skinOverride);
     const serverSnake: ServerSnake = {
       ...base,
-      skinId,
-      rarity,
+      skinId: base.skinId,  // Use the value from createSnake (respects override)
+      rarity: base.rarity,    // Use the value from createSnake
       socketId,
       input: { targetAngle: base.angle, boosting: false },
       lastSnapshot: null,
@@ -282,21 +292,32 @@ export class ArenaRoom {
     let savedSkinId = 'skin-default';
     let savedRarity: SkinRarity = 'common';
     let savedName = 'Player';
+    let savedColor = '';
+    let savedHeadColor = '';
     if (old) {
       savedSkinId = old.skinId;
       savedRarity = old.rarity;
       savedName = old.name;
+      savedColor = old.color;
+      savedHeadColor = old.headColor;
       if (old.alive) killSnake(old, this.nextFoodIdRef, this.foods);
       this.snakes.delete(socketId);
     }
 
     const now = Date.now();
     const pos = findSafeSpawn(this.snakes as unknown as Map<string, SnakeLike>, 0, 0);
-    const base = createSnake(socketId, savedName, 0, pos.x, pos.y, false, now);
+
+    // Pass skin override to preserve exact colors on respawn
+    const skinOverride = (savedColor && savedHeadColor) ? {
+      skinId: savedSkinId, bodyColor: savedColor, headColor: savedHeadColor,
+      accentColor: '', rarity: savedRarity,
+    } : null;
+
+    const base = createSnake(socketId, savedName, 0, pos.x, pos.y, false, now, skinOverride);
     const serverSnake: ServerSnake = {
       ...base,
-      skinId: savedSkinId,
-      rarity: savedRarity,
+      skinId: base.skinId,
+      rarity: base.rarity,
       socketId,
       input: { targetAngle: base.angle, boosting: false },
       lastSnapshot: null,
