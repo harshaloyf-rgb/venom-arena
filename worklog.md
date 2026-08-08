@@ -1054,3 +1054,25 @@ Stage Summary:
 - Death food: 15 base + score, always mixed sizes (large 5, medium 3, small 1)
 - 3-second ELIMINATED banner shows on game canvas, game visible behind, respawn blocked until 3s
 - Lint clean, no runtime errors
+
+---
+Task ID: 5
+Agent: Main
+Task: Fix tunneling, death drops, elimination screen, food spawning
+
+Work Log:
+- Added `segSegIntersect()` exact line-segment intersection function to engine.ts and game-state.ts
+- Replaced sub-step point sampling with swept collision (seg-seg intersect + point check) in both offline and online obstacle collision
+- Changed FOOD_VALUES from [1,3,5] to [1,2,5] in config.ts and shared.ts
+- Rewrote killSnake() death drop: 15+score total, 40% large(5)/30% medium(2)/rest small(1), Fisher-Yates shuffled order
+- Changed elimination screen from 3s to 5s in SnakeGame.tsx (offline + online + canRespawn gate)
+- Increased online FOOD_RESPAWN_BATCH from 5 to 25 to match offline density-based spawning
+- Removed unused DEATH_FOOD_LARGE_DIVISOR/MEDIUM_DIVISOR imports from both engines
+- Verified: lint clean, dev server running, game server starts, no browser errors
+
+Stage Summary:
+- Tunneling bug FIXED: exact swept collision eliminates all wall pass-through at any speed
+- Death drops FIXED: 15+score value, 1/2/5 values, shuffled mixed sizes (no more large→medium→small order)
+- Elimination screen FIXED: 5 seconds instead of 3
+- Food auto-spawn FIXED: online FOOD_RESPAWN_BATCH bumped to 25 (was 5, too slow with 1000 bots)
+- bodyRadius was already correct in game-state.ts line 516

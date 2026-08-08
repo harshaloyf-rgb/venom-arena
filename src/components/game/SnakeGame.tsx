@@ -437,11 +437,11 @@ export default function SnakeGame({
 
         if (isDeadRef.current) {
           const deathElapsed = performance.now() - deathTimeRef.current;
-          if (deathElapsed < 3000) {
-            // First 3s: game visible behind, show elimination banner
+          if (deathElapsed < 5000) {
+            // First 5s: game visible behind, show elimination banner
             drawEliminatedBanner(ctx, viewport, deathElapsed);
           } else {
-            // After 3s: full death overlay with respawn prompt
+            // After 5s: full death overlay with respawn prompt
             drawDeathOverlay(ctx, finalScore || state.player?.score || 0, viewport);
           }
         }
@@ -559,7 +559,7 @@ export default function SnakeGame({
         // ── Death overlay ──
         if (isDeadOnlineRef.current) {
           const deathElapsed = performance.now() - onlineDeathTimeRef.current;
-          if (deathElapsed < 3000) {
+          if (deathElapsed < 5000) {
             drawEliminatedBanner(ctx, viewport, deathElapsed);
           } else {
             drawDeathOverlay(ctx, finalScore, viewport);
@@ -582,10 +582,10 @@ export default function SnakeGame({
       animFrameRef.current = requestAnimationFrame(loop);
     };
 
-    // ── Death overlay: Space/click to respawn (only after 3s elimination) ──
+    // ── Death overlay: Space/click to respawn (only after 5s elimination) ──
     const canRespawn = () => {
-      if (isDeadOnlineRef.current) return performance.now() - onlineDeathTimeRef.current >= 3000;
-      if (isDeadRef.current) return performance.now() - deathTimeRef.current >= 3000;
+      if (isDeadOnlineRef.current) return performance.now() - onlineDeathTimeRef.current >= 5000;
+      if (isDeadRef.current) return performance.now() - deathTimeRef.current >= 5000;
       return false;
     };
     const onRespawnKey = (e: KeyboardEvent) => {
