@@ -674,13 +674,15 @@ export default function SnakeGame({
         </div>
       )}
 
-      {/* Best Ever Score + Leaderboard */}
+      {/* Leaderboard (shared) */}
       <div className="absolute top-4 right-4 w-44 pointer-events-none select-none flex flex-col gap-2">
-        {/* Best Ever */}
-        <div className="bg-black/50 backdrop-blur-sm rounded-lg p-2">
-          <div className="text-xs text-amber-400/70 font-mono mb-0.5 text-center">Best Ever</div>
-          <div className="text-sm text-amber-400 font-bold font-mono text-center">{displayHighScore.toLocaleString()}</div>
-        </div>
+        {/* Best Ever — offline only */}
+        {effectiveMode === 'offline' && (
+          <div className="bg-black/50 backdrop-blur-sm rounded-lg p-2">
+            <div className="text-xs text-amber-400/70 font-mono mb-0.5 text-center">Best Ever</div>
+            <div className="text-sm text-amber-400 font-bold font-mono text-center">{displayHighScore.toLocaleString()}</div>
+          </div>
+        )}
         {/* Leaderboard */}
         <div className="bg-black/50 backdrop-blur-sm rounded-lg p-2">
           <div className="text-xs text-white/60 font-mono mb-1 text-center">Leaderboard</div>
@@ -717,7 +719,9 @@ export default function SnakeGame({
             <Zap className="w-5 h-5" />
             <span>Boost</span>
           </div>
-          <span className="text-[10px] font-normal opacity-60">B / Left Click</span>
+          {effectiveMode === 'offline' && (
+            <span className="text-[10px] font-normal opacity-60">B / Left Click</span>
+          )}
         </button>
 
         {/* Extract Button (hold to extract) */}
@@ -737,7 +741,9 @@ export default function SnakeGame({
             <CircleDot className="w-5 h-5" />
             <span>Extract</span>
           </div>
-          <span className="text-[10px] font-normal opacity-60">E / Right Click</span>
+          {effectiveMode === 'offline' && (
+            <span className="text-[10px] font-normal opacity-60">E / Right Click</span>
+          )}
         </button>
       </div>
     </div>
