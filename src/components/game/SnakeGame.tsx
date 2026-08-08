@@ -9,9 +9,8 @@ import {
   drawControlsHint,
   drawGrid as drawGridFromRenderer,
   drawFood as drawFoodFromRenderer,
-  drawExtractionZone as drawExtractionZoneFromRenderer,
-} from './renderer';
-import { renderSnakeAtlas, renderSnakeFallback, cleanupSnakeParticles, clearSmoothedSegs } from './render-snake-atlas';
+} from './renderer-offline';
+import { renderSnakeAtlas, renderSnakeFallback, cleanupSnakeParticles, clearSmoothedSegs } from './render-snake-atlas-offline';
 import {
   type GameState,
   type Camera,
@@ -19,10 +18,10 @@ import {
   type Snake,
   FIXED_DT,
 } from '@/lib/snake';
-import { createInitialState, gameTick, respawnPlayer, type PlayerSkinOverride } from '@/lib/snake/engine';
-import { createCamera, updateCamera, getViewport, worldToScreen } from '@/lib/snake/camera';
-import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
-import { getPlayerSkinAsset, getPlayerSkinId, registerSkinAsset } from '@/lib/snake/skin-registry';
+import { createInitialState, gameTick, respawnPlayer, type PlayerSkinOverride } from '@/lib/snake/engine-offline';
+import { createCamera, updateCamera, getViewport, worldToScreen } from '@/lib/snake/camera-offline';
+import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas-offline';
+import { getPlayerSkinAsset, getPlayerSkinId, registerSkinAsset } from '@/lib/snake/skin-registry-offline';
 import { useAuth } from '@/components/providers/auth-provider';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -496,11 +495,6 @@ function renderBackground(
 
   // Grid
   drawGridFromRenderer(ctx, camera, viewport);
-
-  // Extraction zone
-  if (state.extractionZone.active) {
-    drawExtractionZoneFromRenderer(ctx, state.extractionZone, camera, viewport);
-  }
 
   // Food
   drawFoodFromRenderer(ctx, state.foods, camera, viewport);

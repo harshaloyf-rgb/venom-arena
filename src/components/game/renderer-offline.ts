@@ -1,14 +1,11 @@
 // ============================================================================
-// Renderer — Pure Canvas API rendering functions.
-//
-// Exports only the functions used by SnakeGame.tsx:
-// Exports: drawGrid, drawFood, drawExtractionZone (shared renderers)
-//   - drawDeathOverlay, drawControlsHint, drawMinimap (overlay UI)
+// Renderer — OFFLINE mode ONLY.
+// Editing this file does NOT affect online mode.
 // ============================================================================
 
 import type { Camera, FoodOrb, Snake, Viewport } from '@/lib/snake/types';
 import { ARENA_GRID_SIZE } from '@/lib/snake/config';
-import { worldToScreen } from '@/lib/snake/camera';
+import { worldToScreen } from '@/lib/snake/camera-offline';
 
 // ==========================================================================
 // Grid
@@ -107,38 +104,7 @@ export function drawFood(
   }
 }
 
-// ==========================================================================
-// Extraction Zone
-// ==========================================================================
 
-export function drawExtractionZone(
-  ctx: CanvasRenderingContext2D,
-  zone: { x: number; y: number; radius: number; active: boolean },
-  camera: Camera,
-  viewport: Viewport,
-): void {
-  const cw = viewport.width;
-  const ch = viewport.height;
-  const { x: sx, y: sy } = worldToScreen(zone.x, zone.y, camera, cw, ch);
-  const sr = zone.radius * camera.zoom;
-
-  ctx.globalAlpha = 0.06;
-  ctx.fillStyle = '#fbbf24';
-  ctx.beginPath();
-  ctx.arc(sx, sy, sr, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.globalAlpha = 0.2;
-  ctx.strokeStyle = '#fbbf24';
-  ctx.lineWidth = 2 * camera.zoom;
-  ctx.setLineDash([8 * camera.zoom, 6 * camera.zoom]);
-  ctx.beginPath();
-  ctx.arc(sx, sy, sr, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  ctx.globalAlpha = 1;
-}
 // ==========================================================================
 // Elimination banner (shown for 3s after death, game still visible behind)
 // ==========================================================================

@@ -1,14 +1,6 @@
 // ============================================================================
-// Face Cosmetics System — Canvas-drawn cosmetic items that render on the
-// snake head in-game and in shop/lab previews.
-//
-// Each cosmetic is defined with:
-//   - id, name, slot, cost, rarity, emoji, description
-//   - draw(ctx, hx, hy, headRadius, moveAngle, time) — draws the cosmetic
-//     on the snake head using canvas 2D API.
-//
-// All coordinates are PROPORTIONAL to headRadius so nothing distorts
-// regardless of zoom level or snake size.
+// Face Cosmetics System — ONLINE mode ONLY.
+// Editing this file does NOT affect offline mode.
 // ============================================================================
 
 // ─── Types ────────────────────────────────────────────────────────────────────

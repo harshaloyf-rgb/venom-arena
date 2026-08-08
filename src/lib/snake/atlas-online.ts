@@ -1,6 +1,6 @@
 // ============================================================================
-// Texture Atlas Skin Renderer — Pre-renders snake skins as offscreen canvas
-// textures. Phase C of the snake game engine rewrite.
+// Texture Atlas Skin Renderer — ONLINE mode ONLY.
+// Editing this file does NOT affect offline mode.
 // ============================================================================
 
 import type {

@@ -195,46 +195,6 @@ export const BOOST_SCORE_COST_INTERVAL = 12;
 /** Boost speed as a multiplier of base speed */
 export const BOOST_SPEED_MULTIPLIER = BOOST_SPEED / BASE_SPEED; // = 2.0
 
-// ============================================================================
-// 6. BOT — AI count, starting stats, steering, behavior parameters
-// ============================================================================
-
-/** Number of AI bots in the arena */
-export const BOT_COUNT = 0; // TODO: re-enable after snake + food are stable
-
-/** Bot starting score minimum */
-export const BOT_START_SCORE_MIN = 10;
-
-/** Bot starting score maximum */
-export const BOT_START_SCORE_MAX = 80;
-
-/** Bot max turn rate (radians per tick, ~60% of player rate for natural feel).
- *  Player: π/15 ≈ 0.209, Bot: π*0.04 ≈ 0.126 (60% ratio preserved). */
-export const BOT_MAX_TURN_RATE = Math.PI * 0.04;
-
-/** Bot food scan radius (how far a bot looks for food) */
-export const BOT_FOOD_SCAN_RADIUS = 300;
-
-/** Bot evade radius (how far a bot detects player bodies) */
-export const BOT_EVADE_RADIUS = 300;
-
-/** Bot AI prediction ticks ahead for collision avoidance */
-export const BOT_PREDICT_TICKS = 8;
-
-/** Bot body avoidance range in pixels */
-export const BOT_AVOID_RANGE = 150;
-
-/** Bot wander angle change range (radians per tick) */
-export const BOT_WANDER_RATE = 0.05;
-
-/** Probability per tick that a bot decides to boost (0.0 = never) */
-export const BOT_BOOST_CHANCE = 0.0;
-
-/** Score threshold at which bots self-destruct near extraction zone */
-export const BOT_SELF_DESTRUCT_SCORE = 100;
-
-/** Distance from arena edge at which bots start turning inward */
-export const BOT_BOUNDARY_AVOID_RADIUS = 200;
 
 // ============================================================================
 // 7. SPAWN — initial spawn radius, safe positioning, respawn timing
@@ -400,19 +360,6 @@ export const FOOD_MAGNET_MIN_SPEED = 1.0;
  *  Quadratic ramp from MIN to MAX creates the snappy vacuum snap. */
 export const FOOD_MAGNET_MAX_SPEED = 10.0;
 
-// ============================================================================
-// 14. EXTRACTION — zone, scoring, star chips, speed bonus
-// ============================================================================
 
-/** Extraction zone radius in pixels */
-export const EXTRACTION_ZONE_RADIUS = 800;
-
-// ZONE_SHRINK_RATE removed — was unused (no shrink logic implemented)
-
-/** Minimum score required to enter the extraction zone */
-export const EXTRACTION_SCORE_THRESHOLD = 50;
-
-/** Speed multiplier applied while inside the extraction zone */
-export const EXTRACTION_SPEED_BONUS = 1.5;
 
 

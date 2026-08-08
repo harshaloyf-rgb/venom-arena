@@ -1,9 +1,6 @@
 // ============================================================================
-// Game Engine — Self-contained game logic for offline mode ONLY.
-//
-// This file has its OWN copies of all game logic functions.
-// Changes here do NOT affect online mode.
-//
+// Game Engine — OFFLINE mode ONLY.
+// Editing this file does NOT affect online mode.
 // ============================================================================
 
 import type {
@@ -13,8 +10,6 @@ import type { IPathBuffer } from './pool';
 import { PathBuffer } from './pool';
 import { SpatialHash, type SpatialEntity } from './spatial-hash';
 import { distSq } from './vec2';
-import type { BotSnakeInput } from './bot-ai';
-import { getBotTarget } from './bot-ai';
 import {
   // MOVEMENT
   BASE_SPEED, BOOST_SPEED, BASE_TURN_RATE, MIN_TURN_RATE, SEGMENT_SPACING,
@@ -31,20 +26,14 @@ import {
   // BOOST
   BOOST_DROP_INTERVAL, BOOST_MIN_BODY, BOOST_MIN_SCORE, BOOST_DROP_COUNT,
   BOOST_SCORE_COST_AMOUNT, BOOST_SCORE_COST_INTERVAL,
-  // BOT
-  BOT_MAX_TURN_RATE, BOT_START_SCORE_MIN, BOT_START_SCORE_MAX,
   // SPAWN
   INITIAL_SPAWN_RADIUS, SAFE_SPAWN_DIST, SAFE_SPAWN_ATTEMPTS,
-  // EXTRACTION
-  EXTRACTION_SCORE_THRESHOLD, EXTRACTION_SPEED_BONUS,
   // SPIRAL
   SPIRAL_TURN_THRESHOLD, SPIRAL_ENTER_TICKS, SPIRAL_MAX_MULTIPLIER,
   SPIRAL_RAMP_TICKS, SPIRAL_EXIT_THRESHOLD,
   // OFFLINE-SPECIFIC
-  BOT_COUNT,
   FOOD_DENSITY_TARGET, FOOD_VISIBLE_RADIUS, FOOD_DESPAWN_RADIUS,
   FOOD_RESPAWN_BATCH, FOOD_MAX_COUNT,
-  EXTRACTION_ZONE_RADIUS,
 } from './config';
 
 // ─── Offline-only Types ──────────────────────────────────────────────────────
@@ -80,13 +69,6 @@ const SPACING_RATIO = SEGMENT_SPACING / BASE_SPEED;
 /** Scaled boost min body: covers same physical distance as BOOST_MIN_BODY * SEGMENT_SPACING */
 const BOOST_MIN_BODY_SCALED = Math.ceil(BOOST_MIN_BODY * SPACING_RATIO);
 
-const BOT_NAMES = [
-  'Viper', 'Cobra', 'Mamba', 'Python', 'Anaconda', 'Rattler',
-  'Sidewinder', 'Boa', 'Asp', 'Taipan', 'Krait', 'Copperhead',
-  'KingSnake', 'Coral', 'Adder', 'Basilisk', 'Hydra', 'Ouroboros',
-  'Naga', 'Serpent', 'Jormungandr', 'Apep', 'Quetzal', 'Coatl',
-  'Wiggles', 'Slithers', 'Fang', 'Venom', 'Toxin', 'Striker',
-];
 
 const SNAKE_PALETTES: [string, string][] = [
   ['#ef4444', '#f87171'], ['#f97316', '#fb923c'],
@@ -111,7 +93,6 @@ const MAGNET_DEATH_DIST_SQ = MAGNET_DEATH_DIST * MAGNET_DEATH_DIST;
 interface MoveContext {
   foods: FoodOrb[];
   nextFoodId: { value: number };
-  extractionZone?: { x: number; y: number; radius: number; active: boolean };
 }
 
 // ─── Module-level singletons ─────────────────────────────────────────────────
@@ -130,7 +111,7 @@ const VISIBLE_RADIUS_SQ = FOOD_VISIBLE_RADIUS * FOOD_VISIBLE_RADIUS;
 
 function createSnake(
   id: string, name: string, startScore: number,
-  posX: number, posY: number, isBot: boolean, now: number,
+  posX: number, posY: number, now: number,
   skinOverride?: PlayerSkinOverride | null,
 ): Snake {
   const targetLength = computeBodyLength(startScore);
@@ -154,7 +135,7 @@ function createSnake(
   return {
     id, name, path, angle, prevAngle: angle,
     speed: BASE_SPEED, score: startScore,
-    boosting: false, alive: true, isBot, isPlayer: !isBot,
+    boosting: false, alive: true, isBot: false, isPlayer: true,
     spawnTime: now, color, headColor,
     lastBoostDrop: 0, targetAngle: angle,
     spiral: { active: false, consecutiveTurns: 0, ticksElapsed: 0, direction: 1 },
@@ -206,36 +187,32 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
   const canBoost = wantBoost && snake.score >= BOOST_MIN_SCORE && snake.path.length > BOOST_MIN_BODY_SCALED;
   const currentSpeed = canBoost ? BOOST_SPEED : BASE_SPEED;
   const speedT = Math.min(1, Math.max(0, (currentSpeed - BASE_SPEED) / (BOOST_SPEED - BASE_SPEED)));
-  let maxTurn = snake.isBot
-    ? BOT_MAX_TURN_RATE
-    : BASE_TURN_RATE + (MIN_TURN_RATE - BASE_TURN_RATE) * speedT;
+  let maxTurn = BASE_TURN_RATE + (MIN_TURN_RATE - BASE_TURN_RATE) * speedT;
 
-  // Spiral assist (players only)
-  if (!snake.isBot) {
-    const absDiff = Math.abs(diff);
-    const turnDir: 1 | -1 = diff >= 0 ? 1 : -1;
-    const sp = snake.spiral;
-    if (!sp.active) {
-      if (absDiff >= SPIRAL_TURN_THRESHOLD && turnDir === sp.direction) {
-        sp.consecutiveTurns++;
-      } else {
-        sp.direction = turnDir;
-        sp.consecutiveTurns = absDiff >= SPIRAL_TURN_THRESHOLD ? 1 : 0;
-      }
-      if (sp.consecutiveTurns >= SPIRAL_ENTER_TICKS) {
-        sp.active = true;
-        sp.ticksElapsed = 0;
-      }
+  // Spiral assist
+  const absDiff = Math.abs(diff);
+  const turnDir: 1 | -1 = diff >= 0 ? 1 : -1;
+  const sp = snake.spiral;
+  if (!sp.active) {
+    if (absDiff >= SPIRAL_TURN_THRESHOLD && turnDir === sp.direction) {
+      sp.consecutiveTurns++;
     } else {
-      if (absDiff < SPIRAL_EXIT_THRESHOLD || turnDir !== sp.direction) {
-        sp.active = false;
-        sp.consecutiveTurns = 0;
-      } else {
-        sp.ticksElapsed++;
-        const t = Math.min(1, sp.ticksElapsed / SPIRAL_RAMP_TICKS);
-        const multiplier = 1 + (SPIRAL_MAX_MULTIPLIER - 1) * t;
-        maxTurn *= multiplier;
-      }
+      sp.direction = turnDir;
+      sp.consecutiveTurns = absDiff >= SPIRAL_TURN_THRESHOLD ? 1 : 0;
+    }
+    if (sp.consecutiveTurns >= SPIRAL_ENTER_TICKS) {
+      sp.active = true;
+      sp.ticksElapsed = 0;
+    }
+  } else {
+    if (absDiff < SPIRAL_EXIT_THRESHOLD || turnDir !== sp.direction) {
+      sp.active = false;
+      sp.consecutiveTurns = 0;
+    } else {
+      sp.ticksElapsed++;
+      const t = Math.min(1, sp.ticksElapsed / SPIRAL_RAMP_TICKS);
+      const multiplier = 1 + (SPIRAL_MAX_MULTIPLIER - 1) * t;
+      maxTurn *= multiplier;
     }
   }
 
@@ -254,15 +231,6 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
   snake.boosting = canBoost;
   const baseSpeedForState = canBoost ? BOOST_SPEED : BASE_SPEED;
   snake.speed = baseSpeedForState * brakeFactor;
-
-  if (ctx.extractionZone?.active && snake.score >= EXTRACTION_SCORE_THRESHOLD) {
-    const ez = ctx.extractionZone;
-    const dx = snake.path.getX(0) - ez.x;
-    const dy = snake.path.getY(0) - ez.y;
-    if (dx * dx + dy * dy < ez.radius * ez.radius) {
-      snake.speed *= EXTRACTION_SPEED_BONUS;
-    }
-  }
 
   // Path buffer movement
   const newHeadX = snake.path.getX(0) + Math.cos(snake.angle) * snake.speed;
@@ -560,30 +528,10 @@ function killSnake(snake: Snake, nextFoodId: { value: number }, foods: FoodOrb[]
 }
 
 // ==========================================================================
-// OFFLINE Bot Respawn
-// ==========================================================================
-
-function respawnBots(snakes: Map<string, Snake>, botCount: number, tickCount: number, now: number): Snake[] {
-  let aliveBots = 0;
-  for (const [, s] of snakes) { if (s.alive && s.isBot) aliveBots++; }
-  const deficit = botCount - aliveBots;
-  const toRespawn = Math.min(deficit, 3);
-  const newBots: Snake[] = [];
-  for (let i = 0; i < toRespawn; i++) {
-    const score = Math.floor(BOT_START_SCORE_MIN + Math.random() * (BOT_START_SCORE_MAX - BOT_START_SCORE_MIN));
-    const nameIdx = (tickCount + i) % BOT_NAMES.length;
-    const pos = findSafeSpawn(snakes, 0, 0);
-    const bot = createSnake(`bot-${now}-${i}`, BOT_NAMES[nameIdx], score, pos.x, pos.y, true, now);
-    newBots.push(bot);
-  }
-  return newBots;
-}
-
-// ==========================================================================
 // Initialization
 // ==========================================================================
 
-/** Create the initial game state (player + bots + 3000 initial food) */
+/** Create the initial game state (player + 3000 initial food) */
 export function createInitialState(
   playerSkin?: PlayerSkinOverride | null,
   initialScore?: number,
@@ -591,24 +539,15 @@ export function createInitialState(
   const state: GameState = {
     snakes: new Map(), foods: [], player: null,
     nextFoodId: 0, showControls: true, tickCount: 0,
-    extractionZone: { x: 0, y: 0, radius: EXTRACTION_ZONE_RADIUS, active: false },
+    extractionZone: { x: 0, y: 0, radius: 0, active: false },
   };
 
   const now = Date.now();
   const nextIdRef = { value: 0 };
 
-  const player = createSnake('player', 'You', initialScore ?? 0, 0, 0, false, now, playerSkin);
+  const player = createSnake('player', 'You', initialScore ?? 0, 0, 0, now, playerSkin);
   state.player = player;
   state.snakes.set(player.id, player);
-
-  for (let i = 0; i < BOT_COUNT; i++) {
-    const score = Math.floor(BOT_START_SCORE_MIN + Math.random() * (BOT_START_SCORE_MAX - BOT_START_SCORE_MIN));
-    const nameIdx = i % BOT_NAMES.length;
-    const nameSuffix = i >= BOT_NAMES.length ? ` ${Math.floor(i / BOT_NAMES.length) + 1}` : '';
-    const pos = findSafeSpawn(state.snakes, 0, 0);
-    const bot = createSnake(`bot-${i}`, BOT_NAMES[nameIdx] + nameSuffix, score, pos.x, pos.y, true, now);
-    state.snakes.set(bot.id, bot);
-  }
 
   spawnFoodBatch(nextIdRef, state.foods, 3000, 0, 0, INITIAL_SPAWN_RADIUS);
   state.nextFoodId = nextIdRef.value;
@@ -629,10 +568,7 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   const moveCtx: MoveContext = {
     foods: state.foods,
     nextFoodId: foodIdRef,
-    extractionZone: state.extractionZone,
   };
-
-  const botInputMap = state.snakes as unknown as Map<string, BotSnakeInput>;
 
   // 1. Move player
   const player = state.player;
@@ -640,14 +576,7 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
     moveSnake(player, input.targetAngle, input.boosting, now, moveCtx);
   }
 
-  // 2. Move bots
-  for (const [, snake] of state.snakes) {
-    if (!snake.alive || !snake.isBot) continue;
-    const botAngle = getBotTarget(snake as BotSnakeInput, botInputMap, state.foods);
-    moveSnake(snake, botAngle, false, now, moveCtx);
-  }
-
-  // 3. Check food eating
+  // 2. Check food eating
   const eatenIds = checkFoodEating(state.snakes.values(), state.foods, foodHash, foodValueCache, now);
   if (eatenIds.size > 0) {
     let writeIdx = 0;
@@ -657,14 +586,10 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
     state.foods.length = writeIdx;
   }
 
-
-
-  // 5. Density-based food spawning (OFFLINE-SPECIFIC)
+  // 3. Density-based food spawning (OFFLINE-SPECIFIC)
   maintainFoodAroundPlayer(state, foodIdRef);
 
-
-
-  // 7. Check collisions
+  // 4. Check collisions
   const collisionResult = checkCollisions(state.snakes, bodyHash, headHash, _insertScratch, now);
   for (const deadId of collisionResult.deadIds) {
     const deadSnake = state.snakes.get(deadId);
@@ -673,10 +598,6 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
       if (!deadSnake.isPlayer) { state.snakes.delete(deadId); }
     }
   }
-
-  // 8. Respawn dead bots
-  const newBots = respawnBots(state.snakes, BOT_COUNT, state.tickCount, now);
-  for (const bot of newBots) { state.snakes.set(bot.id, bot); }
 
   state.nextFoodId = foodIdRef.value;
 
@@ -750,7 +671,7 @@ export function respawnPlayer(state: GameState): void {
     skinId: old.skinId, bodyColor: old.color, headColor: old.headColor,
     accentColor: '', rarity: old.rarity,
   } : null;
-  const newPlayer = createSnake('player', 'You', 0, pos.x, pos.y, false, Date.now(), skinOverride);
+  const newPlayer = createSnake('player', 'You', 0, pos.x, pos.y, Date.now(), skinOverride);
   state.player = newPlayer;
   state.snakes.set(newPlayer.id, newPlayer);
 }

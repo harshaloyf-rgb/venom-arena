@@ -1,9 +1,6 @@
 // ============================================================================
-// Skin Registry — Unified bridge between shop cosmetics, presets, lab skins,
-// and the in-game atlas renderer.
-//
-// Every skin source (ALL_COSMETICS, SLITHER_PRESETS, custom lab, DEFAULT_SKINS)
-// maps to a SkinAsset so the game engine renders the correct appearance.
+// Skin Registry — OFFLINE mode ONLY.
+// Editing this file does NOT affect online mode.
 // ============================================================================
 
 import type { SkinAsset, SkinRarity } from './types';

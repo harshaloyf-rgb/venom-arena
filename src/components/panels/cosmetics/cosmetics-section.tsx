@@ -12,7 +12,7 @@ import {
   type CosmeticSlot,
   type EquippedCosmetics,
   type CosmeticRarity,
-} from '@/lib/snake/face-cosmetics';
+} from '@/lib/snake/face-cosmetics-offline';
 
 // Slots that have actual equippable face cosmetics (flag & banner are server-side)
 const EQUIPPABLE_SLOTS: CosmeticSlot[] = ['eyes', 'mouth', 'ears', 'wings', 'nose', 'hat', 'goggles', 'flag'];
