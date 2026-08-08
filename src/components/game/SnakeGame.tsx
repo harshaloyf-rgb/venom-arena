@@ -18,10 +18,11 @@ import {
   type Snake,
   FIXED_DT,
 } from '@/lib/snake';
+import { createExtractionState, updateExtractionProgress, drawExtractRing } from '@/lib/snake/extraction';
 import { createInitialState, gameTick, respawnPlayer, type PlayerSkinOverride } from '@/lib/snake/engine-offline';
-import { createCamera, updateCamera, getViewport, worldToScreen } from '@/lib/snake/camera-offline';
+import { createCamera, updateCamera, getViewport } from '@/lib/snake/camera-offline';
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas-offline';
-import { getPlayerSkinAsset, getPlayerSkinId, registerSkinAsset } from '@/lib/snake/skin-registry-offline';
+import { getPlayerSkinAsset, registerSkinAsset } from '@/lib/snake/skin-registry-offline';
 import { useAuth } from '@/components/providers/auth-provider';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -72,10 +73,8 @@ export default function SnakeGame({
   // External boost state (from UI button)
   const externalBoostRef = useRef(false);
 
-  // Extraction progress tracking
-  const extractProgressRef = useRef(0);
-  const extractLastAngleRef = useRef(0);
-  const extractActiveRef = useRef(false);
+  // Extraction progress tracking (shared logic)
+  const extractionRef = useRef(createExtractionState());
 
   // ── Leaderboard updater ──
 
@@ -136,7 +135,6 @@ export default function SnakeGame({
     // ── Resolve player's selected skin ──
     const serverSkinId = authPlayer?.currentSkin ?? 'skin-default';
     const playerSkinAsset = getPlayerSkinAsset(serverSkinId);
-    const playerSkinId = getPlayerSkinId(serverSkinId);
 
     // Build atlas for player's skin if it's not already a DEFAULT_SKIN
     if (!atlasManager.getAtlas(playerSkinAsset.id)) {
@@ -163,10 +161,11 @@ export default function SnakeGame({
     controlsDismissedRef.current = false;
     leaderboardTimerRef.current = 0;
     killsRef.current = 0;
+    extractionRef.current = createExtractionState();
     // Load highest ever score from localStorage (per arena)
     const highScoreKey = `venom-high-score-${arenaId || 'default'}`;
-    try { 
-      highScoreRef.current = parseInt(localStorage.getItem(highScoreKey) || '0', 10); 
+    try {
+      highScoreRef.current = parseInt(localStorage.getItem(highScoreKey) || '0', 10);
       setDisplayHighScore(highScoreRef.current);
     } catch { highScoreRef.current = 0; }
 
@@ -203,44 +202,24 @@ export default function SnakeGame({
       const inputState = input.getState();
 
       // ── Frame elapsed (for extraction progress) ──
-      const prevFrameTimeRef = lastTimeRef.current || timestamp;
-      const frameElapsed = Math.min(timestamp - prevFrameTimeRef, 100);
+      const prevFrameTime = lastTimeRef.current || timestamp;
+      const frameElapsed = Math.min(timestamp - prevFrameTime, 100);
 
       // ── External boost: wire UI button into input handler ──
       input.externalBoost = externalBoostRef.current;
 
-      // ── Extraction progress tracking ──
+      // ── Guard: game state must exist ──
       const gameState = gameStateRef.current;
       if (!gameState) {
         animFrameRef.current = requestAnimationFrame(loop);
         return;
       }
 
-      const hasExtractionZone = gameState.extractionZone?.active;
-      const isExtracting = hasExtractionZone && input.isExtracting();
-      if (isExtracting && !isDeadRef.current) {
-        if (!extractActiveRef.current) {
-          extractActiveRef.current = true;
-          extractProgressRef.current = 0;
-          extractLastAngleRef.current = inputState.targetAngle;
-        }
-        const angleDelta = Math.abs(inputState.targetAngle - extractLastAngleRef.current);
-        const wrappedDelta = Math.min(angleDelta, Math.PI * 2 - angleDelta);
-        if (wrappedDelta > 0.05) {
-          extractProgressRef.current = 0;
-          extractLastAngleRef.current = inputState.targetAngle;
-        } else {
-          extractProgressRef.current += frameElapsed / 3000;
-          if (extractProgressRef.current >= 1.0) {
-            extractProgressRef.current = 0;
-            extractActiveRef.current = false;
-            if (onExit) onExit();
-          }
-        }
-      } else {
-        extractActiveRef.current = false;
-        extractProgressRef.current = 0;
-      }
+      // ── Extraction progress tracking (shared) ──
+      updateExtractionProgress(
+        extractionRef.current, input.isExtracting(), isDeadRef.current,
+        inputState.targetAngle, frameElapsed, onExit,
+      );
 
       // Dismiss controls on first input
       if (!controlsDismissedRef.current &&
@@ -317,9 +296,9 @@ export default function SnakeGame({
         renderSnakeAtlas(ctx, gameState.player, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY);
       }
 
-      // Extraction progress ring on snake head
-      if (extractActiveRef.current && extractProgressRef.current > 0 && gameState.player && gameState.player.alive) {
-        drawExtractRing(ctx, gameState.player, cameraRef.current, viewport, extractProgressRef.current);
+      // Extraction progress ring on snake head (shared)
+      if (extractionRef.current.active && extractionRef.current.progress > 0 && gameState.player && gameState.player.alive) {
+        drawExtractRing(ctx, gameState.player, cameraRef.current, viewport, extractionRef.current.progress);
       }
 
       // HUD
@@ -476,7 +455,7 @@ function cleanupDeadSnakeParticles(snakeId: string): void {
 }
 
 // ============================================================================
-// Helper: Render background (grid, food, extraction zone)
+// Helper: Render background (grid, food)
 // ============================================================================
 
 function renderBackground(
@@ -619,55 +598,6 @@ function drawMinimapTopLeft(
   ctx.beginPath();
   ctx.arc(cx, cy, 3, 0, Math.PI * 2);
   ctx.fill();
-}
-
-// ============================================================================
-// Extraction progress ring — drawn on snake head (white → green)
-// ============================================================================
-
-function drawExtractRing(
-  ctx: CanvasRenderingContext2D,
-  snake: Snake,
-  camera: Camera,
-  viewport: Viewport,
-  progress: number,
-): void {
-  const hx = snake.path.headX;
-  const hy = snake.path.headY;
-  const { x: sx, y: sy } = worldToScreen(hx, hy, camera, viewport.width, viewport.height);
-  const zoom = camera.zoom;
-  const ringRadius = (snake.bodyRadius + 10) * zoom;
-  const clampedProgress = Math.max(0, Math.min(1, progress));
-
-  // Background ring
-  ctx.beginPath();
-  ctx.arc(sx, sy, ringRadius, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-  ctx.lineWidth = 3 * zoom;
-  ctx.stroke();
-
-  // Progress arc: white → green
-  const startAngle = -Math.PI / 2;
-  const endAngle = startAngle + clampedProgress * Math.PI * 2;
-  const r = Math.round(255 - clampedProgress * 150);
-  const g = Math.round(255 * clampedProgress + 200 * (1 - clampedProgress));
-  const b = Math.round(255 * (1 - clampedProgress));
-
-  ctx.beginPath();
-  ctx.arc(sx, sy, ringRadius, startAngle, endAngle);
-  ctx.strokeStyle = `rgb(${r}, ${g}, ${b})`;
-  ctx.lineWidth = 3 * zoom;
-  ctx.lineCap = 'round';
-  ctx.stroke();
-  ctx.lineCap = 'butt';
-
-  // Percentage text
-  const pct = Math.floor(clampedProgress * 100);
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-  ctx.font = `bold ${Math.round(11 * zoom)}px monospace`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(`${pct}%`, sx, sy - ringRadius - 10 * zoom);
 }
 
 // ============================================================================

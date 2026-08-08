@@ -15,3 +15,5 @@ export * from './vec2';
 export * from './pool';
 export * from './spatial-hash';
 export * from './snapshot';
+export * from './collision';
+export * from './extraction';

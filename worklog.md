@@ -113,3 +113,25 @@ Stage Summary:
 - Extraction zone removed from engines, renderers, and config
 - Committed and pushed as 4581a8c
 
+---
+Task ID: 1
+Agent: main
+Task: Fix extraction not working in offline mode + move collision and extraction to shared files
+
+Work Log:
+- Diagnosed extraction bug: `gameState.extractionZone?.active` was always `false` because extraction ZONE was removed previously, but extraction RING (press E, 3-sec progress) was still gated on it
+- Created `src/lib/snake/extraction.ts` (shared): ExtractionState interface, createExtractionState(), updateExtractionProgress(), drawExtractRing()
+- Created `src/lib/snake/collision.ts` (shared): KillEvent interface, CollisionResult interface, checkCollisions() with spatial hashing
+- Updated `src/lib/snake/index.ts` to export collision and extraction modules
+- Updated `src/lib/snake/engine-offline.ts`: removed ~110 lines of duplicated collision code, imports from shared collision.ts, re-exports KillEvent for backward compat
+- Updated `src/lib/snake/engine-online.ts`: same changes as offline engine
+- Rewrote `src/components/game/SnakeGame.tsx`: removed extractionZone gate, uses shared extraction module, removed duplicated drawExtractRing function
+- Rewrote `src/components/game/OnlineSnakeGame.tsx`: same changes as offline component
+- Removed unused `getPlayerSkinId` import from both components
+- Verified: lint clean, dev server no errors, browser test passes (game loads, extraction button visible, E key triggers extraction ring, no console errors)
+
+Stage Summary:
+- Extraction now works in both offline and online modes (press E / right click / Extract button)
+- Collision detection is in shared `collision.ts` — edit once, affects both modes
+- Extraction logic is in shared `extraction.ts` — edit once, affects both modes
+- Architecture: Layer 1 shared now includes collision.ts and extraction.ts alongside types, config, vec2, pool, spatial-hash, snapshot
