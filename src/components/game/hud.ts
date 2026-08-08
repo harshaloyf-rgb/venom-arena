@@ -76,7 +76,7 @@ export function renderHUD(
   ctx.fill();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = '11px monospace';
+  ctx.font = '9px monospace';
   ctx.fillStyle = '#94a3b8';
   ctx.fillText(`Rank ${rank} / ${aliveSnakes}`, MAP_PAD + MAP_SIZE / 2, rankY + 12);
 
@@ -85,7 +85,7 @@ export function renderHUD(
   const scoreText = `Score ${scoreVal.toLocaleString()}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
-  ctx.font = 'bold 13px monospace';
+  ctx.font = 'bold 10px monospace';
   ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
   const tw = ctx.measureText(scoreText).width;
   const boxW = Math.max(tw + 28, 120);
@@ -103,11 +103,11 @@ export function renderHUD(
   ctx.fill();
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
-  ctx.font = '11px monospace';
+  ctx.font = '9px monospace';
   ctx.fillStyle = '#a0a0a0';
   ctx.fillText('Kills', cw - krPad - 52, ch - krPad - 20);
   ctx.fillStyle = '#f87171';
-  ctx.font = 'bold 13px monospace';
+  ctx.font = 'bold 10px monospace';
   ctx.fillText(String(kills), cw - krPad - 10, ch - krPad - 20);
 }
 

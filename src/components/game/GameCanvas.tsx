@@ -376,16 +376,16 @@ export default function GameCanvas({
       <div className="absolute top-4 right-4 w-44 pointer-events-none select-none flex flex-col gap-2">
         {/* Best Ever */}
         <div className="bg-black/50 backdrop-blur-sm rounded-lg px-2 py-1.5">
-          <div className="text-[9px] text-amber-400/70 font-mono text-center">Best Ever</div>
-          <div className="text-[10px] text-amber-400 font-bold font-mono text-center leading-tight">{displayHighScore.toLocaleString()}</div>
+          <div className="text-[8px] text-amber-400/70 font-mono text-center">Best Ever</div>
+          <div className="text-[9px] text-amber-400 font-bold font-mono text-center leading-tight">{displayHighScore.toLocaleString()} <span className="font-normal opacity-60">score</span></div>
         </div>
         {/* Leaderboard */}
         <div className="bg-black/50 backdrop-blur-sm rounded-lg p-2">
-          <div className="text-xs text-white/60 font-mono mb-1 text-center">Leaderboard</div>
+          <div className="text-[10px] text-white/60 font-mono mb-1 text-center">Leaderboard</div>
           {leaderboard.map((entry, i) => (
             <div
               key={i}
-              className={`flex justify-between text-xs font-mono px-1 py-0.5 rounded ${
+              className={`flex justify-between text-[10px] font-mono px-1 py-0.5 rounded ${
                 entry.name === 'You' ? 'text-green-400 bg-white/5' : 'text-white/70'
               }`}
             >
