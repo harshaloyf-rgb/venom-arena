@@ -8,8 +8,8 @@ import type {
 } from './types';
 import type { IPathBuffer } from './pool';
 import { PathBuffer } from './pool';
-import { SpatialHash, type SpatialEntity } from './spatial-hash';
-import { distSq } from './vec2';
+import { SpatialHash } from './spatial-hash';
+import { checkCollisions, type KillEvent } from './collision';
 import {
   // MOVEMENT
   BASE_SPEED, BOOST_SPEED, BASE_TURN_RATE, MIN_TURN_RATE, SEGMENT_SPACING,
@@ -19,7 +19,7 @@ import {
   FOOD_SPAWN_WEIGHTS, FOOD_VALUES, FOOD_RADII,
   FOOD_COLORS, FOOD_GLOW_COLORS,
   // COLLISION
-  SNAKE_RADIUS, SPAWN_PROTECTION_MS, SPATIAL_CELL_SIZE,
+  SNAKE_RADIUS,
   // FOOD MAGNET
   FOOD_MAGNET_PULL_RADIUS, FOOD_MAGNET_DEATH_RADIUS,
   FOOD_MAGNET_MIN_SPEED, FOOD_MAGNET_MAX_SPEED,
@@ -49,15 +49,8 @@ export interface PlayerSkinOverride {
   rarity: SkinRarity;
 }
 
-/** Kill event from offline collisions */
-export interface KillEvent {
-  victimId: string;
-  victimName: string;
-  killerId: string;
-  killerName: string;
-  score: number;
-  timestamp: number;
-}
+/** Re-export KillEvent from shared collision for backward compat */
+export type { KillEvent } from './collision';
 
 // ─── Offline-only Constants ──────────────────────────────────────────────────
 
@@ -80,9 +73,6 @@ const SNAKE_PALETTES: [string, string][] = [
 
 const FOOD_SIZES: Array<FoodSize> = ['small', 'medium', 'large'];
 
-const COLLISION_DIST_SQ = SNAKE_RADIUS * 2 * SNAKE_RADIUS * 2;
-
-
 const MAGNET_PULL_DIST = SNAKE_RADIUS + FOOD_MAGNET_PULL_RADIUS;
 const MAGNET_DEATH_DIST = SNAKE_RADIUS + FOOD_MAGNET_DEATH_RADIUS;
 const MAGNET_PULL_DIST_SQ = MAGNET_PULL_DIST * MAGNET_PULL_DIST;
@@ -101,7 +91,6 @@ const foodHash = new SpatialHash();
 const bodyHash = new SpatialHash();
 const headHash = new SpatialHash();
 const foodValueCache = new Map<number, number>();
-const _insertScratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
 const DESPAWN_RADIUS_SQ = FOOD_DESPAWN_RADIUS * FOOD_DESPAWN_RADIUS;
 const VISIBLE_RADIUS_SQ = FOOD_VISIBLE_RADIUS * FOOD_VISIBLE_RADIUS;
 
@@ -377,119 +366,7 @@ function checkFoodEating(
 }
 
 
-// ==========================================================================
-// OFFLINE Collisions
-// ==========================================================================
-
-interface CollisionResult {
-  deadIds: Set<string>;
-  killEvents: KillEvent[];
-}
-
-function checkCollisions(
-  snakes: Map<string, Snake>, bh: SpatialHash, hh: SpatialHash, scratch: SpatialEntity, now: number,
-): CollisionResult {
-  bh.clear();
-  scratch.radius = SNAKE_RADIUS;
-  for (const [, snake] of snakes) {
-    if (!snake.alive) continue;
-    const len = snake.path.length;
-    scratch.id = snake.id;
-    for (let i = 0; i < len; i += 2) {
-      scratch.x = snake.path.getX(i);
-      scratch.y = snake.path.getY(i);
-      bh.insert(scratch);
-    }
-  }
-
-  hh.clear();
-  const dotDist = 0.75;
-  for (const [, snake] of snakes) {
-    if (!snake.alive) continue;
-    scratch.x = snake.path.headX + Math.cos(snake.angle) * snake.bodyRadius * dotDist;
-    scratch.y = snake.path.headY + Math.sin(snake.angle) * snake.bodyRadius * dotDist;
-    scratch.radius = SNAKE_RADIUS;
-    scratch.id = snake.id;
-    hh.insert(scratch);
-  }
-
-  const deadSnakes = new Set<string>();
-  const killEvents: KillEvent[] = [];
-
-  // Head-to-body
-  for (const [, snake] of snakes) {
-    if (!snake.alive || deadSnakes.has(snake.id)) continue;
-    const dotX = snake.path.headX + Math.cos(snake.angle) * snake.bodyRadius * dotDist;
-    const dotY = snake.path.headY + Math.sin(snake.angle) * snake.bodyRadius * dotDist;
-    if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
-
-    const nearby = bh.query(dotX, dotY, SNAKE_RADIUS * 2);
-    for (let i = 0; i < nearby.length; i++) {
-      const entity = nearby[i];
-      const otherId = entity.id as string;
-      if (otherId === snake.id) continue;
-      if (distSq(dotX, dotY, entity.x, entity.y) <= COLLISION_DIST_SQ) {
-        deadSnakes.add(snake.id);
-        const killer = snakes.get(otherId);
-        killEvents.push({ victimId: snake.id, victimName: snake.name, killerId: otherId, killerName: killer?.name ?? 'Unknown', score: snake.score, timestamp: now });
-        break;
-      }
-    }
-  }
-
-  // Head-on-head
-  for (const [, snake] of snakes) {
-    if (!snake.alive || deadSnakes.has(snake.id)) continue;
-    if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
-    const dotX = snake.path.headX + Math.cos(snake.angle) * snake.bodyRadius * dotDist;
-    const dotY = snake.path.headY + Math.sin(snake.angle) * snake.bodyRadius * dotDist;
-
-    const nearby = hh.query(dotX, dotY, SNAKE_RADIUS * 2);
-    for (let i = 0; i < nearby.length; i++) {
-      const otherId = nearby[i].id as string;
-      if (otherId === snake.id || deadSnakes.has(otherId)) continue;
-      const otherSnake = snakes.get(otherId);
-      if (!otherSnake || !otherSnake.alive) continue;
-      if (now - otherSnake.spawnTime < SPAWN_PROTECTION_MS) continue;
-
-      const otherDotX = otherSnake.path.headX + Math.cos(otherSnake.angle) * otherSnake.bodyRadius * dotDist;
-      const otherDotY = otherSnake.path.headY + Math.sin(otherSnake.angle) * otherSnake.bodyRadius * dotDist;
-      const dx = dotX - otherDotX;
-      const dy = dotY - otherDotY;
-      if (dx * dx + dy * dy > COLLISION_DIST_SQ) continue;
-
-      const lenA = snake.path.length;
-      const lenB = otherSnake.path.length;
-      const aBoost = snake.boosting;
-      const bBoost = otherSnake.boosting;
-
-      if (lenA > lenB) {
-        if (!aBoost && bBoost) {
-          deadSnakes.add(snake.id);
-          killEvents.push({ victimId: snake.id, victimName: snake.name, killerId: otherId, killerName: otherSnake.name, score: snake.score, timestamp: now });
-        } else {
-          deadSnakes.add(otherId);
-          killEvents.push({ victimId: otherId, victimName: otherSnake.name, killerId: snake.id, killerName: snake.name, score: otherSnake.score, timestamp: now });
-        }
-      } else if (lenB > lenA) {
-        if (!bBoost && aBoost) {
-          deadSnakes.add(otherId);
-          killEvents.push({ victimId: otherId, victimName: otherSnake.name, killerId: snake.id, killerName: snake.name, score: otherSnake.score, timestamp: now });
-        } else {
-          deadSnakes.add(snake.id);
-          killEvents.push({ victimId: snake.id, victimName: snake.name, killerId: otherId, killerName: otherSnake.name, score: snake.score, timestamp: now });
-        }
-      } else {
-        deadSnakes.add(snake.id);
-        deadSnakes.add(otherId);
-        killEvents.push({ victimId: snake.id, victimName: snake.name, killerId: otherId, killerName: otherSnake.name, score: snake.score, timestamp: now });
-        killEvents.push({ victimId: otherId, victimName: otherSnake.name, killerId: snake.id, killerName: snake.name, score: otherSnake.score, timestamp: now });
-      }
-    }
-  }
-
-  return { deadIds: deadSnakes, killEvents };
-}
+// (Collision detection moved to shared collision.ts)
 
 // ==========================================================================
 // OFFLINE Death & Food Distribution
@@ -589,8 +466,8 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   // 3. Density-based food spawning (OFFLINE-SPECIFIC)
   maintainFoodAroundPlayer(state, foodIdRef);
 
-  // 4. Check collisions
-  const collisionResult = checkCollisions(state.snakes, bodyHash, headHash, _insertScratch, now);
+  // 4. Check collisions (shared)
+  const collisionResult = checkCollisions(state.snakes, bodyHash, headHash, now);
   for (const deadId of collisionResult.deadIds) {
     const deadSnake = state.snakes.get(deadId);
     if (deadSnake) {
