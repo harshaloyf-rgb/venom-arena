@@ -138,19 +138,6 @@ export default function SnakeGame({
     setLeaderboard(entries.slice(0, 5));
   }, []);
 
-  // ── Leaderboard updater (online — from snapshot) ──
-
-  const updateOnlineLeaderboard = useCallback((snakes: SnakeSnapshot[]) => {
-    const entries: { name: string; score: number }[] = [];
-    for (const s of snakes) {
-      if (s.alive) {
-        entries.push({ name: s.name, score: Math.floor(s.score) });
-      }
-    }
-    entries.sort((a, b) => b.score - a.score);
-    setLeaderboard(entries.slice(0, 5));
-  }, []);
-
   // ── Respawn handler (offline) ──
 
   const handleRespawn = useCallback(() => {
@@ -292,6 +279,13 @@ export default function SnakeGame({
 
       onlineEngine.onError = (msg) => {
         setOnlineError(msg);
+      };
+
+      onlineEngine.onKill = (entry) => {
+        // Track player kills (same as offline killEvents loop)
+        if (entry.killerId === onlineMySnakeIdRef.current) {
+          killsRef.current++;
+        }
       };
 
       onlineEngine.onPlayerDied = () => {
@@ -506,7 +500,7 @@ export default function SnakeGame({
       }
 
       // ────────────────────────────────────────────────────────────────────
-      // ONLINE MODE — server snapshots + interpolation (same renderers as offline)
+      // ONLINE MODE — exact copy of offline rendering, data from server snapshots
       // ────────────────────────────────────────────────────────────────────
       else if (effectiveMode === 'online' && onlineEngine) {
         // Forward input to server
@@ -518,7 +512,6 @@ export default function SnakeGame({
         const prevSnap = onlinePrevSnapRef.current;
 
         if (!currSnap || currSnap.snakes.length === 0) {
-          // No snapshot yet — draw loading
           ctx.fillStyle = '#0a0a0f';
           ctx.fillRect(0, 0, w, h);
           drawConnectionOverlay(ctx, { width: w, height: h }, onlineEngine.connectionState);
@@ -526,169 +519,80 @@ export default function SnakeGame({
           return;
         }
 
-        // ── Interpolation factor between snapshots (0 = prev, 1 = curr) ──
-        const snapAge = performance.now() - onlineSnapTimeRef.current;
-        const SNAPSHOT_INTERVAL = 50; // 20Hz broadcast
-        const t = Math.min(snapAge / SNAPSHOT_INTERVAL, 1.0);
-
-        // ── Build interpolated snakes (same visual quality as offline) ──
-        const adaptedSnakes = new Map<string, Snake>();
-        let adaptedPlayer: Snake | null = null;
-        const localTargetAngle = inputState.targetAngle;
-
-        for (const snapSnake of currSnap.snakes) {
-          if (!snapSnake.alive) continue;
-          const isPlayer = snapSnake.id === onlineMySnakeIdRef.current;
-
-          // Find matching snake in previous snapshot for interpolation
-          const prevSnake = prevSnap?.snakes.find(s => s.id === snapSnake.id);
-          const prevBody = onlinePrevBodyRef.current.get(snapSnake.id);
-
-          // Interpolate head position (same as before)
-          let hx = snapSnake.hx;
-          let hy = snapSnake.hy;
-          let angle = snapSnake.angle;
-          if (prevSnake && prevSnake.alive && t < 1.0) {
-            hx = lerp(prevSnake.hx, snapSnake.hx, t);
-            hy = lerp(prevSnake.hy, snapSnake.hy, t);
-            angle = snapSnake.angle;
-          }
-
-          // Build PathBuffer with INTERPOLATED body segments (not just snapping)
-          const path = getOrCreatePath(onlinePathCacheRef.current, snapSnake.id, snapSnake.bodyLen + 1);
-          rebuildPathInterpolated(path, hx, hy, snapSnake, prevBody, t);
-
-          // For player snake, override angle with local input (responsive steering)
-          const finalAngle = isPlayer ? localTargetAngle : angle;
-
-          // Compute speed from head movement (matches offline visual behavior)
-          let computedSpeed = 0;
-          if (prevSnake && prevSnake.alive) {
-            const dx = snapSnake.hx - prevSnake.hx;
-            const dy = snapSnake.hy - prevSnake.hy;
-            const snapDist = Math.sqrt(dx * dx + dy * dy);
-            const snapDt = 50; // 20Hz = 50ms per snapshot
-            computedSpeed = snapDist / (snapDt / 1000);
-          }
-
-          const adapted: Snake = {
-            id: snapSnake.id,
-            name: snapSnake.name,
-            path,
-            angle: finalAngle,
-            prevAngle: prevSnake?.angle ?? snapSnake.angle,
-            speed: computedSpeed,
-            score: snapSnake.score,
-            alive: snapSnake.alive,
-            isBot: !isPlayer,
-            isPlayer,
-            spawnTime: now - 5000,
-            color: snapSnake.color,
-            headColor: snapSnake.headColor,
-            lastBoostDrop: 0,
-            targetAngle: finalAngle,
-            spiral: { active: false, consecutiveTurns: 0, ticksElapsed: 0, direction: 1 },
-            bodyRadius: snapSnake.bodyRadius,
-            boosting: snapSnake.boosting,
-            skinId: snapSnake.skinId,
-            rarity: snapSnake.rarity,
-          };
-
-          adaptedSnakes.set(snapSnake.id, adapted);
-          if (isPlayer) adaptedPlayer = adapted;
+        // ── Build GameState from server snapshot (same shape as offline) ──
+        const state = buildOnlineGameState(
+          currSnap, prevSnap, onlineMySnakeIdRef.current,
+          onlinePrevBodyRef.current, onlinePathCacheRef.current,
+          inputState.targetAngle, now, onlineSnapTimeRef.current,
+        );
+        if (!state) {
+          animFrameRef.current = requestAnimationFrame(loop);
+          return;
         }
 
-        // ── Camera: use same updateCamera as offline (smooth zoom) ──
-        if (adaptedPlayer) {
-          updateCamera(cameraRef.current, adaptedPlayer, w, h);
+        // Track player kills from server kill events
+        // (killsRef is updated in onlineEngine.onKill callback)
+
+        // Camera
+        if (state.player && state.player.alive) {
+          updateCamera(cameraRef.current, state.player, w, h);
         }
 
         const viewport: Viewport = getViewport(cameraRef.current, w, h);
 
-        // Get mouse position for ultra-responsive eye tracking
+        // Get raw mouse screen position for ultra-responsive eye tracking
         const mousePos = input.getMousePos();
         const mouseSX = mousePos?.x;
         const mouseSY = mousePos?.y;
 
-        // ── Render: background (clear, grid, extraction zone, food, star chips) ──
-        renderOfflineBackground(ctx, {
-          snakes: adaptedSnakes,
-          foods: currSnap.foods.map(f => ({
-            id: f.id, x: f.x, y: f.y,
-            size: f.size, value: f.value,
-            radius: FOOD_RADII[f.size === 'medium' ? 1 : f.size === 'large' ? 2 : 0],
-            color: FOOD_COLORS[f.size === 'medium' ? 1 : f.size === 'large' ? 2 : 0],
-            glowColor: FOOD_GLOW_COLORS[f.size === 'medium' ? 1 : f.size === 'large' ? 2 : 0],
-            magnetized: false,
-          })) as FoodOrb[],
-          starChips: currSnap.starChips.map((c, i) => ({
-            id: c.id, x: c.x, y: c.y, value: c.value,
-            radius: STAR_CHIP_RADIUS,
-            color: STAR_CHIP_COLORS[i % STAR_CHIP_COLORS.length],
-            glowColor: STAR_CHIP_GLOW,
-            spawnTime: now - 10000,
-          })) as StarChip[],
-          player: adaptedPlayer,
-          nextFoodId: 0, nextStarChipId: 0,
-          showControls: false, tickCount: currSnap.tick,
-          extractionZone: currSnap.extraction,
-        } as GameState, cameraRef.current, viewport, fc.fps, now);
+        // ── Render: grid, food, star chips, extraction zone ──
+        renderOfflineBackground(ctx, state, cameraRef.current, viewport, fc.fps, now);
 
-        // ── Render snakes — player uses atlas, others use fallback ──
-        for (const [, s] of adaptedSnakes) {
-          if (s.isPlayer) {
-            renderSnakeAtlas(ctx, s, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY);
-          } else {
+        // ── Render snakes: bots use fallback, player uses atlas ──
+        for (const [, s] of state.snakes) {
+          if (s.alive && !s.isPlayer) {
             renderSnakeFallback(ctx, s, cameraRef.current, viewport, now);
           }
         }
+        if (state.player && state.player.alive) {
+          renderSnakeAtlas(ctx, state.player, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY);
+        }
 
         // Extraction progress ring on snake head
-        if (extractActiveRef.current && extractProgressRef.current > 0 && adaptedPlayer?.alive) {
-          drawExtractRing(ctx, adaptedPlayer, cameraRef.current, viewport, extractProgressRef.current);
+        if (extractActiveRef.current && extractProgressRef.current > 0 && state.player && state.player.alive) {
+          drawExtractRing(ctx, state.player, cameraRef.current, viewport, extractProgressRef.current);
         }
 
-        // ── HUD — use same layout as offline (minimap, rank, score, kills) ──
-        if (adaptedPlayer) {
-          renderOfflineHUD(ctx, {
-            snakes: adaptedSnakes,
-            foods: [],
-            starChips: [],
-            player: adaptedPlayer,
-            nextFoodId: 0, nextStarChipId: 0,
-            showControls: false, tickCount: 0,
-            extractionZone: currSnap.extraction,
-          } as GameState, cameraRef.current, viewport, fc.fps, now, killsRef.current, 0);
-        }
-
-        // Controls hint on first join
-        if (showControlsRef.current && adaptedPlayer?.alive) {
+        // HUD (includes minimap, rank, score, kills)
+        renderOfflineHUD(ctx, state, cameraRef.current, viewport, fc.fps, now, killsRef.current, highScoreRef.current);
+        if (showControlsRef.current && state.player && state.player.alive) {
           drawControlsHint(ctx, viewport);
         }
 
         // Mouse cursor indicator (slither.io style crosshair)
         drawMouseCursor(ctx, input);
 
-        // ── Death overlay ──
         if (isDeadOnlineRef.current) {
           const deathElapsed = performance.now() - onlineDeathTimeRef.current;
           if (deathElapsed < 5000) {
+            // First 5s: game visible behind, show elimination banner
             drawEliminatedBanner(ctx, viewport, deathElapsed);
           } else {
-            drawDeathOverlay(ctx, finalScore, viewport);
+            // After 5s: full death overlay with respawn prompt
+            drawDeathOverlay(ctx, finalScore || state.player?.score || 0, viewport);
           }
         }
 
-        // ── Connection status on canvas ──
+        // Connection status overlay (online-only addition)
         if (!onlineEngine.isConnected) {
           drawConnectionOverlay(ctx, viewport, onlineEngine.connectionState);
         }
 
-        // ── Update leaderboard ──
+        // Update leaderboard every ~0.5s
         leaderboardTimerRef.current++;
         if (leaderboardTimerRef.current >= 30) {
           leaderboardTimerRef.current = 0;
-          updateOnlineLeaderboard(currSnap.snakes);
+          updateLeaderboard(state);
         }
       }
 
@@ -731,7 +635,7 @@ export default function SnakeGame({
       onlinePathCacheRef.current.clear();
       onlinePrevBodyRef.current.clear();
     };
-  }, [mode, arenaId, authToken, handleRespawn, updateLeaderboard, updateOnlineLeaderboard, authPlayer]);
+  }, [mode, arenaId, authToken, handleRespawn, updateLeaderboard, authPlayer]);
 
   // ── Render ──
 
@@ -950,6 +854,123 @@ function rebuildPathInterpolated(
     }
   }
   path.length = totalLen;
+}
+
+// ============================================================================
+// Helper: Build a GameState from server snapshots (same shape as offline state)
+// This is the ONLY bridge between online data and offline rendering code.
+// ============================================================================
+
+function buildOnlineGameState(
+  currSnap: ArenaSnapshot,
+  prevSnap: ArenaSnapshot | null,
+  mySnakeId: string | null,
+  prevBodyCache: Map<string, { bodyX: number[]; bodyY: number[]; bodyLen: number }>,
+  pathCache: Map<string, PathBuffer>,
+  localTargetAngle: number,
+  now: number,
+  snapTime: number,
+): GameState | null {
+  // Interpolation factor between snapshots (0 = prev, 1 = curr)
+  const snapAge = performance.now() - snapTime;
+  const SNAPSHOT_INTERVAL = 50; // 20Hz broadcast
+  const t = Math.min(snapAge / SNAPSHOT_INTERVAL, 1.0);
+
+  // Build snakes map
+  const snakes = new Map<string, Snake>();
+  let player: Snake | null = null;
+
+  for (const snapSnake of currSnap.snakes) {
+    if (!snapSnake.alive) continue;
+    const isPlayer = snapSnake.id === mySnakeId;
+
+    // Find matching snake in previous snapshot for interpolation
+    const prevSnake = prevSnap?.snakes.find(s => s.id === snapSnake.id);
+    const prevBody = prevBodyCache.get(snapSnake.id);
+
+    // Interpolate head position
+    let hx = snapSnake.hx;
+    let hy = snapSnake.hy;
+    let angle = snapSnake.angle;
+    if (prevSnake && prevSnake.alive && t < 1.0) {
+      hx = lerp(prevSnake.hx, snapSnake.hx, t);
+      hy = lerp(prevSnake.hy, snapSnake.hy, t);
+      angle = snapSnake.angle;
+    }
+
+    // Build PathBuffer with interpolated body segments
+    const path = getOrCreatePath(pathCache, snapSnake.id, snapSnake.bodyLen + 1);
+    rebuildPathInterpolated(path, hx, hy, snapSnake, prevBody, t);
+
+    // For player snake, override angle with local input (responsive steering)
+    const finalAngle = isPlayer ? localTargetAngle : angle;
+
+    // Compute speed from head movement
+    let computedSpeed = 0;
+    if (prevSnake && prevSnake.alive) {
+      const dx = snapSnake.hx - prevSnake.hx;
+      const dy = snapSnake.hy - prevSnake.hy;
+      const snapDist = Math.sqrt(dx * dx + dy * dy);
+      computedSpeed = snapDist / 0.05; // 50ms per snapshot
+    }
+
+    const snake: Snake = {
+      id: snapSnake.id,
+      name: snapSnake.name,
+      path,
+      angle: finalAngle,
+      prevAngle: prevSnake?.angle ?? snapSnake.angle,
+      speed: computedSpeed,
+      score: snapSnake.score,
+      alive: snapSnake.alive,
+      isBot: !isPlayer,
+      isPlayer,
+      spawnTime: now - 5000,
+      color: snapSnake.color,
+      headColor: snapSnake.headColor,
+      lastBoostDrop: 0,
+      targetAngle: finalAngle,
+      spiral: { active: false, consecutiveTurns: 0, ticksElapsed: 0, direction: 1 },
+      bodyRadius: snapSnake.bodyRadius,
+      boosting: snapSnake.boosting,
+      skinId: snapSnake.skinId,
+      rarity: snapSnake.rarity,
+    };
+
+    snakes.set(snapSnake.id, snake);
+    if (isPlayer) player = snake;
+  }
+
+  // Build foods array (same shape as offline FoodOrb)
+  const foods: FoodOrb[] = currSnap.foods.map(f => ({
+    id: f.id, x: f.x, y: f.y,
+    size: f.size, value: f.value,
+    radius: FOOD_RADII[f.size === 'medium' ? 1 : f.size === 'large' ? 2 : 0],
+    color: FOOD_COLORS[f.size === 'medium' ? 1 : f.size === 'large' ? 2 : 0],
+    glowColor: FOOD_GLOW_COLORS[f.size === 'medium' ? 1 : f.size === 'large' ? 2 : 0],
+    magnetized: false,
+  }));
+
+  // Build star chips array (same shape as offline StarChip)
+  const starChips: StarChip[] = currSnap.starChips.map((c, i) => ({
+    id: c.id, x: c.x, y: c.y, value: c.value,
+    radius: STAR_CHIP_RADIUS,
+    color: STAR_CHIP_COLORS[i % STAR_CHIP_COLORS.length],
+    glowColor: STAR_CHIP_GLOW,
+    spawnTime: now - 10000,
+  }));
+
+  return {
+    snakes,
+    foods,
+    starChips,
+    player,
+    nextFoodId: 0,
+    nextStarChipId: 0,
+    showControls: false,
+    tickCount: currSnap.tick,
+    extractionZone: currSnap.extraction,
+  };
 }
 
 // ============================================================================
