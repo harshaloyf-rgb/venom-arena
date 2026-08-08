@@ -1076,3 +1076,28 @@ Stage Summary:
 - Elimination screen FIXED: 5 seconds instead of 3
 - Food auto-spawn FIXED: online FOOD_RESPAWN_BATCH bumped to 25 (was 5, too slow with 1000 bots)
 - bodyRadius was already correct in game-state.ts line 516
+---
+Task ID: fix-nan-bodyradius
+Agent: Main
+Task: Fix snake and grid lines invisible in both online and offline modes
+
+Work Log:
+- Investigated browser: canvas exists (1280x577), rendering loop running (600K+ strokes, 3M+ fills)
+- Pixel sampling showed canvas 100% background color despite massive draw call counts
+- Used VLM to analyze screenshot: discovered HUD showing "Radius: NaNpx"
+- Traced NaN to `computeBodyRadius()` returning NaN for all scores
+- Root cause: `Math.LN4` is NOT a standard JavaScript property (only LN2, LN10, LOG2E, LOG10E exist)
+- `3 / Math.LN4` = `3 / undefined` = `NaN`, propagating to all bodyRadius values
+- NaN bodyRadius made all arc/fillRect calls for snake body produce invisible results
+
+Fix:
+- Changed `3 / Math.LN4` to `3 / Math.log(4)` in both files:
+  - `/home/z/my-project/src/lib/snake/config.ts` line 132
+  - `/home/z/my-project/mini-services/game-server/shared.ts` line 342
+- Also updated debug panel formula text from "sqrt(score)" to "ln(1 + score/33.3)" in SnakeGame.tsx
+- Verified fix via VLM screenshot analysis: snake, grid lines, and food orbs all visible
+
+Stage Summary:
+- Bug: `Math.LN4` does not exist in JS — caused NaN bodyRadius → invisible snake + grid
+- Fix: Replaced with `Math.log(4)` (evaluates to ~1.386, same mathematical value)
+- Verified working in offline mode via agent-browser + VLM

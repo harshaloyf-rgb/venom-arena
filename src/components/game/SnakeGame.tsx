@@ -906,7 +906,7 @@ function DebugPanel({
 
         {/* Growth formula reference */}
         <div className="text-[9px] text-white/20 font-mono leading-relaxed border-t border-white/5 pt-2">
-          radius = {SNAKE_RADIUS_MIN} + {SNAKE_RADIUS_GROWTH_RATE} x sqrt(score)<br />
+          radius = {SNAKE_RADIUS_MIN} + {SNAKE_RADIUS_GROWTH_RATE} × ln(1 + score/33.3)<br />
           length = 15 + score / 5 (1 seg per 5 pts)<br />
           turn: U-turn in 0.25s | collision = {SNAKE_RADIUS_MIN}px
         </div>
