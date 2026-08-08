@@ -77,8 +77,23 @@ export function drawFood(
 
     if (r < 1) continue;
 
-    // Glow
-    if (r > 2) {
+    if (f.magnetized) {
+      // Magnetized food: brighter glow + white ring to show it's being pulled
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(sx, sy, r * 3.0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.globalAlpha = 0.7;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5 * zoom;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r * 1.8, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    } else if (r > 2) {
+      // Normal glow
       ctx.globalAlpha = 0.3;
       ctx.fillStyle = f.glowColor;
       ctx.beginPath();
@@ -88,7 +103,7 @@ export function drawFood(
     }
 
     // Circle
-    ctx.fillStyle = f.color;
+    ctx.fillStyle = f.magnetized ? '#ffffff' : f.color;
     ctx.beginPath();
     ctx.arc(sx, sy, r, 0, Math.PI * 2);
     ctx.fill();

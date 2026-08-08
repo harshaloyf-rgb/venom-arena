@@ -381,7 +381,27 @@ export const BODY_DOWNSAMPLE_INTERVAL = 3;
 export const FOOD_DOWNSAMPLE_RADIUS = 2000;
 
 // ============================================================================
-// 13. EXTRACTION — zone, scoring, star chips, speed bonus
+// 13. FOOD MAGNET — vacuum pull mechanic around snake head
+// ============================================================================
+
+/** Pull zone: food within (SNAKE_RADIUS + this) pixels of head center gets attracted.
+ *  35px = a visible vacuum halo around the snake head. */
+export const FOOD_MAGNET_PULL_RADIUS = 35;
+
+/** Death zone: food within (SNAKE_RADIUS + this) pixels is eaten instantly.
+ *  2px = tiny inner radius — food must almost touch the mouth. */
+export const FOOD_MAGNET_DEATH_RADIUS = 2;
+
+/** Minimum pull speed at the edge of the pull zone (pixels per tick).
+ *  Food drifts gently when it first enters the field. */
+export const FOOD_MAGNET_MIN_SPEED = 1.0;
+
+/** Maximum pull speed at the death zone boundary (pixels per tick).
+ *  Quadratic ramp from MIN to MAX creates the snappy vacuum snap. */
+export const FOOD_MAGNET_MAX_SPEED = 10.0;
+
+// ============================================================================
+// 14. EXTRACTION — zone, scoring, star chips, speed bonus
 // ============================================================================
 
 /** Extraction zone radius in pixels */
