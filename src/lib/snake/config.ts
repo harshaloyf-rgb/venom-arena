@@ -151,14 +151,22 @@ export const SPATIAL_CELL_SIZE = 100;
 // 5. BOOST — drop interval, prerequisites, speed multiplier
 // ============================================================================
 
-/** Milliseconds between boost food drops (~3 per second) */
-export const BOOST_DROP_INTERVAL = 333;
+/** Milliseconds between boost food drops (~5 per second, dense visible trail) */
+export const BOOST_DROP_INTERVAL = 200;
+
+/** Number of food orbs to drop per boost interval, spaced along the body.
+ *  Dropped at equal intervals from ~15% to 100% of body length.
+ *  Creates a visible on-screen trail instead of a single off-screen tail dot. */
+export const BOOST_DROP_COUNT = 5;
 
 /** Minimum body segments required to boost */
 export const BOOST_MIN_BODY = 8;
 
-/** Minimum score required to boost — must have score to spend */
-export const BOOST_MIN_SCORE = 1;
+/** Minimum score required to boost — must have score to spend.
+ *  Set to 0 so the player can always boost (food drops continue as visual feedback).
+ *  Score still drains but the snake won't suddenly stop boosting at score=0.
+ *  Body length shrinks naturally as score drops, eventually hitting BOOST_MIN_BODY. */
+export const BOOST_MIN_SCORE = 0;
 
 /** Score deducted each interval while boosting (integer — no decimals in score).
  *  Combined with BOOST_SCORE_COST_INTERVAL: 1 point every 12 ticks ≈ 5/sec at 60fps. */

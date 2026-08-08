@@ -1174,3 +1174,40 @@ Stage Summary:
 - Food spawns closer to the player (min 200px instead of 400-600px)
 - Online mode sends food within 2000px (was 500px) to cover full visible area
 - Server spawns food around ALL players, not just one random snake
+---
+Task ID: 4
+Agent: Main
+Task: Fix boost food drops stopping while boosting
+
+Work Log:
+- Analyzed 3 root causes for boost food stopping:
+  1. Score depletion (5/sec) → score hits 0 → canBoost=false → food AND speed stop
+  2. Food dropped only at TAIL → at 2x boost speed, tail food goes off-screen in 2-3 seconds
+  3. Only 1 food per 333ms → too sparse to be visible
+
+- Fixed config.ts:
+  - BOOST_DROP_INTERVAL: 333ms → 200ms (~5 drops/sec instead of ~3)
+  - BOOST_MIN_SCORE: 1 → 0 (snake can always boost, body shrinks naturally)
+  - Added BOOST_DROP_COUNT = 5 (orbs per interval, spaced along body)
+
+- Fixed engine.ts (offline):
+  - Changed drop from single tail orb to 5 orbs spaced 15%-100% along body
+  - Food at 15% of body stays ON-SCREEN near the head
+  - Creates visible dense trail instead of off-screen dot
+
+- Fixed shared.ts + game-state.ts (online server):
+  - Same BOOST_DROP_INTERVAL, BOOST_DROP_COUNT, BOOST_MIN_SCORE changes
+  - Same body-spaced drop logic (5 orbs along body)
+  - Server still pops 1 segment per drop interval (body shrinks while boosting)
+
+- Verified in browser:
+  - Before: 1 food every 333ms at tail (off-screen in 2s)
+  - After: 5 food every 200ms along body = 25 food/sec, visible trail of 20-25 orbs
+  - Extended boost test: 50-55 food visible, clear dense trail, no stopping
+  - No console errors
+
+Stage Summary:
+- Boost food now drops as a visible on-screen trail (15-25 orbs visible)
+- Drops along body at 15%, 34%, 52%, 71%, 89% positions
+- Food never "stops" while boosting (BOOST_MIN_SCORE=0, body length is the limiter)
+- 5x more food per second (25/sec vs 5/sec previously)
