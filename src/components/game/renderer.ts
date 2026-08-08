@@ -75,18 +75,18 @@ export function drawFood(
     const { x: sx, y: sy } = worldToScreen(f.x, f.y, camera, cw, ch);
     const baseR = f.radius * zoom;
 
-    // Magnetized food shrinks to 1/6 size
-    const r = f.magnetized ? baseR / 6 : baseR;
+    // Magnetized food shrinks to 1/3 size
+    const r = f.magnetized ? baseR / 3 : baseR;
 
     if (r < 0.5) continue;
 
     if (f.magnetized) {
-      // Magnetized food: subtle glow ring (keeps original color)
+      // Magnetized food: subtle glow ring (also shrinks)
       ctx.globalAlpha = 0.4;
       ctx.strokeStyle = f.glowColor;
       ctx.lineWidth = 1.0 * zoom;
       ctx.beginPath();
-      ctx.arc(sx, sy, baseR * 1.8, 0, Math.PI * 2);
+      ctx.arc(sx, sy, r * 1.8, 0, Math.PI * 2);
       ctx.stroke();
       ctx.globalAlpha = 1;
     } else if (baseR > 2) {
