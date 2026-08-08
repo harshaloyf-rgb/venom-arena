@@ -10,6 +10,10 @@ import { PathBuffer } from './pool';
 import { SpatialHash, type SpatialEntity } from './spatial-hash';
 import { checkCollisions, type KillEvent } from './collision';
 import {
+  updateAllBotAI, getBotBoost, spawnBots, respawnDeadBots, removeBot,
+  BOT_TYPE_COLORS, type BotType, type BotSpawnConfig, DEFAULT_BOT_MIX,
+} from './bot-ai';
+import {
   // MOVEMENT
   BASE_SPEED, BOOST_SPEED, BASE_TURN_RATE, MIN_TURN_RATE, SEGMENT_SPACING,
   STEERING_LERP, SHARP_TURN_BRAKE,
@@ -100,6 +104,7 @@ function createSnake(
   id: string, name: string, startScore: number,
   posX: number, posY: number, now: number,
   skinOverride?: PlayerSkinOverride | null,
+  botType?: BotType,
 ): Snake {
   const targetLength = computeBodyLength(startScore);
   const palette = SNAKE_PALETTES[Math.floor(Math.random() * SNAKE_PALETTES.length)];
@@ -114,8 +119,15 @@ function createSnake(
     path.appendTail(x, y);
   }
 
-  const color = skinOverride ? skinOverride.bodyColor : palette[0];
-  const headColor = skinOverride ? skinOverride.headColor : palette[1];
+  // Use type-specific colors for bots, otherwise skinOverride or random palette
+  let color: string;
+  let headColor: string;
+  if (botType && BOT_TYPE_COLORS[botType]) {
+    [color, headColor] = BOT_TYPE_COLORS[botType];
+  } else {
+    color = skinOverride ? skinOverride.bodyColor : palette[0];
+    headColor = skinOverride ? skinOverride.headColor : palette[1];
+  }
   const skinId = skinOverride ? skinOverride.skinId : 'skin-default';
   const rarity = skinOverride ? skinOverride.rarity : 'common' as SkinRarity;
 
@@ -446,13 +458,23 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
     nextFoodId: foodIdRef,
   };
 
-  // 1. Move player
+  // 1. Update bot AI (compute target angles + boost decisions)
+  updateAllBotAI(state);
+
+  // 2. Move player
   const player = state.player;
   if (player && player.alive) {
     moveSnake(player, input.targetAngle, input.boosting, now, moveCtx);
   }
 
-  // 2. Check food eating
+  // 3. Move all bots
+  for (const [id, snake] of state.snakes) {
+    if (!snake.isBot || !snake.alive) continue;
+    const botBoost = getBotBoost(id);
+    moveSnake(snake, snake.targetAngle, botBoost, now, moveCtx);
+  }
+
+  // 4. Check food eating
   const eatenIds = checkFoodEating(state.snakes.values(), state.foods, foodHash, foodValueCache, now);
   if (eatenIds.size > 0) {
     let writeIdx = 0;
@@ -462,22 +484,47 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
     state.foods.length = writeIdx;
   }
 
-  // 3. Density-based food spawning
+  // 5. Density-based food spawning
   maintainFoodAroundPlayer(state, foodIdRef);
 
-  // 4. Check collisions (shared)
+  // 6. Check collisions (shared)
   const collisionResult = checkCollisions(state.snakes, bodyHash, headHash, now);
   for (const deadId of collisionResult.deadIds) {
     const deadSnake = state.snakes.get(deadId);
     if (deadSnake) {
       killSnake(deadSnake, foodIdRef, state.foods);
-      if (!deadSnake.isPlayer) { state.snakes.delete(deadId); }
+      if (deadSnake.isBot) {
+        removeBot(deadId);
+        state.snakes.delete(deadId);
+      }
     }
   }
+
+  // 7. Respawn dead bots (1 per tick max)
+  respawnDeadBots(state, DEFAULT_BOT_MIX, createBotSnakeFactory);
 
   state.nextFoodId = foodIdRef.value;
 
   return collisionResult.killEvents;
+}
+
+// ==========================================================================
+// Bot Snake Factory (avoids exposing private createSnake)
+// ==========================================================================
+
+function createBotSnakeFactory(
+  id: string, name: string, score: number, x: number, y: number, now: number, botType: BotType,
+): Snake {
+  return createSnake(id, name, score, x, y, now, undefined, botType);
+}
+
+// ==========================================================================
+// Bot Initialization (call once after createInitialState)
+// ==========================================================================
+
+/** Spawn the initial bot population into the game state */
+export function initBots(state: GameState, config?: BotSpawnConfig): void {
+  spawnBots(state, config, createBotSnakeFactory);
 }
 
 // ==========================================================================
