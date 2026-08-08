@@ -55,17 +55,6 @@ export interface FoodOrb {
   magnetized: boolean;
 }
 
-/** A star chip (extraction zone collectible) */
-export interface StarChip {
-  id: number;
-  x: number;
-  y: number;
-  value: number;
-  radius: number;
-  glowColor: string;
-  color: string;
-  spawnTime: number;
-}
 
 // ─── Skin & Rarity (Phase A types, used by Phases C/D) ─────────────────────
 
@@ -265,13 +254,9 @@ export interface Snake {
 export interface GameState {
   snakes: Map<string, Snake>;
   foods: FoodOrb[];
-  /** Star chips in the arena (extraction zone) */
-  starChips: StarChip[];
   player: Snake | null;
   /** Monotonic food ID counter */
   nextFoodId: number;
-  /** Monotonic star chip ID counter */
-  nextStarChipId: number;
   /** Whether the player has seen the controls hint */
   showControls: boolean;
   /** Current tick count (monotonic, for snapshot sync) */
@@ -337,8 +322,6 @@ export interface ArenaSnapshot {
   snakes: SnakeSnapshot[];
   /** Food positions (downsampled, only near players) */
   foods: Array<{ id: number; x: number; y: number; size: FoodSize; value: number }>;
-  /** Star chip positions */
-  starChips: Array<{ id: number; x: number; y: number; value: number }>;
   /** Extraction zone state */
   extraction: { x: number; y: number; radius: number; active: boolean };
   /** Obstacle wall segments */

@@ -110,7 +110,7 @@ export default function Home() {
 
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [activeArenaId, setActiveArenaId] = useState<string | null>(null);
-  const [gameMode, setGameMode] = useState<'online' | 'offline'>('offline');
+
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [isTuningOpen, setIsTuningOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -196,7 +196,7 @@ export default function Home() {
   );
 
   const handlePlayArena = useCallback(
-    (arenaId: string, isOnline?: boolean) => { if (!player) return; setActiveArenaId(arenaId); setGameMode(isOnline ? 'online' : 'offline'); },
+    (arenaId: string) => { if (!player) return; setActiveArenaId(arenaId); },
     [player],
   );
 
@@ -258,9 +258,7 @@ export default function Home() {
       <div className="w-screen h-screen overflow-hidden bg-slate-950">
         <SnakeGame
           onExit={() => handleExitGame()}
-          mode={gameMode}
           arenaId={activeArenaId}
-          authToken={player?.id}
         />
       </div>
     );

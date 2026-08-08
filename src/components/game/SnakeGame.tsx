@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Wifi, WifiOff, Loader2, AlertTriangle, RefreshCw, X, Zap, CircleDot } from 'lucide-react';
+import { X, Zap, CircleDot } from 'lucide-react';
 import { InputHandler } from './input';
 import {
   drawDeathOverlay,
@@ -9,7 +9,6 @@ import {
   drawControlsHint,
   drawGrid as drawGridFromRenderer,
   drawFood as drawFoodFromRenderer,
-  drawStarChips as drawStarChipsFromRenderer,
   drawExtractionZone as drawExtractionZoneFromRenderer,
 } from './renderer';
 import { renderSnakeAtlas, renderSnakeFallback, cleanupSnakeParticles, clearSmoothedSegs } from './render-snake-atlas';
@@ -18,52 +17,27 @@ import {
   type Camera,
   type Viewport,
   type Snake,
-  type FoodOrb,
-  type StarChip,
-  type ArenaSnapshot,
-  type SnakeSnapshot,
   FIXED_DT,
-  FOOD_COLORS,
-  FOOD_RADII,
-  FOOD_GLOW_COLORS,
-  STAR_CHIP_RADIUS,
-  STAR_CHIP_GLOW,
-  STAR_CHIP_COLORS,
 } from '@/lib/snake';
 import { createInitialState, gameTick, respawnPlayer, type PlayerSkinOverride } from '@/lib/snake/engine';
 import { createCamera, updateCamera, getViewport, worldToScreen } from '@/lib/snake/camera';
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, getPlayerSkinId, registerSkinAsset } from '@/lib/snake/skin-registry';
 import { useAuth } from '@/components/providers/auth-provider';
-import { PathBuffer } from '@/lib/snake/pool';
-import { OnlineEngine, type ConnectionState } from './online-engine';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
 interface SnakeGameProps {
   onExit?: () => void;
-  mode?: 'offline' | 'online';
   arenaId?: string;
-  arenaConfig?: {
-    id: string;
-    name: string;
-    maxPlayers?: number;
-  };
-  authToken?: string;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function SnakeGame({
   onExit,
-  mode = 'offline',
   arenaId,
-  arenaConfig,
-  authToken,
 }: SnakeGameProps) {
-  // If mode is 'online' but no authToken is provided, fall back to offline
-  const effectiveMode = mode === 'online' && !authToken ? 'offline' : mode;
-
   // ── Player skin (read from auth + localStorage) ──
   const { player: authPlayer } = useAuth();
 
@@ -80,40 +54,21 @@ export default function SnakeGame({
     fps: 60,
   });
 
-  // Offline state
+  // State
   const [isDead, setIsDead] = useState(false);
   const [finalScore, setFinalScore] = useState(0);
   const [leaderboard, setLeaderboard] = useState<{ name: string; score: number }[]>([]);
   const isDeadRef = useRef(false);
-  const deathTimeRef = useRef(0); // timestamp when player died
+  const deathTimeRef = useRef(0);
   const showControlsRef = useRef(true);
   const controlsDismissedRef = useRef(false);
   const leaderboardTimerRef = useRef(0);
-  const killsRef = useRef(0); // player kills this session
-  const highScoreRef = useRef(0); // highest ever score per arena (localStorage)
+  const killsRef = useRef(0);
+  const highScoreRef = useRef(0);
   const [displayHighScore, setDisplayHighScore] = useState(0);
 
-  // Online state
-  const onlineEngineRef = useRef<OnlineEngine | null>(null);
-  const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
-  const [onlineError, setOnlineError] = useState<string | null>(null);
-  const isDeadOnlineRef = useRef(false);
-  const onlineDeathTimeRef = useRef(0);
-
-  // Online snapshot interpolation state
-  const onlinePrevSnapRef = useRef<ArenaSnapshot | null>(null);
-  const onlineCurrSnapRef = useRef<ArenaSnapshot | null>(null);
-  const onlineSnapTimeRef = useRef<number>(0);
-  const onlineMySnakeIdRef = useRef<string | null>(null);
-  // Cached PathBuffers per snake (reused across frames to avoid GC)
-  const onlinePathCacheRef = useRef<Map<string, PathBuffer>>(new Map());
-  // Cached previous body positions per snake for smooth body interpolation
-  const onlinePrevBodyRef = useRef<Map<string, { bodyX: number[]; bodyY: number[]; bodyLen: number }>>(new Map());
-
-  // Atlas manager (shared across modes)
+  // Atlas manager
   const atlasManagerRef = useRef<SkinAtlasManager | null>(null);
-
-  
 
   // External boost state (from UI button)
   const externalBoostRef = useRef(false);
@@ -123,9 +78,7 @@ export default function SnakeGame({
   const extractLastAngleRef = useRef(0);
   const extractActiveRef = useRef(false);
 
-  // ── Leaderboard updater (offline) ──
-
-   
+  // ── Leaderboard updater ──
 
   const updateLeaderboard = useCallback((state: GameState) => {
     const entries: { name: string; score: number }[] = [];
@@ -138,33 +91,18 @@ export default function SnakeGame({
     setLeaderboard(entries.slice(0, 5));
   }, []);
 
-  // ── Respawn handler (offline) ──
+  // ── Respawn handler ──
 
   const handleRespawn = useCallback(() => {
-    if (effectiveMode === 'online') {
-      onlineEngineRef.current?.requestRespawn();
-      isDeadOnlineRef.current = false;
-      onlineDeathTimeRef.current = 0;
-      setIsDead(false);
-      setFinalScore(0);
-      return;
-    }
     if (!gameStateRef.current) return;
     respawnPlayer(gameStateRef.current);
     isDeadRef.current = false;
     deathTimeRef.current = 0;
     setIsDead(false);
     setFinalScore(0);
-  }, [effectiveMode]);
-
-  // ── Retry online connection ──
-
-  const handleRetry = useCallback(() => {
-    setOnlineError(null);
-    // The useEffect will re-trigger connect on state change
   }, []);
 
-  // ── Main effect: game loop + online/offline setup ──
+  // ── Main effect: game loop ──
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -217,7 +155,7 @@ export default function SnakeGame({
       rarity: playerSkinAsset.rarity,
     };
 
-    // ── Init offline game state with player skin ──
+    // ── Init game state with player skin ──
     gameStateRef.current = createInitialState(skinOverride);
     cameraRef.current = createCamera(0, 0);
     isDeadRef.current = false;
@@ -225,8 +163,6 @@ export default function SnakeGame({
     showControlsRef.current = true;
     controlsDismissedRef.current = false;
     leaderboardTimerRef.current = 0;
-    isDeadOnlineRef.current = false;
-    onlineDeathTimeRef.current = 0;
     killsRef.current = 0;
     // Load highest ever score from localStorage (per arena)
     const highScoreKey = `venom-high-score-${arenaId || 'default'}`;
@@ -239,78 +175,6 @@ export default function SnakeGame({
     const input = new InputHandler(canvas);
     inputRef.current = input;
     input.attach();
-
-    // ── Online engine setup ──
-    let onlineEngine: OnlineEngine | null = null;
-
-    if (mode === 'online' && arenaId && authToken) {
-      onlineEngine = new OnlineEngine();
-      onlineEngineRef.current = onlineEngine;
-
-      onlineEngine.onConnectionChange = (state) => {
-        setConnectionState(state);
-        if (state === 'connected') {
-          setOnlineError(null);
-        }
-      };
-
-      // ── Snapshot handler: store for interpolation ──
-      onlineEngine.onInit = (data) => {
-        onlineMySnakeIdRef.current = data.snakeId;
-        console.log('[SnakeGame] Got snake ID:', data.snakeId);
-      };
-
-      onlineEngine.onSnapshot = (snapshot) => {
-        // Cache current body positions as "previous" for interpolation
-        if (onlineCurrSnapRef.current) {
-          for (const s of onlineCurrSnapRef.current.snakes) {
-            if (!s.alive) continue;
-            onlinePrevBodyRef.current.set(s.id, {
-              bodyX: Array.from(s.bodyX),
-              bodyY: Array.from(s.bodyY),
-              bodyLen: s.bodyLen,
-            });
-          }
-        }
-        onlinePrevSnapRef.current = onlineCurrSnapRef.current;
-        onlineCurrSnapRef.current = snapshot;
-        onlineSnapTimeRef.current = performance.now();
-      };
-
-      onlineEngine.onError = (msg) => {
-        setOnlineError(msg);
-      };
-
-      onlineEngine.onKill = (entry) => {
-        // Track player kills (same as offline killEvents loop)
-        if (entry.killerId === onlineMySnakeIdRef.current) {
-          killsRef.current++;
-        }
-      };
-
-      onlineEngine.onPlayerDied = () => {
-        isDeadOnlineRef.current = true;
-        onlineDeathTimeRef.current = performance.now();
-        setIsDead(true);
-        const snap = onlineCurrSnapRef.current;
-        if (snap) {
-          const mySnake = snap.snakes.find(s => s.id === onlineMySnakeIdRef.current);
-          setFinalScore(mySnake?.score ?? 0);
-        }
-      };
-
-      // Connect with player's name and skin
-      const playerName = authPlayer?.name || 'Player';
-      onlineEngine.connect(
-        arenaId,
-        authToken,
-        playerSkinId,
-        playerName,
-        playerSkinAsset.bodyColor,
-        playerSkinAsset.headColor,
-        playerSkinAsset.rarity,
-      );
-    }
 
     // ── Game loop ──
     let running = true;
@@ -339,40 +203,38 @@ export default function SnakeGame({
       const now = Date.now();
       const inputState = input.getState();
 
-      // ── Frame elapsed (for extraction progress, both modes) ──
+      // ── Frame elapsed (for extraction progress) ──
       const prevFrameTimeRef = lastTimeRef.current || timestamp;
       const frameElapsed = Math.min(timestamp - prevFrameTimeRef, 100);
 
       // ── External boost: wire UI button into input handler ──
       input.externalBoost = externalBoostRef.current;
 
-      // ── Extraction progress tracking (both modes) ──
-      // Only track extraction if there's an active extraction zone
-      const gameState = effectiveMode === 'offline' ? gameStateRef.current : null;
-      const onlineSnap = effectiveMode === 'online' ? onlineCurrSnapRef.current : null;
-      const hasExtractionZone = gameState?.extractionZone?.active || onlineSnap?.extraction?.active;
+      // ── Extraction progress tracking ──
+      const gameState = gameStateRef.current;
+      if (!gameState) {
+        animFrameRef.current = requestAnimationFrame(loop);
+        return;
+      }
+
+      const hasExtractionZone = gameState.extractionZone?.active;
       const isExtracting = hasExtractionZone && input.isExtracting();
-      if (isExtracting && !isDeadRef.current && !isDeadOnlineRef.current) {
+      if (isExtracting && !isDeadRef.current) {
         if (!extractActiveRef.current) {
-          // Just started extracting — lock the current angle
           extractActiveRef.current = true;
           extractProgressRef.current = 0;
           extractLastAngleRef.current = inputState.targetAngle;
         }
-        // Check direction change (any angle difference resets progress)
         const angleDelta = Math.abs(inputState.targetAngle - extractLastAngleRef.current);
         const wrappedDelta = Math.min(angleDelta, Math.PI * 2 - angleDelta);
         if (wrappedDelta > 0.05) {
-          // Direction changed — reset progress, lock new angle
           extractProgressRef.current = 0;
           extractLastAngleRef.current = inputState.targetAngle;
         } else {
-          // Accumulate progress: 3000ms = 1.0
           extractProgressRef.current += frameElapsed / 3000;
           if (extractProgressRef.current >= 1.0) {
             extractProgressRef.current = 0;
             extractActiveRef.current = false;
-            // Successful extraction — exit to arena screen
             if (onExit) onExit();
           }
         }
@@ -381,7 +243,7 @@ export default function SnakeGame({
         extractProgressRef.current = 0;
       }
 
-      // Dismiss controls on first input (both modes)
+      // Dismiss controls on first input
       if (!controlsDismissedRef.current &&
           (inputState.boosting || Math.abs(inputState.targetAngle) > 0.01)) {
         controlsDismissedRef.current = true;
@@ -389,211 +251,101 @@ export default function SnakeGame({
       }
 
       // ────────────────────────────────────────────────────────────────────
-      // OFFLINE MODE — full local simulation
+      // GAME LOOP — full local simulation
       // ────────────────────────────────────────────────────────────────────
-      if (effectiveMode === 'offline') {
-        const state = gameStateRef.current;
-        if (!state) {
-          animFrameRef.current = requestAnimationFrame(loop);
-          return;
-        }
 
-        // Fixed timestep
-        if (lastTimeRef.current === 0) {
-          lastTimeRef.current = timestamp;
-        }
-        const elapsed = Math.min(timestamp - lastTimeRef.current, 100);
+      // Fixed timestep
+      if (lastTimeRef.current === 0) {
         lastTimeRef.current = timestamp;
-        accumulatorRef.current += elapsed;
+      }
+      const elapsed = Math.min(timestamp - lastTimeRef.current, 100);
+      lastTimeRef.current = timestamp;
+      accumulatorRef.current += elapsed;
 
-        // Fixed timestep — cap at 1 tick per frame to prevent stutter.
-        const tickMs = FIXED_DT * 1000;
-        if (accumulatorRef.current >= tickMs) {
-          const killEvents = gameTick(state, inputState, FIXED_DT);
-          accumulatorRef.current -= tickMs;
-          // Cap accumulator to prevent spiral-of-death catch-up frames
-          if (accumulatorRef.current > tickMs) accumulatorRef.current = tickMs * 0.5;
+      const tickMs = FIXED_DT * 1000;
+      if (accumulatorRef.current >= tickMs) {
+        const killEvents = gameTick(gameState, inputState, FIXED_DT);
+        accumulatorRef.current -= tickMs;
+        if (accumulatorRef.current > tickMs) accumulatorRef.current = tickMs * 0.5;
 
-          // Track player kills
-          if (state.player) {
-            for (const ev of killEvents) {
-              if (ev.killerId === state.player.id) killsRef.current++;
-            }
-            // Track high score (per arena)
-            if (state.player.score > highScoreRef.current) {
-              highScoreRef.current = Math.floor(state.player.score);
-              try { localStorage.setItem(highScoreKey, String(highScoreRef.current)); } catch { /* ignore */ }
-              setDisplayHighScore(highScoreRef.current);
-            }
+        // Track player kills
+        if (gameState.player) {
+          for (const ev of killEvents) {
+            if (ev.killerId === gameState.player.id) killsRef.current++;
           }
-
-          // Check player death
-          if (state.player && !state.player.alive && !isDeadRef.current) {
-            isDeadRef.current = true;
-            deathTimeRef.current = performance.now();
-            setIsDead(true);
-            setFinalScore(state.player.score);
-            // Cleanup particles for dead snakes
-            for (const [sid, s] of state.snakes) {
-              if (!s.alive) cleanupDeadSnakeParticles(sid);
-            }
+          // Track high score (per arena)
+          if (gameState.player.score > highScoreRef.current) {
+            highScoreRef.current = Math.floor(gameState.player.score);
+            try { localStorage.setItem(highScoreKey, String(highScoreRef.current)); } catch { /* ignore */ }
+            setDisplayHighScore(highScoreRef.current);
           }
         }
 
-        // Camera
-        if (state.player && state.player.alive) {
-          updateCamera(cameraRef.current, state.player, w, h);
-        }
-
-        const viewport: Viewport = getViewport(cameraRef.current, w, h);
-
-        // Get raw mouse screen position for ultra-responsive eye tracking
-        const mousePos = input.getMousePos();
-        const mouseSX = mousePos?.x;
-        const mouseSY = mousePos?.y;
-
-        // ── Render: grid, food, star chips, extraction zone ──
-        renderOfflineBackground(ctx, state, cameraRef.current, viewport, fc.fps, now);
-
-        // ── Render snakes: bots use fallback, player uses atlas ──
-        for (const [, s] of state.snakes) {
-          if (s.alive && !s.isPlayer) {
-            renderSnakeFallback(ctx, s, cameraRef.current, viewport, now);
+        // Check player death
+        if (gameState.player && !gameState.player.alive && !isDeadRef.current) {
+          isDeadRef.current = true;
+          deathTimeRef.current = performance.now();
+          setIsDead(true);
+          setFinalScore(gameState.player.score);
+          for (const [sid, s] of gameState.snakes) {
+            if (!s.alive) cleanupDeadSnakeParticles(sid);
           }
         }
-        if (state.player && state.player.alive) {
-          renderSnakeAtlas(ctx, state.player, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY);
-        }
-
-        // Extraction progress ring on snake head
-        if (extractActiveRef.current && extractProgressRef.current > 0 && state.player && state.player.alive) {
-          drawExtractRing(ctx, state.player, cameraRef.current, viewport, extractProgressRef.current);
-        }
-
-        // HUD (includes minimap, rank, score, kills)
-        renderOfflineHUD(ctx, state, cameraRef.current, viewport, fc.fps, now, killsRef.current, highScoreRef.current);
-        if (showControlsRef.current && state.player && state.player.alive) {
-          drawControlsHint(ctx, viewport);
-        }
-
-        // Mouse cursor indicator (slither.io style crosshair)
-        drawMouseCursor(ctx, input);
-
-        if (isDeadRef.current) {
-          const deathElapsed = performance.now() - deathTimeRef.current;
-          if (deathElapsed < 5000) {
-            // First 5s: game visible behind, show elimination banner
-            drawEliminatedBanner(ctx, viewport, deathElapsed);
-          } else {
-            // After 5s: full death overlay with respawn prompt
-            drawDeathOverlay(ctx, finalScore || state.player?.score || 0, viewport);
-          }
-        }
-
-        // Update leaderboard every ~0.5s
-        leaderboardTimerRef.current++;
-        if (leaderboardTimerRef.current >= 30) {
-          leaderboardTimerRef.current = 0;
-          updateLeaderboard(state);
-        }
-
       }
 
-      // ────────────────────────────────────────────────────────────────────
-      // ONLINE MODE — exact copy of offline rendering, data from server snapshots
-      // ────────────────────────────────────────────────────────────────────
-      else if (effectiveMode === 'online' && onlineEngine) {
-        // Forward input to server
-        if (onlineEngine.isConnected) {
-          onlineEngine.setInput(inputState.targetAngle, inputState.boosting);
+      // Camera
+      if (gameState.player && gameState.player.alive) {
+        updateCamera(cameraRef.current, gameState.player, w, h);
+      }
+
+      const viewport: Viewport = getViewport(cameraRef.current, w, h);
+
+      // Mouse position for eye tracking
+      const mousePos = input.getMousePos();
+      const mouseSX = mousePos?.x;
+      const mouseSY = mousePos?.y;
+
+      // ── Render: background ──
+      renderBackground(ctx, gameState, cameraRef.current, viewport, fc.fps, now);
+
+      // ── Render snakes: bots use fallback, player uses atlas ──
+      for (const [, s] of gameState.snakes) {
+        if (s.alive && !s.isPlayer) {
+          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now);
         }
+      }
+      if (gameState.player && gameState.player.alive) {
+        renderSnakeAtlas(ctx, gameState.player, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY);
+      }
 
-        const currSnap = onlineCurrSnapRef.current;
-        const prevSnap = onlinePrevSnapRef.current;
+      // Extraction progress ring on snake head
+      if (extractActiveRef.current && extractProgressRef.current > 0 && gameState.player && gameState.player.alive) {
+        drawExtractRing(ctx, gameState.player, cameraRef.current, viewport, extractProgressRef.current);
+      }
 
-        if (!currSnap || currSnap.snakes.length === 0) {
-          ctx.fillStyle = '#0a0a0f';
-          ctx.fillRect(0, 0, w, h);
-          drawConnectionOverlay(ctx, { width: w, height: h }, onlineEngine.connectionState);
-          animFrameRef.current = requestAnimationFrame(loop);
-          return;
+      // HUD
+      renderHUD(ctx, gameState, cameraRef.current, viewport, fc.fps, now, killsRef.current, highScoreRef.current);
+      if (showControlsRef.current && gameState.player && gameState.player.alive) {
+        drawControlsHint(ctx, viewport);
+      }
+
+      // Mouse cursor
+      drawMouseCursor(ctx, input);
+
+      if (isDeadRef.current) {
+        const deathElapsed = performance.now() - deathTimeRef.current;
+        if (deathElapsed < 5000) {
+          drawEliminatedBanner(ctx, viewport, deathElapsed);
+        } else {
+          drawDeathOverlay(ctx, finalScore || gameState.player?.score || 0, viewport);
         }
+      }
 
-        // ── Build GameState from server snapshot (same shape as offline) ──
-        const state = buildOnlineGameState(
-          currSnap, prevSnap, onlineMySnakeIdRef.current,
-          onlinePrevBodyRef.current, onlinePathCacheRef.current,
-          inputState.targetAngle, now, onlineSnapTimeRef.current,
-        );
-        if (!state) {
-          animFrameRef.current = requestAnimationFrame(loop);
-          return;
-        }
-
-        // Track player kills from server kill events
-        // (killsRef is updated in onlineEngine.onKill callback)
-
-        // Camera
-        if (state.player && state.player.alive) {
-          updateCamera(cameraRef.current, state.player, w, h);
-        }
-
-        const viewport: Viewport = getViewport(cameraRef.current, w, h);
-
-        // Get raw mouse screen position for ultra-responsive eye tracking
-        const mousePos = input.getMousePos();
-        const mouseSX = mousePos?.x;
-        const mouseSY = mousePos?.y;
-
-        // ── Render: grid, food, star chips, extraction zone ──
-        renderOfflineBackground(ctx, state, cameraRef.current, viewport, fc.fps, now);
-
-        // ── Render snakes: bots use fallback, player uses atlas ──
-        for (const [, s] of state.snakes) {
-          if (s.alive && !s.isPlayer) {
-            renderSnakeFallback(ctx, s, cameraRef.current, viewport, now);
-          }
-        }
-        if (state.player && state.player.alive) {
-          renderSnakeAtlas(ctx, state.player, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY);
-        }
-
-        // Extraction progress ring on snake head
-        if (extractActiveRef.current && extractProgressRef.current > 0 && state.player && state.player.alive) {
-          drawExtractRing(ctx, state.player, cameraRef.current, viewport, extractProgressRef.current);
-        }
-
-        // HUD (includes minimap, rank, score, kills)
-        renderOfflineHUD(ctx, state, cameraRef.current, viewport, fc.fps, now, killsRef.current, highScoreRef.current);
-        if (showControlsRef.current && state.player && state.player.alive) {
-          drawControlsHint(ctx, viewport);
-        }
-
-        // Mouse cursor indicator (slither.io style crosshair)
-        drawMouseCursor(ctx, input);
-
-        if (isDeadOnlineRef.current) {
-          const deathElapsed = performance.now() - onlineDeathTimeRef.current;
-          if (deathElapsed < 5000) {
-            // First 5s: game visible behind, show elimination banner
-            drawEliminatedBanner(ctx, viewport, deathElapsed);
-          } else {
-            // After 5s: full death overlay with respawn prompt
-            drawDeathOverlay(ctx, finalScore || state.player?.score || 0, viewport);
-          }
-        }
-
-        // Connection status overlay (online-only addition)
-        if (!onlineEngine.isConnected) {
-          drawConnectionOverlay(ctx, viewport, onlineEngine.connectionState);
-        }
-
-        // Update leaderboard every ~0.5s
-        leaderboardTimerRef.current++;
-        if (leaderboardTimerRef.current >= 30) {
-          leaderboardTimerRef.current = 0;
-          updateLeaderboard(state);
-        }
+      // Update leaderboard every ~0.5s
+      leaderboardTimerRef.current++;
+      if (leaderboardTimerRef.current >= 30) {
+        leaderboardTimerRef.current = 0;
+        updateLeaderboard(gameState);
       }
 
       animFrameRef.current = requestAnimationFrame(loop);
@@ -601,7 +353,6 @@ export default function SnakeGame({
 
     // ── Death overlay: Space/click to respawn (only after 5s elimination) ──
     const canRespawn = () => {
-      if (isDeadOnlineRef.current) return performance.now() - onlineDeathTimeRef.current >= 5000;
       if (isDeadRef.current) return performance.now() - deathTimeRef.current >= 5000;
       return false;
     };
@@ -626,16 +377,8 @@ export default function SnakeGame({
       window.removeEventListener('resize', resize);
       window.removeEventListener('keydown', onRespawnKey);
       canvas.removeEventListener('click', onRespawnClick);
-
-      // Cleanup online connections
-      if (onlineEngine) {
-        onlineEngine.disconnect();
-      }
-      onlineEngineRef.current = null;
-      onlinePathCacheRef.current.clear();
-      onlinePrevBodyRef.current.clear();
     };
-  }, [mode, arenaId, authToken, handleRespawn, updateLeaderboard, authPlayer]);
+  }, [arenaId, handleRespawn, updateLeaderboard, authPlayer, onExit]);
 
   // ── Render ──
 
@@ -647,79 +390,24 @@ export default function SnakeGame({
         style={{ touchAction: 'none', cursor: 'none' }}
       />
 
-      {/* Exit button — online only */}
-      {effectiveMode === 'online' && onExit && (
+      {/* Exit button */}
+      {onExit && (
         <button
           onClick={(e) => { e.stopPropagation(); onExit(); }}
           className="absolute top-4 left-4 z-10 w-9 h-9 rounded-lg bg-black/60 hover:bg-red-950/60 border border-white/10 hover:border-red-500/30 flex items-center justify-center cursor-pointer transition-colors"
-          title="Exit to Lobby"
+          title="Exit to Arena"
         >
           <X className="w-4 h-4 text-white/70 hover:text-red-400" />
         </button>
       )}
 
-      {/* Online connection indicator */}
-      {effectiveMode === 'online' && (
-        <div className="absolute top-4 left-16 z-10 flex items-center gap-2 pointer-events-none">
-          {connectionState === 'connected' && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/30">
-              <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-xs font-mono text-emerald-400">LIVE</span>
-            </div>
-          )}
-          {connectionState === 'connecting' && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/20 border border-amber-500/30">
-              <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />
-              <span className="text-xs font-mono text-amber-400">CONNECTING</span>
-            </div>
-          )}
-          {(connectionState === 'disconnected' || connectionState === 'error' || connectionState === 'reconnecting') && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-500/20 border border-red-500/30">
-              <WifiOff className="w-3.5 h-3.5 text-red-400" />
-              <span className="text-xs font-mono text-red-400">
-                {connectionState === 'error' ? 'ERROR' : connectionState === 'reconnecting' ? 'RECONNECTING' : 'OFFLINE'}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Online error panel */}
-      {effectiveMode === 'online' && onlineError && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-red-500/30 rounded-xl p-6 max-w-sm mx-4 text-center">
-            <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
-            <h3 className="text-lg font-semibold text-white mb-2">Connection Error</h3>
-            <p className="text-sm text-slate-400 mb-4">{onlineError}</p>
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={handleRetry}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/15 text-white text-sm font-medium transition-colors cursor-pointer"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Retry
-              </button>
-              <button
-                onClick={onExit}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 text-sm font-medium transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-                Exit
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Leaderboard (shared) */}
+      {/* Leaderboard */}
       <div className="absolute top-4 right-4 w-44 pointer-events-none select-none flex flex-col gap-2">
-        {/* Best Ever — offline only */}
-        {effectiveMode === 'offline' && (
-          <div className="bg-black/50 backdrop-blur-sm rounded-lg p-2">
-            <div className="text-xs text-amber-400/70 font-mono mb-0.5 text-center">Best Ever</div>
-            <div className="text-sm text-amber-400 font-bold font-mono text-center">{displayHighScore.toLocaleString()}</div>
-          </div>
-        )}
+        {/* Best Ever */}
+        <div className="bg-black/50 backdrop-blur-sm rounded-lg p-2">
+          <div className="text-xs text-amber-400/70 font-mono mb-0.5 text-center">Best Ever</div>
+          <div className="text-sm text-amber-400 font-bold font-mono text-center">{displayHighScore.toLocaleString()}</div>
+        </div>
         {/* Leaderboard */}
         <div className="bg-black/50 backdrop-blur-sm rounded-lg p-2">
           <div className="text-xs text-white/60 font-mono mb-1 text-center">Leaderboard</div>
@@ -739,7 +427,7 @@ export default function SnakeGame({
 
       {/* ── Bottom Left: Boost + Extract Buttons ── */}
       <div className="absolute bottom-6 left-5 z-10 flex flex-col gap-3 pointer-events-none">
-        {/* Boost Button (hold to boost) */}
+        {/* Boost Button */}
         <button
           onPointerDown={(e) => { e.stopPropagation(); externalBoostRef.current = true; }}
           onPointerUp={(e) => { e.stopPropagation(); externalBoostRef.current = false; }}
@@ -757,7 +445,7 @@ export default function SnakeGame({
           <span className="text-[10px] font-normal opacity-60">B / Left Click</span>
         </button>
 
-        {/* Extract Button (hold to extract) */}
+        {/* Extract Button */}
         <button
           onPointerDown={(e) => { e.stopPropagation(); inputRef.current?.setExternalExtract(true); }}
           onPointerUp={(e) => { e.stopPropagation(); inputRef.current?.setExternalExtract(false); }}
@@ -789,201 +477,16 @@ function cleanupDeadSnakeParticles(snakeId: string): void {
 }
 
 // ============================================================================
-// Helper: Linear interpolation
+// Helper: Render background (grid, food, extraction zone)
 // ============================================================================
 
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-// ============================================================================
-// Helper: Get or create a PathBuffer for a snake
-// ============================================================================
-
-function getOrCreatePath(cache: Map<string, PathBuffer>, snakeId: string, length: number): PathBuffer {
-  let path = cache.get(snakeId);
-  if (!path || path.capacity < length * 2 + 10) {
-    path = new PathBuffer(Math.max(length * 2 + 10, 100));
-    cache.set(snakeId, path);
-  }
-  return path;
-}
-
-// ============================================================================
-// Helper: Rebuild a PathBuffer from a SnakeSnapshot + interpolated head position
-// ============================================================================
-
-function rebuildPathInterpolated(
-  path: PathBuffer,
-  headX: number,
-  headY: number,
-  snap: SnakeSnapshot,
-  prevBody: { bodyX: number[]; bodyY: number[]; bodyLen: number } | undefined,
-  t: number,
-): void {
-  const totalLen = snap.bodyLen + 1;
-  path.ensureCapacity(totalLen);
-  path.length = 0;
-  path.headSegIdx = 0;
-
-  // Head at index 0 (already interpolated by caller)
-  path.data[0] = headX;
-  path.data[1] = headY;
-  path.length = 1;
-
-  // Body segments — interpolate between previous and current snapshot
-  if (prevBody && t < 1.0) {
-    // Interpolate: for each segment in current, lerp with previous
-    for (let i = 0; i < snap.bodyLen; i++) {
-      const base = (i + 1) * 2;
-      if (i < prevBody.bodyLen) {
-        path.data[base] = lerp(prevBody.bodyX[i], snap.bodyX[i], t);
-        path.data[base + 1] = lerp(prevBody.bodyY[i], snap.bodyY[i], t);
-      } else {
-        // New segment (snake grew) — use current position
-        path.data[base] = snap.bodyX[i];
-        path.data[base + 1] = snap.bodyY[i];
-      }
-    }
-  } else {
-    // No previous data — use current snapshot positions directly
-    for (let i = 0; i < snap.bodyLen; i++) {
-      const base = (i + 1) * 2;
-      path.data[base] = snap.bodyX[i];
-      path.data[base + 1] = snap.bodyY[i];
-    }
-  }
-  path.length = totalLen;
-}
-
-// ============================================================================
-// Helper: Build a GameState from server snapshots (same shape as offline state)
-// This is the ONLY bridge between online data and offline rendering code.
-// ============================================================================
-
-function buildOnlineGameState(
-  currSnap: ArenaSnapshot,
-  prevSnap: ArenaSnapshot | null,
-  mySnakeId: string | null,
-  prevBodyCache: Map<string, { bodyX: number[]; bodyY: number[]; bodyLen: number }>,
-  pathCache: Map<string, PathBuffer>,
-  localTargetAngle: number,
-  now: number,
-  snapTime: number,
-): GameState | null {
-  // Interpolation factor between snapshots (0 = prev, 1 = curr)
-  const snapAge = performance.now() - snapTime;
-  const SNAPSHOT_INTERVAL = 50; // 20Hz broadcast
-  const t = Math.min(snapAge / SNAPSHOT_INTERVAL, 1.0);
-
-  // Build snakes map
-  const snakes = new Map<string, Snake>();
-  let player: Snake | null = null;
-
-  for (const snapSnake of currSnap.snakes) {
-    if (!snapSnake.alive) continue;
-    const isPlayer = snapSnake.id === mySnakeId;
-
-    // Find matching snake in previous snapshot for interpolation
-    const prevSnake = prevSnap?.snakes.find(s => s.id === snapSnake.id);
-    const prevBody = prevBodyCache.get(snapSnake.id);
-
-    // Interpolate head position
-    let hx = snapSnake.hx;
-    let hy = snapSnake.hy;
-    let angle = snapSnake.angle;
-    if (prevSnake && prevSnake.alive && t < 1.0) {
-      hx = lerp(prevSnake.hx, snapSnake.hx, t);
-      hy = lerp(prevSnake.hy, snapSnake.hy, t);
-      angle = snapSnake.angle;
-    }
-
-    // Build PathBuffer with interpolated body segments
-    const path = getOrCreatePath(pathCache, snapSnake.id, snapSnake.bodyLen + 1);
-    rebuildPathInterpolated(path, hx, hy, snapSnake, prevBody, t);
-
-    // For player snake, override angle with local input (responsive steering)
-    const finalAngle = isPlayer ? localTargetAngle : angle;
-
-    // Compute speed from head movement
-    let computedSpeed = 0;
-    if (prevSnake && prevSnake.alive) {
-      const dx = snapSnake.hx - prevSnake.hx;
-      const dy = snapSnake.hy - prevSnake.hy;
-      const snapDist = Math.sqrt(dx * dx + dy * dy);
-      computedSpeed = snapDist / 0.05; // 50ms per snapshot
-    }
-
-    const snake: Snake = {
-      id: snapSnake.id,
-      name: snapSnake.name,
-      path,
-      angle: finalAngle,
-      prevAngle: prevSnake?.angle ?? snapSnake.angle,
-      speed: computedSpeed,
-      score: snapSnake.score,
-      alive: snapSnake.alive,
-      isBot: !isPlayer,
-      isPlayer,
-      spawnTime: now - 5000,
-      color: snapSnake.color,
-      headColor: snapSnake.headColor,
-      lastBoostDrop: 0,
-      targetAngle: finalAngle,
-      spiral: { active: false, consecutiveTurns: 0, ticksElapsed: 0, direction: 1 },
-      bodyRadius: snapSnake.bodyRadius,
-      boosting: snapSnake.boosting,
-      skinId: snapSnake.skinId,
-      rarity: snapSnake.rarity,
-    };
-
-    snakes.set(snapSnake.id, snake);
-    if (isPlayer) player = snake;
-  }
-
-  // Build foods array (same shape as offline FoodOrb)
-  const foods: FoodOrb[] = currSnap.foods.map(f => ({
-    id: f.id, x: f.x, y: f.y,
-    size: f.size, value: f.value,
-    radius: FOOD_RADII[f.size === 'medium' ? 1 : f.size === 'large' ? 2 : 0],
-    color: FOOD_COLORS[f.size === 'medium' ? 1 : f.size === 'large' ? 2 : 0],
-    glowColor: FOOD_GLOW_COLORS[f.size === 'medium' ? 1 : f.size === 'large' ? 2 : 0],
-    magnetized: false,
-  }));
-
-  // Build star chips array (same shape as offline StarChip)
-  const starChips: StarChip[] = currSnap.starChips.map((c, i) => ({
-    id: c.id, x: c.x, y: c.y, value: c.value,
-    radius: STAR_CHIP_RADIUS,
-    color: STAR_CHIP_COLORS[i % STAR_CHIP_COLORS.length],
-    glowColor: STAR_CHIP_GLOW,
-    spawnTime: now - 10000,
-  }));
-
-  return {
-    snakes,
-    foods,
-    starChips,
-    player,
-    nextFoodId: 0,
-    nextStarChipId: 0,
-    showControls: false,
-    tickCount: currSnap.tick,
-    extractionZone: currSnap.extraction,
-  };
-}
-
-// ============================================================================
-// Helper: Render offline background (grid, food, star chips, extraction)
-// ============================================================================
-
-function renderOfflineBackground(
+function renderBackground(
   ctx: CanvasRenderingContext2D,
   state: GameState,
   camera: Camera,
   viewport: Viewport,
   _fps: number,
-  now: number,
+  _now: number,
 ): void {
   const { width, height } = viewport;
 
@@ -1001,18 +504,13 @@ function renderOfflineBackground(
 
   // Food
   drawFoodFromRenderer(ctx, state.foods, camera, viewport);
-
-  // Star chips
-  if (state.starChips.length > 0) {
-    drawStarChipsFromRenderer(ctx, state.starChips, camera, viewport, now);
-  }
 }
 
 // ============================================================================
-// Helper: Render offline HUD (minimap top-left, score bottom-center, kills bottom-right)
+// Helper: Render HUD (minimap top-left, score bottom-center, kills bottom-right)
 // ============================================================================
 
-function renderOfflineHUD(
+function renderHUD(
   ctx: CanvasRenderingContext2D,
   state: GameState,
   camera: Camera,
@@ -1077,7 +575,7 @@ function renderOfflineHUD(
 }
 
 // ============================================================================
-// Minimap: top-left position (shared layout for both offline & online)
+// Minimap: top-left position
 // ============================================================================
 
 const MAP_SIZE = 120;
@@ -1130,36 +628,6 @@ function drawMinimapTopLeft(
 }
 
 // ============================================================================
-// Connection overlay (drawn on canvas when disconnected)
-// ============================================================================
-
-function drawConnectionOverlay(
-  ctx: CanvasRenderingContext2D,
-  viewport: Viewport,
-  state: ConnectionState,
-): void {
-  const { width, height } = viewport;
-
-  // Subtle vignette
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-  ctx.fillRect(0, 0, width, height);
-
-  // Status text
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  if (state === 'connecting' || state === 'reconnecting') {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.font = '18px sans-serif';
-    ctx.fillText('Connecting to server...', width / 2, height / 2);
-  } else if (state === 'error') {
-    ctx.fillStyle = 'rgba(239, 68, 68, 0.8)';
-    ctx.font = '18px sans-serif';
-    ctx.fillText('Connection error — see panel for details', width / 2, height / 2);
-  }
-}
-
-// ============================================================================
 // Extraction progress ring — drawn on snake head (white → green)
 // ============================================================================
 
@@ -1177,7 +645,7 @@ function drawExtractRing(
   const ringRadius = (snake.bodyRadius + 10) * zoom;
   const clampedProgress = Math.max(0, Math.min(1, progress));
 
-  // Background ring (dim track)
+  // Background ring
   ctx.beginPath();
   ctx.arc(sx, sy, ringRadius, 0, Math.PI * 2);
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
@@ -1187,9 +655,9 @@ function drawExtractRing(
   // Progress arc: white → green
   const startAngle = -Math.PI / 2;
   const endAngle = startAngle + clampedProgress * Math.PI * 2;
-  const r = Math.round(255 - clampedProgress * 150);   // 255 → 105
-  const g = Math.round(255 * clampedProgress + 200 * (1 - clampedProgress)); // 200 → 255
-  const b = Math.round(255 * (1 - clampedProgress));   // 255 → 0
+  const r = Math.round(255 - clampedProgress * 150);
+  const g = Math.round(255 * clampedProgress + 200 * (1 - clampedProgress));
+  const b = Math.round(255 * (1 - clampedProgress));
 
   ctx.beginPath();
   ctx.arc(sx, sy, ringRadius, startAngle, endAngle);
@@ -1201,7 +669,7 @@ function drawExtractRing(
 
   // Percentage text
   const pct = Math.floor(clampedProgress * 100);
-  ctx.fillStyle = `rgba(255, 255, 255, 0.8)`;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
   ctx.font = `bold ${Math.round(11 * zoom)}px monospace`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';

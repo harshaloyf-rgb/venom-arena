@@ -2,11 +2,11 @@
 // Renderer — Pure Canvas API rendering functions.
 //
 // Exports only the functions used by SnakeGame.tsx:
-//   - drawGrid, drawFood, drawStarChips, drawExtractionZone (shared renderers)
+// Exports: drawGrid, drawFood, drawExtractionZone (shared renderers)
 //   - drawDeathOverlay, drawControlsHint, drawMinimap (overlay UI)
 // ============================================================================
 
-import type { Camera, FoodOrb, StarChip, Snake, Viewport } from '@/lib/snake/types';
+import type { Camera, FoodOrb, Snake, Viewport } from '@/lib/snake/types';
 import { ARENA_GRID_SIZE } from '@/lib/snake/config';
 import { worldToScreen } from '@/lib/snake/camera';
 
@@ -104,61 +104,6 @@ export function drawFood(
     ctx.beginPath();
     ctx.arc(sx, sy, r, 0, Math.PI * 2);
     ctx.fill();
-  }
-}
-
-// ==========================================================================
-// Star Chips (golden glow collectibles)
-// ==========================================================================
-
-export function drawStarChips(
-  ctx: CanvasRenderingContext2D,
-  chips: StarChip[],
-  camera: Camera,
-  viewport: Viewport,
-  now: number,
-): void {
-  const zoom = camera.zoom;
-  const cw = viewport.width;
-  const ch = viewport.height;
-
-  for (let i = 0; i < chips.length; i++) {
-    const c = chips[i];
-
-    if (c.x < viewport.left - 30 || c.x > viewport.right + 30) continue;
-    if (c.y < viewport.top - 30 || c.y > viewport.bottom + 30) continue;
-
-    const { x: sx, y: sy } = worldToScreen(c.x, c.y, camera, cw, ch);
-    const r = c.radius * zoom;
-    if (r < 1) continue;
-
-    const pulse = 0.7 + 0.3 * Math.sin((now - c.spawnTime) * 0.004);
-    ctx.globalAlpha = 0.35 * pulse;
-    ctx.fillStyle = c.glowColor;
-    ctx.beginPath();
-    ctx.arc(sx, sy, r * 3, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.globalAlpha = 0.2 * pulse;
-    ctx.strokeStyle = c.glowColor;
-    ctx.lineWidth = 1.5 * zoom;
-    ctx.beginPath();
-    ctx.arc(sx, sy, r * 2, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.globalAlpha = 1;
-
-    ctx.fillStyle = c.color;
-    ctx.beginPath();
-    ctx.arc(sx, sy, r, 0, Math.PI * 2);
-    ctx.fill();
-
-    if (r > 3) {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-      ctx.beginPath();
-      ctx.arc(sx - r * 0.15, sy - r * 0.2, r * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-    }
   }
 }
 
