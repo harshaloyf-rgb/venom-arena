@@ -9,10 +9,10 @@
 
 import { useEffect, useRef } from 'react';
 import { SNAKE_RADIUS, CAMERA_BASE_ZOOM } from '@/lib/snake/config';
-import { getSkinAsset } from '@/lib/snake/skin-registry-offline';
+import { getSkinAsset } from '@/lib/snake/skin-registry';
 import { resolveShapeStyle, computeTaperRadius, drawSegmentShape, readCustomSkinStateSafe, getSkinVisualProps } from './cosmetics-utils';
 import type { BodyStyle, TaperStyle, CustomSegment } from './cosmetics-types';
-import { getCosmeticById, readEquippedCosmetics, type EquippedCosmetics } from '@/lib/snake/face-cosmetics-offline';
+import { getCosmeticById, readEquippedCosmetics, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
 
 // ─── Color helpers ─────────────────────────────────────────
 

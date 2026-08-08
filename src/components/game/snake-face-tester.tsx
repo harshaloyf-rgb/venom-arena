@@ -19,7 +19,7 @@ function previewBodyLength(score: number): number {
     10000,
   );
 }
-import { getSkinAsset } from '@/lib/snake/skin-registry-offline';
+import { getSkinAsset } from '@/lib/snake/skin-registry';
 
 // ─── Color helpers ─────────────────────────────────────────────────────
 

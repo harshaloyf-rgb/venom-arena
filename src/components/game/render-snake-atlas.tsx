@@ -1,15 +1,14 @@
 // ============================================================================
-// Atlas-based Snake Renderer + Fallback Renderer — ONLINE mode ONLY.
-// Editing this file does NOT affect offline mode.
+// Atlas-based Snake Renderer + Fallback Renderer — SHARED — used by both offline and online modes.
 // ============================================================================
 
 import type { Camera, Snake, Viewport } from '@/lib/snake/types';
 import { SEGMENT_SPACING, SPAWN_PROTECTION_MS, LEGENDARY_GLOW_SIZE, computeBodyLength } from '@/lib/snake/config';
-import { worldToScreen } from '@/lib/snake/camera-online';
-import type { SkinAtlasManager } from '@/lib/snake/atlas-online';
-import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas-online';
-import { isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry-online';
-import { renderEquippedCosmetics, readEquippedCosmetics } from '@/lib/snake/face-cosmetics-online';
+import { worldToScreen } from '@/lib/snake/camera';
+import type { SkinAtlasManager } from '@/lib/snake/atlas';
+import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
+import { isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
+import { renderEquippedCosmetics, readEquippedCosmetics } from '@/lib/snake/face-cosmetics';
 import { drawSegmentShape, readCustomSkinState, getSkinVisualProps, resolveShapeStyle, computeTaperRadius } from '@/components/panels/cosmetics/cosmetics-utils';
 import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-types';
 

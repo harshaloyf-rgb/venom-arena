@@ -1,10 +1,9 @@
 // ============================================================================
-// Camera — ONLINE mode ONLY.
-// Editing this file does NOT affect offline mode.
+// Camera — SHARED — used by both offline and online modes.
 // ============================================================================
 // Position: camera = exact head position (no lerp, no snap).
 //   The head stays at dead screen center → zero relative motion → zero jitter.
-//   Grid line crawl is handled by renderer-online.ts (own pixel-snapping).
+//   Grid line crawl is handled by renderer.ts (own pixel-snapping).
 //   Name labels use Math.round for integer-pixel rendering.
 // Zoom: smooth lerp — no quantization snap (was causing visible jumps).
 // ============================================================================
