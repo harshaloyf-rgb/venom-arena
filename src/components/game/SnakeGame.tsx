@@ -20,7 +20,6 @@ import {
   type Viewport,
   type Snake,
   FIXED_DT,
-  CAMERA_LERP,
   SEGMENT_SPACING,
   BASE_SPEED,
   computeBodyLength,
@@ -370,11 +369,15 @@ export default function SnakeGame({
         lastTimeRef.current = timestamp;
         accumulatorRef.current += elapsed;
 
-        // Run fixed ticks
+        // Fixed timestep — cap at 1 tick per frame to prevent stutter.
+        // Running 2 ticks in one frame makes the snake jump 6px then freeze
+        // the next frame. Capping ensures consistent 1-tick-per-frame motion.
         const tickMs = FIXED_DT * 1000;
-        while (accumulatorRef.current >= tickMs) {
+        if (accumulatorRef.current >= tickMs) {
           gameTick(state, inputState, FIXED_DT);
           accumulatorRef.current -= tickMs;
+          // Cap accumulator to prevent spiral-of-death catch-up frames
+          if (accumulatorRef.current > tickMs) accumulatorRef.current = tickMs * 0.5;
 
           // Check player death
           if (state.player && !state.player.alive && !isDeadRef.current) {
@@ -484,9 +487,11 @@ export default function SnakeGame({
           break;
         }
         if (playerSnake) {
-          // Update camera using extrapolated head position
-          cameraRef.current.x += (playerSnake.headX - cameraRef.current.x) * CAMERA_LERP;
-          cameraRef.current.y += (playerSnake.headY - cameraRef.current.y) * CAMERA_LERP;
+          // Snap camera to extrapolated head with sub-pixel precision
+          const z = cameraRef.current.zoom;
+          const p = 1.0 / z;
+          cameraRef.current.x = Math.round(playerSnake.headX / p) * p;
+          cameraRef.current.y = Math.round(playerSnake.headY / p) * p;
         }
 
         const viewport: Viewport = getViewport(cameraRef.current, w, h);
