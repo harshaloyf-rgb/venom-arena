@@ -1211,3 +1211,96 @@ Stage Summary:
 - Drops along body at 15%, 34%, 52%, 71%, 89% positions
 - Food never "stops" while boosting (BOOST_MIN_SCORE=0, body length is the limiter)
 - 5x more food per second (25/sec vs 5/sec previously)
+
+---
+Task ID: 4
+Agent: Main
+Task: Rewrite engine.ts as thin wrapper around unified core.ts
+
+Work Log:
+- Read core.ts (816 lines) — understood all exported functions, types, and constants
+- Read engine.ts (974 lines) — understood offline-specific orchestration and all local functions
+- Read types.ts — understood GameState, Snake, InputState types
+- Read bot-ai.ts — understood BotSnakeInput interface and getBotTarget signature
+- Read snapshot.ts — understood buildSnapshot function for re-export
+- Read config.ts — understood all config constants needed
+
+Changes made to /home/z/my-project/src/lib/snake/engine.ts:
+- Removed ~850 lines of duplicated game logic (createSnake, findSafeSpawn, moveSnake, makeFood, spawnFoodBatch, checkFoodEating, checkCollisions, killSnake, respawnBots, checkStarChips, spawnStarChip)
+- Replaced with thin wrapper that imports all game logic from ./core
+- Kept offline-specific code: PlayerSkinOverride, createInitialState, gameTick, respawnPlayer, setDebugScore, maintainFoodAroundPlayer
+- Maintained module-level singletons: foodHash, bodyHash, headHash, foodValueCache, _insertScratch
+- Maintained module-level constants: DESPAWN_RADIUS_SQ, VISIBLE_RADIUS_SQ
+- Added Map cast helpers (asSnakeLikeMap, asBotInputMap) for type-safe core function calls
+- gameTick now creates per-tick { value: number } refs for nextFoodId/nextStarChipId, passes to core functions, syncs back
+- maintainFoodAroundPlayer uses core's makeFood with the shared nextIdRef
+- checkFoodEating now uses core's version (returns eatenIds Set) + swap-remove in engine.ts
+- checkStarChips now uses core's version (returns collectedIds Set) + swap-remove in engine.ts
+- checkCollisions now uses core's version (returns CollisionResult { deadIds, killEvents }), processes deadIds
+- moveSnake uses core's version with MoveContext (foods, nextFoodId, extractionZone)
+- killSnake uses core's version (snake, nextFoodId, foods) + map removal logic in engine.ts
+- respawnBots uses core's version (returns SnakeLike[]) + adds to state.snakes as Snake
+- Initial food spawn: 3000 items via core's spawnFoodBatch
+- Food density distribution preserved: 50% uniform, 30% ahead, 20% around ring
+- buildSnapshot re-exported from ./snapshot unchanged
+- Fixed TS errors: removed obstacles field (not in GameState type), cast ensureCapacity call
+- Lint and TypeScript checks pass cleanly (no new errors)
+
+Stage Summary:
+- engine.ts reduced from 974 lines to ~440 lines (~55% reduction)
+- All game logic now lives in core.ts, shared between offline and online
+- Offline-specific orchestration preserved: GameState creation, tick loop, density food management, respawn, debug
+
+---
+Task ID: 6-7
+Agent: Main
+Task: Rewrite game-server shared.ts and game-state.ts to use unified core engine
+
+Work Log:
+- Read core.ts (816 lines) — all pure game logic: createSnake, findSafeSpawn, moveSnake (Fibonacci spiral), makeFood, spawnFoodBatch, checkFoodEating, checkCollisions, killSnake, respawnBots, checkStarChips, spawnStarChip, buildSnakeSnapshot, buildArenaSnapshot
+- Read old shared.ts (502 lines) — copy-pasted types, PathBuffer, SpatialHash, config, bot AI, vec2 utils
+- Read old game-state.ts (1013 lines) — ArenaRoom with duplicate movement/collision/food logic
+- Read index.ts — uses ArenaRoom.addPlayer/removePlayer/handleInput/buildSnapshot, KillEvent{killer,killerName,victim,victimName}
+- Read config.ts — 85+ params; found 5 server-only constants not in config (ARENA_RADIUS, FOOD_COUNT_TARGET, FOOD_SPAWN_AREA_RADIUS, EXTRACTION_ZONE_DURATION, EXTRACTION_ZONE_SPAWN_INTERVAL)
+- Read bot-ai.ts — updated with BotSnakeInput interface, uses PathBuffer directly
+- Wrote shared.ts: 55 lines (was 502). Re-exports types from types.ts, functions from core.ts, config from config.ts, utilities from vec2/bot-ai, classes from pool/spatial-hash. Server-only constants defined locally.
+- Wrote game-state.ts: 270 lines (was 1013). ServerSnake extends SnakeLike. ArenaRoom delegates all game logic to core functions. Online-only code preserved: addPlayer/removePlayer/handleInput, enforceArenaBounds, manageExtractionZone, count-based food spawning, buildSnapshot with lastSnapshot caching.
+- Key changes in game-state.ts:
+  - Removed: createSnake (use core), moveSnake (use core with MoveContext), checkFoodEating (use core), checkCollisions (use core), killSnake (use core), respawnBots (use core), spawnStarChip (use core), buildSnapshot/buildSnakeSnapshot (use core), updateSpiralTurn (Fibonacci ramp in core now), bodySegMap (core uses spatial hash directly)
+  - Added: headHash + scratch entity for core's checkCollisions, foodValueCache for core's checkFoodEating, nextFoodIdRef/nextStarChipIdRef wrappers for core's {value:number} pattern
+  - Changed: .filter() → swap-remove for food/star chips, KillEvent conversion (core uses victimId/killerId, server uses victim/killer)
+  - Spiral: old log-spiral (a*e^(b*theta)) replaced by core's Fibonacci ramp system
+- TypeScript strict check passes (shared.ts + game-state.ts + index.ts)
+- Server starts successfully on port 3001
+
+Stage Summary:
+- shared.ts: 502 → 55 lines (89% reduction). Zero game logic — pure re-exports.
+- game-state.ts: 1013 → 270 lines (73% reduction). All game logic delegated to core.
+- Total online server code: 1515 → 325 lines (79% reduction)
+- Both modes (offline engine + online server) now share identical game logic via core.ts
+- Server-only concerns cleanly separated: player I/O, arena bounds, extraction timing, count-based food, network KillEvent format
+---
+Task ID: unified-engine
+Agent: Main
+Task: Create unified snake engine (core.ts) — single source of truth for both offline and online modes
+
+Work Log:
+- Analyzed 6 source files to catalog ALL differences between offline (engine.ts) and online (game-state.ts + shared.ts)
+- Created src/lib/snake/core.ts (~816 lines) with ALL shared game logic: createSnake, moveSnake, findSafeSpawn, makeFood, checkFoodEating, checkCollisions, killSnake, respawnBots, checkStarChips, spawnStarChip, spawnFoodBatch, buildSnakeSnapshot, buildArenaSnapshot
+- Updated bot-ai.ts to use generic BotSnakeInput interface (works for both Snake and ServerSnake)
+- Rewrote src/lib/snake/engine.ts from 974 → 431 lines (thin offline wrapper using core)
+- Rewrote mini-services/game-server/shared.ts from 502 → 73 lines (pure re-exports from core)
+- Rewrote mini-services/game-server/game-state.ts from 1013 → 420 lines (ArenaRoom delegates to core)
+- Updated index.ts barrel exports
+- Updated game-server tsconfig.json to include core path
+- Analyzed boost food drop bug — was in OLD online code (aggressive while-loop trimming + explicit pop on drop), now fixed by unified engine
+- Verified: ESLint passes (zero errors), dev server starts clean, game canvas renders (1280x577), no runtime errors
+
+Stage Summary:
+- Created /home/z/my-project/src/lib/snake/core.ts — THE unified engine
+- Both offline and online now use IDENTICAL game logic from one file
+- ~1500 lines of duplicated code eliminated
+- Config values are now single-source (no more divergence between offline/online)
+- Key behavioral unifications: Fibonacci spiral assist (not log-spiral), dynamic turn rate, boost score cost, pop×2 length management
+- Online-only features preserved: arena bounds, extraction zone timer, count-based food spawning, Socket.IO player management
+

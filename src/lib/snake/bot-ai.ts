@@ -4,7 +4,8 @@
 // Phase A: Updated to use PathBuffer direct access.
 // ============================================================================
 
-import type { Snake, FoodOrb } from './types';
+import type { IPathBuffer } from './pool';
+import type { FoodOrb } from './types';
 import { distSq, angleDirect } from './vec2';
 import {
   BOT_FOOD_SCAN_RADIUS,
@@ -24,9 +25,19 @@ import {
  * 2. Seek nearest food within scan radius
  * 3. Wander randomly
  */
+/** Minimal snake interface for bot AI — both offline Snake and online ServerSnake satisfy this */
+export interface BotSnakeInput {
+  id: string;
+  path: IPathBuffer;
+  angle: number;
+  score: number;
+  alive: boolean;
+  isBot: boolean;
+}
+
 export function getBotTarget(
-  bot: Snake,
-  allSnakes: Map<string, Snake>,
+  bot: BotSnakeInput,
+  allSnakes: Map<string, BotSnakeInput>,
   foods: FoodOrb[],
 ): number {
   const hx = bot.path.headX;
