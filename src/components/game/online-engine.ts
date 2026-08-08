@@ -43,7 +43,7 @@ export class OnlineEngine {
   };
   private inputDirty = false;
   private lastInputSend = 0;
-  private readonly INPUT_SEND_INTERVAL_MS = 50; // 20Hz input rate
+  private readonly INPUT_SEND_INTERVAL_MS = 33; // ~30Hz input rate (matches server tick)
 
   // Callbacks (set by consumer)
   public onSnapshot: ((snapshot: ArenaSnapshot) => void) | null = null;
@@ -51,19 +51,27 @@ export class OnlineEngine {
   public onError: ((message: string) => void) | null = null;
   public onConnectionChange: ((state: ConnectionState) => void) | null = null;
   public onPlayerDied: (() => void) | null = null;
+  public onInit: ((data: { snakeId: string; arenaId: string }) => void) | null = null;
 
   // Track our snake ID (sent by server in 'init' event)
-  private mySnakeId: string | null = null;
+  private _mySnakeId: string | null = null;
 
   // ── Connection lifecycle ───────────────────────────────────────────────────
 
   /** Connect to the game server for a specific arena. */
-  connect(arenaId: string, token: string, skinId: string): void {
+  connect(
+    arenaId: string,
+    token: string,
+    skinId: string,
+    playerName: string = 'Player',
+    bodyColor: string = '',
+    headColor: string = '',
+    rarity: string = 'common',
+  ): void {
     this.setConnectionState('connecting');
 
     // Gateway relay: relative path with port in query
-    // Auth token and arenaId sent via Socket.IO handshake auth
-    // so the server middleware can validate before accepting the connection
+    // Auth token, arenaId, player name, and skin sent via Socket.IO handshake auth
     this.socket = io('/?XTransformPort=3001', {
       transports: ['websocket', 'polling'],
       reconnection: true,
@@ -73,6 +81,11 @@ export class OnlineEngine {
       auth: {
         token,
         arenaId,
+        playerName,
+        skinId,
+        bodyColor,
+        headColor,
+        rarity,
       },
     });
 
@@ -84,8 +97,9 @@ export class OnlineEngine {
 
     // Server sends 'init' with our snake ID and arena info
     this.socket.on('init', (data: { snakeId: string; arenaId: string; tickRate: number; broadcastRate: number }) => {
-      this.mySnakeId = data.snakeId;
+      this._mySnakeId = data.snakeId;
       console.log('[OnlineEngine] Initialized:', data);
+      this.onInit?.({ snakeId: data.snakeId, arenaId: data.arenaId });
     });
 
     // Server sends 'snapshot' at 20Hz with full arena state
@@ -108,15 +122,16 @@ export class OnlineEngine {
       this.onKill?.(entry);
 
       // If we are the victim, notify death
-      if (data.victim === this.mySnakeId) {
+      if (data.victim === this._mySnakeId) {
         this.onPlayerDied?.();
       }
     });
 
     // Server sends 'respawned' after successful respawn
     this.socket.on('respawned', (data: { snakeId: string }) => {
-      this.mySnakeId = data.snakeId;
+      this._mySnakeId = data.snakeId;
       console.log('[OnlineEngine] Respawned:', data);
+      this.onInit?.({ snakeId: data.snakeId, arenaId: '' });
     });
 
     this.socket.on('disconnect', (reason) => {
@@ -138,7 +153,7 @@ export class OnlineEngine {
       this.socket = null;
     }
     this._lastSnapshot = null;
-    this.mySnakeId = null;
+    this._mySnakeId = null;
     this.setConnectionState('disconnected');
   }
 
@@ -196,6 +211,11 @@ export class OnlineEngine {
 
   get isConnected(): boolean {
     return this._connectionState === 'connected';
+  }
+
+  /** The snake ID assigned by the server for this player. */
+  get mySnakeId(): string | null {
+    return this._mySnakeId;
   }
 
   // ── Private: Connection state setter ───────────────────────────────────────

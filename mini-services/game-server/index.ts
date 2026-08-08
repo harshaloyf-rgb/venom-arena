@@ -62,7 +62,7 @@ setInterval(() => {
 // ─── Auth Middleware ──────────────────────────────────────────────────────────
 
 io.use((socket, next) => {
-  const { token, arenaId } = socket.handshake.auth;
+  const { token, arenaId, playerName, skinId, bodyColor, headColor, rarity } = socket.handshake.auth;
 
   // Basic validation: token must be non-empty string
   if (!token || typeof token !== 'string' || token.trim().length === 0) {
@@ -77,6 +77,11 @@ io.use((socket, next) => {
   // Store validated data on socket
   (socket.data as any).userId = token.trim();
   (socket.data as any).arenaId = arenaId.trim();
+  (socket.data as any).playerName = typeof playerName === 'string' ? playerName.trim().slice(0, 16) : token.trim().slice(0, 16);
+  (socket.data as any).skinId = typeof skinId === 'string' ? skinId : 'skin-default';
+  (socket.data as any).bodyColor = typeof bodyColor === 'string' ? bodyColor : '';
+  (socket.data as any).headColor = typeof headColor === 'string' ? headColor : '';
+  (socket.data as any).rarity = typeof rarity === 'string' ? rarity : 'common';
 
   next();
 });
@@ -86,17 +91,19 @@ io.use((socket, next) => {
 io.on('connection', (socket) => {
   const userId = (socket.data as any).userId as string;
   const arenaId = (socket.data as any).arenaId as string;
+  const playerName = (socket.data as any).playerName as string;
+  const skinId = (socket.data as any).skinId as string;
+  const bodyColor = (socket.data as any).bodyColor as string;
+  const headColor = (socket.data as any).headColor as string;
+  const rarity = (socket.data as any).rarity as string;
 
-  console.log(`[Connect] socket=${socket.id} user=${userId} arena=${arenaId}`);
+  console.log(`[Connect] socket=${socket.id} user=${userId} name=${playerName} arena=${arenaId} skin=${skinId}`);
 
   // Get or create arena
   const arena = getOrCreateArena(arenaId);
 
-  // Default player name from userId
-  const playerName = userId.slice(0, 16);
-
-  // Add player to arena
-  const snake = arena.addPlayer(socket.id, playerName);
+  // Add player to arena with skin override
+  const snake = arena.addPlayer(socket.id, playerName, skinId, rarity as any, bodyColor, headColor);
 
   // Send initial state snapshot
   const initSnapshot = arena.buildSnapshot();
@@ -133,11 +140,13 @@ io.on('connection', (socket) => {
 
   // ── Skin Change ────────────────────────────────────────────────────
 
-  socket.on('setSkin', (data: { skinId: string; rarity: SkinRarity }) => {
+  socket.on('setSkin', (data: { skinId: string; rarity: SkinRarity; bodyColor?: string; headColor?: string }) => {
     const s = arena.snakes.get(socket.id);
     if (s) {
       s.skinId = data.skinId;
       s.rarity = data.rarity;
+      if (data.bodyColor) s.color = data.bodyColor;
+      if (data.headColor) s.headColor = data.headColor;
     }
   });
 

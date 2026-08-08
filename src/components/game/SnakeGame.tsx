@@ -20,6 +20,8 @@ import {
   type Snake,
   type FoodOrb,
   type StarChip,
+  type ArenaSnapshot,
+  type SnakeSnapshot,
   FIXED_DT,
   FOOD_COLORS,
   FOOD_RADII,
@@ -33,7 +35,7 @@ import { createCamera, updateCamera, getViewport, worldToScreen } from '@/lib/sn
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, getPlayerSkinId, registerSkinAsset } from '@/lib/snake/skin-registry';
 import { useAuth } from '@/components/providers/auth-provider';
-import { ExtrapolationEngine, type RenderableSnake, type RenderableFood, type RenderableStarChip } from '@/lib/snake/extrapolation';
+import { PathBuffer } from '@/lib/snake/pool';
 import { OnlineEngine, type ConnectionState } from './online-engine';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -93,11 +95,18 @@ export default function SnakeGame({
 
   // Online state
   const onlineEngineRef = useRef<OnlineEngine | null>(null);
-  const extrapolationRef = useRef<ExtrapolationEngine | null>(null);
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [onlineError, setOnlineError] = useState<string | null>(null);
   const isDeadOnlineRef = useRef(false);
   const onlineDeathTimeRef = useRef(0);
+
+  // Online snapshot interpolation state
+  const onlinePrevSnapRef = useRef<ArenaSnapshot | null>(null);
+  const onlineCurrSnapRef = useRef<ArenaSnapshot | null>(null);
+  const onlineSnapTimeRef = useRef<number>(0);
+  const onlineMySnakeIdRef = useRef<string | null>(null);
+  // Cached PathBuffers per snake (reused across frames to avoid GC)
+  const onlinePathCacheRef = useRef<Map<string, PathBuffer>>(new Map());
 
   // Atlas manager (shared across modes)
   const atlasManagerRef = useRef<SkinAtlasManager | null>(null);
@@ -114,7 +123,7 @@ export default function SnakeGame({
 
   // ── Leaderboard updater (offline) ──
 
-  
+   
 
   const updateLeaderboard = useCallback((state: GameState) => {
     const entries: { name: string; score: number }[] = [];
@@ -127,11 +136,11 @@ export default function SnakeGame({
     setLeaderboard(entries.slice(0, 5));
   }, []);
 
-  // ── Leaderboard updater (online — from extrapolation) ──
+  // ── Leaderboard updater (online — from snapshot) ──
 
-  const updateOnlineLeaderboard = useCallback((snakes: Map<string, RenderableSnake>) => {
+  const updateOnlineLeaderboard = useCallback((snakes: SnakeSnapshot[]) => {
     const entries: { name: string; score: number }[] = [];
-    for (const [, s] of snakes) {
+    for (const s of snakes) {
       if (s.alive) {
         entries.push({ name: s.name, score: Math.floor(s.score) });
       }
@@ -244,13 +253,10 @@ export default function SnakeGame({
 
     // ── Online engine setup ──
     let onlineEngine: OnlineEngine | null = null;
-    let extrapolation: ExtrapolationEngine | null = null;
 
     if (mode === 'online' && arenaId && authToken) {
       onlineEngine = new OnlineEngine();
-      extrapolation = new ExtrapolationEngine();
       onlineEngineRef.current = onlineEngine;
-      extrapolationRef.current = extrapolation;
 
       onlineEngine.onConnectionChange = (state) => {
         setConnectionState(state);
@@ -259,8 +265,16 @@ export default function SnakeGame({
         }
       };
 
+      // ── Snapshot handler: store for interpolation ──
+      onlineEngine.onInit = (data) => {
+        onlineMySnakeIdRef.current = data.snakeId;
+        console.log('[SnakeGame] Got snake ID:', data.snakeId);
+      };
+
       onlineEngine.onSnapshot = (snapshot) => {
-        extrapolation!.update(snapshot, performance.now());
+        onlinePrevSnapRef.current = onlineCurrSnapRef.current;
+        onlineCurrSnapRef.current = snapshot;
+        onlineSnapTimeRef.current = performance.now();
       };
 
       onlineEngine.onError = (msg) => {
@@ -271,18 +285,24 @@ export default function SnakeGame({
         isDeadOnlineRef.current = true;
         onlineDeathTimeRef.current = performance.now();
         setIsDead(true);
-        // Get score from last extrapolated state
-        const snakes = extrapolation!.getRenderableSnakes();
-        // Find player snake (first one or use stored ID)
-        let maxScore = 0;
-        for (const [, s] of snakes) {
-          if (s.score > maxScore) maxScore = s.score;
+        const snap = onlineCurrSnapRef.current;
+        if (snap) {
+          const mySnake = snap.snakes.find(s => s.id === onlineMySnakeIdRef.current);
+          setFinalScore(mySnake?.score ?? 0);
         }
-        setFinalScore(maxScore);
       };
 
-      // Connect with player's selected skin
-      onlineEngine.connect(arenaId, authToken, playerSkinId);
+      // Connect with player's name and skin
+      const playerName = authPlayer?.name || 'Player';
+      onlineEngine.connect(
+        arenaId,
+        authToken,
+        playerSkinId,
+        playerName,
+        playerSkinAsset.bodyColor,
+        playerSkinAsset.headColor,
+        playerSkinAsset.rarity,
+      );
     }
 
     // ── Game loop ──
@@ -376,8 +396,6 @@ export default function SnakeGame({
         accumulatorRef.current += elapsed;
 
         // Fixed timestep — cap at 1 tick per frame to prevent stutter.
-        // Running 2 ticks in one frame makes the snake jump 6px then freeze
-        // the next frame. Capping ensures consistent 1-tick-per-frame motion.
         const tickMs = FIXED_DT * 1000;
         if (accumulatorRef.current >= tickMs) {
           const killEvents = gameTick(state, inputState, FIXED_DT);
@@ -471,37 +489,86 @@ export default function SnakeGame({
       }
 
       // ────────────────────────────────────────────────────────────────────
-      // ONLINE MODE — server snapshots + extrapolation (same renderers as offline)
+      // ONLINE MODE — server snapshots + interpolation (same renderers as offline)
       // ────────────────────────────────────────────────────────────────────
-      else if (effectiveMode === 'online' && extrapolation && onlineEngine) {
+      else if (effectiveMode === 'online' && onlineEngine) {
         // Forward input to server
         if (onlineEngine.isConnected) {
           onlineEngine.setInput(inputState.targetAngle, inputState.boosting);
         }
 
-        // Extrapolate between snapshots
-        const dt = 1 / 60;
-        extrapolation.extrapolate(dt);
+        const currSnap = onlineCurrSnapRef.current;
+        const prevSnap = onlinePrevSnapRef.current;
 
-        const renderableSnakes = extrapolation.getRenderableSnakes();
-        const renderableFoods = extrapolation.getRenderableFoods();
-        const renderableStarChips = extrapolation.getRenderableStarChips();
-        const extraction = extrapolation.extraction;
+        if (!currSnap || currSnap.snakes.length === 0) {
+          // No snapshot yet — draw loading
+          ctx.fillStyle = '#0a0a0f';
+          ctx.fillRect(0, 0, w, h);
+          drawConnectionOverlay(ctx, { width: w, height: h }, onlineEngine.connectionState);
+          animFrameRef.current = requestAnimationFrame(loop);
+          return;
+        }
 
-        // ── Convert RenderableSnakes to Snake objects for unified rendering ──
+        // ── Interpolation factor between snapshots (0 = prev, 1 = curr) ──
+        const snapAge = performance.now() - onlineSnapTimeRef.current;
+        const SNAPSHOT_INTERVAL = 50; // 20Hz broadcast
+        const t = Math.min(snapAge / SNAPSHOT_INTERVAL, 1.0);
+
+        // ── Build interpolated snakes ──
         const adaptedSnakes = new Map<string, Snake>();
         let adaptedPlayer: Snake | null = null;
         const localTargetAngle = inputState.targetAngle;
-        let isFirst = true;
-        for (const [, rs] of renderableSnakes) {
-          if (!rs.alive) continue;
-          const isPlayer = isFirst;
-          const adapted = renderableToSnake(rs, isPlayer, now, isPlayer ? localTargetAngle : undefined);
-          adaptedSnakes.set(rs.id, adapted);
-          if (isPlayer) {
-            adaptedPlayer = adapted;
-            isFirst = false;
+
+        for (const snapSnake of currSnap.snakes) {
+          if (!snapSnake.alive) continue;
+          const isPlayer = snapSnake.id === onlineMySnakeIdRef.current;
+
+          // Find matching snake in previous snapshot for interpolation
+          const prevSnake = prevSnap?.snakes.find(s => s.id === snapSnake.id);
+
+          // Interpolate head position
+          let hx = snapSnake.hx;
+          let hy = snapSnake.hy;
+          let angle = snapSnake.angle;
+          if (prevSnake && prevSnake.alive && t < 1.0) {
+            hx = lerp(prevSnake.hx, snapSnake.hx, t);
+            hy = lerp(prevSnake.hy, snapSnake.hy, t);
+            // Don't interpolate angle across wraps — just use current
+            angle = snapSnake.angle;
           }
+
+          // Build PathBuffer from (interpolated) snapshot data
+          const path = getOrCreatePath(onlinePathCacheRef.current, snapSnake.id, snapSnake.bodyLen + 1);
+          rebuildPathFromSnapshot(path, hx, hy, snapSnake);
+
+          // For player snake, override angle with local input (responsive steering)
+          const finalAngle = isPlayer ? localTargetAngle : angle;
+
+          const adapted: Snake = {
+            id: snapSnake.id,
+            name: snapSnake.name,
+            path,
+            angle: finalAngle,
+            prevAngle: prevSnake?.angle ?? snapSnake.angle,
+            speed: 0, // Not used by renderer
+            score: snapSnake.score,
+            alive: snapSnake.alive,
+            isBot: !isPlayer,
+            isPlayer,
+            spawnTime: now - 5000,
+            color: snapSnake.color,
+            headColor: snapSnake.headColor,
+            lastBoostDrop: 0,
+            targetAngle: finalAngle,
+            spiral: { active: false, consecutiveTurns: 0, ticksElapsed: 0, direction: 1 },
+            bodyRadius: snapSnake.bodyRadius,
+            boosting: snapSnake.boosting,
+            skinId: snapSnake.skinId,
+            rarity: snapSnake.rarity,
+          };
+
+          adaptedSnakes.set(snapSnake.id, adapted);
+          if (isPlayer) adaptedPlayer = adapted;
         }
 
         // ── Camera: use same updateCamera as offline (smooth zoom) ──
@@ -517,47 +584,36 @@ export default function SnakeGame({
         const mouseSY = mousePos?.y;
 
         // ── Render: background (clear, grid, extraction zone, food, star chips) ──
-        ctx.fillStyle = '#0a0a0f';
-        ctx.fillRect(0, 0, w, h);
-        drawGridFromRenderer(ctx, cameraRef.current, viewport);
-
-        if (extraction.active) {
-          drawExtractionZoneFromRenderer(ctx, extraction, cameraRef.current, viewport);
-        }
-
-        // Food — convert RenderableFood[] to FoodOrb[] for unified renderer
-        const foodSizeIdx = (size: string) => size === 'medium' ? 1 : size === 'large' ? 2 : 0;
-        const foodOrbs: FoodOrb[] = renderableFoods.map(f => ({
-          id: f.id,
-          x: f.x,
-          y: f.y,
-          size: f.size,
-          value: f.value,
-          radius: FOOD_RADII[foodSizeIdx(f.size)],
-          color: FOOD_COLORS[foodSizeIdx(f.size)],
-          glowColor: FOOD_GLOW_COLORS[foodSizeIdx(f.size)],
-          magnetized: false,
-        }));
-        drawFoodFromRenderer(ctx, foodOrbs, cameraRef.current, viewport);
-
-        // Star chips — convert RenderableStarChip[] to StarChip[] for unified renderer
-        if (renderableStarChips.length > 0) {
-          const starChips: StarChip[] = renderableStarChips.map((c, i) => ({
-            id: c.id,
-            x: c.x,
-            y: c.y,
-            value: c.value,
+        renderOfflineBackground(ctx, {
+          snakes: adaptedSnakes,
+          foods: currSnap.foods.map(f => ({
+            id: f.id, x: f.x, y: f.y,
+            size: f.size, value: f.value,
+            radius: FOOD_RADII[f.size === 'medium' ? 1 : f.size === 'large' ? 2 : 0],
+            color: FOOD_COLORS[f.size === 'medium' ? 1 : f.size === 'large' ? 2 : 0],
+            glowColor: FOOD_GLOW_COLORS[f.size === 'medium' ? 1 : f.size === 'large' ? 2 : 0],
+            magnetized: false,
+          })) as FoodOrb[],
+          starChips: currSnap.starChips.map((c, i) => ({
+            id: c.id, x: c.x, y: c.y, value: c.value,
             radius: STAR_CHIP_RADIUS,
             color: STAR_CHIP_COLORS[i % STAR_CHIP_COLORS.length],
             glowColor: STAR_CHIP_GLOW,
-            spawnTime: now - 10000, // Approximate — no spawn time from server
-          }));
-          drawStarChipsFromRenderer(ctx, starChips, cameraRef.current, viewport, now);
-        }
+            spawnTime: now - 10000,
+          })) as StarChip[],
+          player: adaptedPlayer,
+          nextFoodId: 0, nextStarChipId: 0,
+          showControls: false, tickCount: currSnap.tick,
+          extractionZone: currSnap.extraction,
+        } as GameState, cameraRef.current, viewport, fc.fps, now);
 
-        // ── Render snakes — all use atlas renderer (bots removed) ──
+        // ── Render snakes — player uses atlas, others use fallback ──
         for (const [, s] of adaptedSnakes) {
-          renderSnakeAtlas(ctx, s, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY);
+          if (s.isPlayer) {
+            renderSnakeAtlas(ctx, s, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY);
+          } else {
+            renderSnakeFallback(ctx, s, cameraRef.current, viewport, now);
+          }
         }
 
         // Extraction progress ring on snake head
@@ -569,15 +625,18 @@ export default function SnakeGame({
         if (adaptedPlayer) {
           renderOfflineHUD(ctx, {
             snakes: adaptedSnakes,
-            foods: foodOrbs,
+            foods: [],
             starChips: [],
             player: adaptedPlayer,
-            nextFoodId: 0,
-            nextStarChipId: 0,
-            showControls: false,
-            tickCount: 0,
-            extractionZone: extraction,
+            nextFoodId: 0, nextStarChipId: 0,
+            showControls: false, tickCount: 0,
+            extractionZone: currSnap.extraction,
           } as GameState, cameraRef.current, viewport, fc.fps, now, killsRef.current, 0);
+        }
+
+        // Controls hint on first join
+        if (showControlsRef.current && adaptedPlayer?.alive) {
+          drawControlsHint(ctx, viewport);
         }
 
         // Mouse cursor indicator (slither.io style crosshair)
@@ -602,7 +661,7 @@ export default function SnakeGame({
         leaderboardTimerRef.current++;
         if (leaderboardTimerRef.current >= 30) {
           leaderboardTimerRef.current = 0;
-          updateOnlineLeaderboard(renderableSnakes);
+          updateOnlineLeaderboard(currSnap.snakes);
         }
       }
 
@@ -642,9 +701,9 @@ export default function SnakeGame({
         onlineEngine.disconnect();
       }
       onlineEngineRef.current = null;
-      extrapolationRef.current = null;
+      onlinePathCacheRef.current.clear();
     };
-  }, [mode, arenaId, authToken, handleRespawn, updateLeaderboard, updateOnlineLeaderboard]);
+  }, [mode, arenaId, authToken, handleRespawn, updateLeaderboard, updateOnlineLeaderboard, authPlayer]);
 
   // ── Render ──
 
@@ -798,6 +857,56 @@ function cleanupDeadSnakeParticles(snakeId: string): void {
 }
 
 // ============================================================================
+// Helper: Linear interpolation
+// ============================================================================
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+// ============================================================================
+// Helper: Get or create a PathBuffer for a snake
+// ============================================================================
+
+function getOrCreatePath(cache: Map<string, PathBuffer>, snakeId: string, length: number): PathBuffer {
+  let path = cache.get(snakeId);
+  if (!path || path.capacity < length * 2 + 10) {
+    path = new PathBuffer(Math.max(length * 2 + 10, 100));
+    cache.set(snakeId, path);
+  }
+  return path;
+}
+
+// ============================================================================
+// Helper: Rebuild a PathBuffer from a SnakeSnapshot + interpolated head position
+// ============================================================================
+
+function rebuildPathFromSnapshot(
+  path: PathBuffer,
+  headX: number,
+  headY: number,
+  snap: SnakeSnapshot,
+): void {
+  const totalLen = snap.bodyLen + 1; // +1 for the head position
+  path.ensureCapacity(totalLen);
+  path.length = 0;
+  path.headSegIdx = 0;
+
+  // Head at index 0
+  path.data[0] = headX;
+  path.data[1] = headY;
+  path.length = 1;
+
+  // Body segments (already downsampled, index 0 = nearest to head)
+  for (let i = 0; i < snap.bodyLen; i++) {
+    const base = (i + 1) * 2;
+    path.data[base] = snap.bodyX[i];
+    path.data[base + 1] = snap.bodyY[i];
+  }
+  path.length = totalLen;
+}
+
+// ============================================================================
 // Helper: Render offline background (grid, food, star chips, extraction)
 // ============================================================================
 
@@ -898,35 +1007,6 @@ function renderOfflineHUD(
   ctx.fillStyle = '#f87171';
   ctx.font = 'bold 13px monospace';
   ctx.fillText(String(kills), cw - krPad - 10, ch - krPad - 20);
-}
-
-// ============================================================================
-// Helper: Convert RenderableSnake to Snake for atlas/fallback renderers
-// ============================================================================
-
-function renderableToSnake(rs: RenderableSnake, isPlayer: boolean, now: number, targetAngle?: number): Snake {
-  return {
-    id: rs.id,
-    name: rs.name,
-    path: rs.path,
-    angle: rs.angle,
-    prevAngle: rs.prevAngle,
-    speed: rs.speed,
-    score: rs.score,
-    alive: rs.alive,
-    isBot: !isPlayer,
-    isPlayer,
-    spawnTime: now - 5000, // Assume no spawn protection for online snakes
-    color: rs.color,
-    headColor: rs.headColor,
-    lastBoostDrop: 0,
-    targetAngle: targetAngle ?? rs.angle,
-    spiral: { active: false, consecutiveTurns: 0, ticksElapsed: 0, direction: 1 },
-    bodyRadius: rs.bodyRadius,
-    boosting: rs.boosting,
-    skinId: rs.skinId,
-    rarity: rs.rarity,
-  };
 }
 
 // ============================================================================

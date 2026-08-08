@@ -1498,3 +1498,22 @@ Stage Summary:
 - Game logic remains independent (separate copies in engine.ts vs shared.ts)
 - Rendering unified — same draw functions for both modes
 - Server confirmed working: player connects, total=1 (no bots)
+
+---
+Task ID: fix-online-rendering
+Agent: Main
+Task: Fix online mode rendering bugs — flickering, wrong skin, wrong name, different controls
+
+Work Log:
+- Diagnosed 4 root causes: (1) Server used userId as player name, (2) Server's createSnake picked random palette colors because no skinOverride was passed, (3) ExtrapolationEngine caused jitter by snapping position to anchor every 50ms then predicting forward, (4) Input throttled to 20Hz felt less responsive
+- Fixed mini-services/game-server/index.ts: Accept playerName, skinId, bodyColor, headColor, rarity in Socket.IO handshake auth; pass to arena.addPlayer()
+- Fixed mini-services/game-server/game-state.ts: addPlayer() now builds a SkinOverride from provided colors and passes to createSnake(); respawnPlayer() also preserves colors on respawn
+- Fixed src/components/game/online-engine.ts: connect() now sends playerName, bodyColor, headColor, rarity in handshake auth; added onInit callback and public mySnakeId getter; increased input rate from 20Hz to 30Hz
+- Rewrote src/components/game/SnakeGame.tsx: Completely removed ExtrapolationEngine usage; replaced with snapshot interpolation (lerp between prev/curr snapshots at 60fps); uses same renderers as offline (renderSnakeAtlas for player, renderSnakeFallback for others); player snake uses local input angle for responsive steering; converts server SnakeSnapshot data to Snake objects with PathBuffer for unified rendering
+
+Stage Summary:
+- Name fix: Server now uses authPlayer.name ('Guest') instead of userId.slice(0,16)
+- Skin fix: Server now receives bodyColor/headColor from client and uses them via SkinOverride in createSnake()
+- Flickering fix: Removed ExtrapolationEngine entirely; smooth lerp interpolation between server snapshots eliminates snap-predict-snap jitter
+- Controls fix: Input rate increased to 30Hz (matches server tick rate)
+- All 4 issues verified working via browser testing: snake is green (correct skin), name is 'Guest' (correct), no flickering, food rendering works
