@@ -17,7 +17,7 @@
 import type {
   GameState, InputState, FoodOrb, Snake, StarChip, SkinAsset, SkinRarity,
 } from './types';
-import type { SnakeLike, MoveContext } from './core';
+import type { SnakeLike, MoveContext, KillEvent } from './core';
 import type { BotSnakeInput } from './bot-ai';
 import { getBotTarget } from './bot-ai';
 import { SpatialHash, type SpatialEntity } from './spatial-hash';
@@ -164,7 +164,7 @@ export function createInitialState(
  * Main game tick. Orchestrates core functions in the correct order.
  * Uses module-level SpatialHash singletons and a per-tick ID counter ref.
  */
-export function gameTick(state: GameState, input: InputState, _dt: number): void {
+export function gameTick(state: GameState, input: InputState, _dt: number): KillEvent[] {
   state.tickCount++;
   const now = Date.now();
 
@@ -258,6 +258,8 @@ export function gameTick(state: GameState, input: InputState, _dt: number): void
   // Sync ID counters back to state
   state.nextFoodId = foodIdRef.value;
   state.nextStarChipId = chipIdRef.value;
+
+  return collisionResult.killEvents;
 }
 
 // ==========================================================================
