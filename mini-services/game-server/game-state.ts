@@ -1,6 +1,6 @@
 // ============================================================================
 // ArenaRoom — Core Game Simulation for one arena shard.
-// Uses the unified core engine (src/lib/snake/core.ts) for all game logic.
+// Uses its OWN game logic from shared.ts (ONLINE ONLY — no shared core).
 // Online-specific: player management, arena bounds, extraction zone timing,
 // count-based food spawning, snapshot broadcasting.
 // ============================================================================

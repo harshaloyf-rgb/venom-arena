@@ -1407,3 +1407,31 @@ Stage Summary:
 - Online mode now passes auth token and uses correct Socket.IO protocol
 - Game server needs explicit HTTP server + IPv6 binding for Caddy gateway
 - Server process stability is a sandbox-only issue (works when process stays alive)
+
+---
+Task ID: revert-unified-core
+Agent: Main
+Task: Revert unified core.ts — restore offline/online independence
+
+Work Log:
+- Audited the project: found core.ts was a "unified engine" that BOTH offline (engine.ts) and online (shared.ts/game-state.ts) imported from
+- This caused any change to core.ts to affect BOTH modes — the exact problem user reported
+- Read core.ts (887 lines) fully to catalog all functions, types, and constants
+- Read engine.ts, shared.ts, game-state.ts, index.ts, config.ts, types.ts, SnakeGame.tsx
+- Wrote new engine.ts (~847 lines) with its OWN complete copy of all game logic (no core.ts import)
+- Wrote new shared.ts (~480 lines) with its OWN complete copy of all game logic (no core.ts import)
+- Updated game-state.ts comment to reflect it uses shared.ts not core.ts
+- Updated index.ts to remove `export * from './core'`
+- Deleted core.ts
+- Verified: lint passes clean, dev server starts with no errors
+- Verified independence: engine.ts imports only from types/config/pool/spatial-hash/vec2/bot-ai (pure utilities)
+- Verified independence: shared.ts imports only from types/config/pool/spatial-hash/vec2/bot-ai (pure utilities)
+- Neither file imports from the other or from any shared game logic file
+
+Stage Summary:
+- core.ts DELETED — was the root cause of offline↔online cross-contamination
+- engine.ts = OFFLINE ONLY — has its own createSnake, moveSnake, checkFoodEating, checkCollisions, killSnake, respawnBots, etc.
+- shared.ts = ONLINE ONLY — has its own createSnake, moveSnake, checkFoodEating, checkCollisions, killSnake, respawnBots, etc.
+- Changes to offline engine.ts will NEVER affect online mode
+- Changes to online shared.ts will NEVER affect offline mode
+- Both share only pure utilities: types.ts, config.ts, vec2.ts, spatial-hash.ts, pool.ts, bot-ai.ts
