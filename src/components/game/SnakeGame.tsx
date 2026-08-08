@@ -5,6 +5,7 @@ import { X, Wifi, WifiOff, Loader2, AlertTriangle, RefreshCw, Zap, CircleDot } f
 import { InputHandler } from './input';
 import {
   drawDeathOverlay,
+  drawEliminatedBanner,
   drawControlsHint,
   drawMinimap,
   drawGrid as drawGridFromRenderer,
@@ -83,6 +84,7 @@ export default function SnakeGame({
   const [finalScore, setFinalScore] = useState(0);
   const [leaderboard, setLeaderboard] = useState<{ name: string; score: number }[]>([]);
   const isDeadRef = useRef(false);
+  const deathTimeRef = useRef(0); // timestamp when player died
   const showControlsRef = useRef(true);
   const controlsDismissedRef = useRef(false);
   const leaderboardTimerRef = useRef(0);
@@ -94,6 +96,7 @@ export default function SnakeGame({
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [onlineError, setOnlineError] = useState<string | null>(null);
   const isDeadOnlineRef = useRef(false);
+  const onlineDeathTimeRef = useRef(0);
 
   // Atlas manager (shared across modes)
   const atlasManagerRef = useRef<SkinAtlasManager | null>(null);
@@ -147,6 +150,7 @@ export default function SnakeGame({
     if (effectiveMode === 'online') {
       onlineEngineRef.current?.requestRespawn();
       isDeadOnlineRef.current = false;
+      onlineDeathTimeRef.current = 0;
       setIsDead(false);
       setFinalScore(0);
       return;
@@ -154,6 +158,7 @@ export default function SnakeGame({
     if (!gameStateRef.current) return;
     respawnPlayer(gameStateRef.current);
     isDeadRef.current = false;
+    deathTimeRef.current = 0;
     setIsDead(false);
     setFinalScore(0);
   }, [effectiveMode]);
@@ -222,10 +227,12 @@ export default function SnakeGame({
     gameStateRef.current = createInitialState(skinOverride);
     cameraRef.current = createCamera(0, 0);
     isDeadRef.current = false;
+    deathTimeRef.current = 0;
     showControlsRef.current = true;
     controlsDismissedRef.current = false;
     leaderboardTimerRef.current = 0;
     isDeadOnlineRef.current = false;
+    onlineDeathTimeRef.current = 0;
 
     // Input handler
     const input = new InputHandler(canvas);
@@ -263,6 +270,7 @@ export default function SnakeGame({
 
       onlineEngine.onPlayerDied = () => {
         isDeadOnlineRef.current = true;
+        onlineDeathTimeRef.current = performance.now();
         setIsDead(true);
         // Get score from last extrapolated state
         const snakes = extrapolation!.getRenderableSnakes();
@@ -377,6 +385,7 @@ export default function SnakeGame({
           // Check player death
           if (state.player && !state.player.alive && !isDeadRef.current) {
             isDeadRef.current = true;
+            deathTimeRef.current = performance.now();
             setIsDead(true);
             setFinalScore(state.player.score);
             // Cleanup particles for dead snakes
@@ -427,7 +436,14 @@ export default function SnakeGame({
         drawMouseCursor(ctx, input);
 
         if (isDeadRef.current) {
-          drawDeathOverlay(ctx, finalScore || state.player?.score || 0, viewport);
+          const deathElapsed = performance.now() - deathTimeRef.current;
+          if (deathElapsed < 3000) {
+            // First 3s: game visible behind, show elimination banner
+            drawEliminatedBanner(ctx, viewport, deathElapsed);
+          } else {
+            // After 3s: full death overlay with respawn prompt
+            drawDeathOverlay(ctx, finalScore || state.player?.score || 0, viewport);
+          }
         }
 
         // Update leaderboard every ~0.5s
@@ -542,7 +558,12 @@ export default function SnakeGame({
 
         // ── Death overlay ──
         if (isDeadOnlineRef.current) {
-          drawDeathOverlay(ctx, finalScore, viewport);
+          const deathElapsed = performance.now() - onlineDeathTimeRef.current;
+          if (deathElapsed < 3000) {
+            drawEliminatedBanner(ctx, viewport, deathElapsed);
+          } else {
+            drawDeathOverlay(ctx, finalScore, viewport);
+          }
         }
 
         // ── Connection status on canvas ──
@@ -561,15 +582,20 @@ export default function SnakeGame({
       animFrameRef.current = requestAnimationFrame(loop);
     };
 
-    // ── Death overlay: Space/click to respawn (only when dead) ──
+    // ── Death overlay: Space/click to respawn (only after 3s elimination) ──
+    const canRespawn = () => {
+      if (isDeadOnlineRef.current) return performance.now() - onlineDeathTimeRef.current >= 3000;
+      if (isDeadRef.current) return performance.now() - deathTimeRef.current >= 3000;
+      return false;
+    };
     const onRespawnKey = (e: KeyboardEvent) => {
       if (e.key === ' ' || e.key === 'Enter') {
         e.preventDefault();
-        if (isDeadRef.current) handleRespawn();
+        if (canRespawn()) handleRespawn();
       }
     };
     const onRespawnClick = () => {
-      if (isDeadRef.current) handleRespawn();
+      if (canRespawn()) handleRespawn();
     };
     window.addEventListener('keydown', onRespawnKey);
     canvas.addEventListener('click', onRespawnClick);

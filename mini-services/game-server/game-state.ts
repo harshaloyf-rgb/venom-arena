@@ -806,23 +806,37 @@ export class ArenaRoom {
       }
     }
 
-    // ── Obstacle collision: black dot (1px radius) vs wall segments ──
+    // ── Obstacle collision: black dot (1px) vs wall segments ──
+    // Sub-step check prevents tunneling through thin walls.
     const obstacles = this.obstacles;
     if (obstacles.length > 0) {
-      const wallHitDistSq = 1; // black dot is a point — 1px kill radius
+      const wallHitDistSq = 1;
+      const SUB_STEPS = 4;
       for (const [, snake] of this.snakes) {
         if (!snake.alive || deadSnakes.has(snake.id)) continue;
         if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
+        if (snake.path.length < 2) continue;
 
         const dotX = snake.path.headX + Math.cos(snake.angle) * snake.bodyRadius * DOT_DIST;
         const dotY = snake.path.headY + Math.sin(snake.angle) * snake.bodyRadius * DOT_DIST;
+        const prevDotX = snake.path.getX(1) + Math.cos(snake.angle) * snake.bodyRadius * DOT_DIST;
+        const prevDotY = snake.path.getY(1) + Math.sin(snake.angle) * snake.bodyRadius * DOT_DIST;
+        const ddx = dotX - prevDotX;
+        const ddy = dotY - prevDotY;
 
-        for (let w = 0; w < obstacles.length; w++) {
-          const ob = obstacles[w];
-          if (pointToSegDistSq(dotX, dotY, ob.x1, ob.y1, ob.x2, ob.y2) <= wallHitDistSq) {
-            deadSnakes.add(snake.id);
-            this.killSnake(snake, 'obstacle', 'Obstacle');
-            break;
+        let hit = false;
+        for (let s = 0; s <= SUB_STEPS && !hit; s++) {
+          const t = s / SUB_STEPS;
+          const cx = prevDotX + ddx * t;
+          const cy = prevDotY + ddy * t;
+          for (let w = 0; w < obstacles.length; w++) {
+            const ob = obstacles[w];
+            if (pointToSegDistSq(cx, cy, ob.x1, ob.y1, ob.x2, ob.y2) <= wallHitDistSq) {
+              deadSnakes.add(snake.id);
+              this.killSnake(snake, 'obstacle', 'Obstacle');
+              hit = true;
+              break;
+            }
           }
         }
       }
@@ -834,10 +848,10 @@ export class ArenaRoom {
   private killSnake(snake: ServerSnake, killerId: string, killerName: string): void {
     snake.alive = false;
 
-    // Death food formula: always a mix of small/medium/large.
-    // Minimum 20 value dropped (even at score 0).
+    // Death food: 15 base value + score = total. Always a mix of 1/3/5 value orbs.
+    // Example: score 22 → 37 value → 3L(15) + 4M(12) + 10S(10) = 37
     const score = snake.score;
-    const dropValue = Math.max(score, 20);
+    const dropValue = 15 + score;
     const largeVal = Math.floor(dropValue * 0.4 / 5) * 5;
     const medVal = Math.floor(dropValue * 0.3 / 3) * 3;
     const smallVal = dropValue - largeVal - medVal;

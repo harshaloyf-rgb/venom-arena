@@ -935,22 +935,38 @@ function checkCollisions(state: GameState, now: number): void {
     }
   }
 
-  // ── Obstacle collision: black dot (1px radius) vs wall segments ──
+  // ── Obstacle collision: black dot (1px) vs wall segments ──
+  // Sub-step check prevents tunneling: dot moves ~4.5px/tick but hit radius is 1px,
+  // so a single check can miss walls. We check 4 points along the movement path.
   const obstacles = state.obstacles;
   if (obstacles.length > 0) {
-    const wallHitDistSq = 1; // black dot is a point — 1px kill radius for walls
+    const wallHitDistSq = 1;
+    const SUB_STEPS = 4;
     for (const [, snake] of snakesMap) {
       if (!snake.alive || deadSnakes.has(snake.id)) continue;
       if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
+      if (snake.path.length < 2) continue;
 
       const dotX = snake.path.headX + Math.cos(snake.angle) * snake.bodyRadius * dotDist;
       const dotY = snake.path.headY + Math.sin(snake.angle) * snake.bodyRadius * dotDist;
+      // Previous dot position (head was at path[1] last tick, using current angle)
+      const prevDotX = snake.path.getX(1) + Math.cos(snake.angle) * snake.bodyRadius * dotDist;
+      const prevDotY = snake.path.getY(1) + Math.sin(snake.angle) * snake.bodyRadius * dotDist;
+      const dx = dotX - prevDotX;
+      const dy = dotY - prevDotY;
 
-      for (let w = 0; w < obstacles.length; w++) {
-        const ob = obstacles[w];
-        if (pointToSegDistSq(dotX, dotY, ob.x1, ob.y1, ob.x2, ob.y2) <= wallHitDistSq) {
-          deadSnakes.add(snake.id);
-          break;
+      let hit = false;
+      for (let s = 0; s <= SUB_STEPS && !hit; s++) {
+        const t = s / SUB_STEPS;
+        const cx = prevDotX + dx * t;
+        const cy = prevDotY + dy * t;
+        for (let w = 0; w < obstacles.length; w++) {
+          const ob = obstacles[w];
+          if (pointToSegDistSq(cx, cy, ob.x1, ob.y1, ob.x2, ob.y2) <= wallHitDistSq) {
+            deadSnakes.add(snake.id);
+            hit = true;
+            break;
+          }
         }
       }
     }
@@ -970,9 +986,9 @@ function checkCollisions(state: GameState, now: number): void {
 function killSnake(state: GameState, snake: Snake): void {
   snake.alive = false;
 
-  // Death food formula: always a mix of small/medium/large.
-  // Minimum 20 value dropped (even at score 0).
-  const dropValue = Math.max(snake.score, 20);
+  // Death food: 15 base value + score = total. Always a mix of 1/3/5 value orbs.
+  // Example: score 22 → 37 value → 3L(15) + 4M(12) + 10S(10) = 37
+  const dropValue = 15 + snake.score;
   // ~40% as large (5 each), ~30% as medium (3 each), rest as small (1 each)
   const largeVal = Math.floor(dropValue * 0.4 / 5) * 5;
   const medVal = Math.floor(dropValue * 0.3 / 3) * 3;
