@@ -19,6 +19,7 @@ import {
   type Viewport,
   type Snake,
   FIXED_DT,
+  computeBodyRadius,
 } from '@/lib/snake';
 import { createInitialState, gameTick, respawnPlayer, type PlayerSkinOverride } from '@/lib/snake/engine';
 import { createCamera, updateCamera, getViewport, worldToScreen } from '@/lib/snake/camera';
@@ -621,6 +622,17 @@ export default function SnakeGame({
         style={{ touchAction: 'none', cursor: 'none' }}
       />
 
+      {/* Exit button — online only */}
+      {effectiveMode === 'online' && onExit && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onExit(); }}
+          className="absolute top-4 left-4 z-10 w-9 h-9 rounded-lg bg-black/60 hover:bg-red-950/60 border border-white/10 hover:border-red-500/30 flex items-center justify-center cursor-pointer transition-colors"
+          title="Exit to Lobby"
+        >
+          <X className="w-4 h-4 text-white/70 hover:text-red-400" />
+        </button>
+      )}
+
       {/* Online connection indicator */}
       {effectiveMode === 'online' && (
         <div className="absolute top-4 left-16 z-10 flex items-center gap-2 pointer-events-none">
@@ -709,16 +721,22 @@ export default function SnakeGame({
           onPointerLeave={() => { externalBoostRef.current = false; }}
           onPointerCancel={() => { externalBoostRef.current = false; }}
           disabled={isDead}
-          className={`pointer-events-auto flex flex-col items-center gap-0.5 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all duration-200 select-none touch-manipulation
-            ${isDead
-              ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
-              : 'bg-orange-500/15 border-orange-500/30 text-orange-400 hover:bg-orange-500/25 hover:border-orange-500/50 active:scale-95'
-            }`}
+          className={
+            effectiveMode === 'offline'
+              ? `pointer-events-auto flex flex-col items-center gap-0.5 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all duration-200 select-none touch-manipulation
+                ${isDead
+                  ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
+                  : 'bg-orange-500/15 border-orange-500/30 text-orange-400 hover:bg-orange-500/25 hover:border-orange-500/50 active:scale-95'
+                }`
+              : `pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-xl border font-bold text-sm transition-all duration-200 select-none touch-manipulation
+                ${isDead
+                  ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
+                  : 'bg-orange-500/15 border-orange-500/30 text-orange-400 hover:bg-orange-500/25 hover:border-orange-500/50 active:scale-95'
+                }`
+          }
         >
-          <div className="flex items-center gap-2">
-            <Zap className="w-5 h-5" />
-            <span>Boost</span>
-          </div>
+          <Zap className="w-5 h-5" />
+          <span>Boost</span>
           {effectiveMode === 'offline' && (
             <span className="text-[10px] font-normal opacity-60">B / Left Click</span>
           )}
@@ -731,16 +749,22 @@ export default function SnakeGame({
           onPointerLeave={() => { inputRef.current?.setExternalExtract(false); }}
           onPointerCancel={() => { inputRef.current?.setExternalExtract(false); }}
           disabled={isDead}
-          className={`pointer-events-auto flex flex-col items-center gap-0.5 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all duration-200 select-none touch-manipulation
-            ${isDead
-              ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
-              : 'bg-amber-500/15 border-amber-500/30 text-amber-400 hover:bg-amber-500/25 hover:border-amber-500/50 active:scale-95'
-            }`}
+          className={
+            effectiveMode === 'offline'
+              ? `pointer-events-auto flex flex-col items-center gap-0.5 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all duration-200 select-none touch-manipulation
+                ${isDead
+                  ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
+                  : 'bg-amber-500/15 border-amber-500/30 text-amber-400 hover:bg-amber-500/25 hover:border-amber-500/50 active:scale-95'
+                }`
+              : `pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-xl border font-bold text-sm transition-all duration-200 select-none touch-manipulation
+                ${isDead
+                  ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
+                  : 'bg-amber-500/15 border-amber-500/30 text-amber-400 hover:bg-amber-500/25 hover:border-amber-500/50 active:scale-95'
+                }`
+          }
         >
-          <div className="flex items-center gap-2">
-            <CircleDot className="w-5 h-5" />
-            <span>Extract</span>
-          </div>
+          <CircleDot className="w-5 h-5" />
+          <span>Extract</span>
           {effectiveMode === 'offline' && (
             <span className="text-[10px] font-normal opacity-60">E / Right Click</span>
           )}
@@ -906,7 +930,7 @@ function drawHUDBase(
 
   ctx.font = '11px monospace';
   ctx.fillStyle = '#888888';
-  ctx.fillText(`FPS: ${fps}`, p + 12, p + 10 + lh * 2);
+  ctx.fillText(`Radius: ${computeBodyRadius(score).toFixed(1)}px`, p + 12, p + 10 + lh * 2);
 
   ctx.textAlign = 'right';
   ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
