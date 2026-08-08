@@ -8,10 +8,10 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import type { SkinAsset } from '@/lib/snake/types';
-import { SkinAtlasManager } from '@/lib/snake/atlas-offline';
+import { SkinAtlasManager } from '@/lib/snake/atlas';
 import { SNAKE_RADIUS, CAMERA_BASE_ZOOM, SEGMENT_SPACING } from '@/lib/snake/config';
-import { getSkinAsset, isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry-offline';
-import { renderEquippedCosmetics, getCosmeticById, type EquippedCosmetics } from '@/lib/snake/face-cosmetics-offline';
+import { getSkinAsset, isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
+import { renderEquippedCosmetics, getCosmeticById, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
 import { readCustomSkinStateSafe, drawSegmentShape } from '@/components/panels/cosmetics/cosmetics-utils';
 import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-types';
 

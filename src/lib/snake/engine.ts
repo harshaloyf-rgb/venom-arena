@@ -1,6 +1,5 @@
 // ============================================================================
-// Game Engine — OFFLINE mode ONLY.
-// Editing this file does NOT affect online mode.
+// Game Engine — SHARED — used by both offline and online modes.
 // ============================================================================
 
 import type {
@@ -8,7 +7,7 @@ import type {
 } from './types';
 import type { IPathBuffer } from './pool';
 import { PathBuffer } from './pool';
-import { SpatialHash } from './spatial-hash';
+import { SpatialHash, type SpatialEntity } from './spatial-hash';
 import { checkCollisions, type KillEvent } from './collision';
 import {
   // MOVEMENT
@@ -31,14 +30,13 @@ import {
   // SPIRAL
   SPIRAL_TURN_THRESHOLD, SPIRAL_ENTER_TICKS, SPIRAL_MAX_MULTIPLIER,
   SPIRAL_RAMP_TICKS, SPIRAL_EXIT_THRESHOLD,
-  // OFFLINE-SPECIFIC
   FOOD_DENSITY_TARGET, FOOD_VISIBLE_RADIUS, FOOD_DESPAWN_RADIUS,
   FOOD_RESPAWN_BATCH, FOOD_MAX_COUNT,
 } from './config';
 
-// ─── Offline-only Types ──────────────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
 
-/** Optional skin override for the player snake (offline-specific — includes pattern/animation) */
+/** Optional skin override for the player snake (includes pattern/animation) */
 export interface PlayerSkinOverride {
   skinId: string;
   bodyColor: string;
@@ -52,7 +50,7 @@ export interface PlayerSkinOverride {
 /** Re-export KillEvent from shared collision for backward compat */
 export type { KillEvent } from './collision';
 
-// ─── Offline-only Constants ──────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 /** Path buffer stores one head position per tick at BASE_SPEED spacing.
  * Original game logic uses SEGMENT_SPACING for segment counts.
@@ -95,7 +93,7 @@ const DESPAWN_RADIUS_SQ = FOOD_DESPAWN_RADIUS * FOOD_DESPAWN_RADIUS;
 const VISIBLE_RADIUS_SQ = FOOD_VISIBLE_RADIUS * FOOD_VISIBLE_RADIUS;
 
 // ==========================================================================
-// OFFLINE Snake Creation
+// Snake Creation
 // ==========================================================================
 
 function createSnake(
@@ -133,7 +131,7 @@ function createSnake(
 }
 
 // ==========================================================================
-// OFFLINE Safe Spawn
+// Safe Spawn
 // ==========================================================================
 
 function findSafeSpawn(
@@ -163,7 +161,7 @@ function findSafeSpawn(
 }
 
 // ==========================================================================
-// OFFLINE Snake Movement
+// Snake Movement
 // ==========================================================================
 
 function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: number, ctx: MoveContext): void {
@@ -270,7 +268,7 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
 }
 
 // ==========================================================================
-// OFFLINE Food Creation
+// Food Creation
 // ==========================================================================
 
 function makeFood(nextId: { value: number }, x: number, y: number, forceSize?: number): FoodOrb {
@@ -302,7 +300,7 @@ function spawnFoodBatch(nextId: { value: number }, foods: FoodOrb[], count: numb
 }
 
 // ==========================================================================
-// OFFLINE Food Eating (Magnet + Vacuum)
+// Food Eating (Magnet + Vacuum)
 // ==========================================================================
 
 function checkFoodEating(
@@ -369,7 +367,7 @@ function checkFoodEating(
 // (Collision detection moved to shared collision.ts)
 
 // ==========================================================================
-// OFFLINE Death & Food Distribution
+// Death & Food Distribution
 // ==========================================================================
 
 function killSnake(snake: Snake, nextFoodId: { value: number }, foods: FoodOrb[]): void {
@@ -412,6 +410,7 @@ function killSnake(snake: Snake, nextFoodId: { value: number }, foods: FoodOrb[]
 export function createInitialState(
   playerSkin?: PlayerSkinOverride | null,
   initialScore?: number,
+  playerName?: string,
 ): GameState {
   const state: GameState = {
     snakes: new Map(), foods: [], player: null,
@@ -422,7 +421,7 @@ export function createInitialState(
   const now = Date.now();
   const nextIdRef = { value: 0 };
 
-  const player = createSnake('player', 'You', initialScore ?? 0, 0, 0, now, playerSkin);
+  const player = createSnake('player', playerName || 'You', initialScore ?? 0, 0, 0, now, playerSkin);
   state.player = player;
   state.snakes.set(player.id, player);
 
@@ -433,7 +432,7 @@ export function createInitialState(
 }
 
 // ==========================================================================
-// Main Game Tick (OFFLINE ONLY)
+// Main Game Tick
 // ==========================================================================
 
 export function gameTick(state: GameState, input: InputState, _dt: number): KillEvent[] {
@@ -463,7 +462,7 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
     state.foods.length = writeIdx;
   }
 
-  // 3. Density-based food spawning (OFFLINE-SPECIFIC)
+  // 3. Density-based food spawning
   maintainFoodAroundPlayer(state, foodIdRef);
 
   // 4. Check collisions (shared)
@@ -482,7 +481,7 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
 }
 
 // ==========================================================================
-// Offline-Specific Food Management (density-based, slither.io style)
+// Food Management (density-based, slither.io style)
 // ==========================================================================
 
 function maintainFoodAroundPlayer(state: GameState, nextIdRef: { value: number }): void {
@@ -537,7 +536,7 @@ function maintainFoodAroundPlayer(state: GameState, nextIdRef: { value: number }
 }
 
 // ==========================================================================
-// Player Respawn (OFFLINE)
+// Player Respawn
 // ==========================================================================
 
 export function respawnPlayer(state: GameState): void {
@@ -548,13 +547,13 @@ export function respawnPlayer(state: GameState): void {
     skinId: old.skinId, bodyColor: old.color, headColor: old.headColor,
     accentColor: '', rarity: old.rarity,
   } : null;
-  const newPlayer = createSnake('player', 'You', 0, pos.x, pos.y, Date.now(), skinOverride);
+  const newPlayer = createSnake('player', old?.name || 'You', 0, pos.x, pos.y, Date.now(), skinOverride);
   state.player = newPlayer;
   state.snakes.set(newPlayer.id, newPlayer);
 }
 
 // ==========================================================================
-// Debug Score (OFFLINE)
+// Debug Score
 // ==========================================================================
 
 export function setDebugScore(state: GameState, score: number): void {

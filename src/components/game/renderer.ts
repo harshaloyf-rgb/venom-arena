@@ -1,11 +1,10 @@
 // ============================================================================
-// Renderer — OFFLINE mode ONLY.
-// Editing this file does NOT affect online mode.
+// Renderer — SHARED — used by both offline and online modes.
 // ============================================================================
 
 import type { Camera, FoodOrb, Snake, Viewport } from '@/lib/snake/types';
 import { ARENA_GRID_SIZE } from '@/lib/snake/config';
-import { worldToScreen } from '@/lib/snake/camera-offline';
+import { worldToScreen } from '@/lib/snake/camera';
 
 // ==========================================================================
 // Grid

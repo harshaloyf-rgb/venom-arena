@@ -1,6 +1,5 @@
 // ============================================================================
-// Face Cosmetics System — ONLINE mode ONLY.
-// Editing this file does NOT affect offline mode.
+// Face Cosmetics System — SHARED — used by both offline and online modes.
 // ============================================================================
 
 // ─── Types ────────────────────────────────────────────────────────────────────

@@ -1,6 +1,5 @@
 // ============================================================================
-// Skin Registry — OFFLINE mode ONLY.
-// Editing this file does NOT affect online mode.
+// Skin Registry — SHARED — used by both offline and online modes.
 // ============================================================================
 
 import type { SkinAsset, SkinRarity } from './types';

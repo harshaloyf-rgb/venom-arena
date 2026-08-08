@@ -1,6 +1,5 @@
 // ============================================================================
-// Texture Atlas Skin Renderer — ONLINE mode ONLY.
-// Editing this file does NOT affect offline mode.
+// Texture Atlas Skin Renderer — SHARED — used by both offline and online modes.
 // ============================================================================
 
 import type {
