@@ -415,25 +415,4 @@ export const EXTRACTION_SCORE_THRESHOLD = 50;
 /** Speed multiplier applied while inside the extraction zone */
 export const EXTRACTION_SPEED_BONUS = 1.5;
 
-/** Point value of each star chip collected in extraction */
-export const STAR_CHIP_VALUE = 10;
 
-/** Interval in ms between star chip spawns inside the extraction zone */
-export const STAR_CHIP_SPAWN_INTERVAL = 5000;
-
-/** Visual radius of star chips in pixels */
-export const STAR_CHIP_RADIUS = 12;
-
-/** Glow color for star chips */
-export const STAR_CHIP_GLOW = '#fbbf24';
-
-// EXTRACTION_ZONE_DURATION, EXTRACTION_ZONE_SPAWN_INTERVAL removed — unused
-
-/** Array of 5 golden/amber colors for star chip variety */
-export const STAR_CHIP_COLORS: string[] = [
-  '#fbbf24', // amber-400
-  '#f59e0b', // amber-500
-  '#d97706', // amber-600
-  '#eab308', // yellow-500
-  '#facc15', // yellow-400
-];

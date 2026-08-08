@@ -98,20 +98,11 @@ export function buildSnapshot(
     }
   }
 
-  // Star chips (all included — they're already in the extraction zone).
-  const starChips = state.starChips.map(c => ({
-    id: c.id,
-    x: c.x,
-    y: c.y,
-    value: c.value,
-  }));
-
   return {
     tick: state.tickCount,
     timestamp: Date.now(),
     snakes: snakeSnapshots,
     foods: filteredFoods,
-    starChips,
     extraction: { ...state.extractionZone },
   };
 }

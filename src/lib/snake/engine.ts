@@ -1,16 +1,13 @@
 // ============================================================================
-// OFFLINE Game Engine — Self-contained game logic for offline mode ONLY.
+// Game Engine — Self-contained game logic for offline mode ONLY.
 //
 // This file has its OWN copies of all game logic functions.
 // Changes here do NOT affect online mode.
 //
-// Shared utilities (types, config, vec2, spatial-hash, pool, bot-ai) are fine
-// to import — they are pure data types and utilities with no game logic.
 // ============================================================================
 
 import type {
-  GameState, InputState, FoodOrb, Snake, StarChip, SkinRarity,
-  SnakeSnapshot, ArenaSnapshot, FoodSize, TurnMetadata,
+  GameState, InputState, FoodOrb, Snake, SkinRarity, FoodSize,
 } from './types';
 import type { IPathBuffer } from './pool';
 import { PathBuffer } from './pool';
@@ -40,22 +37,15 @@ import {
   INITIAL_SPAWN_RADIUS, SAFE_SPAWN_DIST, SAFE_SPAWN_ATTEMPTS,
   // EXTRACTION
   EXTRACTION_SCORE_THRESHOLD, EXTRACTION_SPEED_BONUS,
-  STAR_CHIP_VALUE, STAR_CHIP_RADIUS, STAR_CHIP_GLOW, STAR_CHIP_COLORS,
   // SPIRAL
   SPIRAL_TURN_THRESHOLD, SPIRAL_ENTER_TICKS, SPIRAL_MAX_MULTIPLIER,
   SPIRAL_RAMP_TICKS, SPIRAL_EXIT_THRESHOLD,
-  // SNAPSHOT
-  BODY_DOWNSAMPLE_INTERVAL, FOOD_DOWNSAMPLE_RADIUS, MAX_SNAKES_PER_SNAPSHOT,
   // OFFLINE-SPECIFIC
   BOT_COUNT,
   FOOD_DENSITY_TARGET, FOOD_VISIBLE_RADIUS, FOOD_DESPAWN_RADIUS,
   FOOD_RESPAWN_BATCH, FOOD_MAX_COUNT,
-  EXTRACTION_ZONE_RADIUS, STAR_CHIP_SPAWN_INTERVAL,
+  EXTRACTION_ZONE_RADIUS,
 } from './config';
-
-// ─── Re-exports ─────────────────────────────────────────────────────────────
-
-export { buildSnapshot, snapshotToSnake } from './snapshot';
 
 // ─── Offline-only Types ──────────────────────────────────────────────────────
 
@@ -109,7 +99,7 @@ const SNAKE_PALETTES: [string, string][] = [
 const FOOD_SIZES: Array<FoodSize> = ['small', 'medium', 'large'];
 
 const COLLISION_DIST_SQ = SNAKE_RADIUS * 2 * SNAKE_RADIUS * 2;
-const STAR_CHIP_DIST_SQ = (SNAKE_RADIUS + STAR_CHIP_RADIUS) * (SNAKE_RADIUS + STAR_CHIP_RADIUS);
+
 
 const MAGNET_PULL_DIST = SNAKE_RADIUS + FOOD_MAGNET_PULL_RADIUS;
 const MAGNET_DEATH_DIST = SNAKE_RADIUS + FOOD_MAGNET_DEATH_RADIUS;
@@ -418,39 +408,6 @@ function checkFoodEating(
   return eatenIds;
 }
 
-// ==========================================================================
-// OFFLINE Star Chips
-// ==========================================================================
-
-function spawnStarChip(nextId: { value: number }, ez: { x: number; y: number; radius: number; active: boolean }, now: number): StarChip | null {
-  if (!ez.active) return null;
-  const a = Math.random() * Math.PI * 2;
-  const d = Math.random() * ez.radius * 0.8;
-  const colorIdx = Math.floor(Math.random() * STAR_CHIP_COLORS.length);
-  return {
-    id: nextId.value++, x: ez.x + Math.cos(a) * d, y: ez.y + Math.sin(a) * d,
-    value: STAR_CHIP_VALUE, radius: STAR_CHIP_RADIUS,
-    glowColor: STAR_CHIP_GLOW, color: STAR_CHIP_COLORS[colorIdx], spawnTime: now,
-  };
-}
-
-function checkStarChips(snakes: Iterable<Snake>, starChips: StarChip[]): Set<number> {
-  const collected = new Set<number>();
-  if (starChips.length === 0) return collected;
-  for (const snake of snakes) {
-    if (!snake.alive) continue;
-    const hx = snake.path.headX; const hy = snake.path.headY;
-    for (let i = 0; i < starChips.length; i++) {
-      const chip = starChips[i];
-      if (collected.has(chip.id)) continue;
-      if (distSq(hx, hy, chip.x, chip.y) <= STAR_CHIP_DIST_SQ) {
-        collected.add(chip.id);
-        snake.score += chip.value;
-      }
-    }
-  }
-  return collected;
-}
 
 // ==========================================================================
 // OFFLINE Collisions
@@ -632,8 +589,8 @@ export function createInitialState(
   initialScore?: number,
 ): GameState {
   const state: GameState = {
-    snakes: new Map(), foods: [], starChips: [], player: null,
-    nextFoodId: 0, nextStarChipId: 0, showControls: true, tickCount: 0,
+    snakes: new Map(), foods: [], player: null,
+    nextFoodId: 0, showControls: true, tickCount: 0,
     extractionZone: { x: 0, y: 0, radius: EXTRACTION_ZONE_RADIUS, active: false },
   };
 
@@ -668,7 +625,6 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   const now = Date.now();
 
   const foodIdRef = { value: state.nextFoodId };
-  const chipIdRef = { value: state.nextStarChipId };
 
   const moveCtx: MoveContext = {
     foods: state.foods,
@@ -701,24 +657,12 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
     state.foods.length = writeIdx;
   }
 
-  // 4. Check star chip collection
-  const collectedIds = checkStarChips(state.snakes.values(), state.starChips);
-  if (collectedIds.size > 0) {
-    let writeIdx = 0;
-    for (let i = 0; i < state.starChips.length; i++) {
-      if (!collectedIds.has(state.starChips[i].id)) { state.starChips[writeIdx++] = state.starChips[i]; }
-    }
-    state.starChips.length = writeIdx;
-  }
+
 
   // 5. Density-based food spawning (OFFLINE-SPECIFIC)
   maintainFoodAroundPlayer(state, foodIdRef);
 
-  // 6. Spawn star chips in extraction zone
-  if (state.extractionZone.active && now % STAR_CHIP_SPAWN_INTERVAL < 20) {
-    const chip = spawnStarChip(chipIdRef, state.extractionZone, now);
-    if (chip) state.starChips.push(chip);
-  }
+
 
   // 7. Check collisions
   const collisionResult = checkCollisions(state.snakes, bodyHash, headHash, _insertScratch, now);
@@ -735,7 +679,6 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   for (const bot of newBots) { state.snakes.set(bot.id, bot); }
 
   state.nextFoodId = foodIdRef.value;
-  state.nextStarChipId = chipIdRef.value;
 
   return collisionResult.killEvents;
 }
