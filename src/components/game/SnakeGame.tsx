@@ -539,11 +539,11 @@ export default function SnakeGame({
 
         // ── HUD (online) ──
         if (playerSnake) {
-          drawOnlineHUD(ctx, playerSnake, renderableSnakes, fc.fps, viewport);
+          drawOnlineHUD(ctx, playerSnake, fc.fps, viewport);
         }
 
-        // ── Minimap (online, top-left) ──
-        drawOnlineMinimapTopLeft(ctx, renderableSnakes, playerSnake ?? null);
+        // ── Minimap (online, bottom-right) ──
+        drawOnlineMinimap(ctx, renderableSnakes, playerSnake ?? null);
 
         // Mouse cursor indicator (slither.io style crosshair)
         drawMouseCursor(ctx, input);
@@ -857,52 +857,55 @@ function renderOfflineHUD(
 }
 
 // ============================================================================
-// Helper: Render online HUD (score bottom-center, kills bottom-right)
+// Helper: Render online HUD (original — score/length/radius top-left, minimap bottom-right)
 // ============================================================================
 
 function drawOnlineHUD(
   ctx: CanvasRenderingContext2D,
   player: RenderableSnake,
-  snakes: Map<string, RenderableSnake>,
-  _fps: number,
+  fps: number,
   viewport: Viewport,
 ): void {
-  const cw = viewport.width;
-  const ch = viewport.height;
+  drawHUDBase(ctx, player.score, player.path.length, fps, viewport);
+}
 
-  // ── Rank below minimap (top-left) ──
-  let rank = 1;
-  let totalAlive = 0;
-  for (const [, s] of snakes) {
-    if (s.alive) {
-      totalAlive++;
-      if (s.score > player.score) rank++;
-    }
-  }
-  const mapPad = 12;
-  const mapSize = 120;
-  const rankY = mapPad + mapSize + 6;
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-  ctx.beginPath();
-  ctx.roundRect(mapPad, rankY, mapSize, 24, 6);
-  ctx.fill();
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = '11px monospace';
-  ctx.fillStyle = '#94a3b8';
-  ctx.fillText(`Rank ${rank} / ${totalAlive}`, mapPad + mapSize / 2, rankY + 12);
+// ============================================================================
+// Helper: Shared HUD drawing (online mode only)
+// ============================================================================
 
-  // ── Score: bottom-center ──
-  const scoreVal = Math.floor(player.score);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
-  ctx.font = 'bold 28px monospace';
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+function drawHUDBase(
+  ctx: CanvasRenderingContext2D,
+  score: number,
+  length: number,
+  fps: number,
+  viewport: Viewport,
+): void {
+  const p = 16;
+  const lh = 22;
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
   ctx.beginPath();
-  ctx.roundRect(cw / 2 - 80, ch - 56, 160, 44, 10);
+  ctx.roundRect(p, p, 180, lh * 3 + p * 2 - 4, 8);
   ctx.fill();
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
   ctx.fillStyle = '#ffffff';
-  ctx.fillText(scoreVal.toLocaleString(), cw / 2, ch - 18);
+  ctx.font = 'bold 16px monospace';
+  ctx.fillText(`Score: ${Math.floor(score)}`, p + 12, p + 10);
+
+  ctx.font = '13px monospace';
+  ctx.fillStyle = '#a0a0a0';
+  ctx.fillText(`Length: ${length}`, p + 12, p + 10 + lh);
+
+  ctx.font = '11px monospace';
+  ctx.fillStyle = '#888888';
+  ctx.fillText(`FPS: ${fps}`, p + 12, p + 10 + lh * 2);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+  ctx.font = '12px monospace';
+  ctx.fillText(`${fps} FPS`, viewport.width - p, p);
 }
 
 // ============================================================================
@@ -1087,16 +1090,22 @@ function drawMinimapTopLeft(
   ctx.fill();
 }
 
-function drawOnlineMinimapTopLeft(
+// ============================================================================
+// Online minimap (bottom-right — original online layout)
+// ============================================================================
+
+function drawOnlineMinimap(
   ctx: CanvasRenderingContext2D,
   snakes: Map<string, RenderableSnake>,
   player: RenderableSnake | null,
 ): void {
+  const size = 120;
+  const pad = 12;
+
   const cw = ctx.canvas.width / (window.devicePixelRatio || 1);
-  const size = MAP_SIZE;
-  const pad = MAP_PAD;
-  const mx = pad;
-  const my = pad;
+  const ch = ctx.canvas.height / (window.devicePixelRatio || 1);
+  const mx = cw - size - pad;
+  const my = ch - size - pad;
 
   ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
   ctx.beginPath();
