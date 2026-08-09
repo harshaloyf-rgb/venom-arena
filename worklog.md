@@ -392,3 +392,53 @@ Stage Summary:
 - No logic or behavior changes — purely dead code removal
 - All retained exports verified to have at least one importer in src/
 - SpiralTurnState type was inlined into Snake interface since the field must remain
+
+---
+Task ID: spiral-coil-fix
+Agent: main
+Task: Fix snake coiling physics — make coils tighten like slither.io python grip
+
+Work Log:
+- Diagnosed root cause: STEERING_LERP (0.12) bottlenecks actual turn rate, making the old SPIRAL_MAX_MULTIPLIER (1.8x) on maxTurn completely ineffective
+- The old spiral system increased maxTurn but the actual turn = diff * 0.12 never exceeded maxTurn, so the multiplier had zero effect
+- Fixed config.ts: replaced SPIRAL_MAX_MULTIPLIER/SPIRAL_RAMP_TICKS with new constants:
+  - SPIRAL_TIGHTEN_TICKS=300 (5s continuous tightening, no plateau)
+  - SPIRAL_TURN_MULTIPLIER=4.0 (max turn rate boost)
+  - SPIRAL_LERP_BOOST=0.35 (critical: boosts steering lerp from 0.12 to 0.47)
+  - SPIRAL_PATH_CONTRACT=0.12 (path-level body contraction)
+- Fixed engine.ts moveSnake(): now boosts BOTH maxTurn AND effectiveLerp during spiral
+  - Continuous quadratic ease-out tightening over 300 ticks (5 seconds)
+  - Circle radius shrinks from 25px → ~6px as spiral progresses
+- Added contractPathCurvature() function: modifies actual path data to simulate slither.io rope-constraint body following
+  - Computes curvature via cross-product at each path entry
+  - Shifts entries perpendicular to movement direction, toward curve center
+  - Only active during spiral mode, processes every 3rd entry for performance
+  - Fade factor: strongest at 30-70% of body length, zero at head and tail
+- Kept render-only coil-path.ts as subtle visual enhancement on top of physical tightening
+- Verified: lint passes, game loads in browser with zero console errors
+
+Stage Summary:
+- Root cause of invisible coil: STEERING_LERP bottlenecked turn rate, making spiral multiplier useless
+- Fix: boost both maxTurn and lerp with continuous tightening (no plateau)
+- Added path-level curvature contraction for extra body tightening effect
+- Circle radius goes from 25px (normal) → 6.25px (full spiral) over 5 seconds of continuous turning
+- Files changed: config.ts, engine.ts
+---
+Task ID: 2
+Agent: main
+Task: Collision bug fixes
+
+Work Log:
+- Commented out drawCollisionChain in both renderers (hidden from players)
+- Removed GameCanvas debug dots + unused imports
+- Bug 1: Added missing break in head-on-head loop (collision.ts)
+- Bug 2: Changed bodyRadius to SNAKE_RADIUS in all 4 collision dot offsets
+- Bug 5: Extended spawn protection food block to bots
+- Death drops: Removed +15 bonus, capped food count to path length
+
+Stage Summary:
+- collision.ts: 4 bodyRadius fixes, 1 break added
+- engine.ts: spawn protection for bots, death drops fixed
+- render-snake-atlas.tsx: drawCollisionChain re-commented
+- GameCanvas.tsx: old debug dots removed
+

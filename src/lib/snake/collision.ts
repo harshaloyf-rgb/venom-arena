@@ -1,14 +1,15 @@
 // ============================================================================
 // Collision Detection — SHARED collision logic for both offline and online modes.
 //
-// Handles snake-to-body and head-on-head collision detection using spatial hashing.
-// Both modes use identical collision logic — edit here to change both at once.
+// Head-to-body: SWEPT line-segment collision (line crossing) + point-to-segment
+//   proximity (parallel crawling). A head dot dies if its movement line crosses
+//   a body segment OR if it's within 1px of any body segment.
+// Head-on-head: dot proximity (≤2px) OR movement line crossing.
 // ============================================================================
 
 import type { Snake } from './types';
 import { SpatialHash, type SpatialEntity } from './spatial-hash';
-import { distSq } from './vec2';
-import { SNAKE_RADIUS, SPAWN_PROTECTION_MS, NECK_PROTECTION, HEAD_ON_HEAD_BOOST_WINS } from './config';
+import { SPAWN_PROTECTION_MS, HEAD_ON_HEAD_BOOST_WINS, SNAKE_RADIUS } from './config';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -30,24 +31,94 @@ export interface CollisionResult {
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const COLLISION_DIST_SQ = SNAKE_RADIUS * 2 * SNAKE_RADIUS * 2;
 const DOT_DIST_FACTOR = 0.75;
 
 // ─── Module-level scratch (avoids per-tick allocation) ──────────────────────
 
 const _scratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
 
+// ─── 2D cross product ──────────────────────────────────────────────────────
+
+function cross2d(ax: number, ay: number, bx: number, by: number): number {
+  return ax * by - ay * bx;
+}
+
+// ─── Segment-segment intersection ──────────────────────────────────────────
+// Returns true if segment (p1→p2) crosses segment (p3→p4).
+
+function segsIntersect(
+  p1x: number, p1y: number, p2x: number, p2y: number,
+  p3x: number, p3y: number, p4x: number, p4y: number,
+): boolean {
+  const d1x = p2x - p1x, d1y = p2y - p1y;
+  const d2x = p4x - p3x, d2y = p4y - p3y;
+  const d3x = p3x - p1x, d3y = p3y - p1y;
+
+  const denom = cross2d(d1x, d1y, d2x, d2y);
+  if (Math.abs(denom) < 1e-10) return false; // parallel
+
+  const t = cross2d(d3x, d3y, d2x, d2y) / denom;
+  const u = cross2d(d3x, d3y, d1x, d1y) / denom;
+
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+}
+
+// ─── Point-to-segment squared distance ────────────────────────────────────
+// Returns the squared distance from point (px,py) to segment (ax,ay)→(bx,by).
+// Used to detect parallel crawling: if a head dot stays close to a body
+// segment without the movement lines actually crossing.
+
+function distPointToSegSq(
+  px: number, py: number,
+  ax: number, ay: number,
+  bx: number, by: number,
+): number {
+  const abx = bx - ax, aby = by - ay;
+  const apx = px - ax, apy = py - ay;
+  const lenSq = abx * abx + aby * aby;
+  if (lenSq < 1e-10) return apx * apx + apy * apy; // degenerate segment
+  let t = (apx * abx + apy * aby) / lenSq;
+  if (t < 0) t = 0;
+  if (t > 1) t = 1;
+  const cx = ax + t * abx - px;
+  const cy = ay + t * aby - py;
+  return cx * cx + cy * cy;
+}
+
+// ─── Get head dot position (offset forward from head center) ───────────────
+
+function getHeadDot(snake: Snake): { x: number; y: number } {
+  return {
+    x: snake.path.headX + Math.cos(snake.angle) * SNAKE_RADIUS * DOT_DIST_FACTOR,
+    y: snake.path.headY + Math.sin(snake.angle) * SNAKE_RADIUS * DOT_DIST_FACTOR,
+  };
+}
+
+// ─── Get PREVIOUS head dot position (from path history) ────────────────────
+
+function getPrevHeadDot(snake: Snake): { x: number; y: number } {
+  if (snake.path.length < 2) {
+    // No history yet — use current position as fallback
+    return getHeadDot(snake);
+  }
+  const prevHX = snake.path.getX(1);
+  const prevHY = snake.path.getY(1);
+  // Estimate previous angle from the direction path[1] → path[0]
+  const dx = snake.path.headX - prevHX;
+  const dy = snake.path.headY - prevHY;
+  const prevAngle = (dx * dx + dy * dy > 0.01) ? Math.atan2(dy, dx) : snake.angle;
+  return {
+    x: prevHX + Math.cos(prevAngle) * SNAKE_RADIUS * DOT_DIST_FACTOR,
+    y: prevHY + Math.sin(prevAngle) * SNAKE_RADIUS * DOT_DIST_FACTOR,
+  };
+}
+
 // ─── Collision Detection ───────────────────────────────────────────────────
 
 /**
- * Check all snake-to-snake collisions (head-to-body + head-on-head).
- * Uses spatial hashing for O(n) broad phase, then distance checks for narrow phase.
- *
- * @param snakes  - Map of all living/dead snakes
- * @param bodyHash - Spatial hash for body segments (reused between ticks, caller clears)
- * @param headHash - Spatial hash for head collision points (reused between ticks, caller clears)
- * @param now     - Current timestamp (for spawn protection)
- * @returns CollisionResult with dead snake IDs and kill events
+ * Check all snake-to-snake collisions using swept line-segment intersection.
+ * The head's movement line (prev tick → this tick) is checked against every
+ * body line segment of other snakes. If they cross → death. No tunneling possible.
  */
 export function checkCollisions(
   snakes: Map<string, Snake>,
@@ -57,33 +128,28 @@ export function checkCollisions(
 ): CollisionResult {
   const scratch = _scratch;
 
-  // ── Build body segment spatial hash (every 2nd segment for perf) ──
+  // ── Build body spatial hash (broad phase) ──
   bodyHash.clear();
   scratch.radius = SNAKE_RADIUS;
   for (const [, snake] of snakes) {
     if (!snake.alive) continue;
-    // Skip body segments from recently spawned snakes — their body is
-    // invisible to the player and causes surprise deaths
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
     const len = snake.path.length;
     scratch.id = snake.id;
-    // Skip head (i=0) and neck segments (NECK_PROTECTION) so that:
-    // - Head-on-head collisions fall through to the dedicated handler (Bug 5)
-    // - Neck segments don't cause phantom kills (Bug 3)
-    const bodyStart = NECK_PROTECTION;
-    for (let i = bodyStart; i < len; i += 2) {
+    for (let i = 1; i < len; i++) {
       scratch.x = snake.path.getX(i);
       scratch.y = snake.path.getY(i);
       bodyHash.insert(scratch);
     }
   }
 
-  // ── Build head collision point hash (offset forward by bodyRadius * 0.75) ──
+  // ── Build head hash (for head-on-head broad phase) ──
   headHash.clear();
   for (const [, snake] of snakes) {
     if (!snake.alive) continue;
-    scratch.x = snake.path.headX + Math.cos(snake.angle) * snake.bodyRadius * DOT_DIST_FACTOR;
-    scratch.y = snake.path.headY + Math.sin(snake.angle) * snake.bodyRadius * DOT_DIST_FACTOR;
+    const dot = getHeadDot(snake);
+    scratch.x = dot.x;
+    scratch.y = dot.y;
     scratch.radius = SNAKE_RADIUS;
     scratch.id = snake.id;
     headHash.insert(scratch);
@@ -92,24 +158,66 @@ export function checkCollisions(
   const deadSnakes = new Set<string>();
   const killEvents: KillEvent[] = [];
 
-  // ── Head-to-body collisions ──
+  // ── Head-to-body: swept line-segment intersection ──
   for (const [, snake] of snakes) {
     if (!snake.alive || deadSnakes.has(snake.id)) continue;
-    const dotX = snake.path.headX + Math.cos(snake.angle) * snake.bodyRadius * DOT_DIST_FACTOR;
-    const dotY = snake.path.headY + Math.sin(snake.angle) * snake.bodyRadius * DOT_DIST_FACTOR;
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
-    const nearby = bodyHash.query(dotX, dotY, SNAKE_RADIUS * 2);
+    const dot = getHeadDot(snake);
+    const prevDot = getPrevHeadDot(snake);
+
+    // Broad phase: find which snakes have body near this head
+    const nearX = (dot.x + prevDot.x) * 0.5;
+    const nearY = (dot.y + prevDot.y) * 0.5;
+    const nearby = bodyHash.query(nearX, nearY, SNAKE_RADIUS * 6);
+    const checkedSnakes = new Set<string>();
+
     for (let i = 0; i < nearby.length; i++) {
       const entity = nearby[i];
       const otherId = entity.id as string;
-      if (otherId === snake.id) continue;
-      if (distSq(dotX, dotY, entity.x, entity.y) <= COLLISION_DIST_SQ) {
+      if (otherId === snake.id || checkedSnakes.has(otherId)) continue;
+      checkedSnakes.add(otherId);
+
+      const otherSnake = snakes.get(otherId);
+      if (!otherSnake || !otherSnake.alive) continue;
+      if (now - otherSnake.spawnTime < SPAWN_PROTECTION_MS) continue;
+
+      // Narrow phase: check if head movement line touches ANY body segment.
+      // Uses 3 sampled points along the movement line (start, mid, end) to
+      // catch: line crossing, proximity, and both-sides-moving scenarios.
+      const BODY_HIT_DIST_SQ = 4; // 2px — reliable touch threshold
+      const len = otherSnake.path.length;
+      let hit = false;
+      // Midpoint of movement line
+      const midX = (prevDot.x + dot.x) * 0.5;
+      const midY = (prevDot.y + dot.y) * 0.5;
+      for (let j = 0; j < len - 1; j++) {
+        const sx = otherSnake.path.getX(j);
+        const sy = otherSnake.path.getY(j);
+        const ex = otherSnake.path.getX(j + 1);
+        const ey = otherSnake.path.getY(j + 1);
+        // 1. Line crossing (tunneling prevention)
+        if (segsIntersect(
+          prevDot.x, prevDot.y, dot.x, dot.y,
+          sx, sy, ex, ey,
+        )) {
+          hit = true;
+          break;
+        }
+        // 2. Proximity: check 3 points on the movement line
+        if (distPointToSegSq(dot.x, dot.y, sx, sy, ex, ey) <= BODY_HIT_DIST_SQ
+          || distPointToSegSq(prevDot.x, prevDot.y, sx, sy, ex, ey) <= BODY_HIT_DIST_SQ
+          || distPointToSegSq(midX, midY, sx, sy, ex, ey) <= BODY_HIT_DIST_SQ) {
+          hit = true;
+          break;
+        }
+      }
+
+      if (hit) {
         deadSnakes.add(snake.id);
-        const killer = snakes.get(otherId);
         killEvents.push({
           victimId: snake.id, victimName: snake.name,
-          killerId: otherId, killerName: killer?.name ?? 'Unknown',
+          killerId: otherId, killerName: otherSnake.name,
           score: snake.score, timestamp: now,
         });
         break;
@@ -117,14 +225,20 @@ export function checkCollisions(
     }
   }
 
-  // ── Head-on-head collisions ──
+  // ── Head-on-head: dot proximity OR movement line crossing ──
+  // segsIntersect alone is too strict for two 1px dots moving ~3px/tick.
+  // If snakes approach with even 1px offset the movement lines are parallel
+  // and never cross — so we also check dot-to-dot distance.
+  const HEAD_HIT_DIST_SQ = 4; // 2px — two 1px dots touching
+
   for (const [, snake] of snakes) {
     if (!snake.alive || deadSnakes.has(snake.id)) continue;
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
-    const dotX = snake.path.headX + Math.cos(snake.angle) * snake.bodyRadius * DOT_DIST_FACTOR;
-    const dotY = snake.path.headY + Math.sin(snake.angle) * snake.bodyRadius * DOT_DIST_FACTOR;
 
-    const nearby = headHash.query(dotX, dotY, SNAKE_RADIUS * 2);
+    const dot = getHeadDot(snake);
+    const prevDot = getPrevHeadDot(snake);
+
+    const nearby = headHash.query(dot.x, dot.y, SNAKE_RADIUS * 4);
     for (let i = 0; i < nearby.length; i++) {
       const otherId = nearby[i].id as string;
       if (otherId === snake.id || deadSnakes.has(otherId)) continue;
@@ -132,38 +246,44 @@ export function checkCollisions(
       if (!otherSnake || !otherSnake.alive) continue;
       if (now - otherSnake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
-      const otherDotX = otherSnake.path.headX + Math.cos(otherSnake.angle) * otherSnake.bodyRadius * DOT_DIST_FACTOR;
-      const otherDotY = otherSnake.path.headY + Math.sin(otherSnake.angle) * otherSnake.bodyRadius * DOT_DIST_FACTOR;
-      const dx = dotX - otherDotX;
-      const dy = dotY - otherDotY;
-      if (dx * dx + dy * dy > COLLISION_DIST_SQ) continue;
+      const otherDot = getHeadDot(otherSnake);
+      const otherPrevDot = getPrevHeadDot(otherSnake);
 
-      const lenA = snake.path.length;
-      const lenB = otherSnake.path.length;
-      const aBoost = snake.boosting;
-      const bBoost = otherSnake.boosting;
+      const ddx = dot.x - otherDot.x;
+      const ddy = dot.y - otherDot.y;
+      const dotDistSq = ddx * ddx + ddy * ddy;
 
-      // Bug 6 fix: if one snake is boosting and the other isn't, boosting wins
-      if (HEAD_ON_HEAD_BOOST_WINS && aBoost !== bBoost) {
-        const loserId = aBoost ? otherId : snake.id;
-        const loserName = aBoost ? otherSnake.name : snake.name;
-        const winnerId = aBoost ? snake.id : otherId;
-        const winnerName = aBoost ? snake.name : otherSnake.name;
-        deadSnakes.add(loserId);
-        const loser = snakes.get(loserId)!;
-        killEvents.push({ victimId: loserId, victimName: loserName, killerId: winnerId, killerName: winnerName, score: loser.score, timestamp: now });
-      } else if (lenA > lenB) {
-        deadSnakes.add(otherId);
-        killEvents.push({ victimId: otherId, victimName: otherSnake.name, killerId: snake.id, killerName: snake.name, score: otherSnake.score, timestamp: now });
-      } else if (lenB > lenA) {
-        deadSnakes.add(snake.id);
-        killEvents.push({ victimId: snake.id, victimName: snake.name, killerId: otherId, killerName: otherSnake.name, score: snake.score, timestamp: now });
-      } else {
-        // Same length — both die
-        deadSnakes.add(snake.id);
-        deadSnakes.add(otherId);
-        killEvents.push({ victimId: snake.id, victimName: snake.name, killerId: otherId, killerName: otherSnake.name, score: snake.score, timestamp: now });
-        killEvents.push({ victimId: otherId, victimName: otherSnake.name, killerId: snake.id, killerName: snake.name, score: otherSnake.score, timestamp: now });
+      // Check if dots are close enough OR movement lines cross
+      if (dotDistSq <= HEAD_HIT_DIST_SQ || segsIntersect(
+        prevDot.x, prevDot.y, dot.x, dot.y,
+        otherPrevDot.x, otherPrevDot.y, otherDot.x, otherDot.y,
+      )) {
+        const lenA = snake.path.length;
+        const lenB = otherSnake.path.length;
+        const aBoost = snake.boosting;
+        const bBoost = otherSnake.boosting;
+
+        if (HEAD_ON_HEAD_BOOST_WINS && aBoost !== bBoost) {
+          const loserId = aBoost ? otherId : snake.id;
+          const loserName = aBoost ? otherSnake.name : snake.name;
+          const winnerId = aBoost ? snake.id : otherId;
+          const winnerName = aBoost ? snake.name : otherSnake.name;
+          deadSnakes.add(loserId);
+          const loser = snakes.get(loserId)!;
+          killEvents.push({ victimId: loserId, victimName: loserName, killerId: winnerId, killerName: winnerName, score: loser.score, timestamp: now });
+        } else if (lenA > lenB) {
+          deadSnakes.add(otherId);
+          killEvents.push({ victimId: otherId, victimName: otherSnake.name, killerId: snake.id, killerName: snake.name, score: otherSnake.score, timestamp: now });
+        } else if (lenB > lenA) {
+          deadSnakes.add(snake.id);
+          killEvents.push({ victimId: snake.id, victimName: snake.name, killerId: otherId, killerName: otherSnake.name, score: snake.score, timestamp: now });
+        } else {
+          deadSnakes.add(snake.id);
+          deadSnakes.add(otherId);
+          killEvents.push({ victimId: snake.id, victimName: snake.name, killerId: otherId, killerName: otherSnake.name, score: snake.score, timestamp: now });
+          killEvents.push({ victimId: otherId, victimName: otherSnake.name, killerId: snake.id, killerName: snake.name, score: otherSnake.score, timestamp: now });
+        }
+        break;
       }
     }
   }

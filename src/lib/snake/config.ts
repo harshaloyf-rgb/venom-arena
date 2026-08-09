@@ -55,7 +55,7 @@ export const START_LENGTH = 15;
  *  Formula: length = START_LENGTH + RATE × ln(1 + score / OFFSET)
  *  No hard cap — naturally flattens but ALWAYS grows (different scores = different lengths).
  *  Fitted to checkpoints: 0→15 | 1K→100 | 10K→288 | 50K→451 | 100K→523 | 1M→764 */
-export const LENGTH_GROWTH_RATE = 105;
+export const LENGTH_GROWTH_RATE = 42;
 export const LENGTH_GROWTH_OFFSET = 800;
 
 /** Compute visual body length (segments) from score using logarithmic growth.
@@ -140,7 +140,7 @@ export const SNAKE_RADIUS_GROWTH_RATE = 3 / Math.log(4); // ≈ 2.164
 export const NECK_PROTECTION = 5;
 
 /** Spawn protection duration in milliseconds */
-export const SPAWN_PROTECTION_MS = 4000;
+export const SPAWN_PROTECTION_MS = 2000;
 
 /** Head-on-head: if true, the boosting snake always wins */
 export const HEAD_ON_HEAD_BOOST_WINS = true;
@@ -152,13 +152,12 @@ export const SPATIAL_CELL_SIZE = 100;
 // 5. BOOST — drop interval, prerequisites, speed multiplier
 // ============================================================================
 
-/** Milliseconds between boost food drops (~5 per second, dense visible trail) */
-export const BOOST_DROP_INTERVAL = 200;
+/** Milliseconds between boost food drops (3 per second). */
+export const BOOST_DROP_INTERVAL = 333;
 
-/** Number of food orbs to drop per boost interval, spaced along the body.
- *  Dropped at equal intervals from ~15% to 100% of body length.
- *  Creates a visible on-screen trail instead of a single off-screen tail dot. */
-export const BOOST_DROP_COUNT = 5;
+/** Number of food orbs to drop per boost interval.
+ *  1 drop × 500ms = 2 food/sec. */
+export const BOOST_DROP_COUNT = 1;
 
 /** Minimum body segments required to boost */
 export const BOOST_MIN_BODY = 8;
@@ -212,7 +211,16 @@ export const SPIRAL_RAMP_TICKS = 40;
 export const SPIRAL_EXIT_THRESHOLD = 0.03;
 
 // ============================================================================
-// 9. EXTRAPOLATION — server/client timing, interpolation, camera
+// 9. COIL PHYSICS — curvature-based body contraction
+// ============================================================================
+
+/** Body contraction strength when coiling (0 = off, 0.5 = moderate, 1.0 = strong).
+ *  Pulls body segments inward on curves for a python-grip tightening effect.
+ *  Applied at render time only — collision/physics use the raw path. */
+export const COIL_CONTRACTION = 0.45;
+
+// ============================================================================
+// 10. EXTRAPOLATION — server/client timing, interpolation, camera
 // ============================================================================
 
 /** Fixed timestep in seconds for offline game loop (targeting 60fps) */

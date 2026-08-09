@@ -227,6 +227,8 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
   const smoothT = sharpness * sharpness * (3 - 2 * sharpness);
   const brakeFactor = 1 - SHARP_TURN_BRAKE * smoothT;
 
+  // Detect boost transition for instant first drop
+  const boostJustStarted = canBoost && !snake.boosting;
   snake.boosting = canBoost;
   const baseSpeedForState = canBoost ? BOOST_SPEED : BASE_SPEED;
   snake.speed = baseSpeedForState * brakeFactor;
@@ -240,8 +242,9 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
   const logicalLen = computeBodyLength(snake.score);
   const targetLength = Math.ceil(logicalLen * SPACING_RATIO);
 
-  // Boost food drop
-  if (canBoost && now - snake.lastBoostDrop >= BOOST_DROP_INTERVAL) {
+  // Boost food drop — instant on press, then every BOOST_DROP_INTERVAL
+  const shouldDrop = canBoost && (boostJustStarted || now - snake.lastBoostDrop >= BOOST_DROP_INTERVAL);
+  if (shouldDrop) {
     snake.lastBoostDrop = now;
     const pathLen = snake.path.length;
     const dropCount = Math.min(BOOST_DROP_COUNT, pathLen - 1);
@@ -257,6 +260,10 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
         });
       }
     }
+  }
+  // Reset drop timer when not boosting so next boost press is instant
+  if (!canBoost) {
+    snake.lastBoostDrop = 0;
   }
 
   // Boost score cost
@@ -341,7 +348,7 @@ function checkFoodEating(
     if (!snake.alive) continue;
     const hx = snake.path.headX;
     const hy = snake.path.headY;
-    if (snake.isPlayer && now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
+    if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
     const nearby = fh.query(hx, hy, MAGNET_PULL_DIST);
     for (let i = 0; i < nearby.length; i++) {
@@ -384,11 +391,15 @@ function checkFoodEating(
 
 function killSnake(snake: Snake, nextFoodId: { value: number }, foods: FoodOrb[]): void {
   snake.alive = false;
-  const dropValue = 15 + snake.score;
-  const largeCount = Math.max(1, Math.floor(dropValue * 0.4 / 5));
-  const medCount = Math.max(1, Math.floor(dropValue * 0.3 / 2));
+  const dropValue = Math.max(1, snake.score);
+  const segLen = snake.path.length;
+  // Cap total food to path length so drops don't pile at the tail
+  const maxFood = segLen;
+
+  const largeCount = Math.min(maxFood, Math.max(1, Math.floor(dropValue * 0.4 / 5)));
+  const medCount = Math.min(maxFood - largeCount, Math.max(1, Math.floor(dropValue * 0.3 / 2)));
   let remaining = dropValue - largeCount * 5 - medCount * 2;
-  const smallCount = Math.max(1, remaining);
+  const smallCount = Math.min(maxFood - largeCount - medCount, Math.max(1, remaining));
   remaining -= smallCount;
   const totalFood = largeCount + medCount + smallCount;
 
@@ -401,7 +412,6 @@ function killSnake(snake: Snake, nextFoodId: { value: number }, foods: FoodOrb[]
     const tmp = sizes[i]; sizes[i] = sizes[j]; sizes[j] = tmp;
   }
 
-  const segLen = snake.path.length;
   const step = Math.max(1, Math.floor(segLen / totalFood));
   for (let i = 0; i < sizes.length; i++) {
     const si = Math.min(i * step, segLen - 1);

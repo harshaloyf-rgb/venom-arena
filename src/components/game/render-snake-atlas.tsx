@@ -298,12 +298,49 @@ export function renderSnakeAtlas(
   const ch = viewport.height;
   const segRadius = snake.bodyRadius * zoom;
 
-  // Spawn protection: smooth fade-in (no blinking)
+  // ── Spawn shield: rotating hexagonal ring that fades out ──
   const spawnAge = time - snake.spawnTime;
-  if (spawnAge < SPAWN_PROTECTION_MS) {
-    const t = spawnAge / SPAWN_PROTECTION_MS;
-    const pulse = 0.7 + 0.3 * Math.sin(time * 0.008);
-    ctx.globalAlpha = 0.5 + 0.5 * t * pulse;
+  if (spawnAge < SPAWN_PROTECTION_MS && headScreen) {
+    const t = spawnAge / SPAWN_PROTECTION_MS; // 0→1 over protection duration
+    const shieldAlpha = 1 - t; // fade out
+    const shieldR = atlasHeadR * (2.2 + 0.3 * Math.sin(time * 0.006));
+    const rot = time * 0.003; // slow rotation
+    const sides = 6;
+    ctx.save();
+    ctx.globalAlpha = shieldAlpha * 0.6;
+    ctx.strokeStyle = '#00e5ff';
+    ctx.lineWidth = 2 * zoom;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (let i = 0; i <= sides; i++) {
+      const a = rot + (i / sides) * Math.PI * 2;
+      const px = headScreen.x + Math.cos(a) * shieldR;
+      const py = headScreen.y + Math.sin(a) * shieldR;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    // Inner glow ring
+    ctx.globalAlpha = shieldAlpha * 0.15;
+    ctx.fillStyle = '#00e5ff';
+    ctx.fill();
+    // Second ring (counter-rotating)
+    ctx.globalAlpha = shieldAlpha * 0.35;
+    ctx.strokeStyle = '#80f0ff';
+    ctx.lineWidth = 1 * zoom;
+    const shieldR2 = shieldR * 0.75;
+    ctx.beginPath();
+    for (let i = 0; i <= sides; i++) {
+      const a = -rot * 1.5 + (i / sides) * Math.PI * 2 + 0.5;
+      const px = headScreen.x + Math.cos(a) * shieldR2;
+      const py = headScreen.y + Math.sin(a) * shieldR2;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+    // Snake body also semi-transparent during shield
+    ctx.globalAlpha = 0.5 + 0.5 * t;
   }
 
   const vl = viewport.left - 40;
@@ -489,11 +526,11 @@ export function renderSnakeAtlas(
 
   }
 
-  // ── Collision Points: connected chain — head diameter line + body squares ──
-  // drawCollisionChain(
-  //   ctx, headScreen, snake.angle, atlasHeadR,
-  //   walked, segRadius, camera, cw, ch, vl, vr, vt, vb,
-  // );
+  // ── Collision Points: connected chain — head dot + body squares ──
+  drawCollisionChain(
+    ctx, headScreen, snake.angle, atlasHeadR,
+    walked, segRadius, camera, cw, ch, vl, vr, vt, vb,
+  );
 
   // ── Render particles for legendary snakes ──
   if (isLegendary) {
@@ -555,14 +592,6 @@ export function renderSnakeFallback(
   const ch = viewport.height;
   const segRadius = snake.bodyRadius * zoom;
 
-  // Spawn protection: smooth fade-in (no blinking)
-  const spawnAge = now - snake.spawnTime;
-  if (spawnAge < SPAWN_PROTECTION_MS) {
-    const t = spawnAge / SPAWN_PROTECTION_MS;
-    const pulse = 0.7 + 0.3 * Math.sin(now * 0.008);
-    ctx.globalAlpha = 0.5 + 0.5 * t * pulse;
-  }
-
   const vl = viewport.left - 20;
   const vr = viewport.right + 20;
   const vt = viewport.top - 20;
@@ -570,6 +599,48 @@ export function renderSnakeFallback(
 
   const headScreen = worldToScreen(headWorldX, headWorldY, camera, cw, ch);
   const headVisible = headWorldX >= vl && headWorldX <= vr && headWorldY >= vt && headWorldY <= vb;
+
+  // ── Spawn shield: rotating hexagonal ring that fades out ──
+  const spawnAge = now - snake.spawnTime;
+  if (spawnAge < SPAWN_PROTECTION_MS && headVisible) {
+    const t = spawnAge / SPAWN_PROTECTION_MS;
+    const shieldAlpha = 1 - t;
+    const shieldR = segRadius * (2.2 + 0.3 * Math.sin(now * 0.006));
+    const rot = now * 0.003;
+    const sides = 6;
+    ctx.save();
+    ctx.globalAlpha = shieldAlpha * 0.6;
+    ctx.strokeStyle = '#00e5ff';
+    ctx.lineWidth = 2 * zoom;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (let i = 0; i <= sides; i++) {
+      const a = rot + (i / sides) * Math.PI * 2;
+      const px = headScreen.x + Math.cos(a) * shieldR;
+      const py = headScreen.y + Math.sin(a) * shieldR;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.globalAlpha = shieldAlpha * 0.15;
+    ctx.fillStyle = '#00e5ff';
+    ctx.fill();
+    ctx.globalAlpha = shieldAlpha * 0.35;
+    ctx.strokeStyle = '#80f0ff';
+    ctx.lineWidth = 1 * zoom;
+    const shieldR2 = shieldR * 0.75;
+    ctx.beginPath();
+    for (let i = 0; i <= sides; i++) {
+      const a = -rot * 1.5 + (i / sides) * Math.PI * 2 + 0.5;
+      const px = headScreen.x + Math.cos(a) * shieldR2;
+      const py = headScreen.y + Math.sin(a) * shieldR2;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+    ctx.globalAlpha = 0.5 + 0.5 * t;
+  }
 
   // ── Walk path at dynamic step (based on radius), capped to maxSegs ──
   const walked = walkPathFixedStep(path, step, maxSegs, snake.angle);
@@ -752,11 +823,11 @@ export function renderSnakeFallback(
 
   }
 
-  // ── Collision Points: connected chain — head diameter line + body squares ──
-  // drawCollisionChain(
-  //   ctx, headVisible ? headScreen : null, snake.angle, headRadius,
-  //   walked, segRadius, camera, cw, ch, vl, vr, vt, vb,
-  // );
+  // ── Collision Points: connected chain — head dot + body squares ──
+  drawCollisionChain(
+    ctx, headVisible ? headScreen : null, snake.angle, headRadius,
+    walked, segRadius, camera, cw, ch, vl, vr, vt, vb,
+  );
 
   ctx.globalAlpha = 1;
 }
@@ -826,22 +897,16 @@ function drawCollisionChain(
   }
   ctx.stroke();
 
-  // ── 2. Head: diameter line through center, along direction (head→body) ──
+  // ── 2. Head: tiny black dot at collision point (no red line) ──
   if (pts[0].r > 0) {
     const hp = pts[0];
-    const hHalf = hp.r * 0.75;
-    ctx.beginPath();
-    ctx.moveTo(hp.x - Math.cos(hp.a) * hHalf, hp.y - Math.sin(hp.a) * hHalf);
-    ctx.lineTo(hp.x + Math.cos(hp.a) * hHalf, hp.y + Math.sin(hp.a) * hHalf);
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-    // Black dot at front end of diameter
+    const frontX = hp.x + Math.cos(hp.a) * hp.r * 0.75;
+    const frontY = hp.y + Math.sin(hp.a) * hp.r * 0.75;
     ctx.fillStyle = '#000000';
     ctx.beginPath();
-    ctx.arc(hp.x + Math.cos(hp.a) * hHalf, hp.y + Math.sin(hp.a) * hHalf, 2.5, 0, Math.PI * 2);
+    ctx.arc(frontX, frontY, 1, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = 'rgba(239, 68, 68, 0.45)'; // restore red fill for squares
-    ctx.lineWidth = 1.8; // restore
   }
 
   // ── 3. Body: rotated squares at each segment ──

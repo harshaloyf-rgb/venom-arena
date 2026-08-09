@@ -4,15 +4,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Zap, CircleDot } from 'lucide-react';
 import { createExtractionState, updateExtractionProgress, drawExtractRing } from '@/lib/snake/extraction';
 import { createInitialState, gameTick, respawnPlayer, initBots, type PlayerSkinOverride } from '@/lib/snake/engine';
-import { createCamera, updateCamera, getViewport } from '@/lib/snake/camera';
+import { createCamera, updateCamera, getViewport, worldToScreen } from '@/lib/snake/camera';
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, registerSkinAsset } from '@/lib/snake/skin-registry';
-import { type GameState, type Camera, type Viewport, type Snake, FIXED_DT } from '@/lib/snake';
+import { type GameState, type Camera, type Viewport, FIXED_DT } from '@/lib/snake';
 import { drawDeathOverlay, drawEliminatedBanner, drawControlsHint } from './renderer';
 import { renderSnakeAtlas, renderSnakeFallback } from './render-snake-atlas';
 import { cleanupDeadSnakeParticles, renderBackground, renderHUD, drawMouseCursor } from './hud';
 import { InputHandler } from './input';
+import { makeCoiledPath } from './coil-path';
 import { useAuth } from '@/components/providers/auth-provider';
+
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -69,6 +71,7 @@ export default function GameCanvas({
   // Extraction progress tracking (shared logic)
   const extractionRef = useRef(createExtractionState());
 
+
   // ── Leaderboard updater ──
 
   const updateLeaderboard = useCallback((state: GameState) => {
@@ -91,6 +94,7 @@ export default function GameCanvas({
     deathTimeRef.current = 0;
     setIsDead(false);
     setFinalScore(0);
+
   }, []);
 
   // ── Main effect: game loop ──
@@ -157,6 +161,7 @@ export default function GameCanvas({
     leaderboardTimerRef.current = 0;
     killsRef.current = 0;
     extractionRef.current = createExtractionState();
+
     // Load highest ever score from localStorage (per arena, mode-specific key)
     const highScoreKey = `venom-high-score${mode === 'online' ? '-online' : ''}-${arenaId || 'default'}`;
     try {
@@ -241,6 +246,7 @@ export default function GameCanvas({
         const killEvents = gameTick(gameState, inputState, FIXED_DT);
         accumulatorRef.current -= tickMs;
 
+
         // Track player kills
         if (gameState.player) {
           for (const ev of killEvents) {
@@ -282,13 +288,16 @@ export default function GameCanvas({
       renderBackground(ctx, gameState, cameraRef.current, viewport, fc.fps, now);
 
       // ── Render snakes: bots use fallback, player uses atlas ──
+      // Apply coil contraction (curvature-based body tightening) for visual effect.
+      // Physics/collision use raw path — this wrapper only affects rendering.
       for (const [, s] of gameState.snakes) {
         if (s.alive && !s.isPlayer) {
-          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now);
+          renderSnakeFallback(ctx, { ...s, path: makeCoiledPath(s.path) }, cameraRef.current, viewport, now);
         }
       }
       if (gameState.player && gameState.player.alive) {
-        renderSnakeAtlas(ctx, gameState.player, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY);
+        const coiledPlayer = { ...gameState.player, path: makeCoiledPath(gameState.player.path) };
+        renderSnakeAtlas(ctx, coiledPlayer, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY);
       }
 
       // Extraction progress ring on snake head (shared)
@@ -355,13 +364,14 @@ export default function GameCanvas({
 
   // ── Render ──
 
+
   return (
     <div className="relative w-full h-full bg-[#0a0a0f] overflow-hidden">
       <canvas
-        ref={canvasRef}
-        className="block w-full h-full"
-        style={{ touchAction: 'none', cursor: 'none' }}
-      />
+          ref={canvasRef}
+          className="block w-full h-full"
+          style={{ touchAction: 'none', cursor: 'none' }}
+        />
 
       {/* Exit button */}
       {onExit && (
@@ -374,7 +384,6 @@ export default function GameCanvas({
         </button>
       )}
 
-      {/* Leaderboard */}
       <div className="absolute top-4 right-4 w-44 pointer-events-none select-none flex flex-col gap-2">
         {/* Best Ever */}
         <div className="bg-black/50 backdrop-blur-sm rounded-lg px-2 py-1.5">
