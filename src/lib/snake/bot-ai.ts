@@ -11,11 +11,6 @@ import { BASE_SPEED, SPAWN_RADIUS, INITIAL_SPAWN_RADIUS, BOOST_MIN_SCORE } from 
 
 export type BotType = 'hunter' | 'gatherer' | 'ambusher' | 'kamikaze' | 'wanderer' | 'opportunist';
 
-export const BOT_TYPE_LABELS: Record<BotType, string> = {
-  hunter: 'Hunter', gatherer: 'Gatherer', ambusher: 'Ambusher',
-  kamikaze: 'Kamikaze', wanderer: 'Wanderer', opportunist: 'Opportunist',
-};
-
 /** Color palette per bot type: [bodyColor, headColor] */
 export const BOT_TYPE_COLORS: Record<BotType, [string, string]> = {
   hunter:     ['#ef4444', '#fca5a5'],
@@ -360,7 +355,6 @@ function updateWanderer(snake: Snake, data: BotAIData, state: GameState): void {
   const danger = checkDangerCached(snake, data, state.snakes, 300 * 300);
   if (danger) { data.targetAngle = fleeAngle(hx, hy, danger.x, danger.y); data.wantBoost = false; return; }
 
-  data.wanderChangeTimer--;
   if (data.wanderChangeTimer <= 0) {
     const food = findNearestFood(hx, hy, state.foods, 600 * 600);
     if (food && Math.random() < 0.4) { data.wanderAngle = angleTo(hx, hy, food.x, food.y) + (Math.random() - 0.5) * 0.8; }
@@ -530,7 +524,4 @@ export function respawnDeadBots(
 }
 
 export function removeBot(snakeId: string): void { removeBotData(snakeId); }
-export function getBotType(snakeId: string): BotType | undefined { return getBotData(snakeId)?.type; }
-export function getTotalBotCount(config: BotSpawnConfig = DEFAULT_BOT_MIX): number {
-  return config.hunter + config.gatherer + config.ambusher + config.kamikaze + config.wanderer + config.opportunist;
-}
+

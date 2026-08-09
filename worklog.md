@@ -1,6 +1,28 @@
 ---
 Task ID: 1
 Agent: main
+Task: Fix blank screen and login issue — restore dev server persistence
+
+Work Log:
+- Diagnosed blank screen: dev server was not running (killed when previous session ended)
+- Found and used next-supervisor.py (double-fork daemon) to keep server alive persistently
+- Created missing start-game-server.sh (placeholder) so `bun run dev` properly chains to supervisor
+- Restored package.json dev script to original: `bash start-game-server.sh && python3 next-supervisor.py ...`
+- Verified .env has correct JWT_SECRET
+- Full browser E2E test: login page renders, "Play as Guest" works, full lobby loads, all panels functional
+- Guest login API returns 200 with player profile (150 chips, VENOM-XXXX tag)
+- Zero console errors throughout
+- Server persists across tool calls via supervisor daemon
+
+Stage Summary:
+- Root cause: dev server died when previous session ended, and `start-game-server.sh` was missing so `bun run dev` couldn't start the supervisor
+- Fix: created start-game-server.sh, verified supervisor daemon works (double-fork keeps process alive)
+- Application verified working: login, guest access, full lobby, cosmetics shop, all 12 stations, challenges
+- Version confirmed: 008b50e (with 6 bot AI types)
+
+---
+Task ID: 1
+Agent: main
 Task: Remove star chips from offline mode + delete all online game code
 
 Work Log:
@@ -320,3 +342,53 @@ Stage Summary:
 - Modified: GameCanvas.tsx (initBots call)
 - Shared code — works for both offline and online modes
 - Bot population self-maintains: dead bots respawn 1/tick to maintain target count
+---
+Task ID: 5
+Agent: main
+Task: Re-apply 6 lost bug fixes after git reset
+
+Work Log:
+- Bug 1 (GameCanvas.tsx): Changed `if (accumulator >= tickMs)` to `while (accumulator >= tickMs && maxTicks-- > 0)` with maxTicks=5 cap. Removed the accumulator discard cap (`if > tickMs, reset to 0.5`). Game now properly drains accumulated time, running multiple ticks per frame when needed.
+- Bug 2 (spatial-hash.ts): Changed `clear()` from only resetting counts to also pruning empty cells from the Map. Uses `for (const [key, cell] of this.cellMap)` to delete cells with count 0 and reset cells with count > 0. Prevents unbounded memory growth in long game sessions.
+- Bug 3 (collision.ts): Imported NECK_PROTECTION from config. Changed body hash loop from `for (let i = 0; ...)` to `for (let i = NECK_PROTECTION; ...)` skipping first 5 segments. Prevents phantom kills near snake necks.
+- Bug 4 (bot-ai.ts): Removed duplicate `data.wanderChangeTimer--` from `updateWanderer()` (line 363). The generic `updateAllBotAI` dispatcher already decrements it for all bots. Wanderers now turn at the intended frequency.
+- Bug 5 (collision.ts): By starting body hash at `i = NECK_PROTECTION` (5), the head segment (i=0) is no longer inserted into the body hash. Head-on-head collisions now correctly fall through to the dedicated head-on-head handler instead of being caught by the head-to-body check.
+- Bug 6 (collision.ts): Imported HEAD_ON_HEAD_BOOST_WINS from config. Added boost-wins check before size comparison: if one snake is boosting and the other isn't, the boosting snake wins. Falls through to size-based rule only when both or neither are boosting.
+- Verified login/register: tested register + login with new credentials — both work. Old accounts lost because git replaced db/custom.db (only guest accounts were in git).
+- Lint clean, zero compilation errors.
+
+Stage Summary:
+- All 6 bugs fixed in 4 files: GameCanvas.tsx, spatial-hash.ts, collision.ts, bot-ai.ts
+- Game loop now runs at correct speed (while loop instead of if)
+- Memory leak in spatial hash fixed (empty cells pruned on clear)
+- Neck protection actually enforced (NECK_PROTECTION=5 segments skipped in body hash)
+- Head-on-head collision rules now reachable (head not in body hash)
+- Boost-wins rule correctly applied (boosting snake always wins head-on)
+- Wanderer bots turn at designed frequency (no more double decrement)
+- Login works: user must register a new account (old accounts lost with database)
+
+---
+Task ID: 1
+Agent: sub
+Task: Clean dead code in snake library (10 files)
+
+Work Log:
+- config.ts: Removed 18 dead constants (ARENA_BG_COLOR, ARENA_GRID_COLOR, BOOST_SHRINK_RATE, DEATH_FOOD_LARGE_DIVISOR, DEATH_FOOD_MEDIUM_DIVISOR, SACRIFICE_SET_COUNT, RARITY_UPGRADE_CHANCE, CHEST_WEIGHTS, SET_PIECE_COUNTS, SERVER_TICK_RATE, CLIENT_RENDER_FPS, MAX_EXTRAPOLATION_MS, ANGLE_LERP_SPEED, CAMERA_LERP, POSITION_PREDICT_FACTOR, BOOST_SPEED_MULTIPLIER, RESPAWN_DELAY, SPAWN_INVULN_BLINK_RATE)
+- vec2.ts: Reduced from 106 lines to 10 lines — kept only distSq function, removed 12 unused functions (dist, angleDirect, distance, distanceSq, normalize, angleBetween, lerp, lerpVec2, rotate, fromAngle, add, sub, scale, magnitude) and the unused Vec2 import
+- pool.ts: Removed 5 dead PathBuffer methods (getXY, tailX getter, tailY getter, setLength, toVec2Array, initFromArray), deleted ObjectPool class, scratchVec2 export, and SnapshotPool class entirely. Reduced from 288 to 160 lines.
+- skin-registry.ts: Removed 4 dead exports (getDefaultSkinAsset, getPlayerSkinId, getAllSkinIds, getSkinColors) and 2 dead internal functions (darkenHex, hexToRgb)
+- bot-ai.ts: Removed 3 dead exports (BOT_TYPE_LABELS, getBotType, getTotalBotCount)
+- engine.ts: Removed setDebugScore function export (34 lines including section header)
+- camera.ts: Removed screenToWorld function export (13 lines)
+- renderer.ts: Removed drawMinimap function (47 lines), also removed unused Snake import
+- hud.ts: Changed `export function drawMinimapTopLeft` to `function drawMinimapTopLeft` (un-exported, only called internally by renderHUD)
+- types.ts: Removed 6 dead interfaces (CellCoord, RarityWeights, SpiralTurnState, SkinPiece, CollectionSet, CraftingTransaction). Inlined SpiralTurnState shape into Snake.spiral field to preserve the spiral feature.
+- Verified: zero importers remain for all removed symbols across src/
+- Verified: ESLint passes clean on all 10 changed files
+- Verified: TypeScript has no new errors (only pre-existing ones in unrelated files)
+
+Stage Summary:
+- Removed ~220 lines of dead code across 10 files in src/lib/snake/ and src/components/game/
+- No logic or behavior changes — purely dead code removal
+- All retained exports verified to have at least one importer in src/
+- SpiralTurnState type was inlined into Snake interface since the field must remain

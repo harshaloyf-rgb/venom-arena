@@ -12,12 +12,6 @@
 /** Background grid cell size in pixels */
 export const ARENA_GRID_SIZE = 100;
 
-/** Arena background fill color */
-export const ARENA_BG_COLOR = '#0a0a0f';
-
-/** Arena grid line color (subtle) */
-export const ARENA_GRID_COLOR = 'rgba(255, 255, 255, 0.03)';
-
 // ============================================================================
 // 2. MOVEMENT — speed, turning, growth, length caps
 // ============================================================================
@@ -79,8 +73,6 @@ export function computeBodyRadius(score: number): number {
   return SNAKE_RADIUS_MIN + SNAKE_RADIUS_GROWTH_RATE * Math.log(1 + score / SNAKE_RADIUS_GROWTH_OFFSET);
 }
 
-/** Segments lost per boost food drop */
-export const BOOST_SHRINK_RATE = 1;
 
 // ============================================================================
 // 3. FOOD — orbs: weights, values, sizes, colors, spawn/despawn areas
@@ -153,12 +145,6 @@ export const SPAWN_PROTECTION_MS = 4000;
 /** Head-on-head: if true, the boosting snake always wins */
 export const HEAD_ON_HEAD_BOOST_WINS = true;
 
-/** Death food distribution: divisor for large food count (score ÷ this) */
-export const DEATH_FOOD_LARGE_DIVISOR = 5;
-
-/** Death food distribution: divisor for medium food count (remainder ÷ this) */
-export const DEATH_FOOD_MEDIUM_DIVISOR = 3;
-
 /** Spatial hash cell size in pixels for collision detection */
 export const SPATIAL_CELL_SIZE = 100;
 
@@ -192,9 +178,6 @@ export const BOOST_SCORE_COST_AMOUNT = 1;
  *  Replaces old float-based BOOST_SCORE_COST_PER_TICK (0.08) which caused decimal scores. */
 export const BOOST_SCORE_COST_INTERVAL = 12;
 
-/** Boost speed as a multiplier of base speed */
-export const BOOST_SPEED_MULTIPLIER = BOOST_SPEED / BASE_SPEED; // = 2.0
-
 
 // ============================================================================
 // 7. SPAWN — initial spawn radius, safe positioning, respawn timing
@@ -208,12 +191,6 @@ export const SAFE_SPAWN_DIST = 500;
 
 /** Max attempts to find a safe spawn position before forcing placement */
 export const SAFE_SPAWN_ATTEMPTS = 30;
-
-/** Delay in milliseconds before a dead player can respawn */
-export const RESPAWN_DELAY = 3000;
-
-/** Milliseconds between spawn-protection blink toggle */
-export const SPAWN_INVULN_BLINK_RATE = 200;
 
 // ============================================================================
 // 8. SPIRAL_TURN — Progressive spiral assist for tight circular motion
@@ -238,23 +215,8 @@ export const SPIRAL_EXIT_THRESHOLD = 0.03;
 // 9. EXTRAPOLATION — server/client timing, interpolation, camera
 // ============================================================================
 
-/** Server simulation tick rate in Hz */
-export const SERVER_TICK_RATE = 20;
-
-/** Client target render frame rate in fps */
-export const CLIENT_RENDER_FPS = 60;
-
-/** Maximum time in ms to extrapolate beyond last server snapshot */
-export const MAX_EXTRAPOLATION_MS = 200;
-
-/** Angle interpolation speed (0–1, lower = smoother) */
-export const ANGLE_LERP_SPEED = 0.3;
-
 /** Fixed timestep in seconds for offline game loop (targeting 60fps) */
 export const FIXED_DT = 1 / 60;
-
-/** Camera position lerp factor (0–1, lower = smoother follow). Used in online mode. */
-export const CAMERA_LERP = 0.08;
 
 /** Base camera zoom — starts closer for better visibility */
 export const CAMERA_BASE_ZOOM = 1.35;
@@ -266,35 +228,6 @@ export const CAMERA_ZOOM_MIN = 0.45;
  *  0.015 → 90% convergence in ~153 frames (2.5s at 60fps).
  *  Combined with gradual target changes, the player barely notices zoom shifting. */
 export const CAMERA_ZOOM_LERP = 0.015;
-
-/** Position prediction factor for extrapolation (1.0 = full prediction) */
-export const POSITION_PREDICT_FACTOR = 1.0;
-
-// ============================================================================
-// 10. CRAFTING — sacrifice, rarity upgrade, chest weights, set piece counts
-// ============================================================================
-
-/** Number of completed sets required to perform a sacrifice roll */
-export const SACRIFICE_SET_COUNT = 1;
-
-/** Percentage chance of rarity upgrade on sacrifice (0–100) */
-export const RARITY_UPGRADE_CHANCE = 15;
-
-/** Weighted drop rates per rarity when opening a chest */
-export const CHEST_WEIGHTS = {
-  common: 55,
-  rare: 30,
-  epic: 12,
-  legendary: 3,
-} as const;
-
-/** Number of pieces required to complete a set, per rarity tier */
-export const SET_PIECE_COUNTS = {
-  common: 5,
-  rare: 4,
-  epic: 3,
-  legendary: 2,
-} as const;
 
 // ============================================================================
 // 11. TEXTURE_ATLAS — sprite sizes, segment counts, UV mapping
@@ -322,26 +255,7 @@ export const ATLAS_PADDING = 2;
 export const LEGENDARY_GLOW_SIZE = 16;
 
 // ============================================================================
-// 12. SNAPSHOT_DOWNSAMPLING — network broadcast optimization
-// ============================================================================
-
-/** Server-to-client snapshot broadcast rate in Hz */
-export const BROADCAST_RATE = 20;
-
-/** Maximum number of snakes included in a single snapshot */
-export const MAX_SNAKES_PER_SNAPSHOT = 100;
-
-/** Send every Nth body segment in snapshots (1 = all, 3 = every 3rd) */
-export const BODY_DOWNSAMPLE_INTERVAL = 3;
-
-/** Only include food within this radius of any player in the snapshot.
- *  2000px covers the visible screen area at all zoom levels with comfortable buffer.
- *  Was 500 — way too small, player could see areas with no food data.
- */
-export const FOOD_DOWNSAMPLE_RADIUS = 2000;
-
-// ============================================================================
-// 13. FOOD MAGNET — vacuum pull mechanic around snake head
+// 12. FOOD MAGNET — vacuum pull mechanic around snake head
 // ============================================================================
 
 /** Pull zone: food within (SNAKE_RADIUS + this) pixels of head center gets attracted.

@@ -22,24 +22,6 @@ function lightenHex(hex: string, factor: number): string {
   return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`;
 }
 
-/** Darken a hex color by factor (0–1) */
-function darkenHex(hex: string, factor: number): string {
-  const n = parseInt(hex.replace('#', ''), 16);
-  const r = (n >> 16) & 0xff;
-  const g = (n >> 8) & 0xff;
-  const b = n & 0xff;
-  const nr = Math.round(r * (1 - factor));
-  const ng = Math.round(g * (1 - factor));
-  const nb = Math.round(b * (1 - factor));
-  return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`;
-}
-
-/** Parse hex to [r, g, b] */
-function hexToRgb(hex: string): [number, number, number] {
-  const n = parseInt(hex.replace('#', ''), 16);
-  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
-}
-
 /** Determine rarity based on cost */
 function rarityFromCost(cost: number): SkinRarity {
   if (cost === 0) return 'common';
@@ -214,30 +196,6 @@ export function getPlayerSkinAsset(serverSkinId: string): SkinAsset {
   return getSkinAsset(serverSkinId);
 }
 
-/**
- * Get the default SkinAsset (Viper Green) for when no skin is selected.
- */
-export function getDefaultSkinAsset(): SkinAsset {
-  return getSkinAsset('skin-default');
-}
-
-/** Get the skinId that should be passed to the game engine */
-export function getPlayerSkinId(serverSkinId: string): string {
-  if (typeof window === 'undefined') return serverSkinId;
-
-  try {
-    const raw = localStorage.getItem(CUSTOM_SKIN_KEY);
-    if (raw) {
-      const state: CustomSkinState = JSON.parse(raw);
-      if (state.useCustomSkin) {
-        return state.currentSkin; // preset id or 'custom-lab-skin'
-      }
-    }
-  } catch { /* fall through */ }
-
-  return serverSkinId;
-}
-
 // ─── Custom Lab Skin ─────────────────────────────────────────────────────────
 
 /** Build a SkinAsset from the DNA Lab's custom segments in localStorage */
@@ -337,16 +295,6 @@ export function getSegmentColor(skinId: string, segmentIndex: number): string | 
 }
 
 /**
- * Get all registered skin IDs (for the shop to iterate).
- */
-export function getAllSkinIds(): string[] {
-  const ids = new Set<string>();
-  for (const key of cosmeticSkinMap.keys()) ids.add(key);
-  for (const key of presetSkinMap.keys()) ids.add(key);
-  return [...ids];
-}
-
-/**
  * Register additional skins at runtime (e.g., DEFAULT_SKINS from atlas.ts).
  * This allows the game to register its built-in skins into the registry.
  */
@@ -364,22 +312,4 @@ export function isMultiColorSkin(skinId: string): boolean {
   return false;
 }
 
-/** Get the full colors array for a multi-color skin */
-export function getSkinColors(skinId: string): string[] {
-  const preset = SLITHER_PRESETS.find((p) => p.id === skinId);
-  if (preset) return preset.colors;
 
-  if (skinId === 'custom-lab-skin' && typeof window !== 'undefined') {
-    try {
-      const raw = localStorage.getItem(CUSTOM_SKIN_KEY);
-      if (raw) {
-        const state: CustomSkinState = JSON.parse(raw);
-        if (state.customSkinSegments?.length) {
-          return state.customSkinSegments.map((s) => s.color);
-        }
-      }
-    } catch { /* fall through */ }
-  }
-
-  return [];
-}

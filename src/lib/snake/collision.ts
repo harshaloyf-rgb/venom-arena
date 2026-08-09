@@ -8,7 +8,7 @@
 import type { Snake } from './types';
 import { SpatialHash, type SpatialEntity } from './spatial-hash';
 import { distSq } from './vec2';
-import { SNAKE_RADIUS, SPAWN_PROTECTION_MS } from './config';
+import { SNAKE_RADIUS, SPAWN_PROTECTION_MS, NECK_PROTECTION, HEAD_ON_HEAD_BOOST_WINS } from './config';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -67,7 +67,11 @@ export function checkCollisions(
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
     const len = snake.path.length;
     scratch.id = snake.id;
-    for (let i = 0; i < len; i += 2) {
+    // Skip head (i=0) and neck segments (NECK_PROTECTION) so that:
+    // - Head-on-head collisions fall through to the dedicated handler (Bug 5)
+    // - Neck segments don't cause phantom kills (Bug 3)
+    const bodyStart = NECK_PROTECTION;
+    for (let i = bodyStart; i < len; i += 2) {
       scratch.x = snake.path.getX(i);
       scratch.y = snake.path.getY(i);
       bodyHash.insert(scratch);
@@ -139,22 +143,21 @@ export function checkCollisions(
       const aBoost = snake.boosting;
       const bBoost = otherSnake.boosting;
 
-      if (lenA > lenB) {
-        if (!aBoost && bBoost) {
-          deadSnakes.add(snake.id);
-          killEvents.push({ victimId: snake.id, victimName: snake.name, killerId: otherId, killerName: otherSnake.name, score: snake.score, timestamp: now });
-        } else {
-          deadSnakes.add(otherId);
-          killEvents.push({ victimId: otherId, victimName: otherSnake.name, killerId: snake.id, killerName: snake.name, score: otherSnake.score, timestamp: now });
-        }
+      // Bug 6 fix: if one snake is boosting and the other isn't, boosting wins
+      if (HEAD_ON_HEAD_BOOST_WINS && aBoost !== bBoost) {
+        const loserId = aBoost ? otherId : snake.id;
+        const loserName = aBoost ? otherSnake.name : snake.name;
+        const winnerId = aBoost ? snake.id : otherId;
+        const winnerName = aBoost ? snake.name : otherSnake.name;
+        deadSnakes.add(loserId);
+        const loser = snakes.get(loserId)!;
+        killEvents.push({ victimId: loserId, victimName: loserName, killerId: winnerId, killerName: winnerName, score: loser.score, timestamp: now });
+      } else if (lenA > lenB) {
+        deadSnakes.add(otherId);
+        killEvents.push({ victimId: otherId, victimName: otherSnake.name, killerId: snake.id, killerName: snake.name, score: otherSnake.score, timestamp: now });
       } else if (lenB > lenA) {
-        if (!bBoost && aBoost) {
-          deadSnakes.add(otherId);
-          killEvents.push({ victimId: otherId, victimName: otherSnake.name, killerId: snake.id, killerName: snake.name, score: otherSnake.score, timestamp: now });
-        } else {
-          deadSnakes.add(snake.id);
-          killEvents.push({ victimId: snake.id, victimName: snake.name, killerId: otherId, killerName: otherSnake.name, score: snake.score, timestamp: now });
-        }
+        deadSnakes.add(snake.id);
+        killEvents.push({ victimId: snake.id, victimName: snake.name, killerId: otherId, killerName: otherSnake.name, score: snake.score, timestamp: now });
       } else {
         // Same length — both die
         deadSnakes.add(snake.id);

@@ -2,7 +2,7 @@
 // Renderer — SHARED — used by both offline and online modes.
 // ============================================================================
 
-import type { Camera, FoodOrb, Snake, Viewport } from '@/lib/snake/types';
+import type { Camera, FoodOrb, Viewport } from '@/lib/snake/types';
 import { ARENA_GRID_SIZE } from '@/lib/snake/config';
 import { worldToScreen } from '@/lib/snake/camera';
 
@@ -195,55 +195,4 @@ export function drawControlsHint(ctx: CanvasRenderingContext2D, viewport: Viewpo
   ctx.font = '14px monospace';
   ctx.fillText('WASD / Mouse to steer', width / 2, height / 2 + 85);
   ctx.fillText('Space / Click to boost', width / 2, height / 2 + 110);
-}
-
-// ==========================================================================
-// Minimap
-// ==========================================================================
-
-export function drawMinimap(
-  ctx: CanvasRenderingContext2D,
-  snakes: Map<string, Snake>,
-  player: Snake | null,
-): void {
-  const size = 120;
-  const pad = 12;
-
-  const cw = ctx.canvas.width / (window.devicePixelRatio || 1);
-  const ch = ctx.canvas.height / (window.devicePixelRatio || 1);
-  const mx = cw - size - pad;
-  const my = ch - size - pad;
-
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-  ctx.beginPath();
-  ctx.roundRect(mx, my, size, size, 6);
-  ctx.fill();
-
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  if (!player || !player.alive || player.path.length === 0) return;
-
-  const scale = 0.02;
-  const cx = mx + size / 2;
-  const cy = my + size / 2;
-  const px = player.path.headX;
-  const py = player.path.headY;
-  const halfSize = size / 2 - 4;
-
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-  for (const [, snake] of snakes) {
-    if (!snake.alive || snake.isPlayer) continue;
-    if (snake.path.length === 0) continue;
-    const dx = (snake.path.headX - px) * scale;
-    const dy = (snake.path.headY - py) * scale;
-    if (Math.abs(dx) > halfSize || Math.abs(dy) > halfSize) continue;
-    ctx.fillRect(cx + dx - 1, cy + dy - 1, 2, 2);
-  }
-
-  ctx.fillStyle = '#22c55e';
-  ctx.beginPath();
-  ctx.arc(cx, cy, 3, 0, Math.PI * 2);
-  ctx.fill();
 }

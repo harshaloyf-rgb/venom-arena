@@ -599,37 +599,4 @@ export function respawnPlayer(state: GameState): void {
   state.snakes.set(newPlayer.id, newPlayer);
 }
 
-// ==========================================================================
-// Debug Score
-// ==========================================================================
 
-export function setDebugScore(state: GameState, score: number): void {
-  const player = state.player;
-  if (!player) return;
-  player.score = score;
-  player.bodyRadius = computeBodyRadius(score);
-  player.boostCostAccum = 0;
-
-  const targetPathLen = Math.ceil(computeBodyLength(score) * SPACING_RATIO);
-  const currentLen = player.path.length;
-
-  if (targetPathLen > currentLen) {
-    const tailIdx = currentLen - 1;
-    const prevIdx = Math.max(0, tailIdx - 1);
-    const dx = player.path.getX(tailIdx) - player.path.getX(prevIdx);
-    const dy = player.path.getY(tailIdx) - player.path.getY(prevIdx);
-    const segLen = Math.sqrt(dx * dx + dy * dy) || BASE_SPEED;
-    const nx = (dx / segLen) * BASE_SPEED;
-    const ny = (dy / segLen) * BASE_SPEED;
-    let lastX = player.path.getX(tailIdx);
-    let lastY = player.path.getY(tailIdx);
-    (player.path as unknown as { ensureCapacity(n: number): void }).ensureCapacity(targetPathLen + 10);
-    const needed = targetPathLen - currentLen;
-    for (let i = 0; i < needed; i++) {
-      lastX += nx; lastY += ny;
-      player.path.appendTail(lastX, lastY);
-    }
-  } else if (targetPathLen < currentLen) {
-    while (player.path.length > targetPathLen) { player.path.pop(); }
-  }
-}

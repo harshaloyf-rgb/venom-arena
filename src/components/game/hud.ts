@@ -115,7 +115,7 @@ export function renderHUD(
 // Minimap: top-left position
 // ============================================================================
 
-export function drawMinimapTopLeft(
+function drawMinimapTopLeft(
   ctx: CanvasRenderingContext2D,
   snakes: Map<string, Snake>,
   player: Snake | null,

@@ -2,7 +2,6 @@
  * Zero-allocation object pool system for the snake game engine.
  *
  * Hot paths (PathBuffer prepend/pop/getX/getY) never allocate.
- * Only `grow()` and `toVec2Array()` allocate, and both are rare/non-hot.
  *
  * @module pool
  */
@@ -73,13 +72,6 @@ export class PathBuffer implements IPathBuffer {
     this.length++;
   }
 
-  /** Get segment at logical index. Returns undefined if out of range. */
-  getXY(index: number): { x: number; y: number } | undefined {
-    if (index < 0 || index >= this.length) return undefined;
-    const base = ((this.headSegIdx + index) % this.capacity) * 2;
-    return { x: this.data[base], y: this.data[base + 1] };
-  }
-
   /** Direct float access — no object creation. Returns 0 if out of range. */
   getX(index: number): number {
     if (index < 0 || index >= this.length) return 0;
@@ -100,16 +92,6 @@ export class PathBuffer implements IPathBuffer {
   /** Y coordinate of the head segment. */
   get headY(): number {
     return this.data[this.headSegIdx * 2 + 1];
-  }
-
-  /** X coordinate of the tail segment (oldest active segment). */
-  get tailX(): number {
-    return this.data[((this.headSegIdx + this.length - 1) % this.capacity) * 2];
-  }
-
-  /** Y coordinate of the tail segment (oldest active segment). */
-  get tailY(): number {
-    return this.data[((this.headSegIdx + this.length - 1) % this.capacity) * 2 + 1];
   }
 
   /** Set X of segment at logical index `i`. Zero-alloc. */
@@ -136,11 +118,6 @@ export class PathBuffer implements IPathBuffer {
   /** O(1) tail removal. Decrements length; stale data is left in place. */
   pop(): void {
     if (this.length > 0) this.length--;
-  }
-
-  /** Truncate or extend length (used after death to shrink the path). */
-  setLength(n: number): void {
-    this.length = Math.max(0, Math.min(n, this.capacity));
   }
 
   /** Clear all segments without reallocating. headSegIdx is preserved. */
@@ -174,114 +151,9 @@ export class PathBuffer implements IPathBuffer {
     this.headSegIdx = 0;
   }
 
-  /** Convenience for non-hot paths (e.g. respawn). Allocates objects. */
-  toVec2Array(): Array<{ x: number; y: number }> {
-    const out: Array<{ x: number; y: number }> = new Array(this.length);
-    for (let i = 0; i < this.length; i++) {
-      const base = ((this.headSegIdx + i) % this.capacity) * 2;
-      out[i] = { x: this.data[base], y: this.data[base + 1] };
-    }
-    return out;
-  }
-
-  /** Initialize from an existing Vec2 array (backward-compat migration). headSegIdx is reset to 0. */
-  initFromArray(arr: Array<{ x: number; y: number }>): void {
-    this.ensureCapacity(arr.length);
-    this.headSegIdx = 0;
-    this.length = arr.length;
-    for (let i = 0; i < arr.length; i++) {
-      this.data[i * 2] = arr[i].x;
-      this.data[i * 2 + 1] = arr[i].y;
-    }
-  }
-
   /** Grow the buffer if `needed` exceeds current capacity. */
   ensureCapacity(needed: number): void {
     while (this.capacity < needed) this.grow();
   }
 }
 
-// ─── ObjectPool<T> ──────────────────────────────────────────────────────────
-
-/**
- * Generic object pool for non-hot-path reuse.
- *
- * Useful for transient objects that would otherwise be created and
- * garbage-collected every frame (e.g. collision query results, UI state).
- */
-export class ObjectPool<T> {
-  private readonly factory: () => T;
-  private readonly reset: (obj: T) => void;
-  private readonly pool: T[] = [];
-
-  constructor(
-    factory: () => T,
-    reset: (obj: T) => void,
-    initialSize: number = 0,
-  ) {
-    this.factory = factory;
-    this.reset = reset;
-    for (let i = 0; i < initialSize; i++) {
-      this.pool.push(factory());
-    }
-  }
-
-  /** Acquire an object from the pool, or create a new one if empty. */
-  acquire(): T {
-    return this.pool.length > 0 ? (this.pool.pop() as T) : this.factory();
-  }
-
-  /** Reset and return an object to the pool. */
-  release(obj: T): void {
-    this.reset(obj);
-    this.pool.push(obj);
-  }
-
-  /** Number of objects currently sitting idle in the pool. */
-  get size(): number {
-    return this.pool.length;
-  }
-}
-
-// ─── scratchVec2 ────────────────────────────────────────────────────────────
-
-/**
- * Single reusable `{ x, y }` object for scratch math in hot paths.
- *
- * **Warning**: do not store references to this object across async boundaries
- * or pass it to code that may retain it. Only use for immediate,
- * synchronous computations.
- */
-export const scratchVec2: { x: number; y: number } = { x: 0, y: 0 };
-
-// ─── SnapshotPool ───────────────────────────────────────────────────────────
-
-/**
- * Specialized pool for server snapshot buffers (pre-allocated `Uint8Array`).
- *
- * Each call to `acquire` returns a zeroed buffer of `snapshotByteSize` bytes.
- * Returned buffers are zeroed again on `release` to prevent data leaks.
- */
-export class SnapshotPool {
-  private readonly pool: Uint8Array[] = [];
-  private readonly snapshotByteSize: number;
-
-  constructor(maxSnapshots: number, snapshotByteSize: number) {
-    this.snapshotByteSize = snapshotByteSize;
-    for (let i = 0; i < maxSnapshots; i++) {
-      this.pool.push(new Uint8Array(snapshotByteSize));
-    }
-  }
-
-  /** Acquire a zeroed buffer for snapshot serialization. */
-  acquire(): Uint8Array {
-    const buf = this.pool.length > 0 ? (this.pool.pop() as Uint8Array) : new Uint8Array(this.snapshotByteSize);
-    buf.fill(0);
-    return buf;
-  }
-
-  /** Return a buffer to the pool. */
-  release(buf: Uint8Array): void {
-    this.pool.push(buf);
-  }
-}

@@ -124,10 +124,14 @@ export class SpatialHash {
     return result;
   }
 
-  /** Clear all entities (O(cells) — just reset counts, no GC) */
+  /** Clear all entities — reset counts and prune empty cells to prevent unbounded memory growth */
   clear(): void {
-    for (const cell of this.cellMap.values()) {
-      cell.count = 0;
+    for (const [key, cell] of this.cellMap) {
+      if (cell.count === 0) {
+        this.cellMap.delete(key);
+      } else {
+        cell.count = 0;
+      }
     }
   }
 

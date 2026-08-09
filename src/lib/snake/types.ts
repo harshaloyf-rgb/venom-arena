@@ -1,6 +1,5 @@
 // ============================================================================
 // Snake Game Types — Pure TypeScript types, no logic.
-// Phase A: Extended with Fibonacci, rarity, crafting, and atlas types.
 // ============================================================================
 
 import type { IPathBuffer } from './pool';
@@ -30,12 +29,6 @@ export interface Viewport {
   height: number;
 }
 
-/** Spatial hash cell coordinates */
-export interface CellCoord {
-  cx: number;
-  cy: number;
-}
-
 // ─── Food ───────────────────────────────────────────────────────────────────
 
 /** Food orb size categories */
@@ -60,14 +53,6 @@ export interface FoodOrb {
 
 /** 4-tier skin rarity system */
 export type SkinRarity = 'common' | 'rare' | 'epic' | 'legendary';
-
-/** Rarity weight for random drops */
-export interface RarityWeights {
-  common: number;
-  rare: number;
-  epic: number;
-  legendary: number;
-}
 
 /** A single skin asset definition */
 export interface SkinAsset {
@@ -127,77 +112,6 @@ export interface ParticleEmitterConfig {
   gravity: number;
 }
 
-// ─── Fibonacci Spiral (Phase A types, implemented in Phase B) ───────────────
-
-/** Spiral turn state — tracks progressive turn enhancement for circular motion */
-export interface SpiralTurnState {
-  /** Whether spiral assist is active */
-  active: boolean;
-  /** Consecutive ticks turning in the same direction (for entry detection) */
-  consecutiveTurns: number;
-  /** Ticks elapsed since spiral activated (for ramp-up) */
-  ticksElapsed: number;
-  /** Direction of the turn: +1 = clockwise, -1 = counter-clockwise */
-  direction: 1 | -1;
-}
-
-/** Turn metadata attached to snapshots for client extrapolation */
-export interface TurnMetadata {
-  /** Snapshot tick when the turn was detected */
-  tick: number;
-  /** Snake ID */
-  snakeId: string;
-  /** Whether this is a Fibonacci spiral turn */
-  isSpiral: boolean;
-  /** Turn start angle (radians) */
-  startAngle: number;
-  /** Turn direction */
-  direction: 1 | -1;
-  /** Spiral theta at the time of snapshot */
-  theta: number;
-  /** Expected number of ticks for the spiral turn to complete */
-  expectedDuration: number;
-}
-
-// ─── Crafting (Phase A types, API in Phase D) ──────────────────────────────
-
-/** A skin piece owned by a player */
-export interface SkinPiece {
-  id: string;
-  playerId: string;
-  skinAssetId: string;
-  rarity: SkinRarity;
-  setName: string;
-  /** Slot within the set (0-based) */
-  slotIndex: number;
-  obtainedAt: string;
-  source: 'chest' | 'sacrifice' | 'admin';
-}
-
-/** A collectible set that can be completed for sacrifice */
-export interface CollectionSet {
-  id: string;
-  name: string;
-  rarity: SkinRarity;
-  /** Required skin asset IDs to complete the set */
-  requiredPieces: string[];
-  /** Total number of pieces needed */
-  pieceCount: number;
-  /** Reward: skin asset ID from next rarity tier */
-  rewardSkinId?: string;
-}
-
-/** A crafting transaction record */
-export interface CraftingTransaction {
-  id: string;
-  playerId: string;
-  type: 'chest_open' | 'sacrifice' | 'trade';
-  inputPieces: string[];
-  outputPiece: string;
-  rarity: SkinRarity;
-  timestamp: string;
-}
-
 // ─── Snake ──────────────────────────────────────────────────────────────────
 
 /** A snake (player or bot) — uses PathBuffer for zero-alloc path history */
@@ -235,7 +149,16 @@ export interface Snake {
 
   // ── Fibonacci spiral fields (Phase A, logic in Phase B) ──
   /** Spiral turn state for this snake */
-  spiral: SpiralTurnState;
+  spiral: {
+    /** Whether spiral assist is active */
+    active: boolean;
+    /** Consecutive ticks turning in the same direction (for entry detection) */
+    consecutiveTurns: number;
+    /** Ticks elapsed since spiral activated (for ramp-up) */
+    ticksElapsed: number;
+    /** Direction of the turn: +1 = clockwise, -1 = counter-clockwise */
+    direction: 1 | -1;
+  };
   /** Cached body radius (avoids recalculation) */
   bodyRadius: number;
   /** Tick accumulator for integer-based boost score cost */
@@ -273,57 +196,4 @@ export interface InputState {
   targetAngle: number;
   /** Whether boost is requested */
   boosting: boolean;
-}
-
-// ─── Snapshot (Phase A type, used by Phase E server + Phase B client) ──────
-
-/** Downsampled snapshot of a single snake for network broadcast */
-export interface SnakeSnapshot {
-  id: string;
-  name: string;
-  /** Head x,y */
-  hx: number;
-  hy: number;
-  /** Current angle */
-  angle: number;
-  /** Body length (segment count) */
-  length: number;
-  /** Score */
-  score: number;
-  /** Alive? */
-  alive: boolean;
-  /** Skin color (hex) */
-  color: string;
-  /** Head color (hex) */
-  headColor: string;
-  /** Body radius */
-  bodyRadius: number;
-  /** Boosting? */
-  boosting: boolean;
-  /** Skin ID */
-  skinId: string;
-  /** Skin rarity */
-  rarity: SkinRarity;
-  /** Body path x,y pairs (downsampled — every Nth segment) */
-  bodyX: Float32Array;
-  bodyY: Float32Array;
-  bodyLen: number;
-  /** Turn metadata if a spiral turn is active */
-  turn?: TurnMetadata;
-}
-
-/** Full arena snapshot for network broadcast */
-export interface ArenaSnapshot {
-  /** Server tick when this snapshot was taken */
-  tick: number;
-  /** Server timestamp (ms) */
-  timestamp: number;
-  /** Snake snapshots */
-  snakes: SnakeSnapshot[];
-  /** Food positions (downsampled, only near players) */
-  foods: Array<{ id: number; x: number; y: number; size: FoodSize; value: number }>;
-  /** Extraction zone state */
-  extraction: { x: number; y: number; radius: number; active: boolean };
-  /** Obstacle wall segments */
-  obstacles: Array<{ x1: number; y1: number; x2: number; y2: number }>;
 }

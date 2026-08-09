@@ -76,16 +76,3 @@ export function worldToScreen(
   };
 }
 
-/** Convert screen coordinates to world coordinates */
-export function screenToWorld(
-  sx: number,
-  sy: number,
-  camera: Camera,
-  canvasWidth: number,
-  canvasHeight: number,
-): { x: number; y: number } {
-  return {
-    x: (sx - canvasWidth / 2) / camera.zoom + camera.x,
-    y: (sy - canvasHeight / 2) / camera.zoom + camera.y,
-  };
-}

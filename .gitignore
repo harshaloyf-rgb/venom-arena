@@ -57,3 +57,5 @@ mini-services/game-server.pid
 # Skills directory
 /skills/tool-results/
 *.txt
+# Database (runtime data — never commit)
+db/*.db

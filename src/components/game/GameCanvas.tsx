@@ -236,10 +236,10 @@ export default function GameCanvas({
       accumulatorRef.current += elapsed;
 
       const tickMs = FIXED_DT * 1000;
-      if (accumulatorRef.current >= tickMs) {
+      let maxTicks = 5;
+      while (accumulatorRef.current >= tickMs && maxTicks-- > 0) {
         const killEvents = gameTick(gameState, inputState, FIXED_DT);
         accumulatorRef.current -= tickMs;
-        if (accumulatorRef.current > tickMs) accumulatorRef.current = tickMs * 0.5;
 
         // Track player kills
         if (gameState.player) {
