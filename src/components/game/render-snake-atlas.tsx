@@ -176,7 +176,7 @@ const _walker = {
 // previous world positions (screen coords still recomputed since camera moves).
 // Saves ~16000 path point evaluations per frame when 13 bots are visible.
 
-const BOT_WALK_CACHE_INTERVAL = 3;
+const BOT_WALK_CACHE_INTERVAL = 1;
 
 interface BotWalkCacheEntry {
   xs: Float64Array;
@@ -781,15 +781,29 @@ export function renderSnakeFallback(
   const rawMaxSegs = Math.ceil(visualLen / step);
   const maxSegs = getSmoothedMaxSegs(snake.id, rawMaxSegs);
 
-  // Culling
-  const cullMargin = visualLen + 100;
-  if (headWorldX < viewport.left - cullMargin || headWorldX > viewport.right + cullMargin) return;
-  if (headWorldY < viewport.top - cullMargin || headWorldY > viewport.bottom + cullMargin) return;
+  // No inner cull here — the CALLER (GameCanvas) already handles culling
+  // with a body-aware margin. A second cull here with a different margin
+  // caused the double-cull bug: outer cull passed the bot through but
+  // inner cull rejected it, making bots invisible.
 
   const zoom = camera.zoom;
   const cw = viewport.width;
   const ch = viewport.height;
   const segRadius = snake.bodyRadius * zoom;
+
+  // ── FAR LOD: single dot, skip body walk entirely ──
+  // At distance >1500px, the body is tiny on screen. Drawing 1 circle
+  // instead of walking ~25 segments + 25 arcs saves ~95% render cost.
+  if (isFar) {
+    if (headVisible) {
+      ctx.fillStyle = snake.color;
+      ctx.beginPath();
+      ctx.arc(headScreen.x, headScreen.y, segRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    return;
+  }
 
   // FIX 1: Render-time interpolation offset
   const interpHeadX = snake.prevHeadX + (snake.path.headX - snake.prevHeadX) * alpha;

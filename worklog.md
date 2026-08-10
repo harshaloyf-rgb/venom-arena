@@ -804,3 +804,20 @@ Stage Summary:
 - GameCanvas.tsx: body-aware culling + skip coiled path for bots + import computeBodyLength/SEGMENT_SPACING
 - collision.ts: full body insertion, full narrow phase, CRAWL_HIT_DIST_SQ=100, query radius 8R, removed nearbyIds
 - render-snake-atlas.tsx: BOT_WALK_CACHE_INTERVAL=3
+---
+Task ID: 2
+Agent: main
+Task: Fix 4 persistent bugs - double-cull, sudden death, gaps, lag
+
+Work Log:
+- Deep-audited ALL render/collision code paths
+- Found the DOUBLE-CULL BUG: renderSnakeFallback had inner cull (margin +100) that contradicted outer cull in GameCanvas (margin +500). Bot passes outer, fails inner, becomes invisible.
+- Removed inner cull from renderSnakeFallback
+- Identified sudden death = invisible bots (from double-cull) that player drives into. Fixed by fixing double-cull.
+- Reverted BOT_WALK_CACHE_INTERVAL from 3 to 1 (fixes body segment gaps caused by stale cache)
+- Added far-LOD early exit: bots >1500px from camera now render as single dot instead of full body walk (saves ~25 arc calls per far bot)
+
+Stage Summary:
+- render-snake-atlas.tsx: removed inner cull, added far-LOD dot-only render, reverted cache interval
+- No changes to collision.ts or GameCanvas.tsx this round
+- All fixes are about RENDERING, not collision logic
