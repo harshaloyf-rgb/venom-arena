@@ -32,6 +32,8 @@ export interface IPathBuffer {
   pop(): void;
   /** Clear all segments without reallocating. */
   clear(): void;
+  /** Trim tail to at most `maxLength` segments (O(1)). */
+  trimTo(maxLength: number): void;
 }
 
 // ─── PathBuffer ─────────────────────────────────────────────────────────────
@@ -123,6 +125,15 @@ export class PathBuffer implements IPathBuffer {
   /** Clear all segments without reallocating. headSegIdx is preserved. */
   clear(): void {
     this.length = 0;
+  }
+
+  /** Trim the tail to at most `maxLength` segments.
+   *  O(1) — just decrements length; stale data left in place.
+   *  Prevents unbounded path growth for long-lived snakes. */
+  trimTo(maxLength: number): void {
+    if (this.length > maxLength) {
+      this.length = maxLength;
+    }
   }
 
   /** Reset to a single segment at (x, y). Resets headSegIdx to 0. */

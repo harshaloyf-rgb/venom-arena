@@ -322,6 +322,15 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
     const pops = Math.min(excess, 2);
     for (let i = 0; i < pops; i++) snake.path.pop();
   }
+
+  // P1: Path buffer trimming — cap path to target length + safety margin.
+  // The path grows by 1 per tick (prepend). If the snake shrinks rapidly
+  // (boost drain, death drops), excess tail lingers in the buffer.
+  // This trim prevents unbounded memory growth in long sessions.
+  // Margin = 10% extra for collision detection lookback + coil rendering.
+  const pathCeil = Math.ceil(targetLength * 1.1) + 20;
+  snake.path.trimTo(pathCeil);
+
   snake.bodyRadius = computeBodyRadius(snake.score);
 }
 

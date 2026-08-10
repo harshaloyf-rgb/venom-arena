@@ -12,15 +12,19 @@ import { renderEquippedCosmetics, readEquippedCosmetics, type EquippedCosmetics 
 import { drawSegmentShape, readCustomSkinState, getSkinVisualProps, getPresetVisualProps, resolveShapeStyle, computeTaperRadius } from '@/components/panels/cosmetics/cosmetics-utils';
 import type { CustomSkinState } from '@/components/panels/cosmetics/cosmetics-types';
 import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-types';
+import { incrementCoilFrame } from './coil-path';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
-/** Compute body draw step based on current radius.
+/** P7: Compute body draw step based on current radius.
  *  Ensures segments overlap for solid continuous look at any size.
  *  Thinner snakes → tighter spacing (more segments drawn).
- *  Fatter snakes  → wider spacing  (fewer, larger circles). */
+ *  Fatter snakes  → wider spacing  (fewer, larger circles).
+ *  With unlimited growth, step scales proportionally to radius.
+ *  The 1.3 factor (was 1.5) ensures more overlap for bigger snakes
+ *  where gaps would be more visible. */
 function bodyDrawStep(bodyRadius: number): number {
-  return Math.max(bodyRadius * 1.5, 8);
+  return Math.max(bodyRadius * 1.3, 8);
 }
 
 /** Smoothed visual segment count per snake (prevents score-driven jitter).
@@ -103,6 +107,7 @@ export function setCachedDpr(dpr: number): void { _cachedDpr = dpr; }
 /** Call once at the start of each render frame to invalidate caches. */
 export function beginRenderFrame(): void {
   _frameCounter++;
+  incrementCoilFrame();
 }
 
 /** Cached readEquippedCosmetics — reads localStorage at most once per frame. */
@@ -188,6 +193,7 @@ function walkPathFixedStep(
   step: number,
   maxSegs: number,
   headAngle: number,
+  maxWorldDist?: number,
 ): WalkResult {
   const pathLen = path.length;
   const w = _walker;
@@ -212,6 +218,11 @@ function walkPathFixedStep(
 
   const headX = path.headX;
   const headY = path.headY;
+  // P2: If maxWorldDist is set, stop walking once cumulative distance exceeds it.
+  // This prevents walking 10,000+ path points for long snakes when only ~200
+  // segments could possibly be visible on screen.
+  const hasDistLimit = maxWorldDist !== undefined && maxWorldDist > 0;
+  let cumDist = 0;
 
   // Initialize walker at head (path[0] → path[1])
   w.pIdx = 0;
@@ -323,6 +334,14 @@ function walkPathFixedStep(
     ys[count] = wy;
     angles[count] = segAngle;
     count++;
+
+    // P2: Early exit for viewport-culled walking.
+    // Once we've walked far enough that no more segments could be visible,
+    // stop. The first segment (head) is at cumDist=0.
+    if (hasDistLimit) {
+      cumDist += step;
+      if (cumDist > maxWorldDist!) break;
+    }
 
     if (reachedEnd) break;
   }
@@ -484,7 +503,9 @@ export function renderSnakeAtlas(
   }
 
   // ── Walk path at dynamic step (based on radius), capped to maxSegs ──
-  const walked = walkPathFixedStep(effectivePath, step, maxSegs, snake.angle);
+  // P2: maxWorldDist limits walk distance for long snakes.
+  const vpDiag = Math.sqrt(cw * cw + ch * ch) / zoom;
+  const walked = walkPathFixedStep(effectivePath, step, maxSegs, snake.angle, vpDiag + 500);
 
   // ── BOOST AURA: Full-body glow effect ──
   if (snake.boosting) {
@@ -736,10 +757,14 @@ export function renderSnakeFallback(
   snap?: boolean,
   alpha: number = 1.0,
   coiledPath?: PathLike,
+  lodFar?: number,
 ): void {
+  // P8: LOD — far bots skip coiled path, eyes, name, direction pointer, shield
+  const isFar = lodFar === 1;
   // Choose pixel-snapped or exact world-to-screen conversion
   const w2s = snap ? worldToScreenSnapped : worldToScreen;
-  const path = coiledPath ?? snake.path;
+  // P8: Far bots skip coil contraction (saves neighbor lookups per segment)
+  const path = (coiledPath && !isFar) ? coiledPath : snake.path;
   const pathLen = path.length;
   if (pathLen < 2) return;
 
@@ -787,8 +812,9 @@ export function renderSnakeFallback(
   const headVisible = headWorldX >= vl && headWorldX <= vr && headWorldY >= vt && headWorldY <= vb;
 
   // ── Spawn shield: rotating hexagonal ring that fades out ──
+  // P8: Skip shield for far LOD bots
   const spawnAge = now - snake.spawnTime;
-  if (spawnAge < SPAWN_PROTECTION_MS && headVisible) {
+  if (spawnAge < SPAWN_PROTECTION_MS && headVisible && !isFar) {
     const t = spawnAge / SPAWN_PROTECTION_MS;
     const shieldAlpha = 1 - t;
     const shieldR = segRadius * (2.2 + 0.3 * Math.sin(now * 0.006));
@@ -830,13 +856,17 @@ export function renderSnakeFallback(
 
   // ── Walk path at dynamic step (based on radius), capped to maxSegs ──
   // Bot walk cache: reuse walked world positions every BOT_WALK_CACHE_INTERVAL frames.
+  // P2: Compute maxWorldDist to early-exit walk for long snakes.
+  // The furthest a visible segment can be from the head is the viewport diagonal + margin.
+  const vpDiag = Math.sqrt(cw * cw + ch * ch) / zoom;
+  const walkDistLimit = vpDiag + 500;
   let walked: WalkResult;
   if (snake.isBot) {
     let cached = _botWalkCache.get(snake.id);
     if (cached && (_frameCounter - cached.frame) < BOT_WALK_CACHE_INTERVAL) {
       walked = cached;
     } else {
-      walked = walkPathFixedStep(path, step, maxSegs, snake.angle);
+      walked = walkPathFixedStep(path, step, maxSegs, snake.angle, walkDistLimit);
       // Copy to cache (walkPathFixedStep reuses shared buffers)
       const cx = new Float64Array(walked.count);
       const cy = new Float64Array(walked.count);
@@ -849,7 +879,7 @@ export function renderSnakeFallback(
       walked = cached;
     }
   } else {
-    walked = walkPathFixedStep(path, step, maxSegs, snake.angle);
+    walked = walkPathFixedStep(path, step, maxSegs, snake.angle, walkDistLimit);
   }
 
   // ── BOOST AURA: Full-body glow effect (fallback) ──
@@ -1030,24 +1060,26 @@ export function renderSnakeFallback(
       ctx.fill();
     }
 
-    // Direction pointer — thin line extending far ahead, shows where snake is steering
-    drawDirectionPointer(ctx, snake.id, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting);
-
-    // Responsive eyes — track raw mouse position relative to head
-    // Skip if a custom eye cosmetic is equipped (it draws its own eyes)
-    const eq2 = getCachedEquipped();
-    const hasCustomEyes2 = eq2.eyes && eq2.eyes !== 'none';
-    if (!hasCustomEyes2) {
-      drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting, snake.id, now);
+    // Direction pointer — P8: skip for far LOD bots
+    if (!isFar) {
+      drawDirectionPointer(ctx, snake.id, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting);
     }
 
-    // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
-    renderEquippedCosmetics(ctx, { hx: headScreen.x, hy: headScreen.y, hr: headRadius, angle: snake.angle, time: now, boosting: snake.boosting, mouseScreenX, mouseScreenY });
+    // Responsive eyes — P8: skip for far LOD bots
+    // Skip if a custom eye cosmetic is equipped (it draws its own eyes)
+    if (!isFar) {
+      const eq2 = getCachedEquipped();
+      const hasCustomEyes2 = eq2.eyes && eq2.eyes !== 'none';
+      if (!hasCustomEyes2) {
+        drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting, snake.id, now);
+      }
 
-    // Name — round to integer pixels to prevent sub-pixel text jitter.
-    // Own name: visible for 3s after spawn, then fades out over 1s.
-    // Other names: always visible.
-    if (segRadius > 3) {
+      // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
+      renderEquippedCosmetics(ctx, { hx: headScreen.x, hy: headScreen.y, hr: headRadius, angle: snake.angle, time: now, boosting: snake.boosting, mouseScreenX, mouseScreenY });
+    }
+
+    // Name — P8: skip for far LOD bots
+    if (!isFar && segRadius > 3) {
       let nameAlpha = snake.isPlayer ? 0.9 : 0.5;
       if (snake.isPlayer) {
         const elapsed = now - snake.spawnTime;

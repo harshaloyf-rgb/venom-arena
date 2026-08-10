@@ -43,7 +43,10 @@ export function updateCameraInterpolated(
   camera.x = snake.prevHeadX + (curX - snake.prevHeadX) * alpha;
   camera.y = snake.prevHeadY + (curY - snake.prevHeadY) * alpha;
 
-  // Zoom: quantized + lerped (unchanged — zoom changes are rare)
+  // Zoom: quantized + lerped
+  // P3: Adjusted zoom formula for unlimited growth support.
+  // The 0.16 factor means each unit of totalGrowth = 0.16 zoom decrease.
+  // With CAMERA_ZOOM_MIN lowered to 0.15, very large snakes can zoom out far.
   const quantizedScore = Math.floor(snake.score / ZOOM_SCORE_BRACKET) * ZOOM_SCORE_BRACKET;
   const targetLength = computeBodyLength(quantizedScore);
   const baseLength = START_LENGTH;
@@ -52,7 +55,7 @@ export function updateCameraInterpolated(
   const bodyRatio = quantizedBodyRadius / SNAKE_RADIUS_MIN;
   const widthFactor = Math.log2(Math.max(bodyRatio, 1)) * 0.8;
   const totalGrowth = lengthFactor + widthFactor;
-  const targetZoom = Math.max(CAMERA_ZOOM_MIN, CAMERA_BASE_ZOOM - totalGrowth * 0.16);
+  const targetZoom = Math.max(CAMERA_ZOOM_MIN, CAMERA_BASE_ZOOM - totalGrowth * 0.18);
 
   const zoomDelta = targetZoom - camera.zoom;
   if (Math.abs(zoomDelta) < ZOOM_DEADZONE) {

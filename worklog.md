@@ -761,3 +761,25 @@ Stage Summary:
 - Proximity slowdown: FIXED — 4-tick cap prevents tick rate drop when render overhead increases
 - Files changed: src/components/game/GameCanvas.tsx (3 edits in game loop)
 
+
+---
+Task ID: 2
+Agent: Main
+Task: Implement all 8 unlimited growth + 1000-bot priorities
+
+Work Log:
+- P1: Added trimTo() to PathBuffer/IPathBuffer, called in moveSnake() after length management. Caps path to targetLength * 1.1 + 20. Prevents unbounded memory growth in long sessions.
+- P2: Added maxWorldDist parameter to walkPathFixedStep(). Both renderSnakeFallback and renderSnakeAtlas now compute vpDiag + 500 and pass it. Walker breaks early once cumulative walked distance exceeds limit. Prevents walking 10,000+ path points for long off-screen body segments.
+- P3: Lowered CAMERA_ZOOM_MIN from 0.45 to 0.15 (9× more world area visible). Increased zoom decay factor from 0.16 to 0.18. Updated computeBodyRadius docstring to confirm no hard cap.
+- P4: Verified collision radius already uses constant SNAKE_RADIUS=6 everywhere (collision.ts). Visual radius grows, collision stays fixed.
+- P5: Added coiled path cache in coil-path.ts. Long snakes (path > 200) cache the coiled wrapper for 3 frames. Added incrementCoilFrame() called from beginRenderFrame().
+- P6: Added BODY_COLLISION_FRACTION=0.4, BODY_COLLISION_MIN_SEGS=50, BODY_COLLISION_CAP=400 to collision.ts. Long snakes only have front 40% (max 400 segments) inserted into spatial hash and checked in narrow-phase.
+- P7: Changed bodyDrawStep factor from 1.5 to 1.3 for more overlap on bigger snakes, preventing visible gaps at large radii.
+- P8: Added lodFar parameter to renderSnakeFallback. Bots >1500px from camera get LOD=1: skips coil contraction, spawn shield, direction pointer, eyes, cosmetics, and name rendering.
+
+Stage Summary:
+- All 8 priorities implemented and verified
+- Zero lint errors, zero browser errors
+- Game renders correctly with all optimizations active
+- Files changed: pool.ts, engine.ts, config.ts, camera.ts, coil-path.ts, collision.ts, render-snake-atlas.tsx, GameCanvas.tsx
+

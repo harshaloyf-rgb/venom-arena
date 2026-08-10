@@ -176,6 +176,12 @@ export function checkCollisions(
 
   // ── Build body spatial hash (broad phase) ──
   // Pre-filtered: only insert segments from snakes with nearby heads.
+  // P6: For long snakes, only insert the front portion of the body.
+  // The tail is mostly harmless and checking it against every other
+  // snake's head is wasteful. Front 40% covers the dangerous zone.
+  const BODY_COLLISION_FRACTION = 0.4;
+  const BODY_COLLISION_MIN_SEGS = 50;
+  const BODY_COLLISION_CAP = 400;
   bodyHash.clear();
   scratch.radius = SNAKE_RADIUS;
   for (const [, snake] of snakes) {
@@ -183,8 +189,12 @@ export function checkCollisions(
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
     if (!nearbyIds.has(snake.id)) continue;
     const len = snake.path.length;
+    // P6: Cap body segments checked for long snakes
+    const maxSegs = len > BODY_COLLISION_MIN_SEGS
+      ? Math.min(Math.ceil(len * BODY_COLLISION_FRACTION), BODY_COLLISION_CAP)
+      : len;
     scratch.id = snake.id;
-    for (let i = 1; i < len; i++) {
+    for (let i = 1; i < maxSegs; i++) {
       scratch.x = snake.path.getX(i);
       scratch.y = snake.path.getY(i);
       bodyHash.insert(scratch);
@@ -316,12 +326,16 @@ export function checkCollisions(
 
       // Narrow phase: two independent detection methods.
       // Starts from segment 1 (first body point, no neck skip).
+      // P6: For long snakes, limit narrow-phase check to front portion.
       const len = otherSnake.path.length;
+      const narrowMax = len > BODY_COLLISION_MIN_SEGS
+        ? Math.min(Math.ceil(len * BODY_COLLISION_FRACTION), BODY_COLLISION_CAP)
+        : len - 1;
       let hit = false;
       // Midpoint of head CENTER movement
       const midHcx = (prevHcx + hcx) * 0.5;
       const midHcy = (prevHcy + hcy) * 0.5;
-      for (let j = 1; j < len - 1; j++) {
+      for (let j = 1; j < narrowMax; j++) {
         const sx = otherSnake.path.getX(j);
         const sy = otherSnake.path.getY(j);
         const ex = otherSnake.path.getX(j + 1);

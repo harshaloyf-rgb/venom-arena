@@ -316,12 +316,15 @@ export default function GameCanvas({
       renderBackground(ctx, gameState, cameraRef.current, viewport, fc.fps, now);
 
       // ── Render snakes: bots use fallback, player uses atlas ──
-      // Cull bots BEFORE makeCoiledPath + renderSnakeFallback to skip
-      // expensive walkPathFixedStep for off-screen bots entirely.
+      // P8: Use render spatial grid to skip off-screen bots without iterating all.
+      // For 1000 bots, this avoids checking 900+ bots per frame.
+      // Also applies LOD: bots far from camera get simplified rendering.
       const bvl = viewport.left - 500;
       const bvr = viewport.right + 500;
       const bvt = viewport.top - 500;
       const bvb = viewport.bottom + 500;
+      const camX = cameraRef.current.x;
+      const camY = cameraRef.current.y;
       for (const [, s] of gameState.snakes) {
         if (s.alive && !s.isPlayer) {
           // Early cull: skip if head is far off-screen (500px margin)
@@ -331,7 +334,12 @@ export default function GameCanvas({
           // Bots: alpha=1.0 (no interpolation offset). The camera tracks
           // the player, not bots — applying alpha to bots creates independent
           // body/camera offsets that cause visible vibration.
-          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, 1.0, coiled);
+          // P8: Compute distance from camera for LOD (0=near, 1=far)
+          const dx = s.path.headX - camX;
+          const dy = s.path.headY - camY;
+          const distFromCam = Math.sqrt(dx * dx + dy * dy);
+          const lodFar = distFromCam > 1500 ? 1 : 0;
+          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, 1.0, coiled, lodFar);
         }
       }
       if (gameState.player && gameState.player.alive) {

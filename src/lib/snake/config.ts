@@ -64,9 +64,9 @@ export function computeBodyLength(score: number): number {
 }
 
 /** Compute visual body radius from score using logarithmic growth curve.
- *  Fitted to exact data checkpoints for smooth, controlled growth that
- *  never gets too fat. Flattens naturally at high scores.
- *  Score 0→6  |  100→9  |  500→12  |  1K→13.4  |  10K→18.4  |  100K→23.3  |  300K→25.7 */
+ *  NO HARD CAP — grows indefinitely (logarithmically) with score.
+ *  Visual-only: collision radius stays constant at SNAKE_RADIUS (fairness).
+ *  Score 0→6  |  100→9  |  500→12  |  1K→13.4  |  10K→18.4  |  100K→23.3  |  1M→31  |  10M→39 */
 export function computeBodyRadius(score: number): number {
   return SNAKE_RADIUS_MIN + SNAKE_RADIUS_GROWTH_RATE * Math.log(1 + score / SNAKE_RADIUS_GROWTH_OFFSET);
 }
@@ -227,8 +227,9 @@ export const FIXED_DT = 1 / 60;
 /** Base camera zoom — starts closer for better visibility */
 export const CAMERA_BASE_ZOOM = 1.35;
 
-/** Minimum camera zoom level (safety floor — rarely reached in normal gameplay) */
-export const CAMERA_ZOOM_MIN = 0.45;
+/** Minimum camera zoom level — lowered to support massive snakes (unlimited growth).
+ *  At zoom 0.15, the viewport shows ~9× more world area than at zoom 1.35. */
+export const CAMERA_ZOOM_MIN = 0.15;
 
 /** Camera zoom lerp factor (0–1, lower = smoother zoom transitions).
  *  0.015 → 90% convergence in ~153 frames (2.5s at 60fps).
