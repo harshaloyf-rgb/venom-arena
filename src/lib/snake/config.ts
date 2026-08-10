@@ -52,23 +52,27 @@ export const START_LENGTH = 4;
 /** Logarithmic body length growth — same pattern as bodyRadius.
  *  Formula: length = START_LENGTH + RATE × ln(1 + score / OFFSET)
  *  No hard cap — naturally flattens but ALWAYS grows (different scores = different lengths).
- *  Checkpoints: 0→4 | 100→10 | 1K→47 | 5K→108 | 10K→141 | 100K→258 | 1M→378 | 10M→499 */
-export const LENGTH_GROWTH_RATE = 52.5;
+ *  Checkpoints: 0→4 | 100→9 | 500→26 | 1K→40 | 5K→93 | 10K→121 | 100K→222 | 1M→325 | 10M→429 */
+export const LENGTH_GROWTH_RATE = 45;
 export const LENGTH_GROWTH_OFFSET = 800;
 
 /** Compute visual body length (segments) from score using logarithmic growth.
  *  Same structure as computeBodyRadius — fast early, flattens at high scores, no cap.
- *  Score 0→4 | 100→10 | 1K→47 | 5K→108 | 10K→141 | 100K→258 | 1M→378 | 10M→499 */
+ *  Score 0→4 | 100→9 | 500→26 | 1K→40 | 5K→93 | 10K→121 | 100K→222 | 1M→325 | 10M→429 */
 export function computeBodyLength(score: number): number {
   return Math.floor(START_LENGTH + LENGTH_GROWTH_RATE * Math.log(1 + score / LENGTH_GROWTH_OFFSET));
 }
 
-/** Compute visual body radius from score using logarithmic growth curve.
+/** Compute visual body radius from score using dual-logarithmic growth curve.
  *  NO HARD CAP — grows indefinitely (logarithmically) with score.
  *  Visual-only: collision radius stays constant at SNAKE_RADIUS (fairness).
- *  Score 0→3  |  100→3.5  |  500→4.7  |  1K→5.5  |  5K→8  |  10K→8.9  |  50K→11.4  |  100K→12.6  |  1M→15.2  |  10M→18.8 */
+ *  Primary log handles 0→~100K (gradual, balanced growth).
+ *  Secondary log adds extra thickness at high scores (50K+).
+ *  Score 0→3  |  100→3.5  |  500→4.7  |  1K→5.6  |  5K→8.1  |  10K→9.3  |  50K→12.2  |  100K→13.6  |  1M→18.8  |  10M→24.2  |  100M→29.7 */
 export function computeBodyRadius(score: number): number {
-  return SNAKE_RADIUS_MIN + SNAKE_RADIUS_GROWTH_RATE * Math.log(1 + score / SNAKE_RADIUS_GROWTH_OFFSET);
+  return SNAKE_RADIUS_MIN
+    + SNAKE_RADIUS_GROWTH_RATE_1 * Math.log(1 + score / SNAKE_RADIUS_GROWTH_OFFSET_1)
+    + SNAKE_RADIUS_GROWTH_RATE_2 * Math.log(1 + score / SNAKE_RADIUS_GROWTH_OFFSET_2);
 }
 
 
@@ -124,17 +128,28 @@ export const SNAKE_RADIUS = 3;
 /** Minimum visual body radius (at score 0). Thin starting snake. */
 export const SNAKE_RADIUS_MIN = 3;
 
-/** Radius growth offset: logarithmic curve parameter.
- *  Formula: radius = MIN + RATE × ln(1 + score / OFFSET)
+/** Dual-log radius growth — primary curve handles 0→~100K.
+ *  Formula: radius = MIN + RATE_1 × ln(1 + score / OFFSET_1) + RATE_2 × ln(1 + score / OFFSET_2)
  *  Higher offset = slower, more gradual growth (avoids getting fat too fast).
- *  300 = radius doubles (3→6) around score ~6.7K instead of score ~100. */
-export const SNAKE_RADIUS_GROWTH_OFFSET = 300;
+ *  300 = radius reaches ~6 around score ~7K (gradual early growth). */
+export const SNAKE_RADIUS_GROWTH_OFFSET_1 = 300;
 
-/** Radius growth rate: logarithmic curve coefficient.
- *  Formula: radius = 3 + 1.741 × ln(1 + score / 300)
- *  Fitted so radius reaches 8px at score 5K (2.67× starting size).
- *  Score 0→3  |  100→3.5  |  500→4.7  |  1K→5.5  |  5K→8  |  10K→8.9  |  50K→11.4  |  100K→12.6  |  1M→15.2  |  10M→18.8 */
-export const SNAKE_RADIUS_GROWTH_RATE = 5 / Math.log(1 + 5000 / 300); // ≈ 1.741
+/** Primary radius growth rate: handles 0→~100K (gradual, balanced).
+ *  Score 0→3  |  100→3.5  |  1K→5.6  |  10K→9.2  |  100K→12.9 */
+export const SNAKE_RADIUS_GROWTH_RATE_1 = 1.75;
+
+/** Dual-log radius growth — secondary curve adds extra thickness at high scores (50K+).
+ *  100,000 offset = this term is negligible below 10K, meaningful at 100K+. */
+export const SNAKE_RADIUS_GROWTH_OFFSET_2 = 100000;
+
+/** Secondary radius growth rate: extra thickness for big snakes.
+ *  Adds ~+2.5px at 1M, ~+5.4px at 10M, ~+8.2px at 100M on top of primary. */
+export const SNAKE_RADIUS_GROWTH_RATE_2 = 0.65;
+
+/** @deprecated Use SNAKE_RADIUS_GROWTH_RATE_1 / OFFSET_1 instead */
+export const SNAKE_RADIUS_GROWTH_OFFSET = SNAKE_RADIUS_GROWTH_OFFSET_1;
+/** @deprecated Use SNAKE_RADIUS_GROWTH_RATE_1 instead */
+export const SNAKE_RADIUS_GROWTH_RATE = SNAKE_RADIUS_GROWTH_RATE_1;
 
 /** First N segments of a snake's body that cannot kill on collision */
 export const NECK_PROTECTION = 5;
@@ -226,8 +241,9 @@ export const COIL_CONTRACTION = 0.45;
 /** Fixed timestep in seconds for offline game loop (targeting 60fps) */
 export const FIXED_DT = 1 / 60;
 
-/** Base camera zoom — starts closer for better visibility */
-export const CAMERA_BASE_ZOOM = 1.35;
+/** Base camera zoom — slightly higher (1.6) so the small 3px-radius snake is clearly visible at spawn.
+ *  Old value 1.35 made the 75%-smaller snake too tiny on screen. */
+export const CAMERA_BASE_ZOOM = 1.6;
 
 /** Minimum camera zoom level — lowered to support massive snakes (unlimited growth).
  *  At zoom 0.15, the viewport shows ~9× more world area than at zoom 1.35. */

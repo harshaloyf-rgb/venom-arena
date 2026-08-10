@@ -863,3 +863,22 @@ Stage Summary:
 - SNAKE_RADIUS_GROWTH_RATE: 1.623 → 1.741 (slightly higher rate, but offset dominates)
 - Length growth unchanged (52.5 / 800)
 - New radius curve: 0→3 | 100→3.5 | 500→4.7 | 1K→5.5 | 5K→8 | 10K→8.9 | 100K→12.6 | 1M→15.2 | 10M→18.8
+
+---
+Task ID: 2
+Agent: Main
+Task: Increase growth rates slightly + implement camera fix
+
+Work Log:
+- Dual-log radius growth: RATE_1=1.75 (primary, handles 0-100K), RATE_2=0.65 (secondary, adds thickness 50K+), OFFSET_2=100K
+- Length growth: 52.5 → 45 (14% reduction from original, slightly higher than proposed 42)
+- Camera BASE_ZOOM: 1.35 → 1.6 (snake more visible at spawn)
+- Camera zoom-out multiplier: 0.18 → 0.12 (spreads zoom across full score range)
+- Added deprecated aliases for old SNAKE_RADIUS_GROWTH_RATE/OFFSET exports
+- Verified offline practice mode: no errors, clean compilation
+
+Stage Summary:
+- Radius: 3 + 1.75×ln(1+s/300) + 0.65×ln(1+s/100000)
+- Length: 4 + 45×ln(1+s/800)
+- Camera: zoom = max(0.15, 1.6 - totalGrowth × 0.12)
+- Min zoom no longer reached until extreme scores (100M+)
