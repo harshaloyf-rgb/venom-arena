@@ -517,14 +517,25 @@ export function renderSnakeAtlas(
     }
 
     // Name label — round to integer pixels to prevent sub-pixel text jitter.
+    // Own name: visible for 3s after spawn, then fades out over 1s.
+    // Other names: always visible.
     if (segRadius > 3) {
-      ctx.fillStyle = snake.isPlayer ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.5)';
-      ctx.font = `${Math.max(10, 12 * zoom)}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
-      const nameX = Math.round(hsx);
-      const nameY = Math.round(hsy - headDrawSize / 2 - 8 * zoom);
-      ctx.fillText(snake.name, nameX, nameY);
+      let nameAlpha = snake.isPlayer ? 0.9 : 0.5;
+      if (snake.isPlayer) {
+        const elapsed = now - snake.spawnTime;
+        if (elapsed > 3000) {
+          nameAlpha = Math.max(0, 0.9 * (1 - (elapsed - 3000) / 1000));
+        }
+      }
+      if (nameAlpha > 0.01) {
+        ctx.fillStyle = `rgba(255, 255, 255, ${nameAlpha})`;
+        ctx.font = `${Math.max(10, 12 * zoom)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        const nameX = Math.round(hsx);
+        const nameY = Math.round(hsy - headDrawSize / 2 - 8 * zoom);
+        ctx.fillText(snake.name, nameX, nameY);
+      }
     }
 
   }
@@ -838,14 +849,25 @@ export function renderSnakeFallback(
     renderEquippedCosmetics(ctx, { hx: headScreen.x, hy: headScreen.y, hr: headRadius, angle: snake.angle, time: now, boosting: snake.boosting, mouseScreenX, mouseScreenY });
 
     // Name — round to integer pixels to prevent sub-pixel text jitter.
+    // Own name: visible for 3s after spawn, then fades out over 1s.
+    // Other names: always visible.
     if (segRadius > 3) {
-      ctx.fillStyle = snake.isPlayer ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.5)';
-      ctx.font = `${Math.max(10, 12 * zoom)}px sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
-      const nameX = Math.round(headScreen.x);
-      const nameY = Math.round(headScreen.y - headRadius - 8 * zoom);
-      ctx.fillText(snake.name, nameX, nameY);
+      let nameAlpha = snake.isPlayer ? 0.9 : 0.5;
+      if (snake.isPlayer) {
+        const elapsed = now - snake.spawnTime;
+        if (elapsed > 3000) {
+          nameAlpha = Math.max(0, 0.9 * (1 - (elapsed - 3000) / 1000));
+        }
+      }
+      if (nameAlpha > 0.01) {
+        ctx.fillStyle = `rgba(255, 255, 255, ${nameAlpha})`;
+        ctx.font = `${Math.max(10, 12 * zoom)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        const nameX = Math.round(headScreen.x);
+        const nameY = Math.round(headScreen.y - headRadius - 8 * zoom);
+        ctx.fillText(snake.name, nameX, nameY);
+      }
     }
 
   }

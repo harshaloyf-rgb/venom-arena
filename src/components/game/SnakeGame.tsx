@@ -1,5 +1,6 @@
 'use client';
 import GameCanvas from './GameCanvas';
+import { useAuth } from '@/components/providers/auth-provider';
 
 interface SnakeGameProps {
   onExit?: () => void;
@@ -7,5 +8,6 @@ interface SnakeGameProps {
 }
 
 export default function SnakeGame(props: SnakeGameProps) {
-  return <GameCanvas {...props} mode="offline" />;
+  const { player } = useAuth();
+  return <GameCanvas {...props} mode="offline" playerName={player?.name} />;
 }
