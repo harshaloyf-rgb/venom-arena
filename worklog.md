@@ -487,3 +487,29 @@ Stage Summary:
 - Fix: Added botsEnabled flag to GameState, guards all bot logic in gameTick
 - Files changed: types.ts, engine.ts, GameCanvas.tsx
 - Online mode now has zero bots; offline mode unaffected
+---
+Task ID: dead-code-cleanup
+Agent: main
+Task: Remove all dead code from snake lib, commit with timestamp
+
+Work Log:
+- Scanned entire src/ for dead code using Explore agent
+- Found 10 dead code items across 7 files
+- Removed unused imports: SNAKE_RADIUS, BOOST_MIN_SCORE from bot-ai.ts (kept SPAWN_RADIUS, used on line 67)
+- Removed unused import: IPathBuffer type from engine.ts
+- Removed unused import: worldToScreen from GameCanvas.tsx
+- Removed dead re-export: KillEvent from engine.ts (still imported internally)
+- Deleted dead file: vec2.ts (unused, distSq duplicated in bot-ai.ts)
+- Deleted dead file: constants.ts (unused re-export shim for config.ts)
+- Removed unused Vec2 interface from types.ts
+- Removed vec2 export from index.ts barrel
+- Ran lint: zero errors
+- Browser verified: page loads clean, no console errors
+- Caught SPAWN_RADIUS regression during browser test (removed it then immediately restored it)
+- Committed and pushed with name/date/timestamp as requested
+
+Stage Summary:
+- 8 files changed, 2 insertions, 31 deletions
+- Deleted files: vec2.ts, constants.ts
+- Commit: 86599e0 — "refactor: remove dead code — Z.ai — 2026-08-10 04:41 IST"
+- All changes pushed to main
