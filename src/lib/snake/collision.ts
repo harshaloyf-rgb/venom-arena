@@ -185,7 +185,7 @@ export function checkCollisions(
       // Narrow phase: check if head movement line touches ANY body segment.
       // Uses 3 sampled points along the movement line (start, mid, end) to
       // catch: line crossing, proximity, and both-sides-moving scenarios.
-      const BODY_HIT_DIST_SQ = 4; // 2px — reliable touch threshold
+      const BODY_HIT_DIST_SQ = 1; // 1px — grace buffer for hairline gap passing
       const len = otherSnake.path.length;
       let hit = false;
       // Midpoint of movement line
