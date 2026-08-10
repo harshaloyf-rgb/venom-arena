@@ -1,15 +1,24 @@
 // ============================================================================
 // Collision Detection — SHARED collision logic for both offline and online modes.
 //
-// Head-to-body: SWEPT line-segment collision (line crossing) + point-to-segment
-//   proximity (parallel crawling). A head dot dies if its movement line crosses
-//   a body segment OR if it's within 1px of any body segment.
-// Head-on-head: movement line crossing only (eyes can touch, no proximity death).
+// Two detection methods, each with its own geometry:
 //
-// ORDER MATTERS: Head-on-head is checked FIRST. This prevents false double-kills
-// where both snakes die from head-to-body on each other's neck segments during
-// a head-on approach. After head-on-head is resolved, the head-to-body phase
-// skips any snake already dead, so no neck gap or crawl exploit exists.
+//   1. SWEPT LINE CROSSING (tunneling prevention)
+//      Head DOT movement line vs body SPINE segment line.
+//      Catches perpendicular/angled approaches where the head passes through.
+//      Exact: any crossing = death (no distance threshold needed).
+//
+//   2. PROXIMITY (parallel crawling detection)
+//      Head CENTER vs body SPINE segment.
+//      Catches parallel movement where lines don't cross but the head
+//      is physically inside the other snake's body cylinder.
+//      Uses SNAKE_RADIUS so collision triggers when head center enters
+//      the body surface, with 1px grace inside.
+//
+//   Head-on-head: movement line crossing only (eyes can touch, no proximity).
+//
+// ORDER: Head-on-head checked FIRST to prevent false double-kills on neck
+// segments. Head-to-body checked SECOND, skips already-dead snakes.
 // ============================================================================
 
 import type { Snake } from './types';
@@ -37,6 +46,11 @@ export interface CollisionResult {
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const DOT_DIST_FACTOR = 0.75;
+// Proximity uses head CENTER (not dot) against body spine.
+// Head center dies when within (SNAKE_RADIUS - 1)px of spine =
+// 1px grace inside the body surface (surface is at SNAKE_RADIUS from spine).
+// This catches parallel crawling where swept line crossing misses.
+const CRAWL_HIT_DIST_SQ = (SNAKE_RADIUS - 1) * (SNAKE_RADIUS - 1); // 25 for R=6
 
 // ─── Module-level scratch (avoids per-tick allocation) ──────────────────────
 
@@ -248,10 +262,18 @@ export function checkCollisions(
 
     const dot = getHeadDot(snake);
     const prevDot = getPrevHeadDot(snake);
+    // Head CENTER for proximity (crawl detection) — symmetric, no dot-offset bias
+    const hcx = snake.path.headX;
+    const hcy = snake.path.headY;
+    let prevHcx = hcx, prevHcy = hcy;
+    if (snake.path.length >= 2) {
+      prevHcx = snake.path.getX(1);
+      prevHcy = snake.path.getY(1);
+    }
 
     // Broad phase: find which snakes have body near this head
-    const nearX = (dot.x + prevDot.x) * 0.5;
-    const nearY = (dot.y + prevDot.y) * 0.5;
+    const nearX = (hcx + prevHcx) * 0.5;
+    const nearY = (hcy + prevHcy) * 0.5;
     const nearby = bodyHash.query(nearX, nearY, SNAKE_RADIUS * 6);
     const checkedSnakes = new Set<string>();
 
@@ -265,20 +287,21 @@ export function checkCollisions(
       if (!otherSnake || !otherSnake.alive) continue;
       if (now - otherSnake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
-      // Narrow phase: check if head movement line touches ANY body segment.
+      // Narrow phase: two independent detection methods.
       // Starts from segment 1 (first body point, no neck skip).
-      const BODY_HIT_DIST_SQ = 1; // 1px — grace buffer for hairline gap passing
       const len = otherSnake.path.length;
       let hit = false;
-      // Midpoint of movement line
-      const midX = (prevDot.x + dot.x) * 0.5;
-      const midY = (prevDot.y + dot.y) * 0.5;
+      // Midpoint of head CENTER movement
+      const midHcx = (prevHcx + hcx) * 0.5;
+      const midHcy = (prevHcy + hcy) * 0.5;
       for (let j = 1; j < len - 1; j++) {
         const sx = otherSnake.path.getX(j);
         const sy = otherSnake.path.getY(j);
         const ex = otherSnake.path.getX(j + 1);
         const ey = otherSnake.path.getY(j + 1);
-        // 1. Line crossing (tunneling prevention)
+        // 1. LINE CROSSING: head DOT swept line vs body SPINE segment.
+        //    Catches perpendicular/angled approaches (tunneling prevention).
+        //    No distance threshold — any geometric crossing = death.
         if (segsIntersect(
           prevDot.x, prevDot.y, dot.x, dot.y,
           sx, sy, ex, ey,
@@ -286,10 +309,12 @@ export function checkCollisions(
           hit = true;
           break;
         }
-        // 2. Proximity: check 3 points on the movement line
-        if (distPointToSegSq(dot.x, dot.y, sx, sy, ex, ey) <= BODY_HIT_DIST_SQ
-          || distPointToSegSq(prevDot.x, prevDot.y, sx, sy, ex, ey) <= BODY_HIT_DIST_SQ
-          || distPointToSegSq(midX, midY, sx, sy, ex, ey) <= BODY_HIT_DIST_SQ) {
+        // 2. PROXIMITY: head CENTER vs body SPINE segment.
+        //    Catches parallel crawling where lines don't cross.
+        //    Uses body-radius-based threshold (1px grace inside surface).
+        if (distPointToSegSq(hcx, hcy, sx, sy, ex, ey) <= CRAWL_HIT_DIST_SQ
+          || distPointToSegSq(prevHcx, prevHcy, sx, sy, ex, ey) <= CRAWL_HIT_DIST_SQ
+          || distPointToSegSq(midHcx, midHcy, sx, sy, ex, ey) <= CRAWL_HIT_DIST_SQ) {
           hit = true;
           break;
         }
