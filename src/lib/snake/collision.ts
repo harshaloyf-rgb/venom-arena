@@ -5,6 +5,12 @@
 //   proximity (parallel crawling). A head dot dies if its movement line crosses
 //   a body segment OR if it's within 1px of any body segment.
 // Head-on-head: dot proximity (≤2px) OR movement line crossing.
+//
+// IMPORTANT: The body hash starts at segment index 1 (skipping the head point), but
+// segments 1-3 are the "neck" — only ~3-9px behind the head. During head-on
+// approaches, the other snake's head dot lands near these neck segments and
+// triggers FALSE head-to-body kills on BOTH snakes. To prevent this, the narrow
+// phase skips the first NECK_SKIP segments of each snake's body.
 // ============================================================================
 
 import type { Snake } from './types';
@@ -32,6 +38,11 @@ export interface CollisionResult {
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const DOT_DIST_FACTOR = 0.75;
+// Skip the first N body segments in head-to-body narrow phase.
+// These are the "neck" (3-9px behind head). Without this skip, head-on
+// collisions falsely trigger head-to-body kills on BOTH snakes because
+// each head dot lands near the other's neck segments.
+const NECK_SKIP = 4;
 
 // ─── Module-level scratch (avoids per-tick allocation) ──────────────────────
 
@@ -185,13 +196,15 @@ export function checkCollisions(
       // Narrow phase: check if head movement line touches ANY body segment.
       // Uses 3 sampled points along the movement line (start, mid, end) to
       // catch: line crossing, proximity, and both-sides-moving scenarios.
+      // Starts at NECK_SKIP to avoid false head-to-body kills on neck segments
+      // during head-on collisions (see top-of-file comment).
       const BODY_HIT_DIST_SQ = 1; // 1px — grace buffer for hairline gap passing
       const len = otherSnake.path.length;
       let hit = false;
       // Midpoint of movement line
       const midX = (prevDot.x + dot.x) * 0.5;
       const midY = (prevDot.y + dot.y) * 0.5;
-      for (let j = 0; j < len - 1; j++) {
+      for (let j = NECK_SKIP; j < len - 1; j++) {
         const sx = otherSnake.path.getX(j);
         const sy = otherSnake.path.getY(j);
         const ex = otherSnake.path.getX(j + 1);

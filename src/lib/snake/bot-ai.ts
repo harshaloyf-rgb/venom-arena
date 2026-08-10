@@ -73,15 +73,16 @@ const BODY_SCAN_DIST = 180;       // px ahead to scan for body threats
 const BODY_SCAN_CONE = Math.PI * 0.45; // 81° half-cone
 const HEAD_ON_RANGE = 250;        // px to detect head-on approach
 
-// ─── Per-Type Steering ───────────────────────────────────────────────────────
-/** Additional smoothing lerp applied before engine's STEERING_LERP */
-const STEER_LERP: Record<BotType, number> = {
-  predator: 0.55,
-  coiler: 0.30,
-  baiter: 0.65,
-  interceptor: 0.75,
-  grazer: 0.25,
-  trapper: 0.20,
+// ─── Per-Type Food Aggression ───────────────────────────────────────────────
+/** How aggressively the type chases food vs holds its heading.
+ *  0 = pure forward (no food pull), 1 = full food chase */
+const FOOD_AGRESSION: Record<BotType, number> = {
+  predator: 0.4,
+  coiler: 0.3,
+  baiter: 0.5,
+  interceptor: 0.4,
+  grazer: 0.7,
+  trapper: 0.3,
 };
 
 // ─── Bot AI State ────────────────────────────────────────────────────────────
@@ -354,30 +355,49 @@ function checkHeadOnThreat(
 }
 
 // ============================================================================
-// SHARED SYSTEM 3: Wall Avoidance
+// SHARED SYSTEM 3: Wall Avoidance (distance-proportional)
 // ============================================================================
+// Blend ramps from 5% at 600px margin to 90% at wall edge.
+// No more flat 50/50 fighting near boundaries.
 
 function wallAvoidAngle(x: number, y: number, currentAngle: number, boundary: number): number {
   const margin = 600;
   let steerX = 0, steerY = 0;
-  if (x > boundary - margin) steerX -= 1;
-  if (x < -boundary + margin) steerX += 1;
-  if (y > boundary - margin) steerY -= 1;
-  if (y < -boundary + margin) steerY += 1;
+  let maxPenetration = 0;
+
+  if (x > boundary - margin) { const p = (x - (boundary - margin)) / margin; maxPenetration = Math.max(maxPenetration, p); steerX -= 1; }
+  if (x < -boundary + margin) { const p = ((-boundary + margin) - x) / margin; maxPenetration = Math.max(maxPenetration, p); steerX += 1; }
+  if (y > boundary - margin) { const p = (y - (boundary - margin)) / margin; maxPenetration = Math.max(maxPenetration, p); steerY -= 1; }
+  if (y < -boundary + margin) { const p = ((-boundary + margin) - y) / margin; maxPenetration = Math.max(maxPenetration, p); steerY += 1; }
+
   if (steerX === 0 && steerY === 0) return currentAngle;
+
+  // Blend: 0.05 at edge of margin → 0.9 at wall
+  const blend = 0.05 + 0.85 * Math.min(maxPenetration, 1);
   const avoidAngle = Math.atan2(steerY, steerX);
-  return normalizeAngle(avoidAngle * 0.5 + currentAngle * 0.5);
+  return normalizeAngle(currentAngle * (1 - blend) + avoidAngle * blend);
 }
 
 // ============================================================================
-// SHARED SYSTEM 4: Smooth Steering + Output
+// SHARED SYSTEM 4: Forward-Biased Steering
 // ============================================================================
-// Applies per-type lerp between desired angle and output angle.
-// The engine's STEERING_LERP handles the final smoothing to the actual snake angle.
+// No bot-level lerp — engine's STEERING_LERP handles all smoothing.
+// Blends 60% current heading + 40% desired direction so bots hold their line
+// like real players instead of instantly snapping to new targets.
 
-function steerToward(data: BotAIData, desiredAngle: number): void {
-  const diff = normalizeAngle(desiredAngle - data.targetAngle);
-  data.targetAngle = normalizeAngle(data.targetAngle + diff * STEER_LERP[data.type]);
+function steerToward(data: BotAIData, desiredAngle: number, bias = 0.6): void {
+  data.targetAngle = normalizeAngle(
+    data.targetAngle * bias + desiredAngle * (1 - bias),
+  );
+}
+
+/** Same as steerToward but with per-type food aggression bias */
+function steerToFoodBias(data: BotAIData, desiredAngle: number, type: BotType): void {
+  // More food-aggressive types turn harder toward food
+  const foodBias = 1.0 - FOOD_AGRESSION[type] * 0.5; // 0.8 (grazer) to 0.85 (coiler)
+  data.targetAngle = normalizeAngle(
+    data.targetAngle * foodBias + desiredAngle * (1 - foodBias),
+  );
 }
 
 // ─── Shared: Set angle to food or wander ────────────────────────────────────
@@ -387,18 +407,19 @@ function steerToFood(snake: Snake, data: BotAIData, state: GameState): void {
   const hy = snake.path.headY;
   const cluster = findFoodCluster(hx, hy, state.foods, CLUSTER_RANGE);
   if (cluster) {
-    steerToward(data, angleTo(hx, hy, cluster.x, cluster.y));
+    steerToFoodBias(data, angleTo(hx, hy, cluster.x, cluster.y), data.type);
   } else {
     const food = findNearestFood(hx, hy, state.foods, FOOD_SEEK_RANGE_SQ);
-    steerToward(data, food ? angleTo(hx, hy, food.x, food.y) : data.wanderAngle);
+    steerToFoodBias(data, food ? angleTo(hx, hy, food.x, food.y) : data.wanderAngle, data.type);
   }
   data.wantBoost = false;
 }
 
 function steerToWander(data: BotAIData, snake: Snake): void {
   if (data.wanderChangeTimer <= 0) {
-    data.wanderAngle += (Math.random() - 0.5) * 1.2;
-    data.wanderChangeTimer = 60 + Math.floor(Math.random() * 120);
+    // ±0.15 rad (±8.6°) gentle drift — not the old ±0.6 rad jerks
+    data.wanderAngle += (Math.random() - 0.5) * 0.3;
+    data.wanderChangeTimer = 120 + Math.floor(Math.random() * 240);
   }
   steerToward(data, data.wanderAngle);
   data.wantBoost = false;
@@ -808,22 +829,23 @@ export function updateAllBotAI(state: GameState): void {
     const bodyThreat = scanBodyAhead(snake, state.snakes);
     const headOnThreat = !bodyThreat ? checkHeadOnThreat(snake, state.snakes) : null;
 
-    if (bodyThreat) {
-      // Evade body: blend flee angle with current angle based on severity
+    if (bodyThreat && bodyThreat.severity > 0.3) {
+      // Evade body: only react when severity > 0.3 (body < 126px away)
+      // Use forward bias so evasion is smooth, not jerky
       const flee = bodyThreat.avoidAngle;
-      const blend = 0.3 + 0.7 * bodyThreat.severity;
+      const blend = 0.2 + 0.8 * bodyThreat.severity; // 0.36 at 0.2, ramps to 1.0
       const evaded = normalizeAngle(data.targetAngle * (1 - blend) + flee * blend);
-      steerToward(data, evaded);
-      data.wantBoost = bodyThreat.severity > 0.7; // boost only when very close
+      steerToward(data, evaded, 0.7); // lighter forward bias during evasion
+      data.wantBoost = bodyThreat.severity > 0.7;
     } else if (headOnThreat) {
-      steerToward(data, headOnThreat.avoidAngle);
+      steerToward(data, headOnThreat.avoidAngle, 0.5); // less bias for head-on (need to turn)
       data.wantBoost = false;
     } else {
       // ── Layer 3: Type Personality ──
       BOT_UPDATERS[data.type](snake, data, state);
     }
 
-    // ── Wall avoidance (always, blended 50/50) ──
+    // ── Wall avoidance (distance-proportional, not flat 50/50) ──
     data.targetAngle = wallAvoidAngle(snake.path.headX, snake.path.headY, data.targetAngle, WALL_BOUNDARY);
 
     // ── Output ──
