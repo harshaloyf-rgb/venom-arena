@@ -170,6 +170,7 @@ function createSnake(
     lastBoostDrop: 0, targetAngle: angle,
     spiral: { active: false, consecutiveTurns: 0, ticksElapsed: 0, direction: 1 },
     bodyRadius: computeBodyRadius(startScore), skinId, rarity,
+    prevHeadX: posX, prevHeadY: posY, smoothBrakeFactor: 1.0,
   };
 }
 
@@ -210,6 +211,10 @@ function findSafeSpawn(
 function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: number, ctx: MoveContext): void {
   snake.targetAngle = targetAngle;
   snake.prevAngle = snake.angle;
+
+  // P0: Save head position BEFORE this tick for render interpolation
+  snake.prevHeadX = snake.path.headX;
+  snake.prevHeadY = snake.path.headY;
 
   let diff = targetAngle - snake.angle;
   diff = Math.atan2(Math.sin(diff), Math.cos(diff));
@@ -256,13 +261,18 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
   const absClampedTurn = Math.abs(clampedTurn);
   const sharpness = maxTurn > 0 ? Math.min(absClampedTurn / maxTurn, 1.0) : 0;
   const smoothT = sharpness * sharpness * (3 - 2 * sharpness);
-  const brakeFactor = 1 - SHARP_TURN_BRAKE * smoothT;
+  const rawBrake = 1 - SHARP_TURN_BRAKE * smoothT;
+
+  // P1: Smooth the brake factor over ~4 ticks instead of instant.
+  // Eliminates per-tick speed variation that causes camera jitter.
+  const BRAKE_LERP = 0.25;
+  snake.smoothBrakeFactor += (rawBrake - snake.smoothBrakeFactor) * BRAKE_LERP;
 
   // Detect boost transition for instant first drop
   const boostJustStarted = canBoost && !snake.boosting;
   snake.boosting = canBoost;
   const baseSpeedForState = canBoost ? BOOST_SPEED : BASE_SPEED;
-  snake.speed = baseSpeedForState * brakeFactor;
+  snake.speed = baseSpeedForState * snake.smoothBrakeFactor;
 
   // Path buffer movement
   const newHeadX = snake.path.getX(0) + Math.cos(snake.angle) * snake.speed;

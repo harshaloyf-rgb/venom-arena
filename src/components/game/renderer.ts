@@ -20,18 +20,15 @@ export function drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, viewport
   const zoomedGrid = GRID_SIZE * camera.zoom;
   if (zoomedGrid < 4) return;
 
-  // Snap grid origin to pixel boundaries to prevent sub-pixel line crawling.
-  // The modulo gives us the fractional offset within one grid cell;
-  // rounding that to integer pixels means lines only move in 1px jumps
-  // (imperceptible at 3px/frame head movement).
+  // P3: Grid offset WITHOUT Math.round — the camera is now interpolated (P0)
+  // so it moves smoothly. Math.round caused periodic 1px jumps as rounding
+  // error accumulated (every ~67 frames at zoom 1.35). Now the grid scrolls
+  // perfectly smoothly with the camera.
   let offsetX = (-camera.x * camera.zoom + viewport.width / 2) % zoomedGrid;
   let offsetY = (-camera.y * camera.zoom + viewport.height / 2) % zoomedGrid;
   // Ensure positive modulo (JS % can be negative)
   if (offsetX < 0) offsetX += zoomedGrid;
   if (offsetY < 0) offsetY += zoomedGrid;
-  // Snap to nearest pixel — eliminates crawling while keeping smooth scroll
-  offsetX = Math.round(offsetX);
-  offsetY = Math.round(offsetY);
 
   ctx.beginPath();
   for (let x = offsetX; x < viewport.width; x += zoomedGrid) {

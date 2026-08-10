@@ -5,7 +5,7 @@
 //   1. Numeric cell keys (no string concatenation on insert)
 //   2. Flat typed arrays per cell (no Set/Map per cell)
 //   3. Count-based clear (no Map.clear() → no GC)
-//   4. Pre-allocated scratch entity for query (minimal alloc)
+//   4. P4: Pre-allocated query result buffer (no per-query array allocation)
 // ============================================================================
 
 import { SPATIAL_CELL_SIZE } from './config';
@@ -33,6 +33,10 @@ export class SpatialHash {
   private cellSize: number;
   private cellMap: Map<number, Cell>;
   private invCellSize: number;
+
+  // P4: Pre-allocated query result buffer — avoids [] allocation per query.
+  // Grows as needed but never shrinks (reused across frames).
+  private _queryBuf: SpatialEntity[] = [];
 
   constructor(cellSize: number = SPATIAL_CELL_SIZE) {
     this.cellSize = cellSize;
@@ -92,7 +96,8 @@ export class SpatialHash {
     }
   }
 
-  /** Query all entities within a given radius of a point */
+  /** Query all entities within a given radius of a point.
+   *  P4: Uses pre-allocated buffer — no array allocation per call. */
   query(x: number, y: number, radius: number): SpatialEntity[] {
     const inv = this.invCellSize;
     const minCx = ((x - radius) * inv) | 0;
@@ -100,7 +105,9 @@ export class SpatialHash {
     const minCy = ((y - radius) * inv) | 0;
     const maxCy = ((y + radius) * inv) | 0;
 
-    const result: SpatialEntity[] = [];
+    // P4: Reuse pre-allocated buffer
+    const result = this._queryBuf;
+    result.length = 0;
     const map = this.cellMap;
 
     for (let cx = minCx; cx <= maxCx; cx++) {

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Zap, CircleDot } from 'lucide-react';
 import { createExtractionState, updateExtractionProgress, drawExtractRing } from '@/lib/snake/extraction';
 import { createInitialState, gameTick, respawnPlayer, initBots, type PlayerSkinOverride } from '@/lib/snake/engine';
-import { createCamera, updateCamera, getViewport } from '@/lib/snake/camera';
+import { createCamera, updateCameraInterpolated, getViewport } from '@/lib/snake/camera';
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, registerSkinAsset } from '@/lib/snake/skin-registry';
 import { type GameState, type Camera, type Viewport, FIXED_DT } from '@/lib/snake';
@@ -236,13 +236,11 @@ export default function GameCanvas({
       }
 
       // ────────────────────────────────────────────────────────────────────
-      // GAME LOOP — full local simulation
+      // GAME LOOP — full local simulation with P0 render interpolation
       // ────────────────────────────────────────────────────────────────────
 
       // Fixed timestep — CAP TO 2 TICKS PER FRAME.
-      // If a frame is slow, run up to 2 physics ticks to maintain speed.
-      // Prevents the 1-tick cap from halving game speed during lag.
-      // Accumulator capped at 2× tickMs to prevent spiral on recovery.
+      // P0: Before any tick, save prevHead for ALL snakes for interpolation.
       if (lastTimeRef.current === 0) {
         lastTimeRef.current = timestamp;
       }
@@ -253,7 +251,20 @@ export default function GameCanvas({
       const tickMs = FIXED_DT * 1000;
       const maxAccum = tickMs * 2;
       if (accumulatorRef.current > maxAccum) accumulatorRef.current = maxAccum;
+
       let ticksThisFrame = 0;
+
+      // P0: Save prevHeadX/Y BEFORE any ticks run (for render interpolation).
+      // moveSnake() overwrites these per-tick, so we snapshot BEFORE the loop.
+      const player = gameState.player;
+      if (player && player.alive) {
+        for (const [, s] of gameState.snakes) {
+          if (s.alive) {
+            s.prevHeadX = s.path.headX;
+            s.prevHeadY = s.path.headY;
+          }
+        }
+      }
       while (accumulatorRef.current >= tickMs && ticksThisFrame < 2) {
         const killEvents = gameTick(gameState, inputState, FIXED_DT);
         accumulatorRef.current -= tickMs;
@@ -285,9 +296,13 @@ export default function GameCanvas({
         ticksThisFrame++;
       }
 
-      // Camera
-      if (gameState.player && gameState.player.alive) {
-        updateCamera(cameraRef.current, gameState.player, w, h);
+      // P0: Camera with interpolated position.
+      // alpha = how far we are toward the next tick (0 to ~1).
+      // camera.x = prevHead + (currentHead - prevHead) * alpha
+      // This makes the camera move smoothly on EVERY render frame.
+      if (player && player.alive) {
+        const alpha = Math.min(accumulatorRef.current / tickMs, 1.0);
+        updateCameraInterpolated(cameraRef.current, player, w, h, alpha);
       }
 
       const viewport: Viewport = getViewport(cameraRef.current, w, h);

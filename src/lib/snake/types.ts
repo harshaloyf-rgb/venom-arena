@@ -156,6 +156,14 @@ export interface Snake {
   /** Tick accumulator for integer-based boost score cost */
   boostCostAccum?: number;
 
+  // ── Interpolation fields (P0: render-time smoothing) ──
+  /** Head X before the most recent tick (for render interpolation) */
+  prevHeadX: number;
+  /** Head Y before the most recent tick (for render interpolation) */
+  prevHeadY: number;
+  /** Smoothed brake factor (P1: eliminates instant SHARP_TURN_BRAKE speed jumps) */
+  smoothBrakeFactor: number;
+
   // ── Skin fields (Phase A, rendering in Phase C) ──
   /** Current skin asset ID */
   skinId: string;
