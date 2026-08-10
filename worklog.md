@@ -513,3 +513,23 @@ Stage Summary:
 - Deleted files: vec2.ts, constants.ts
 - Commit: 86599e0 — "refactor: remove dead code — Z.ai — 2026-08-10 04:41 IST"
 - All changes pushed to main
+---
+Task ID: bot-steering-smooth + head-on-fix
+Agent: main
+Task: Fix 5 bot steering jitter issues + head-on-head both-die collision bug
+
+Work Log:
+- Diagnosed 5 causes of bot jitter: dual-lerp, flat wall blend, over-sensitive body scanner, aggressive wander, no forward momentum
+- Fix 1: Removed STEER_LERP per-type lerp. steerToward() now blends 60/40 forward bias instead of lerping. Engine STEERING_LERP handles all smoothing.
+- Fix 2: wallAvoidAngle() now distance-proportional: 5% at 600px margin → 90% at wall edge
+- Fix 3: Body scanner only reacts when severity > 0.3 (body within 126px). Distant bodies no longer cause micro-swerves.
+- Fix 4: Wander drift reduced from ±0.6 rad (±34°) to ±0.15 rad (±8.6°). Interval increased to 120-240 ticks.
+- Fix 5: steerToward() uses 0.6/0.4 forward bias by default. Added steerToFoodBias() with per-type food aggression.
+- Investigated head-on-head collision: root cause was neck segments (index 1-3, only 3-9px behind head) triggering false head-to-body kills on BOTH snakes
+- Fix: Added NECK_SKIP=4 constant, narrow phase now starts at j=4 instead of j=0
+- Lint clean, browser verified no errors
+
+Stage Summary:
+- Bots should now move smoothly with natural forward momentum
+- Head-on-head collisions: longer snake wins, equal = both die (no more false double-kill from neck)
+- Commit: 8a73bbf pushed to main
