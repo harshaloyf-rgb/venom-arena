@@ -316,7 +316,7 @@ export function renderSnakeAtlas(
       const a = rot + (i / sides) * Math.PI * 2;
       const px = headScreen.x + Math.cos(a) * shieldR;
       const py = headScreen.y + Math.sin(a) * shieldR;
-      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
     ctx.closePath();
     ctx.stroke();
@@ -334,7 +334,7 @@ export function renderSnakeAtlas(
       const a = -rot * 1.5 + (i / sides) * Math.PI * 2 + 0.5;
       const px = headScreen.x + Math.cos(a) * shieldR2;
       const py = headScreen.y + Math.sin(a) * shieldR2;
-      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
     ctx.closePath();
     ctx.stroke();
@@ -618,7 +618,7 @@ export function renderSnakeFallback(
       const a = rot + (i / sides) * Math.PI * 2;
       const px = headScreen.x + Math.cos(a) * shieldR;
       const py = headScreen.y + Math.sin(a) * shieldR;
-      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
     ctx.closePath();
     ctx.stroke();
@@ -634,7 +634,7 @@ export function renderSnakeFallback(
       const a = -rot * 1.5 + (i / sides) * Math.PI * 2 + 0.5;
       const px = headScreen.x + Math.cos(a) * shieldR2;
       const py = headScreen.y + Math.sin(a) * shieldR2;
-      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
     ctx.closePath();
     ctx.stroke();
