@@ -842,3 +842,24 @@ Stage Summary:
 - Offline mode now works: no crash, snakes visible, bots smoothly interpolated
 - Bot movement no longer stutters — render-time alpha interpolation applied to bots
 - Head-body segment gaps eliminated — caused by lack of interpolation (body frozen between ticks while head moved)
+---
+Task ID: 1
+Agent: Main
+Task: Fix snake visual gap when small + implement new growth rates
+
+Work Log:
+- Diagnosed root cause: bodyDrawStep() had floor of 8px, but small snake diameter is 6px (radius 3), creating 2px gaps between drawn segments
+- Fixed bodyDrawStep minimum from 8 to 4 in render-snake-atlas.tsx
+- Redesigned radius growth curve: OFFSET 33.33→300, RATE 1.623→1.741 for much more gradual growth
+- Old curve: radius reached 5.25 at score 100 (75% increase) — too fast
+- New curve: radius reaches 3.5 at score 100 (17% increase) — gradual and satisfying
+- Reviewed length growth: current RATE=52.5 OFFSET=800 is good, kept as-is
+- Fixed incorrect docstring checkpoints for both computeBodyLength and computeBodyRadius
+- Verified in browser: offline practice mode loads without errors
+
+Stage Summary:
+- bodyDrawStep floor: 8 → 4 (eliminates visual gaps at small size)
+- SNAKE_RADIUS_GROWTH_OFFSET: 33.333 → 300 (9× slower early growth)
+- SNAKE_RADIUS_GROWTH_RATE: 1.623 → 1.741 (slightly higher rate, but offset dominates)
+- Length growth unchanged (52.5 / 800)
+- New radius curve: 0→3 | 100→3.5 | 500→4.7 | 1K→5.5 | 5K→8 | 10K→8.9 | 100K→12.6 | 1M→15.2 | 10M→18.8

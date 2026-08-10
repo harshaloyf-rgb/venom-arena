@@ -22,9 +22,10 @@ import { incrementCoilFrame } from './coil-path';
  *  Fatter snakes  → wider spacing  (fewer, larger circles).
  *  With unlimited growth, step scales proportionally to radius.
  *  The 1.3 factor (was 1.5) ensures more overlap for bigger snakes
- *  where gaps would be more visible. */
+ *  where gaps would be more visible.
+ *  Floor of 4 (was 8) scaled down to match the smaller base snake size. */
 function bodyDrawStep(bodyRadius: number): number {
-  return Math.max(bodyRadius * 1.3, 8);
+  return Math.max(bodyRadius * 1.3, 4);
 }
 
 /** Smoothed visual segment count per snake (prevents score-driven jitter).

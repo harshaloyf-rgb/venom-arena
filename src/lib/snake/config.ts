@@ -52,13 +52,13 @@ export const START_LENGTH = 4;
 /** Logarithmic body length growth — same pattern as bodyRadius.
  *  Formula: length = START_LENGTH + RATE × ln(1 + score / OFFSET)
  *  No hard cap — naturally flattens but ALWAYS grows (different scores = different lengths).
- *  Fitted to checkpoints: 0→4 | 1K→89 | 10K→267 | 100K→478 | 1M→698 | 10M→919 */
+ *  Checkpoints: 0→4 | 100→10 | 1K→47 | 5K→108 | 10K→141 | 100K→258 | 1M→378 | 10M→499 */
 export const LENGTH_GROWTH_RATE = 52.5;
 export const LENGTH_GROWTH_OFFSET = 800;
 
 /** Compute visual body length (segments) from score using logarithmic growth.
  *  Same structure as computeBodyRadius — fast early, flattens at high scores, no cap.
- *  Score 0→4 | 100→10 | 1K→89 | 10K→267 | 100K→478 | 1M→698 | 10M→919 */
+ *  Score 0→4 | 100→10 | 1K→47 | 5K→108 | 10K→141 | 100K→258 | 1M→378 | 10M→499 */
 export function computeBodyLength(score: number): number {
   return Math.floor(START_LENGTH + LENGTH_GROWTH_RATE * Math.log(1 + score / LENGTH_GROWTH_OFFSET));
 }
@@ -66,7 +66,7 @@ export function computeBodyLength(score: number): number {
 /** Compute visual body radius from score using logarithmic growth curve.
  *  NO HARD CAP — grows indefinitely (logarithmically) with score.
  *  Visual-only: collision radius stays constant at SNAKE_RADIUS (fairness).
- *  Score 0→6  |  100→6.6  |  1K→7.4  |  10K→8.3  |  100K→9.3  |  1M→10.2  |  10M→11.3 */
+ *  Score 0→3  |  100→3.5  |  500→4.7  |  1K→5.5  |  5K→8  |  10K→8.9  |  50K→11.4  |  100K→12.6  |  1M→15.2  |  10M→18.8 */
 export function computeBodyRadius(score: number): number {
   return SNAKE_RADIUS_MIN + SNAKE_RADIUS_GROWTH_RATE * Math.log(1 + score / SNAKE_RADIUS_GROWTH_OFFSET);
 }
@@ -126,13 +126,15 @@ export const SNAKE_RADIUS_MIN = 3;
 
 /** Radius growth offset: logarithmic curve parameter.
  *  Formula: radius = MIN + RATE × ln(1 + score / OFFSET)
- *  Derived from exact data-point fitting (see checkpoints in RATE). */
-export const SNAKE_RADIUS_GROWTH_OFFSET = 100 / 3; // ≈ 33.333
+ *  Higher offset = slower, more gradual growth (avoids getting fat too fast).
+ *  300 = radius doubles (3→6) around score ~6.7K instead of score ~100. */
+export const SNAKE_RADIUS_GROWTH_OFFSET = 300;
 
 /** Radius growth rate: logarithmic curve coefficient.
- *  Formula: radius = 3 + 1.623 × ln(1 + score / 33.333)
- *  Score 0→3  |  100→6  |  1K→10.4  |  10K→15.3  |  100K→20.2  |  1M→24  |  10M→27.7 */
-export const SNAKE_RADIUS_GROWTH_RATE = 2.25 / Math.log(4); // ≈ 1.623
+ *  Formula: radius = 3 + 1.741 × ln(1 + score / 300)
+ *  Fitted so radius reaches 8px at score 5K (2.67× starting size).
+ *  Score 0→3  |  100→3.5  |  500→4.7  |  1K→5.5  |  5K→8  |  10K→8.9  |  50K→11.4  |  100K→12.6  |  1M→15.2  |  10M→18.8 */
+export const SNAKE_RADIUS_GROWTH_RATE = 5 / Math.log(1 + 5000 / 300); // ≈ 1.741
 
 /** First N segments of a snake's body that cannot kill on collision */
 export const NECK_PROTECTION = 5;
