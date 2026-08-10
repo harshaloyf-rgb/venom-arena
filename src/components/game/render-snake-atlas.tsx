@@ -172,11 +172,11 @@ const _walker = {
 
 // ─── Bot Walk Cache ─────────────────────────────────────────────────────
 // Caches walked world positions for bot snakes. Updated every BOT_WALK_CACHE_INTERVAL
-// frames. On cache-hit frames, re-uses previous world positions (screen coords
-// are still recomputed every frame since the camera moves). Saves ~8000 path
-// point evaluations per frame when 13 bots are visible.
+// frames (3 = reuse for 2 frames, re-walk on 3rd). On cache-hit frames, re-uses
+// previous world positions (screen coords still recomputed since camera moves).
+// Saves ~16000 path point evaluations per frame when 13 bots are visible.
 
-const BOT_WALK_CACHE_INTERVAL = 1;
+const BOT_WALK_CACHE_INTERVAL = 3;
 
 interface BotWalkCacheEntry {
   xs: Float64Array;

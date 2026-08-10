@@ -13,6 +13,7 @@ import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrame, setCachedDpr }
 import { cleanupDeadSnakeParticles, renderBackground, renderHUD, drawMouseCursor } from './hud';
 import { InputHandler } from './input';
 import { makeCoiledPath } from './coil-path';
+import { computeBodyLength, SEGMENT_SPACING } from '@/lib/snake/config';
 import { useAuth } from '@/components/providers/auth-provider';
 
 
@@ -316,30 +317,31 @@ export default function GameCanvas({
       renderBackground(ctx, gameState, cameraRef.current, viewport, fc.fps, now);
 
       // ── Render snakes: bots use fallback, player uses atlas ──
-      // P8: Use render spatial grid to skip off-screen bots without iterating all.
-      // For 1000 bots, this avoids checking 900+ bots per frame.
-      // Also applies LOD: bots far from camera get simplified rendering.
-      const bvl = viewport.left - 500;
-      const bvr = viewport.right + 500;
-      const bvt = viewport.top - 500;
-      const bvb = viewport.bottom + 500;
+      // Culling: use body-aware margin so long snakes don't pop in/out.
+      // The body extends BEHIND the head, so the cull box must cover head
+      // (forward) + body length (behind). A fixed 500px head-only margin
+      // caused long snakes to vanish when only the head left the viewport.
+      const baseMargin = 500;
       const camX = cameraRef.current.x;
       const camY = cameraRef.current.y;
       for (const [, s] of gameState.snakes) {
         if (s.alive && !s.isPlayer) {
-          // Early cull: skip if head is far off-screen (500px margin)
-          if (s.path.headX < bvl || s.path.headX > bvr ||
-              s.path.headY < bvt || s.path.headY > bvb) continue;
-          const coiled = makeCoiledPath(s.path);
-          // Bots: alpha=1.0 (no interpolation offset). The camera tracks
-          // the player, not bots — applying alpha to bots creates independent
-          // body/camera offsets that cause visible vibration.
+          const bodyLen = computeBodyLength(s.score) * SEGMENT_SPACING;
+          const margin = bodyLen + baseMargin;
+          // Body-aware cull: the snake is off-screen if BOTH its head (front)
+          // and the end of its body (behind head) are outside the viewport.
+          // We approximate: head must be within margin on the forward side,
+          // and within bodyLen+margin on the trailing side. Since we don't
+          // know heading per-axis, use the full margin in all directions.
+          if (s.path.headX < viewport.left - margin || s.path.headX > viewport.right + margin ||
+              s.path.headY < viewport.top - margin || s.path.headY > viewport.bottom + margin) continue;
+          // Bots: skip coiled path entirely (render perf) — use raw path.
           // P8: Compute distance from camera for LOD (0=near, 1=far)
           const dx = s.path.headX - camX;
           const dy = s.path.headY - camY;
           const distFromCam = Math.sqrt(dx * dx + dy * dy);
           const lodFar = distFromCam > 1500 ? 1 : 0;
-          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, 1.0, coiled, lodFar);
+          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, 1.0, undefined, lodFar);
         }
       }
       if (gameState.player && gameState.player.alive) {

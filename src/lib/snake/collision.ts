@@ -12,8 +12,7 @@
 //      Head CENTER vs body SPINE segment.
 //      Catches parallel movement where lines don't cross but the head
 //      is physically inside the other snake's body cylinder.
-//      Uses SNAKE_RADIUS so collision triggers when head center enters
-//      the body surface, with 1px grace inside.
+//      Threshold: 2*R-2 = 10px (2px grace before surfaces touch).
 //
 //   Head-on-head: movement line crossing only (eyes can touch, no proximity).
 //
@@ -47,10 +46,11 @@ export interface CollisionResult {
 
 const DOT_DIST_FACTOR = 0.75;
 // Proximity uses head CENTER (not dot) against body spine.
-// Head center dies when within (SNAKE_RADIUS - 1)px of spine =
-// 1px grace inside the body surface (surface is at SNAKE_RADIUS from spine).
-// This catches parallel crawling where swept line crossing misses.
-const CRAWL_HIT_DIST_SQ = (SNAKE_RADIUS - 1) * (SNAKE_RADIUS - 1); // 25 for R=6
+// Head surface touches body surface when center-to-spine distance <=
+// 2 * SNAKE_RADIUS (= 12px). We allow 2px grace so collision
+// triggers at 10px (= (2*R - 2)² = 100). This catches parallel
+// crawling where swept line crossing misses (parallel lines never cross).
+const CRAWL_HIT_DIST_SQ = (2 * SNAKE_RADIUS - 2) * (2 * SNAKE_RADIUS - 2); // 100 for R=6
 
 // ─── Module-level scratch (avoids per-tick allocation) ──────────────────────
 
@@ -149,52 +149,24 @@ export function checkCollisions(
 ): CollisionResult {
   const scratch = _scratch;
 
-  // ── Collect head positions for proximity pre-filter ──
-  // Only insert body segments from snakes whose head is within
-  // BODY_HASH_HEAD_RANGE of ANY other snake's head. Far-away snakes
-  // can never be hit (heads can't reach them), so skip their segments.
-  const BODY_HASH_HEAD_RANGE = 1500;
-  const BODY_HASH_HEAD_RANGE_SQ = BODY_HASH_HEAD_RANGE * BODY_HASH_HEAD_RANGE;
   const aliveSnakes: Snake[] = [];
   for (const [, snake] of snakes) {
     if (snake.alive) aliveSnakes.push(snake);
   }
-  // Build set of snake IDs whose heads are near at least one other head
-  const nearbyIds = new Set<string>();
-  for (let a = 0; a < aliveSnakes.length; a++) {
-    const sa = aliveSnakes[a];
-    for (let b = a + 1; b < aliveSnakes.length; b++) {
-      const sb = aliveSnakes[b];
-      const dx = sa.path.headX - sb.path.headX;
-      const dy = sa.path.headY - sb.path.headY;
-      if (dx * dx + dy * dy < BODY_HASH_HEAD_RANGE_SQ) {
-        nearbyIds.add(sa.id);
-        nearbyIds.add(sb.id);
-      }
-    }
-  }
 
   // ── Build body spatial hash (broad phase) ──
-  // Pre-filtered: only insert segments from snakes with nearby heads.
-  // P6: For long snakes, only insert the front portion of the body.
-  // The tail is mostly harmless and checking it against every other
-  // snake's head is wasteful. Front 40% covers the dangerous zone.
-  const BODY_COLLISION_FRACTION = 0.4;
-  const BODY_COLLISION_MIN_SEGS = 50;
-  const BODY_COLLISION_CAP = 400;
+  // ALL alive non-protected snakes' FULL bodies are inserted.
+  // Previous optimizations (nearbyIds head filter + 40% front-only)
+  // created massive blind spots: bots crawling on tails, bodies
+  // invisible when heads were far apart. Full insertion is correct.
   bodyHash.clear();
   scratch.radius = SNAKE_RADIUS;
   for (const [, snake] of snakes) {
     if (!snake.alive) continue;
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
-    if (!nearbyIds.has(snake.id)) continue;
     const len = snake.path.length;
-    // P6: Cap body segments checked for long snakes
-    const maxSegs = len > BODY_COLLISION_MIN_SEGS
-      ? Math.min(Math.ceil(len * BODY_COLLISION_FRACTION), BODY_COLLISION_CAP)
-      : len;
     scratch.id = snake.id;
-    for (let i = 1; i < maxSegs; i++) {
+    for (let i = 1; i < len; i++) {
       scratch.x = snake.path.getX(i);
       scratch.y = snake.path.getY(i);
       bodyHash.insert(scratch);
@@ -311,7 +283,7 @@ export function checkCollisions(
     // Broad phase: find which snakes have body near this head
     const nearX = (hcx + prevHcx) * 0.5;
     const nearY = (hcy + prevHcy) * 0.5;
-    const nearby = bodyHash.query(nearX, nearY, SNAKE_RADIUS * 6);
+    const nearby = bodyHash.query(nearX, nearY, SNAKE_RADIUS * 8);
     const checkedSnakes = new Set<string>();
 
     for (let i = 0; i < nearby.length; i++) {
@@ -326,16 +298,13 @@ export function checkCollisions(
 
       // Narrow phase: two independent detection methods.
       // Starts from segment 1 (first body point, no neck skip).
-      // P6: For long snakes, limit narrow-phase check to front portion.
+      // Check ALL body segments — no tiered truncation.
       const len = otherSnake.path.length;
-      const narrowMax = len > BODY_COLLISION_MIN_SEGS
-        ? Math.min(Math.ceil(len * BODY_COLLISION_FRACTION), BODY_COLLISION_CAP)
-        : len - 1;
       let hit = false;
       // Midpoint of head CENTER movement
       const midHcx = (prevHcx + hcx) * 0.5;
       const midHcy = (prevHcy + hcy) * 0.5;
-      for (let j = 1; j < narrowMax; j++) {
+      for (let j = 1; j < len - 1; j++) {
         const sx = otherSnake.path.getX(j);
         const sy = otherSnake.path.getY(j);
         const ex = otherSnake.path.getX(j + 1);
@@ -352,7 +321,7 @@ export function checkCollisions(
         }
         // 2. PROXIMITY: head CENTER vs body SPINE segment.
         //    Catches parallel crawling where lines don't cross.
-        //    Uses body-radius-based threshold (1px grace inside surface).
+        //    Threshold: 2*R-2 = 10px (2px grace before surfaces touch).
         if (distPointToSegSq(hcx, hcy, sx, sy, ex, ey) <= CRAWL_HIT_DIST_SQ
           || distPointToSegSq(prevHcx, prevHcy, sx, sy, ex, ey) <= CRAWL_HIT_DIST_SQ
           || distPointToSegSq(midHcx, midHcy, sx, sy, ex, ey) <= CRAWL_HIT_DIST_SQ) {

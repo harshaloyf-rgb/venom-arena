@@ -783,3 +783,24 @@ Stage Summary:
 - Game renders correctly with all optimizations active
 - Files changed: pool.ts, engine.ts, config.ts, camera.ts, coil-path.ts, collision.ts, render-snake-atlas.tsx, GameCanvas.tsx
 
+---
+Task ID: 1
+Agent: main
+Task: Fix 3 persistent bugs - bot disappear/reappear, collision blind spots, game slowdown
+
+Work Log:
+- Audited all relevant source files (collision.ts, config.ts, engine.ts, GameCanvas.tsx, render-snake-atlas.tsx, coil-path.ts, pool.ts, spatial-hash.ts, camera.ts, types.ts)
+- Identified root causes for all 3 issues
+- Fixed bot disappear/reappear: replaced head-only 500px cull with body-aware cull (bodyLen + 500px margin)
+- Fixed collision blind spot #1: removed P6 tiered collision (40% front-only → 100% full body)
+- Fixed collision blind spot #2: removed nearbyIds head-proximity pre-filter
+- Fixed collision blind spot #3: increased CRAWL_HIT_DIST_SQ from 25 (5px) to 100 (10px)
+- Fixed game slowdown: increased BOT_WALK_CACHE_INTERVAL from 1 to 3 (actual caching)
+- Fixed game slowdown: skip coiled path for bots (pass undefined instead of makeCoiledPath)
+- Increased body hash query radius from 6R to 8R to match new proximity threshold
+- All changes pass lint check
+
+Stage Summary:
+- GameCanvas.tsx: body-aware culling + skip coiled path for bots + import computeBodyLength/SEGMENT_SPACING
+- collision.ts: full body insertion, full narrow phase, CRAWL_HIT_DIST_SQ=100, query radius 8R, removed nearbyIds
+- render-snake-atlas.tsx: BOT_WALK_CACHE_INTERVAL=3
