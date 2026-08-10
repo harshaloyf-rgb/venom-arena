@@ -298,10 +298,8 @@ export default function GameCanvas({
 
       // P0: Camera with interpolated position.
       // alpha = how far we are toward the next tick (0 to ~1).
-      // camera.x = prevHead + (currentHead - prevHead) * alpha
-      // This makes the camera move smoothly on EVERY render frame.
+      const alpha = Math.min(accumulatorRef.current / tickMs, 1.0);
       if (player && player.alive) {
-        const alpha = Math.min(accumulatorRef.current / tickMs, 1.0);
         updateCameraInterpolated(cameraRef.current, player, w, h, alpha);
       }
 
