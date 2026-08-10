@@ -68,7 +68,7 @@ export function computeBodyLength(score: number): number {
  *  Visual-only: collision radius stays constant at SNAKE_RADIUS (fairness).
  *  Primary log handles 0→~100K (gradual, balanced growth).
  *  Secondary log adds extra thickness at high scores (50K+).
- *  Score 0→3  |  100→3.5  |  500→4.7  |  1K→5.6  |  5K→8.1  |  10K→9.3  |  50K→12.2  |  100K→13.6  |  1M→18.8  |  10M→24.2  |  100M→29.7 */
+ *  Score 0→3  |  100→3.7  |  500→5.3  |  1K→6.5  |  5K→9.8  |  10K→11.4  |  25K→13.6  |  50K→15.4  |  100K→17.2  |  1M→23.7  |  10M→30.6  |  100M→37.5 */
 export function computeBodyRadius(score: number): number {
   return SNAKE_RADIUS_MIN
     + SNAKE_RADIUS_GROWTH_RATE_1 * Math.log(1 + score / SNAKE_RADIUS_GROWTH_OFFSET_1)
@@ -134,9 +134,10 @@ export const SNAKE_RADIUS_MIN = 3;
  *  300 = radius reaches ~6 around score ~7K (gradual early growth). */
 export const SNAKE_RADIUS_GROWTH_OFFSET_1 = 300;
 
-/** Primary radius growth rate: handles 0→~100K (gradual, balanced).
- *  Score 0→3  |  100→3.5  |  1K→5.6  |  10K→9.2  |  100K→12.9 */
-export const SNAKE_RADIUS_GROWTH_RATE_1 = 1.75;
+/** Primary radius growth rate: handles 0→~100K.
+ *  Fitted so radius ≈ 13.6 at score 25K.
+ *  Score 0→3  |  100→3.7  |  500→5.3  |  1K→6.5  |  5K→9.8  |  10K→11.4  |  25K→13.6  |  50K→15.4  |  100K→17.2  |  1M→23.7  |  10M→30.6 */
+export const SNAKE_RADIUS_GROWTH_RATE_1 = 2.36;
 
 /** Dual-log radius growth — secondary curve adds extra thickness at high scores (50K+).
  *  100,000 offset = this term is negligible below 10K, meaningful at 100K+. */
