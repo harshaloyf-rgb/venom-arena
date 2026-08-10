@@ -9,7 +9,7 @@
 
 import type { Snake } from './types';
 import { SpatialHash, type SpatialEntity } from './spatial-hash';
-import { SPAWN_PROTECTION_MS, HEAD_ON_HEAD_BOOST_WINS, SNAKE_RADIUS, NECK_PROTECTION } from './config';
+import { SPAWN_PROTECTION_MS, HEAD_ON_HEAD_BOOST_WINS, SNAKE_RADIUS } from './config';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -129,8 +129,6 @@ export function checkCollisions(
   const scratch = _scratch;
 
   // ── Build body spatial hash (broad phase) ──
-  // Skip first NECK_PROTECTION body points to avoid false broad-phase matches
-  // near the head area. These are handled by head-on-head collision instead.
   bodyHash.clear();
   scratch.radius = SNAKE_RADIUS;
   for (const [, snake] of snakes) {
@@ -138,7 +136,7 @@ export function checkCollisions(
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
     const len = snake.path.length;
     scratch.id = snake.id;
-    for (let i = 1 + NECK_PROTECTION; i < len; i++) {
+    for (let i = 1; i < len; i++) {
       scratch.x = snake.path.getX(i);
       scratch.y = snake.path.getY(i);
       bodyHash.insert(scratch);
@@ -187,17 +185,13 @@ export function checkCollisions(
       // Narrow phase: check if head movement line touches ANY body segment.
       // Uses 3 sampled points along the movement line (start, mid, end) to
       // catch: line crossing, proximity, and both-sides-moving scenarios.
-      // Skip first NECK_PROTECTION segments to avoid false positives from the
-      // neck area (head-to-neck). The neck segments are too close to the head
-      // and cause unfair deaths when snakes pass near each other.
       const BODY_HIT_DIST_SQ = 4; // 2px — reliable touch threshold
       const len = otherSnake.path.length;
       let hit = false;
       // Midpoint of movement line
       const midX = (prevDot.x + dot.x) * 0.5;
       const midY = (prevDot.y + dot.y) * 0.5;
-      const neckSkip = NECK_PROTECTION;
-      for (let j = neckSkip; j < len - 1; j++) {
+      for (let j = 0; j < len - 1; j++) {
         const sx = otherSnake.path.getX(j);
         const sy = otherSnake.path.getY(j);
         const ex = otherSnake.path.getX(j + 1);
