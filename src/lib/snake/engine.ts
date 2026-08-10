@@ -5,7 +5,6 @@
 import type {
   GameState, InputState, FoodOrb, Snake, SkinRarity, FoodSize,
 } from './types';
-import type { IPathBuffer } from './pool';
 import { PathBuffer } from './pool';
 import { SpatialHash, type SpatialEntity } from './spatial-hash';
 import { checkCollisions, type KillEvent } from './collision';
@@ -51,9 +50,6 @@ export interface PlayerSkinOverride {
   animation?: any;
   rarity: SkinRarity;
 }
-
-/** Re-export KillEvent from shared collision for backward compat */
-export type { KillEvent } from './collision';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

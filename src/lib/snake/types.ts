@@ -4,14 +4,6 @@
 
 import type { IPathBuffer } from './pool';
 
-// ─── Geometry ───────────────────────────────────────────────────────────────
-
-/** 2D vector (lightweight, for non-hot-path use) */
-export interface Vec2 {
-  x: number;
-  y: number;
-}
-
 /** Camera state for rendering */
 export interface Camera {
   x: number;

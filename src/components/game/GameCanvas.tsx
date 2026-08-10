@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Zap, CircleDot } from 'lucide-react';
 import { createExtractionState, updateExtractionProgress, drawExtractRing } from '@/lib/snake/extraction';
 import { createInitialState, gameTick, respawnPlayer, initBots, type PlayerSkinOverride } from '@/lib/snake/engine';
-import { createCamera, updateCamera, getViewport, worldToScreen } from '@/lib/snake/camera';
+import { createCamera, updateCamera, getViewport } from '@/lib/snake/camera';
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, registerSkinAsset } from '@/lib/snake/skin-registry';
 import { type GameState, type Camera, type Viewport, FIXED_DT } from '@/lib/snake';

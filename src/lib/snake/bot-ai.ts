@@ -15,7 +15,7 @@
 // ============================================================================
 
 import type { GameState, Snake, FoodOrb } from './types';
-import { BASE_SPEED, SPAWN_RADIUS, INITIAL_SPAWN_RADIUS, BOOST_MIN_SCORE, SNAKE_RADIUS } from './config';
+import { BASE_SPEED, SPAWN_RADIUS, INITIAL_SPAWN_RADIUS } from './config';
 
 // ─── Bot Types ──────────────────────────────────────────────────────────────
 

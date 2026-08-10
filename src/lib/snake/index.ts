@@ -3,7 +3,6 @@
 
 export * from './config';
 export * from './types';
-export * from './vec2';
 export * from './pool';
 export * from './spatial-hash';
 export * from './collision';
