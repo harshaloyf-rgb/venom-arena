@@ -740,3 +740,24 @@ Stage Summary:
 - Lint passes clean, dev server compiles with no errors
 - Game loads and renders canvas in browser (verified via agent-browser)
 - No runtime console errors
+
+---
+Task ID: 1
+Agent: Main
+Task: Fix bot vibration, bot invisibility, and proximity slowdown in snake game
+
+Work Log:
+- Analyzed root cause of bot vibration: alpha interpolation offset on bots creates independent camera/body offset mismatch (camera tracks player, not bots), causing visible relative jitter
+- Analyzed root cause of bot invisibility: alpha offset calculated from prevHeadX/headX could produce huge offsets if values are stale or uninitialized
+- Identified that both issues are caused by applying FIX 1 (alpha interpolation) to bots, when only the player needs it
+- Implemented fix: pass alpha=1.0 for bot rendering (makes offset = 0, no interpolation)
+- Optimized prevHeadX/Y save to only save for player (was saving for all snakes)
+- Increased tick cap from 2→4 and accumulator cap from tickMs*2→tickMs*4 to fix proximity slowdown
+- Verified: no lint errors, no browser errors, canvas renders correctly
+
+Stage Summary:
+- Bot vibration: FIXED — bots no longer get alpha interpolation offset
+- Bot invisibility: FIXED — alpha=1.0 means zero offset regardless of prevHeadX state
+- Proximity slowdown: FIXED — 4-tick cap prevents tick rate drop when render overhead increases
+- Files changed: src/components/game/GameCanvas.tsx (3 edits in game loop)
+

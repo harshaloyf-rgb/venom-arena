@@ -239,8 +239,9 @@ export default function GameCanvas({
       // GAME LOOP — full local simulation with P0 render interpolation
       // ────────────────────────────────────────────────────────────────────
 
-      // Fixed timestep — CAP TO 2 TICKS PER FRAME.
-      // P0: Before any tick, save prevHead for ALL snakes for interpolation.
+      // Fixed timestep — CAP TO 4 TICKS PER FRAME.
+      // Increased from 2→4 to prevent effective tick rate drop when render
+      // overhead increases (more visible bots → longer frames → fewer ticks).
       if (lastTimeRef.current === 0) {
         lastTimeRef.current = timestamp;
       }
@@ -249,23 +250,21 @@ export default function GameCanvas({
       accumulatorRef.current += elapsed;
 
       const tickMs = FIXED_DT * 1000;
-      const maxAccum = tickMs * 2;
+      const maxAccum = tickMs * 4;
       if (accumulatorRef.current > maxAccum) accumulatorRef.current = maxAccum;
 
       let ticksThisFrame = 0;
 
-      // P0: Save prevHeadX/Y BEFORE any ticks run (for render interpolation).
-      // moveSnake() overwrites these per-tick, so we snapshot BEFORE the loop.
+      // P0: Save prevHeadX/Y for the PLAYER only (for render interpolation).
+      // Bots do NOT get alpha interpolation — only the player snake needs it
+      // because the camera tracks the player. Applying alpha to bots causes
+      // vibration (camera and body offset are independent → relative jitter).
       const player = gameState.player;
       if (player && player.alive) {
-        for (const [, s] of gameState.snakes) {
-          if (s.alive) {
-            s.prevHeadX = s.path.headX;
-            s.prevHeadY = s.path.headY;
-          }
-        }
+        player.prevHeadX = player.path.headX;
+        player.prevHeadY = player.path.headY;
       }
-      while (accumulatorRef.current >= tickMs && ticksThisFrame < 2) {
+      while (accumulatorRef.current >= tickMs && ticksThisFrame < 4) {
         const killEvents = gameTick(gameState, inputState, FIXED_DT);
         accumulatorRef.current -= tickMs;
 
@@ -329,7 +328,10 @@ export default function GameCanvas({
           if (s.path.headX < bvl || s.path.headX > bvr ||
               s.path.headY < bvt || s.path.headY > bvb) continue;
           const coiled = makeCoiledPath(s.path);
-          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, alpha, coiled);
+          // Bots: alpha=1.0 (no interpolation offset). The camera tracks
+          // the player, not bots — applying alpha to bots creates independent
+          // body/camera offsets that cause visible vibration.
+          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, 1.0, coiled);
         }
       }
       if (gameState.player && gameState.player.alive) {
