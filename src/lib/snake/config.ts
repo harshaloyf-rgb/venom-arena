@@ -52,13 +52,13 @@ export const START_LENGTH = 15;
 /** Logarithmic body length growth — same pattern as bodyRadius.
  *  Formula: length = START_LENGTH + RATE × ln(1 + score / OFFSET)
  *  No hard cap — naturally flattens but ALWAYS grows (different scores = different lengths).
- *  Fitted to checkpoints: 0→15 | 1K→100 | 10K→288 | 50K→451 | 100K→523 | 1M→764 */
-export const LENGTH_GROWTH_RATE = 52.5;
+ *  Fitted to checkpoints: 0→15 | 1K→26 | 10K→49 | 100K→79 | 1M→109 | 10M→139 */
+export const LENGTH_GROWTH_RATE = 13.125;
 export const LENGTH_GROWTH_OFFSET = 800;
 
 /** Compute visual body length (segments) from score using logarithmic growth.
  *  Same structure as computeBodyRadius — fast early, flattens at high scores, no cap.
- *  Score 0→15 | 100→27 | 500→66 | 1K→100 | 5K→223 | 10K→288 | 50K→451 | 100K→523 | 1M→764 */
+ *  Score 0→15 | 100→17 | 500→30 | 1K→26 | 10K→49 | 100K→79 | 1M→109 | 10M→139 */
 export function computeBodyLength(score: number): number {
   return Math.floor(START_LENGTH + LENGTH_GROWTH_RATE * Math.log(1 + score / LENGTH_GROWTH_OFFSET));
 }
@@ -66,7 +66,7 @@ export function computeBodyLength(score: number): number {
 /** Compute visual body radius from score using logarithmic growth curve.
  *  NO HARD CAP — grows indefinitely (logarithmically) with score.
  *  Visual-only: collision radius stays constant at SNAKE_RADIUS (fairness).
- *  Score 0→6  |  100→9  |  500→12  |  1K→13.4  |  10K→18.4  |  100K→23.3  |  1M→31  |  10M→39 */
+ *  Score 0→6  |  100→6.6  |  1K→7.4  |  10K→8.3  |  100K→9.3  |  1M→10.2  |  10M→11.3 */
 export function computeBodyRadius(score: number): number {
   return SNAKE_RADIUS_MIN + SNAKE_RADIUS_GROWTH_RATE * Math.log(1 + score / SNAKE_RADIUS_GROWTH_OFFSET);
 }
@@ -130,9 +130,9 @@ export const SNAKE_RADIUS_MIN = 6;
 export const SNAKE_RADIUS_GROWTH_OFFSET = 100 / 3; // ≈ 33.333
 
 /** Radius growth rate: logarithmic curve coefficient.
- *  Formula: radius = 6 + 1.623 × ln(1 + score / 33.333)
- *  Score 0→6  |  100→9  |  500→12  |  1K→13.4  |  10K→18.4  |  100K→23.3  |  300K→25.7 */
-export const SNAKE_RADIUS_GROWTH_RATE = 2.25 / Math.log(4); // ≈ 1.623
+ *  Formula: radius = 6 + 0.406 × ln(1 + score / 33.333)
+ *  Score 0→6  |  100→6.6  |  1K→7.4  |  10K→8.3  |  100K→9.3  |  1M→10.2  |  10M→11.3 */
+export const SNAKE_RADIUS_GROWTH_RATE = 0.25 * 2.25 / Math.log(4); // ≈ 0.406 (75% reduced growth)
 
 /** First N segments of a snake's body that cannot kill on collision */
 export const NECK_PROTECTION = 5;
