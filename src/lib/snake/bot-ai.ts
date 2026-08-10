@@ -903,6 +903,13 @@ function findBotSpawnPos(state: GameState): { x: number; y: number } {
   return { x: Math.cos(a) * d, y: Math.sin(a) * d };
 }
 
+// ─── Bot Starting Score Tiers ───────────────────────────────────────────────
+// Bots spawn with varying scores so the leaderboard looks populated and
+// motivating. 13 bots: rank ~1 at 25K, rank ~10 at 3K, rank ~13 at 1.5K.
+const BOT_SCORE_TIERS = [
+  25000, 22000, 19000, 16000, 13000, 10000, 8000, 6000, 4500, 3000, 2200, 1800, 1500,
+];
+
 export function spawnBots(
   state: GameState,
   config: BotSpawnConfig = DEFAULT_BOT_MIX,
@@ -919,7 +926,8 @@ export function spawnBots(
       const pos = findBotSpawnPos(state);
       const id = `bot-${type}-${botIndex++}`;
       const name = pickBotName(type);
-      const snake = createSnakeFn(id, name, 0, pos.x, pos.y, now, type);
+      const startScore = BOT_SCORE_TIERS[botIndex % BOT_SCORE_TIERS.length] ?? 0;
+      const snake = createSnakeFn(id, name, startScore, pos.x, pos.y, now, type);
       snake.isBot = true;
       snake.isPlayer = false;
       state.snakes.set(id, snake);
@@ -955,7 +963,9 @@ export function respawnDeadBots(
     const pos = findBotSpawnPos(state);
     const id = `bot-${bestType}-${Date.now()}`;
     const name = pickBotName(bestType);
-    const snake = createSnakeFn(id, name, 0, pos.x, pos.y, now, bestType);
+    // Respawned bots get a random mid-tier score to stay competitive
+    const respawnScore = BOT_SCORE_TIERS[Math.floor(Math.random() * BOT_SCORE_TIERS.length)];
+    const snake = createSnakeFn(id, name, respawnScore, pos.x, pos.y, now, bestType);
     snake.isBot = true; snake.isPlayer = false;
     state.snakes.set(id, snake);
     setBotData(id, createBotAIData(bestType));

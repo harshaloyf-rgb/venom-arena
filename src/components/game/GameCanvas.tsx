@@ -9,7 +9,7 @@ import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, registerSkinAsset } from '@/lib/snake/skin-registry';
 import { type GameState, type Camera, type Viewport, FIXED_DT } from '@/lib/snake';
 import { drawDeathOverlay, drawEliminatedBanner, drawControlsHint } from './renderer';
-import { renderSnakeAtlas, renderSnakeFallback } from './render-snake-atlas';
+import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrame, setCachedDpr } from './render-snake-atlas';
 import { cleanupDeadSnakeParticles, renderBackground, renderHUD, drawMouseCursor } from './hud';
 import { InputHandler } from './input';
 import { makeCoiledPath } from './coil-path';
@@ -85,7 +85,7 @@ export default function GameCanvas({
       }
     }
     entries.sort((a, b) => b.score - a.score);
-    setLeaderboard(entries.slice(0, 5));
+    setLeaderboard(entries.slice(0, 10));
   }, []);
 
   // ── Respawn handler ──
@@ -248,7 +248,7 @@ export default function GameCanvas({
       accumulatorRef.current += elapsed;
 
       const tickMs = FIXED_DT * 1000;
-      let maxTicks = 5;
+      let maxTicks = 10;
       while (accumulatorRef.current >= tickMs && maxTicks-- > 0) {
         const killEvents = gameTick(gameState, inputState, FIXED_DT);
         accumulatorRef.current -= tickMs;
@@ -292,19 +292,30 @@ export default function GameCanvas({
       const mouseSY = mousePos?.y;
 
       // ── Render: background ──
+      beginRenderFrame();
+      const dpr = window.devicePixelRatio || 1;
+      setCachedDpr(dpr);
       renderBackground(ctx, gameState, cameraRef.current, viewport, fc.fps, now);
 
       // ── Render snakes: bots use fallback, player uses atlas ──
-      // Apply coil contraction (curvature-based body tightening) for visual effect.
-      // Physics/collision use raw path — this wrapper only affects rendering.
+      // Cull bots BEFORE makeCoiledPath + renderSnakeFallback to skip
+      // expensive walkPathFixedStep for off-screen bots entirely.
+      const bvl = viewport.left - 500;
+      const bvr = viewport.right + 500;
+      const bvt = viewport.top - 500;
+      const bvb = viewport.bottom + 500;
       for (const [, s] of gameState.snakes) {
         if (s.alive && !s.isPlayer) {
-          renderSnakeFallback(ctx, { ...s, path: makeCoiledPath(s.path) }, cameraRef.current, viewport, now);
+          // Early cull: skip if head is far off-screen (500px margin)
+          if (s.path.headX < bvl || s.path.headX > bvr ||
+              s.path.headY < bvt || s.path.headY > bvb) continue;
+          const coiled = makeCoiledPath(s.path);
+          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, coiled);
         }
       }
       if (gameState.player && gameState.player.alive) {
-        const coiledPlayer = { ...gameState.player, path: makeCoiledPath(gameState.player.path) };
-        renderSnakeAtlas(ctx, coiledPlayer, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY);
+        const coiledPlayer = makeCoiledPath(gameState.player.path);
+        renderSnakeAtlas(ctx, gameState.player, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY, undefined, coiledPlayer);
       }
 
       // Extraction progress ring on snake head (shared)
@@ -398,7 +409,7 @@ export default function GameCanvas({
           <div className="text-[9px] text-amber-400 font-bold font-mono text-center leading-tight">{displayHighScore.toLocaleString()} <span className="font-normal opacity-60">score</span></div>
         </div>
         {/* Leaderboard */}
-        <div className="bg-black/50 backdrop-blur-sm rounded-lg p-2">
+        <div className="bg-black/50 backdrop-blur-sm rounded-lg p-2 max-h-72 overflow-y-auto scrollbar-thin">
           <div className="text-[10px] text-white/60 font-mono mb-1 text-center">Leaderboard</div>
           {leaderboard.map((entry, i) => (
             <div

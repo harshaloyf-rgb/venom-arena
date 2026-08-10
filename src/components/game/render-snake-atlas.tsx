@@ -4,12 +4,13 @@
 
 import type { Camera, Snake, Viewport } from '@/lib/snake/types';
 import { SEGMENT_SPACING, SPAWN_PROTECTION_MS, LEGENDARY_GLOW_SIZE, computeBodyLength } from '@/lib/snake/config';
-import { worldToScreen } from '@/lib/snake/camera';
+import { worldToScreen, worldToScreenSnapped } from '@/lib/snake/camera';
 import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
 import { isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
-import { renderEquippedCosmetics, readEquippedCosmetics } from '@/lib/snake/face-cosmetics';
+import { renderEquippedCosmetics, readEquippedCosmetics, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
 import { drawSegmentShape, readCustomSkinState, getSkinVisualProps, getPresetVisualProps, resolveShapeStyle, computeTaperRadius } from '@/components/panels/cosmetics/cosmetics-utils';
+import type { CustomSkinState } from '@/components/panels/cosmetics/cosmetics-types';
 import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-types';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -42,6 +43,82 @@ function getSmoothedMaxSegs(snakeId: string, rawMaxSegs: number): number {
   const smoothed = prev + (rawMaxSegs - prev) * 0.1;
   _smoothSegs.set(snakeId, smoothed);
   return Math.round(smoothed);
+}
+
+// ─── Per-frame caches (avoid localStorage reads every snake) ───────────────
+
+let _frameEquipped: { data: EquippedCosmetics; frame: number } | null = null;
+let _frameCustomSkin: { data: CustomSkinState | null; frame: number } | null = null;
+let _frameCounter = 0;
+
+// ─── Pre-rendered gradient circle cache ────────────────────────────────────
+// Key: "color|r|dpr" → OffscreenCanvas with 3D gradient circle.
+// Avoids creating 700+ createRadialGradient objects per frame for bot segments.
+// drawImage from cached canvas is a GPU-accelerated blit — orders of magnitude
+// faster than gradient creation + fill.
+
+const _circleCache = new Map<string, OffscreenCanvas | HTMLCanvasElement>();
+const _CIRCLE_CACHE_MAX = 64;
+
+function getCachedGradientCircle(color: string, r: number, dpr: number): OffscreenCanvas | HTMLCanvasElement {
+  const key = `${color}|${Math.round(r)}|${dpr}`;
+  let cached = _circleCache.get(key);
+  if (cached) return cached;
+
+  const diameter = Math.ceil(r * 2 * dpr) + 2;
+  const oc = typeof OffscreenCanvas !== 'undefined'
+    ? new OffscreenCanvas(diameter, diameter)
+    : document.createElement('canvas');
+  if (!(oc instanceof OffscreenCanvas)) { (oc as HTMLCanvasElement).width = diameter; (oc as HTMLCanvasElement).height = diameter; }
+
+  const cx = oc.getContext('2d')!;
+  const half = diameter / (2 * dpr);
+  cx.scale(dpr, dpr);
+
+  // 3D radial gradient
+  const grad = cx.createRadialGradient(
+    half - r * 0.3, half - r * 0.3, r * 0.1,
+    half, half, r,
+  );
+  grad.addColorStop(0, lightenHex(color, 0.3));
+  grad.addColorStop(0.5, color);
+  grad.addColorStop(1, darkenHex(color, 0.3));
+  cx.fillStyle = grad;
+  cx.beginPath();
+  cx.arc(half, half, r, 0, Math.PI * 2);
+  cx.fill();
+
+  // Evict old entries if cache is full
+  if (_circleCache.size >= _CIRCLE_CACHE_MAX) {
+    const firstKey = _circleCache.keys().next().value;
+    if (firstKey !== undefined) _circleCache.delete(firstKey);
+  }
+  _circleCache.set(key, oc);
+  return oc;
+}
+
+/** Get device pixel ratio (cached per frame) */
+let _cachedDpr = 1;
+export function setCachedDpr(dpr: number): void { _cachedDpr = dpr; }
+/** Call once at the start of each render frame to invalidate caches. */
+export function beginRenderFrame(): void {
+  _frameCounter++;
+}
+
+/** Cached readEquippedCosmetics — reads localStorage at most once per frame. */
+function getCachedEquipped(): EquippedCosmetics {
+  if (_frameEquipped && _frameEquipped.frame === _frameCounter) return _frameEquipped.data;
+  const data = readEquippedCosmetics();
+  _frameEquipped = { data, frame: _frameCounter };
+  return data;
+}
+
+/** Cached readCustomSkinState — reads localStorage at most once per frame. */
+function getCachedCustomSkinState(): CustomSkinState | null {
+  if (_frameCustomSkin && _frameCustomSkin.frame === _frameCounter) return _frameCustomSkin.data;
+  const data = readCustomSkinState();
+  _frameCustomSkin = { data, frame: _frameCounter };
+  return data;
 }
 
 // ─── Particle type (render-side) ────────────────────────────────────────────
@@ -250,12 +327,17 @@ export function renderSnakeAtlas(
   time: number,
   mouseScreenX?: number,
   mouseScreenY?: number,
+  snap?: boolean,
+  coiledPath?: PathLike,
 ): void {
+  // Use coiled path for body rendering if provided
+  const effectivePath = coiledPath ?? snake.path;
+
   // Skins with custom segments (presets equipped via localStorage or
   // custom-lab-skin) must use the fallback renderer which supports
   // per-segment shape / taper / glow.  The atlas path draws uniform
   // circle sprites and would lose those features.
-  const customState = readCustomSkinState();
+  const customState = getCachedCustomSkinState();
   const hasCustomSegments =
     customState?.useCustomSkin === true &&
     customState.currentSkin === snake.skinId &&
@@ -268,21 +350,21 @@ export function renderSnakeAtlas(
   const presetVisuals = !patternVisuals ? getPresetVisualProps(snake.skinId) : null;
 
   if (snake.skinId === 'custom-lab-skin' || hasCustomSegments || patternVisuals || presetVisuals) {
-    renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY);
+    renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY, snap, effectivePath);
     return;
   }
 
   const atlas = atlasManager.getAtlas(snake.skinId);
   if (!atlas) {
-    renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY);
+    renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY, snap, effectivePath);
     return;
   }
 
-  const pathLen = snake.path.length;
+  const pathLen = effectivePath.length;
   if (pathLen < 2) return;
 
-  const headWx = snake.path.headX;
-  const headWy = snake.path.headY;
+  const headWx = effectivePath.headX;
+  const headWy = effectivePath.headY;
 
   // ── Calculate logical body length (segments) using sqrt growth curve ──
   const logicalLen = computeBodyLength(snake.score);
@@ -369,16 +451,14 @@ export function renderSnakeAtlas(
   }
 
   // ── Walk path at dynamic step (based on radius), capped to maxSegs ──
-  const walked = walkPathFixedStep(snake.path, step, maxSegs, snake.angle);
+  const walked = walkPathFixedStep(effectivePath, step, maxSegs, snake.angle);
 
   // ── BOOST AURA: Full-body glow effect ──
   if (snake.boosting) {
     const boostPulse = 0.15 + 0.1 * Math.sin(time * 0.008);
     ctx.save();
     ctx.globalAlpha = boostPulse;
-    ctx.shadowColor = snake.color;
-    ctx.shadowBlur = 25 * zoom;
-    // Draw a thick line along the body for glow
+    // Draw a thick line along the body for glow (no shadowBlur — too expensive)
     if (walked.count > 1) {
       ctx.strokeStyle = lightenHex(snake.color, 0.4);
       ctx.lineWidth = segRadius * 3;
@@ -437,7 +517,7 @@ export function renderSnakeAtlas(
     const hsy = headScreen.y;
     const headDrawSize = segRadius * 2 * 1.05;
 
-    // Legendary glow underlay
+    // Legendary glow underlay — only for epic/legendary (rare, acceptable cost)
     if (isLegendary) {
       const glowR = headDrawSize / 2 + LEGENDARY_GLOW_SIZE * zoom;
       const intensity = 0.25 + 0.15 * Math.sin(time * 3);
@@ -452,6 +532,48 @@ export function renderSnakeAtlas(
       ctx.arc(hsx, hsy, glowR, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
+    }
+
+    // ── Spawn shield: rotating hexagonal ring that fades out ──
+    const spawnAge2 = time - snake.spawnTime;
+    if (spawnAge2 < SPAWN_PROTECTION_MS) {
+      const t = spawnAge2 / SPAWN_PROTECTION_MS;
+      const shieldAlpha = 1 - t;
+      const shieldR = atlasHeadR * (2.2 + 0.3 * Math.sin(time * 0.006));
+      const rot = time * 0.003;
+      const sides = 6;
+      ctx.save();
+      ctx.globalAlpha = shieldAlpha * 0.6;
+      ctx.strokeStyle = '#00e5ff';
+      ctx.lineWidth = 2 * zoom;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      for (let i = 0; i <= sides; i++) {
+        const a = rot + (i / sides) * Math.PI * 2;
+        const px = hsx + Math.cos(a) * shieldR;
+        const py = hsy + Math.sin(a) * shieldR;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      ctx.globalAlpha = shieldAlpha * 0.15;
+      ctx.fillStyle = '#00e5ff';
+      ctx.fill();
+      ctx.globalAlpha = shieldAlpha * 0.35;
+      ctx.strokeStyle = '#80f0ff';
+      ctx.lineWidth = 1 * zoom;
+      const shieldR2 = shieldR * 0.75;
+      ctx.beginPath();
+      for (let i = 0; i <= sides; i++) {
+        const a = -rot * 1.5 + (i / sides) * Math.PI * 2 + 0.5;
+        const px = hsx + Math.cos(a) * shieldR2;
+        const py = hsy + Math.sin(a) * shieldR2;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+      ctx.globalAlpha = 0.5 + 0.5 * t;
     }
 
     ctx.save();
@@ -476,7 +598,7 @@ export function renderSnakeAtlas(
 
     // Ultra-responsive eyes — track raw mouse position relative to head
     // Skip if a custom eye cosmetic is equipped (it draws its own eyes)
-    const equipped = readEquippedCosmetics();
+    const equipped = getCachedEquipped();
     const hasCustomEyes = equipped.eyes && equipped.eyes !== 'none';
     if (!hasCustomEyes) {
       drawResponsiveEyes(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting, snake.id, time);
@@ -578,13 +700,17 @@ export function renderSnakeFallback(
   now: number,
   mouseScreenX?: number,
   mouseScreenY?: number,
+  snap?: boolean,
+  coiledPath?: PathLike,
 ): void {
-  const path = snake.path;
+  // Choose pixel-snapped or exact world-to-screen conversion
+  const w2s = snap ? worldToScreenSnapped : worldToScreen;
+  const path = coiledPath ?? snake.path;
   const pathLen = path.length;
   if (pathLen < 2) return;
 
   // Read custom skin state once (may contain segments for presets or custom-lab-skin)
-  const customState = readCustomSkinState();
+  const customState = getCachedCustomSkinState();
 
   const headWorldX = path.headX;
   const headWorldY = path.headY;
@@ -611,7 +737,7 @@ export function renderSnakeFallback(
   const vt = viewport.top - 20;
   const vb = viewport.bottom + 20;
 
-  const headScreen = worldToScreen(headWorldX, headWorldY, camera, cw, ch);
+  const headScreen = w2s(headWorldX, headWorldY, camera, cw, ch);
   const headVisible = headWorldX >= vl && headWorldX <= vr && headWorldY >= vt && headWorldY <= vb;
 
   // ── Spawn shield: rotating hexagonal ring that fades out ──
@@ -664,8 +790,7 @@ export function renderSnakeFallback(
     const boostPulse = 0.15 + 0.1 * Math.sin(now * 0.008);
     ctx.save();
     ctx.globalAlpha = boostPulse;
-    ctx.shadowColor = snake.color;
-    ctx.shadowBlur = segRadius * 3;
+    // No shadowBlur — too expensive with many segments
     if (walked.count > 1) {
       ctx.strokeStyle = lightenHex(snake.color, 0.4);
       ctx.lineWidth = segRadius * 3;
@@ -674,10 +799,10 @@ export function renderSnakeFallback(
       ctx.beginPath();
       const s0x = walked.xs[walked.count - 1];
       const s0y = walked.ys[walked.count - 1];
-      const scr0 = worldToScreen(s0x, s0y, camera, cw, ch);
+      const scr0 = w2s(s0x, s0y, camera, cw, ch);
       ctx.moveTo(scr0.x, scr0.y);
       for (let i = walked.count - 2; i >= 0; i--) {
-        const scr = worldToScreen(walked.xs[i], walked.ys[i], camera, cw, ch);
+        const scr = w2s(walked.xs[i], walked.ys[i], camera, cw, ch);
         ctx.lineTo(scr.x, scr.y);
       }
       ctx.stroke();
@@ -704,11 +829,9 @@ export function renderSnakeFallback(
   // This lets bots and players with preset skins render with proper shapes/taper/glow
   const presetVis = !patternVis ? getPresetVisualProps(snake.skinId) : null;
 
-  // Drop shadow under the whole snake body
-  ctx.save();
-  ctx.shadowColor = 'rgba(0,0,0,0.3)';
-  ctx.shadowBlur = segRadius * 0.8;
-  ctx.shadowOffsetY = segRadius * 0.3;
+  // No drop shadow — shadowBlur on every segment was causing massive
+  // frame drops (650+ blurred fills/frame). The 3D gradient already
+  // provides depth without the performance cost.
 
   if (customSegments) {
     // Detect stale first-segment override: if index 0 has a different sizeScale
@@ -730,7 +853,7 @@ export function renderSnakeFallback(
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-      const scr = worldToScreen(wx, wy, camera, cw, ch);
+      const scr = w2s(wx, wy, camera, cw, ch);
       const seg = segs[i % segs.length];
       const taperedR = segRadius * seg.sizeScale;
       const segAngle = walked.angles[i];
@@ -746,7 +869,7 @@ export function renderSnakeFallback(
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-      const scr = worldToScreen(wx, wy, camera, cw, ch);
+      const scr = w2s(wx, wy, camera, cw, ch);
       const segAngle = walked.angles[i];
       const segColor = pColors[i % pColors.length] ?? snake.color;
       const segShape = resolveShapeStyle(pBodyStyle, i);
@@ -763,7 +886,7 @@ export function renderSnakeFallback(
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-      const scr = worldToScreen(wx, wy, camera, cw, ch);
+      const scr = w2s(wx, wy, camera, cw, ch);
       const segAngle = walked.angles[i];
       const segColor = pColors[i % pColors.length] ?? snake.color;
       const segShape = resolveShapeStyle(pBodyStyle, i);
@@ -771,42 +894,46 @@ export function renderSnakeFallback(
       drawSegmentShape(ctx, scr.x, scr.y, taperedR, segAngle, segShape, segColor, pGlow);
     }
   } else if (multiColor) {
-    // Per-segment color: draw each one individually with 3D gradient
+    // Per-segment color: batch circles by color to minimize fillStyle changes.
+    // Groups segments by their color, then draws each group as a single path.
+    const colorGroups = new Map<string, number[]>();
     for (let i = walked.count - 1; i >= 0; i--) {
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-      const scr = worldToScreen(wx, wy, camera, cw, ch);
+      const scr = w2s(wx, wy, camera, cw, ch);
       const segColor = getSegmentColor(snake.skinId, i) ?? snake.color;
-      const grad = ctx.createRadialGradient(scr.x - segRadius * 0.3, scr.y - segRadius * 0.3, segRadius * 0.1, scr.x, scr.y, segRadius);
-      grad.addColorStop(0, lightenHex(segColor, 0.3));
-      grad.addColorStop(0.5, segColor);
-      grad.addColorStop(1, darkenHex(segColor, 0.3));
-      ctx.fillStyle = grad;
+      let group = colorGroups.get(segColor);
+      if (!group) { group = []; colorGroups.set(segColor, group); }
+      group.push(scr.x, scr.y);
+    }
+    for (const [color, coords] of colorGroups) {
+      ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(scr.x, scr.y, segRadius, 0, Math.PI * 2);
+      for (let j = 0; j < coords.length; j += 2) {
+        const sx = coords[j]; const sy = coords[j + 1];
+        ctx.moveTo(sx + segRadius, sy);
+        ctx.arc(sx, sy, segRadius, 0, Math.PI * 2);
+      }
       ctx.fill();
     }
   } else {
-    // Per-segment 3D radial gradient (each segment needs its own gradient)
+    // BATCHED FLAT CIRCLES — 1 fill() call instead of 200+ drawImage calls.
+    // This is the #1 performance optimization: eliminates per-segment OffscreenCanvas
+    // lookup and GPU blit overhead. For bots (non-player), flat circles look clean
+    // and the 3D gradient is not perceptible at small sizes anyway.
+    ctx.fillStyle = snake.color;
+    ctx.beginPath();
     for (let i = walked.count - 1; i >= 0; i--) {
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-      const scr = worldToScreen(wx, wy, camera, cw, ch);
-      const grad = ctx.createRadialGradient(scr.x - segRadius * 0.3, scr.y - segRadius * 0.3, segRadius * 0.1, scr.x, scr.y, segRadius);
-      grad.addColorStop(0, lightenHex(snake.color, 0.3));
-      grad.addColorStop(0.5, snake.color);
-      grad.addColorStop(1, darkenHex(snake.color, 0.3));
-      ctx.fillStyle = grad;
-      ctx.beginPath();
+      const scr = w2s(wx, wy, camera, cw, ch);
+      ctx.moveTo(scr.x + segRadius, scr.y);
       ctx.arc(scr.x, scr.y, segRadius, 0, Math.PI * 2);
-      ctx.fill();
     }
+    ctx.fill();
   }
-
-  // Reset shadow after drawing body
-  ctx.restore();
 
   // ── Head ──
   // Detect uniform taper: head matches body size when everything is uniform
@@ -824,22 +951,24 @@ export function renderSnakeFallback(
     // For pattern/preset skins, use the primary color for the head
     const visProps = patternVis || presetVis;
     const effectiveHeadColor = visProps ? (visProps.colors[0] ?? snake.headColor) : snake.headColor;
-    // 3D head gradient
-    const headGrad = ctx.createRadialGradient(headScreen.x - headRadius * 0.3, headScreen.y - headRadius * 0.3, headRadius * 0.05, headScreen.x, headScreen.y, headRadius);
-    headGrad.addColorStop(0, lightenHex(effectiveHeadColor, 0.35));
-    headGrad.addColorStop(0.55, effectiveHeadColor);
-    headGrad.addColorStop(1, darkenHex(effectiveHeadColor, 0.35));
-    ctx.fillStyle = headGrad;
-    ctx.beginPath();
-    ctx.arc(headScreen.x, headScreen.y, headRadius, 0, Math.PI * 2);
-    ctx.fill();
+    // Flat head circle — much cheaper than drawImage for bots.
+    // Gradient only for pattern/preset skins (rare for bots).
+    if (visProps) {
+      const headCircle = getCachedGradientCircle(effectiveHeadColor, headRadius, _cachedDpr);
+      ctx.drawImage(headCircle, headScreen.x - headRadius, headScreen.y - headRadius, headRadius * 2, headRadius * 2);
+    } else {
+      ctx.fillStyle = effectiveHeadColor;
+      ctx.beginPath();
+      ctx.arc(headScreen.x, headScreen.y, headRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // Direction pointer — thin line extending far ahead, shows where snake is steering
     drawDirectionPointer(ctx, snake.id, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting);
 
     // Responsive eyes — track raw mouse position relative to head
     // Skip if a custom eye cosmetic is equipped (it draws its own eyes)
-    const eq2 = readEquippedCosmetics();
+    const eq2 = getCachedEquipped();
     const hasCustomEyes2 = eq2.eyes && eq2.eyes !== 'none';
     if (!hasCustomEyes2) {
       drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting, snake.id, now);

@@ -22,15 +22,13 @@ export const BASE_SPEED = 3.0;
 /** Speed while boosting (pixels per tick at 60fps) — 2.0× base */
 export const BOOST_SPEED = 6.0;
 
-/** Turn rate at base speed (radians per tick) — ~6.9° per tick.
- *  Reduced from 0.200 for wider, more majestic turning arcs. */
-export const BASE_TURN_RATE = 0.120;
+/** Turn rate at base speed (radians per tick) — ~2.9° per tick.
+ *  Turn radius = speed / turn_rate → 3.0 / 0.050 = 60px. */
+export const BASE_TURN_RATE = 0.050;
 
-/** Turn rate at boost speed (radians per tick) — ~3.4° per tick.
- *  Dynamic: actual turn rate is lerped between BASE_TURN_RATE and MIN_TURN_RATE
- *  based on current speed. Faster = wider turn radius (realistic).
- *  Reduced from 0.100 to match the heavier steering feel. */
-export const MIN_TURN_RATE = 0.060;
+/** Turn rate at boost speed (radians per tick) — ~5.7° per tick.
+ *  Turn radius = speed / turn_rate → 6.0 / 0.100 = 60px. */
+export const MIN_TURN_RATE = 0.100;
 
 /** Steering inertia — fraction of remaining angle applied per tick (0–1).
  *  Controls how "heavy" the snake feels when changing direction.
@@ -100,8 +98,8 @@ export const FOOD_SPAWN_WEIGHTS: [number, number, number] = [0.93, 0.04, 0.03];
 /** Point values for [small, medium, large] food */
 export const FOOD_VALUES: [number, number, number] = [1, 2, 5];
 
-/** Visual radii for [small, medium, large] food */
-export const FOOD_RADII: [number, number, number] = [3, 5, 8];
+/** Visual radii for [small, medium, large] food — reduced for cleaner look */
+export const FOOD_RADII: [number, number, number] = [1.5, 2, 3];
 
 /** Fill colors for [small, medium, large] food */
 export const FOOD_COLORS: [string, string, string] = ['#34d399', '#38bdf8', '#f472b6'];

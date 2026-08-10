@@ -3,8 +3,8 @@
 // ============================================================================
 
 import type { Camera, FoodOrb, Viewport } from '@/lib/snake/types';
-import { ARENA_GRID_SIZE } from '@/lib/snake/config';
-import { worldToScreen } from '@/lib/snake/camera';
+import { ARENA_GRID_SIZE, FOOD_COLORS, FOOD_GLOW_COLORS } from '@/lib/snake/config';
+import { worldToScreenSnapped } from '@/lib/snake/camera';
 
 // ==========================================================================
 // Grid
@@ -51,6 +51,15 @@ export function drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, viewport
 // Food
 // ==========================================================================
 
+// Pre-allocated food batching buffers (avoid per-frame array allocation)
+const _fBucketXs: number[][] = [[], [], []];
+const _fBucketYs: number[][] = [[], [], []];
+const _fBucketRs: number[][] = [[], [], []];
+const _fGlowXs: number[] = [];
+const _fGlowYs: number[] = [];
+const _fGlowRs: number[] = [];
+const _fGlowCI: number[] = [];
+
 export function drawFood(
   ctx: CanvasRenderingContext2D,
   foods: FoodOrb[],
@@ -61,6 +70,16 @@ export function drawFood(
   const cw = viewport.width;
   const ch = viewport.height;
 
+  // Two-pass: collect visible food by color bucket (3 colors),
+  // then draw each bucket as a single batched path.
+  // This reduces fillStyle changes from 200+ to ~3.
+  const bucketXs = _fBucketXs; const bucketYs = _fBucketYs; const bucketRs = _fBucketRs;
+  bucketXs[0].length = 0; bucketXs[1].length = 0; bucketXs[2].length = 0;
+  bucketYs[0].length = 0; bucketYs[1].length = 0; bucketYs[2].length = 0;
+  bucketRs[0].length = 0; bucketRs[1].length = 0; bucketRs[2].length = 0;
+  const glowXs = _fGlowXs; const glowYs = _fGlowYs; const glowRs = _fGlowRs; const glowCI = _fGlowCI;
+  glowXs.length = 0; glowYs.length = 0; glowRs.length = 0; glowCI.length = 0;
+
   for (let i = 0; i < foods.length; i++) {
     const f = foods[i];
 
@@ -68,37 +87,58 @@ export function drawFood(
     if (f.x < viewport.left - 20 || f.x > viewport.right + 20) continue;
     if (f.y < viewport.top - 20 || f.y > viewport.bottom + 20) continue;
 
-    const { x: sx, y: sy } = worldToScreen(f.x, f.y, camera, cw, ch);
+    const { x: sx, y: sy } = worldToScreenSnapped(f.x, f.y, camera, cw, ch);
     const baseR = f.radius * zoom;
-
-    // Magnetized food shrinks to 1/3 size
     const r = f.magnetized ? baseR / 3 : baseR;
-
     if (r < 0.5) continue;
 
-    if (f.magnetized) {
-      // Magnetized food: subtle glow ring (also shrinks)
-      ctx.globalAlpha = 0.4;
-      ctx.strokeStyle = f.glowColor;
-      ctx.lineWidth = 1.0 * zoom;
-      ctx.beginPath();
-      ctx.arc(sx, sy, r * 1.8, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    } else if (baseR > 2) {
-      // Normal glow
-      ctx.globalAlpha = 0.3;
-      ctx.fillStyle = f.glowColor;
-      ctx.beginPath();
-      ctx.arc(sx, sy, baseR * 2.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
+    // Bucket index: 0=small(green), 1=medium(blue), 2=large(pink)
+    const bi = f.size === 'small' ? 0 : f.size === 'medium' ? 1 : 2;
+    bucketXs[bi].push(sx);
+    bucketYs[bi].push(sy);
+    bucketRs[bi].push(r);
 
-    // Circle — always keeps its natural color
-    ctx.fillStyle = f.color;
+    if (f.magnetized) {
+      glowXs.push(sx);
+      glowYs.push(sy);
+      glowRs.push(r * 1.8);
+      glowCI.push(bi);
+    }
+  }
+
+  // Draw magnetized glow rings first (behind food)
+  if (glowXs.length > 0) {
+    ctx.globalAlpha = 0.4;
+    ctx.lineWidth = 1.0 * zoom;
+    for (let ci = 0; ci < 3; ci++) {
+      let hasAny = false;
+      for (let j = 0; j < glowXs.length; j++) {
+        if (glowCI[j] !== ci) continue;
+        if (!hasAny) {
+          ctx.strokeStyle = FOOD_GLOW_COLORS[ci];
+          ctx.beginPath();
+          hasAny = true;
+        }
+        ctx.moveTo(glowXs[j] + glowRs[j], glowYs[j]);
+        ctx.arc(glowXs[j], glowYs[j], glowRs[j], 0, Math.PI * 2);
+      }
+      if (hasAny) ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Draw food circles (batched by color)
+  for (let bi = 0; bi < 3; bi++) {
+    const xs = bucketXs[bi];
+    if (xs.length === 0) continue;
+    ctx.fillStyle = FOOD_COLORS[bi];
     ctx.beginPath();
-    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    const ys = bucketYs[bi];
+    const rs = bucketRs[bi];
+    for (let j = 0; j < xs.length; j++) {
+      ctx.moveTo(xs[j] + rs[j], ys[j]);
+      ctx.arc(xs[j], ys[j], rs[j], 0, Math.PI * 2);
+    }
     ctx.fill();
   }
 }
