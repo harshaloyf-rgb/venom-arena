@@ -283,7 +283,7 @@ export function checkCollisions(
     // Broad phase: find which snakes have body near this head
     const nearX = (hcx + prevHcx) * 0.5;
     const nearY = (hcy + prevHcy) * 0.5;
-    const nearby = bodyHash.query(nearX, nearY, SNAKE_RADIUS * 8);
+    const nearby = bodyHash.query(nearX, nearY, SNAKE_RADIUS * 6);
     const checkedSnakes = new Set<string>();
 
     for (let i = 0; i < nearby.length; i++) {

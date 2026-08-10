@@ -335,13 +335,14 @@ export default function GameCanvas({
           // know heading per-axis, use the full margin in all directions.
           if (s.path.headX < viewport.left - margin || s.path.headX > viewport.right + margin ||
               s.path.headY < viewport.top - margin || s.path.headY > viewport.bottom + margin) continue;
-          // Bots: skip coiled path entirely (render perf) — use raw path.
+          // Bots use the same render alpha as the player for smooth
+          // interpolation between ticks (prevents stop-and-go stutter).
           // P8: Compute distance from camera for LOD (0=near, 1=far)
           const dx = s.path.headX - camX;
           const dy = s.path.headY - camY;
           const distFromCam = Math.sqrt(dx * dx + dy * dy);
           const lodFar = distFromCam > 1500 ? 1 : 0;
-          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, 1.0, undefined, lodFar);
+          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, alpha, undefined, lodFar);
         }
       }
       if (gameState.player && gameState.player.alive) {

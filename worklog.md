@@ -821,3 +821,24 @@ Stage Summary:
 - render-snake-atlas.tsx: removed inner cull, added far-LOD dot-only render, reverted cache interval
 - No changes to collision.ts or GameCanvas.tsx this round
 - All fixes are about RENDERING, not collision logic
+---
+Task ID: 1
+Agent: main
+Task: Fix offline mode crash (headVisible TDZ), bot smoothness, and collision safety
+
+Work Log:
+- Diagnosed ReferenceError: `headVisible` used on line 798 but declared on line 826 (temporal dead zone with const)
+- Also `headScreen` used on line 801 but declared on line 825
+- Root cause: the FAR LOD block (isFar check) was placed BEFORE the viewport bounds and headScreen/headVisible declarations
+- Fix: Moved viewport bounds (vl/vr/vt/vb) computation before the isFar check, made FAR LOD use its own inline w2s call instead of depending on w2sOff/headScreen
+- Diagnosed bot stutter: bots rendered with alpha=1.0 (no interpolation) while player got smooth alpha interpolation
+- Fix: Changed bot renderSnakeFallback call to pass actual alpha instead of hardcoded 1.0
+- Reduced collision query radius from SNAKE_RADIUS*8 back to SNAKE_RADIUS*6 (safety)
+- BOT_WALK_CACHE_INTERVAL confirmed at 1 (already correct)
+- Browser E2E verified: offline mode loads, snakes render (green/purple/cyan pixels detected), zero JS errors, zero dev log errors
+
+Stage Summary:
+- Fixed 3 files: render-snake-atlas.tsx (TDZ), GameCanvas.tsx (alpha), collision.ts (query radius)
+- Offline mode now works: no crash, snakes visible, bots smoothly interpolated
+- Bot movement no longer stutters — render-time alpha interpolation applied to bots
+- Head-body segment gaps eliminated — caused by lack of interpolation (body frozen between ticks while head moved)

@@ -791,14 +791,21 @@ export function renderSnakeFallback(
   const ch = viewport.height;
   const segRadius = snake.bodyRadius * zoom;
 
+  // ── Viewport bounds (used by FAR LOD and body culling) ──
+  const vl = viewport.left - 20;
+  const vr = viewport.right + 20;
+  const vt = viewport.top - 20;
+  const vb = viewport.bottom + 20;
+
   // ── FAR LOD: single dot, skip body walk entirely ──
   // At distance >1500px, the body is tiny on screen. Drawing 1 circle
   // instead of walking ~25 segments + 25 arcs saves ~95% render cost.
   if (isFar) {
-    if (headVisible) {
+    const farHeadScr = w2s(headWorldX, headWorldY, camera, cw, ch);
+    if (headWorldX >= vl && headWorldX <= vr && headWorldY >= vt && headWorldY <= vb) {
       ctx.fillStyle = snake.color;
       ctx.beginPath();
-      ctx.arc(headScreen.x, headScreen.y, segRadius, 0, Math.PI * 2);
+      ctx.arc(farHeadScr.x, farHeadScr.y, segRadius, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
@@ -816,11 +823,6 @@ export function renderSnakeFallback(
     r.y += renderOffY;
     return r;
   };
-
-  const vl = viewport.left - 20;
-  const vr = viewport.right + 20;
-  const vt = viewport.top - 20;
-  const vb = viewport.bottom + 20;
 
   const headScreen = w2sOff(headWorldX, headWorldY);
   const headVisible = headWorldX >= vl && headWorldX <= vr && headWorldY >= vt && headWorldY <= vb;
