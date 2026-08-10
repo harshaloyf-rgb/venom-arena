@@ -3,9 +3,10 @@ import type {
   CustomSegment,
   CustomSkinState,
   SegShape,
+  SlitherPreset,
   TaperStyle,
 } from './cosmetics-types';
-import { CUSTOM_SKIN_KEY } from './cosmetics-types';
+import { CUSTOM_SKIN_KEY, SLITHER_PRESETS } from './cosmetics-types';
 import { ALL_COSMETICS, PASS_FREE_COSMETICS, PASS_ELITE_COSMETICS } from '@/lib/game-config';
 import type { SkinPattern } from '@/lib/game-config';
 
@@ -263,6 +264,28 @@ export function getSkinVisualProps(skinId: string): SkinVisualProps | null {
 
   const { bodyStyle, taperStyle, glow } = mapPatternToVisuals(pattern);
   return { colors, bodyStyle, taperStyle, glow };
+}
+
+/** Build a flat lookup: skinId → SlitherPreset for fast preset resolution */
+const presetLookupMap = new Map<string, SlitherPreset>();
+for (const p of SLITHER_PRESETS) {
+  presetLookupMap.set(p.id, p);
+}
+
+/**
+ * Get visual props for a preset skin by its ID (e.g. 'preset-fish', 'preset-lion').
+ * Returns null if the skinId is not a known preset.
+ * Used by the fallback renderer to draw bots with their preset shapes/taper/glow/colors.
+ */
+export function getPresetVisualProps(skinId: string): SkinVisualProps | null {
+  const preset = presetLookupMap.get(skinId);
+  if (!preset) return null;
+  return {
+    colors: preset.colors,
+    bodyStyle: preset.shape,
+    taperStyle: preset.taper,
+    glow: preset.glow,
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -442,3 +442,28 @@ Stage Summary:
 - render-snake-atlas.tsx: drawCollisionChain re-commented
 - GameCanvas.tsx: old debug dots removed
 
+---
+Task ID: 2-a
+Agent: main
+Task: Reduce head size 30%→5%, fix bot preset skins, fix collision neck protection
+
+Work Log:
+- Changed head size multiplier from 1.3 (30%) to 1.05 (5%) in 3 places in render-snake-atlas.tsx:
+  - Atlas renderer: atlasHeadR and headDrawSize
+  - Fallback renderer: headScale
+- Added getPresetVisualProps() to cosmetics-utils.ts that maps preset IDs (preset-fish, preset-lion, etc.) to SkinVisualProps (colors, bodyStyle, taperStyle, glow)
+- Added presetVis check in renderSnakeFallback so bots with preset skins render with proper shapes/taper/glow instead of plain circles
+- Added presetVisuals check in renderSnakeAtlas so players with preset skins also route to fallback with full visual rendering
+- Fixed head color to use preset's primary color via patternVis || presetVis
+- Fixed isUniformTaper to also check presetVis.taperStyle
+- Applied NECK_PROTECTION (5 segments) in collision.ts:
+  - Body hash insert now starts from i = 1 + NECK_PROTECTION (skips neck points in broad phase)
+  - Narrow phase loop now starts from j = NECK_PROTECTION (skips neck segments)
+  - This prevents false deaths when snakes pass near each other's heads
+- Verified: lint clean, dev server compiles, game loads with zero console errors
+
+Stage Summary:
+- Head visual size reduced from 30% to 5% larger than body
+- Bots now render with full preset skin visuals (dragon scales, crystal shards, armor plates, etc.)
+- Collision false-positive bug fixed: neck segments no longer cause phantom deaths
+- Files changed: render-snake-atlas.tsx, cosmetics-utils.ts, collision.ts

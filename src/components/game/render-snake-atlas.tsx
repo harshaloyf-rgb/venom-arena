@@ -9,7 +9,7 @@ import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
 import { isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
 import { renderEquippedCosmetics, readEquippedCosmetics } from '@/lib/snake/face-cosmetics';
-import { drawSegmentShape, readCustomSkinState, getSkinVisualProps, resolveShapeStyle, computeTaperRadius } from '@/components/panels/cosmetics/cosmetics-utils';
+import { drawSegmentShape, readCustomSkinState, getSkinVisualProps, getPresetVisualProps, resolveShapeStyle, computeTaperRadius } from '@/components/panels/cosmetics/cosmetics-utils';
 import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-types';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -264,7 +264,10 @@ export function renderSnakeAtlas(
   // Pattern-based skins (neon, rainbow, metallic, etc.) need shape-aware rendering
   const patternVisuals = getSkinVisualProps(snake.skinId);
 
-  if (snake.skinId === 'custom-lab-skin' || hasCustomSegments || patternVisuals) {
+  // Preset skins (preset-fish, preset-lion, etc.) need shape-aware rendering too
+  const presetVisuals = !patternVisuals ? getPresetVisualProps(snake.skinId) : null;
+
+  if (snake.skinId === 'custom-lab-skin' || hasCustomSegments || patternVisuals || presetVisuals) {
     renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY);
     return;
   }
@@ -428,11 +431,11 @@ export function renderSnakeAtlas(
   // ── Head ──
   const headVisible = headWx >= vl && headWx <= vr && headWy >= vt && headWy <= vb;
   const headScreen = headVisible ? worldToScreen(headWx, headWy, camera, cw, ch) : null;
-  const atlasHeadR = segRadius * 1.3;
+  const atlasHeadR = segRadius * 1.05;
   if (headVisible && headScreen) {
     const hsx = headScreen.x;
     const hsy = headScreen.y;
-    const headDrawSize = segRadius * 2 * 1.3;
+    const headDrawSize = segRadius * 2 * 1.05;
 
     // Legendary glow underlay
     if (isLegendary) {
@@ -686,6 +689,10 @@ export function renderSnakeFallback(
   // Check for pattern-based visual props (manufactured skins with neon/rainbow/etc.)
   const patternVis = getSkinVisualProps(snake.skinId);
 
+  // Check for preset-based visual props (preset-fish, preset-lion, etc.)
+  // This lets bots and players with preset skins render with proper shapes/taper/glow
+  const presetVis = !patternVis ? getPresetVisualProps(snake.skinId) : null;
+
   // Drop shadow under the whole snake body
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.3)';
@@ -724,6 +731,23 @@ export function renderSnakeFallback(
     const pBodyStyle = patternVis.bodyStyle;
     const pTaper = patternVis.taperStyle;
     const pGlow = patternVis.glow;
+    for (let i = walked.count - 1; i >= 0; i--) {
+      const wx = walked.xs[i];
+      const wy = walked.ys[i];
+      if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
+      const scr = worldToScreen(wx, wy, camera, cw, ch);
+      const segAngle = walked.angles[i];
+      const segColor = pColors[i % pColors.length] ?? snake.color;
+      const segShape = resolveShapeStyle(pBodyStyle, i);
+      const taperedR = segRadius * computeTaperRadius(i, walked.count, pTaper);
+      drawSegmentShape(ctx, scr.x, scr.y, taperedR, segAngle, segShape, segColor, pGlow);
+    }
+  } else if (presetVis) {
+    // Preset skin (preset-fish, preset-lion, etc.): same rendering as pattern-based
+    const pColors = presetVis.colors;
+    const pBodyStyle = presetVis.bodyStyle;
+    const pTaper = presetVis.taperStyle;
+    const pGlow = presetVis.glow;
     for (let i = walked.count - 1; i >= 0; i--) {
       const wx = walked.xs[i];
       const wy = walked.ys[i];
@@ -780,12 +804,15 @@ export function renderSnakeFallback(
     isUniformTaper = customSegments.every((s) => Math.abs(s.sizeScale - 1.0) < 0.01);
   } else if (patternVis) {
     isUniformTaper = patternVis.taperStyle === 'uniform';
+  } else if (presetVis) {
+    isUniformTaper = presetVis.taperStyle === 'uniform';
   }
-  const headScale = isUniformTaper ? 1.0 : 1.3;
+  const headScale = isUniformTaper ? 1.0 : 1.05;
   const headRadius = segRadius * headScale;
   if (headVisible) {
-    // For pattern skins, use the pattern's primary color for the head
-    const effectiveHeadColor = patternVis ? (patternVis.colors[0] ?? snake.headColor) : snake.headColor;
+    // For pattern/preset skins, use the primary color for the head
+    const visProps = patternVis || presetVis;
+    const effectiveHeadColor = visProps ? (visProps.colors[0] ?? snake.headColor) : snake.headColor;
     // 3D head gradient
     const headGrad = ctx.createRadialGradient(headScreen.x - headRadius * 0.3, headScreen.y - headRadius * 0.3, headRadius * 0.05, headScreen.x, headScreen.y, headRadius);
     headGrad.addColorStop(0, lightenHex(effectiveHeadColor, 0.35));
