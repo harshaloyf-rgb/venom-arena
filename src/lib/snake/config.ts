@@ -47,18 +47,18 @@ export const SHARP_TURN_BRAKE = 0.30;
 export const SEGMENT_SPACING = 8;
 
 /** Starting body segment count for new snakes. */
-export const START_LENGTH = 15;
+export const START_LENGTH = 4;
 
 /** Logarithmic body length growth — same pattern as bodyRadius.
  *  Formula: length = START_LENGTH + RATE × ln(1 + score / OFFSET)
  *  No hard cap — naturally flattens but ALWAYS grows (different scores = different lengths).
- *  Fitted to checkpoints: 0→15 | 1K→26 | 10K→49 | 100K→79 | 1M→109 | 10M→139 */
-export const LENGTH_GROWTH_RATE = 13.125;
+ *  Fitted to checkpoints: 0→4 | 1K→89 | 10K→267 | 100K→478 | 1M→698 | 10M→919 */
+export const LENGTH_GROWTH_RATE = 52.5;
 export const LENGTH_GROWTH_OFFSET = 800;
 
 /** Compute visual body length (segments) from score using logarithmic growth.
  *  Same structure as computeBodyRadius — fast early, flattens at high scores, no cap.
- *  Score 0→15 | 100→17 | 500→30 | 1K→26 | 10K→49 | 100K→79 | 1M→109 | 10M→139 */
+ *  Score 0→4 | 100→10 | 1K→89 | 10K→267 | 100K→478 | 1M→698 | 10M→919 */
 export function computeBodyLength(score: number): number {
   return Math.floor(START_LENGTH + LENGTH_GROWTH_RATE * Math.log(1 + score / LENGTH_GROWTH_OFFSET));
 }
@@ -119,10 +119,10 @@ export const FOOD_MAX_COUNT = 10000;
 
 /** Collision/food-eat radius — stays constant regardless of score (fair gameplay).
  *  Bigger snakes LOOK fatter (visual radius grows) but hitbox stays the same. */
-export const SNAKE_RADIUS = 6;
+export const SNAKE_RADIUS = 3;
 
 /** Minimum visual body radius (at score 0). Thin starting snake. */
-export const SNAKE_RADIUS_MIN = 6;
+export const SNAKE_RADIUS_MIN = 3;
 
 /** Radius growth offset: logarithmic curve parameter.
  *  Formula: radius = MIN + RATE × ln(1 + score / OFFSET)
@@ -130,9 +130,9 @@ export const SNAKE_RADIUS_MIN = 6;
 export const SNAKE_RADIUS_GROWTH_OFFSET = 100 / 3; // ≈ 33.333
 
 /** Radius growth rate: logarithmic curve coefficient.
- *  Formula: radius = 6 + 0.406 × ln(1 + score / 33.333)
- *  Score 0→6  |  100→6.6  |  1K→7.4  |  10K→8.3  |  100K→9.3  |  1M→10.2  |  10M→11.3 */
-export const SNAKE_RADIUS_GROWTH_RATE = 0.25 * 2.25 / Math.log(4); // ≈ 0.406 (75% reduced growth)
+ *  Formula: radius = 3 + 1.623 × ln(1 + score / 33.333)
+ *  Score 0→3  |  100→6  |  1K→10.4  |  10K→15.3  |  100K→20.2  |  1M→24  |  10M→27.7 */
+export const SNAKE_RADIUS_GROWTH_RATE = 2.25 / Math.log(4); // ≈ 1.623
 
 /** First N segments of a snake's body that cannot kill on collision */
 export const NECK_PROTECTION = 5;
