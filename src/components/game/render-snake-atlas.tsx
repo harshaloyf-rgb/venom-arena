@@ -526,11 +526,11 @@ export function renderSnakeAtlas(
 
   }
 
-  // ── Collision Points: connected chain — head dot + body squares ──
-  drawCollisionChain(
-    ctx, headScreen, snake.angle, atlasHeadR,
-    walked, segRadius, camera, cw, ch, vl, vr, vt, vb,
-  );
+  // Collision chain debug rendering — hidden for production
+  // drawCollisionChain(
+  //   ctx, headScreen, snake.angle, atlasHeadR,
+  //   walked, segRadius, camera, cw, ch, vl, vr, vt, vb,
+  // );
 
   // ── Render particles for legendary snakes ──
   if (isLegendary) {
@@ -823,11 +823,11 @@ export function renderSnakeFallback(
 
   }
 
-  // ── Collision Points: connected chain — head dot + body squares ──
-  drawCollisionChain(
-    ctx, headVisible ? headScreen : null, snake.angle, headRadius,
-    walked, segRadius, camera, cw, ch, vl, vr, vt, vb,
-  );
+  // Collision chain debug rendering — hidden for production
+  // drawCollisionChain(
+  //   ctx, headVisible ? headScreen : null, snake.angle, headRadius,
+  //   walked, segRadius, camera, cw, ch, vl, vr, vt, vb,
+  // );
 
   ctx.globalAlpha = 1;
 }
