@@ -153,6 +153,7 @@ export default function GameCanvas({
     gameStateRef.current = createInitialState(skinOverride, undefined, playerName);
     // ── Spawn bots (offline mode only — online will have its own bot system) ──
     if (mode === 'offline') {
+      gameStateRef.current.botsEnabled = true;
       initBots(gameStateRef.current);
     }
     cameraRef.current = createCamera(0, 0);

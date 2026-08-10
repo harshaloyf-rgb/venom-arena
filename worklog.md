@@ -467,3 +467,23 @@ Stage Summary:
 - Bots now render with full preset skin visuals (dragon scales, crystal shards, armor plates, etc.)
 - Collision false-positive bug fixed: neck segments no longer cause phantom deaths
 - Files changed: render-snake-atlas.tsx, cosmetics-utils.ts, collision.ts
+---
+Task ID: 2
+Agent: main
+Task: Remove bots from online mode — fix respawnDeadBots spawning bots every tick
+
+Work Log:
+- Investigated why bots still appeared in online mode despite initBots() guard
+- Found root cause: respawnDeadBots() in bot-ai.ts runs every tick in gameTick() — sees 0 alive bots vs target 13, spawns 1 bot per tick to fill deficit
+- Added `botsEnabled: boolean` field to GameState (types.ts)
+- Set default to `false` in createInitialState() (engine.ts)
+- Set `botsEnabled = true` in GameCanvas.tsx only for offline mode before initBots()
+- Wrapped updateAllBotAI, bot movement loop, and respawnDeadBots in `if (state.botsEnabled)` guards in gameTick()
+- Verified collision.ts has no NECK_PROTECTION changes (already clean)
+- Lint passes clean
+
+Stage Summary:
+- Root cause: respawnDeadBots() was unconditionally spawning bots to fill the target count (13) regardless of game mode
+- Fix: Added botsEnabled flag to GameState, guards all bot logic in gameTick
+- Files changed: types.ts, engine.ts, GameCanvas.tsx
+- Online mode now has zero bots; offline mode unaffected

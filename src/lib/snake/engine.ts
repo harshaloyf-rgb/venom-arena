@@ -457,6 +457,7 @@ export function createInitialState(
     snakes: new Map(), foods: [], player: null,
     nextFoodId: 0, showControls: true, tickCount: 0,
     extractionZone: { x: 0, y: 0, radius: 0, active: false },
+    botsEnabled: false,
   };
 
   const now = Date.now();
@@ -487,8 +488,10 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
     nextFoodId: foodIdRef,
   };
 
-  // 1. Update bot AI (compute target angles + boost decisions)
-  updateAllBotAI(state);
+  // 1. Update bot AI (compute target angles + boost decisions) — offline only
+  if (state.botsEnabled) {
+    updateAllBotAI(state);
+  }
 
   // 2. Move player
   const player = state.player;
@@ -496,11 +499,13 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
     moveSnake(player, input.targetAngle, input.boosting, now, moveCtx);
   }
 
-  // 3. Move all bots
-  for (const [id, snake] of state.snakes) {
-    if (!snake.isBot || !snake.alive) continue;
-    const botBoost = getBotBoost(id);
-    moveSnake(snake, snake.targetAngle, botBoost, now, moveCtx);
+  // 3. Move all bots — offline only
+  if (state.botsEnabled) {
+    for (const [id, snake] of state.snakes) {
+      if (!snake.isBot || !snake.alive) continue;
+      const botBoost = getBotBoost(id);
+      moveSnake(snake, snake.targetAngle, botBoost, now, moveCtx);
+    }
   }
 
   // 4. Check food eating
@@ -529,8 +534,10 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
     }
   }
 
-  // 7. Respawn dead bots (1 per tick max)
-  respawnDeadBots(state, DEFAULT_BOT_MIX, createBotSnakeFactory);
+  // 7. Respawn dead bots (1 per tick max) — offline only
+  if (state.botsEnabled) {
+    respawnDeadBots(state, DEFAULT_BOT_MIX, createBotSnakeFactory);
+  }
 
   state.nextFoodId = foodIdRef.value;
 

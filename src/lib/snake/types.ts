@@ -186,6 +186,8 @@ export interface GameState {
   tickCount: number;
   /** Extraction zone: center x, center y, current radius */
   extractionZone: { x: number; y: number; radius: number; active: boolean };
+  /** Whether offline bots are enabled (false in online mode) */
+  botsEnabled: boolean;
 }
 
 // ─── Input ──────────────────────────────────────────────────────────────────
