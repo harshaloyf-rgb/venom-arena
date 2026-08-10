@@ -171,7 +171,7 @@ const _walker = {
 // are still recomputed every frame since the camera moves). Saves ~8000 path
 // point evaluations per frame when 13 bots are visible.
 
-const BOT_WALK_CACHE_INTERVAL = 3;
+const BOT_WALK_CACHE_INTERVAL = 1;
 
 interface BotWalkCacheEntry {
   xs: Float64Array;

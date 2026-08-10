@@ -257,15 +257,23 @@ function scanBodyAhead(
   const scanDistSq = BODY_SCAN_DIST * BODY_SCAN_DIST;
   const headRangeSq = (BODY_SCAN_DIST * 2.5) * (BODY_SCAN_DIST * 2.5);
 
+  // Pre-sort: collect head distances, only scan 3 nearest snakes.
+  // When clustered with 10+ snakes, this cuts 70% of segment iterations.
+  type SnakeDist = { snake: Snake; distSq: number };
+  const nearby: SnakeDist[] = [];
+  for (const [id, other] of snakes) {
+    if (id === snake.id || !other.alive) continue;
+    const dSq = distSq(hx, hy, other.path.headX, other.path.headY);
+    if (dSq <= headRangeSq) nearby.push({ snake: other, distSq: dSq });
+  }
+  // Sort by head distance, keep only 3 nearest
+  nearby.sort((a, b) => a.distSq - b.distSq);
+  const scanList = nearby.length > 3 ? nearby.slice(0, 3) : nearby;
+
   let closestDist = BODY_SCAN_DIST + 1;
   let closestFleeAngle = 0;
 
-  for (const [id, other] of snakes) {
-    if (id === snake.id || !other.alive) continue;
-
-    // Quick reject: if their head is far, their body can't be close
-    if (distSq(hx, hy, other.path.headX, other.path.headY) > headRangeSq) continue;
-
+  for (const { snake: other } of scanList) {
     const len = other.path.length;
     // Check every 2nd body point (6px spacing at BASE_SPEED=3)
     for (let i = 2; i < len; i += 2) {

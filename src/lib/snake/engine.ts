@@ -104,7 +104,23 @@ function getRandomBotSkin(): PlayerSkinOverride {
   return BOT_SKIN_POOL[Math.floor(Math.random() * BOT_SKIN_POOL.length)];
 }
 
+// ─── Module-level cached food hash (rebuilt every 3 ticks) ───────────────
 const foodValueCache = new Map<number, number>();
+let _cachedFoodById = new Map<number, FoodOrb>();
+const _foodHashScratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
+
+function rebuildFoodHash(fh: SpatialHash, foods: FoodOrb[]): void {
+  fh.clear();
+  _cachedFoodById.clear();
+  for (let i = 0; i < foods.length; i++) {
+    const f = foods[i];
+    _foodHashScratch.x = f.x; _foodHashScratch.y = f.y;
+    _foodHashScratch.radius = f.radius; _foodHashScratch.id = f.id;
+    fh.insert(_foodHashScratch);
+    _cachedFoodById.set(f.id, f);
+  }
+}
+
 const DESPAWN_RADIUS_SQ = FOOD_DESPAWN_RADIUS * FOOD_DESPAWN_RADIUS;
 const VISIBLE_RADIUS_SQ = FOOD_VISIBLE_RADIUS * FOOD_VISIBLE_RADIUS;
 
@@ -340,20 +356,26 @@ function spawnFoodBatch(nextId: { value: number }, foods: FoodOrb[], count: numb
 function checkFoodEating(
   snakes: Iterable<Snake>, foods: FoodOrb[],
   fh: SpatialHash, fvc: Map<number, number>, now: number,
+  useCachedHash: boolean,
 ): Set<number> {
   for (let i = 0; i < foods.length; i++) foods[i].magnetized = false;
 
-  fh.clear();
-  fvc.clear();
-  const foodById = new Map<number, FoodOrb>();
-  const scratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
-  for (let i = 0; i < foods.length; i++) {
-    const f = foods[i];
-    scratch.x = f.x; scratch.y = f.y; scratch.radius = f.radius; scratch.id = f.id;
-    fh.insert(scratch);
-    fvc.set(f.id, f.value);
-    foodById.set(f.id, f);
+  // Rebuild hash from scratch (called every 3 ticks)
+  if (!useCachedHash) {
+    fh.clear();
+    fvc.clear();
+    _cachedFoodById.clear();
+    const scratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
+    for (let i = 0; i < foods.length; i++) {
+      const f = foods[i];
+      scratch.x = f.x; scratch.y = f.y; scratch.radius = f.radius; scratch.id = f.id;
+      fh.insert(scratch);
+      fvc.set(f.id, f.value);
+      _cachedFoodById.set(f.id, f);
+    }
   }
+
+  const foodById = _cachedFoodById;
 
   const eatenIds = new Set<number>();
   const speedRange = FOOD_MAGNET_MAX_SPEED - FOOD_MAGNET_MIN_SPEED;
@@ -506,8 +528,9 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
     }
   }
 
-  // 4. Check food eating
-  const eatenIds = checkFoodEating(state.snakes.values(), state.foods, foodHash, foodValueCache, now);
+  // 4. Check food eating (rebuild spatial hash every 3 ticks, query every tick)
+  const rebuildHash = state.tickCount % 3 === 0;
+  const eatenIds = checkFoodEating(state.snakes.values(), state.foods, foodHash, foodValueCache, now, rebuildHash);
   if (eatenIds.size > 0) {
     let writeIdx = 0;
     for (let i = 0; i < state.foods.length; i++) {
@@ -516,8 +539,10 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
     state.foods.length = writeIdx;
   }
 
-  // 5. Density-based food spawning
-  maintainFoodAroundPlayer(state, foodIdRef);
+  // 5. Density-based food spawning (every 10 ticks — density doesn't need 60fps)
+  if (state.tickCount % 10 === 0) {
+    maintainFoodAroundPlayer(state, foodIdRef);
+  }
 
   // 6. Check collisions (shared)
   const collisionResult = checkCollisions(state.snakes, bodyHash, headHash, now);

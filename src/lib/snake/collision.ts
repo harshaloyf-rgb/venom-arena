@@ -149,12 +149,39 @@ export function checkCollisions(
 ): CollisionResult {
   const scratch = _scratch;
 
+  // ── Collect head positions for proximity pre-filter ──
+  // Only insert body segments from snakes whose head is within
+  // BODY_HASH_HEAD_RANGE of ANY other snake's head. Far-away snakes
+  // can never be hit (heads can't reach them), so skip their segments.
+  const BODY_HASH_HEAD_RANGE = 1500;
+  const BODY_HASH_HEAD_RANGE_SQ = BODY_HASH_HEAD_RANGE * BODY_HASH_HEAD_RANGE;
+  const aliveSnakes: Snake[] = [];
+  for (const [, snake] of snakes) {
+    if (snake.alive) aliveSnakes.push(snake);
+  }
+  // Build set of snake IDs whose heads are near at least one other head
+  const nearbyIds = new Set<string>();
+  for (let a = 0; a < aliveSnakes.length; a++) {
+    const sa = aliveSnakes[a];
+    for (let b = a + 1; b < aliveSnakes.length; b++) {
+      const sb = aliveSnakes[b];
+      const dx = sa.path.headX - sb.path.headX;
+      const dy = sa.path.headY - sb.path.headY;
+      if (dx * dx + dy * dy < BODY_HASH_HEAD_RANGE_SQ) {
+        nearbyIds.add(sa.id);
+        nearbyIds.add(sb.id);
+      }
+    }
+  }
+
   // ── Build body spatial hash (broad phase) ──
+  // Pre-filtered: only insert segments from snakes with nearby heads.
   bodyHash.clear();
   scratch.radius = SNAKE_RADIUS;
   for (const [, snake] of snakes) {
     if (!snake.alive) continue;
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
+    if (!nearbyIds.has(snake.id)) continue;
     const len = snake.path.length;
     scratch.id = snake.id;
     for (let i = 1; i < len; i++) {

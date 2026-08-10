@@ -239,10 +239,10 @@ export default function GameCanvas({
       // GAME LOOP — full local simulation
       // ────────────────────────────────────────────────────────────────────
 
-      // Fixed timestep — CAP TO 1 TICK PER FRAME.
-      // If a frame is slow, we skip physics ticks rather than piling them up.
-      // This eliminates the accumulator spiral that causes fast/slow stutter.
-      // The game runs at slightly lower physics rate during lag, but FEELS consistent.
+      // Fixed timestep — CAP TO 2 TICKS PER FRAME.
+      // If a frame is slow, run up to 2 physics ticks to maintain speed.
+      // Prevents the 1-tick cap from halving game speed during lag.
+      // Accumulator capped at 2× tickMs to prevent spiral on recovery.
       if (lastTimeRef.current === 0) {
         lastTimeRef.current = timestamp;
       }
@@ -251,11 +251,12 @@ export default function GameCanvas({
       accumulatorRef.current += elapsed;
 
       const tickMs = FIXED_DT * 1000;
-      // Run at most 1 tick per frame. Discard excess accumulated time
-      // (cap at 1 tick worth to prevent spiral on next frame).
-      if (accumulatorRef.current >= tickMs) {
+      const maxAccum = tickMs * 2;
+      if (accumulatorRef.current > maxAccum) accumulatorRef.current = maxAccum;
+      let ticksThisFrame = 0;
+      while (accumulatorRef.current >= tickMs && ticksThisFrame < 2) {
         const killEvents = gameTick(gameState, inputState, FIXED_DT);
-        accumulatorRef.current = Math.min(accumulatorRef.current - tickMs, tickMs);
+        accumulatorRef.current -= tickMs;
 
 
         // Track player kills
@@ -281,6 +282,7 @@ export default function GameCanvas({
             if (!s.alive) cleanupDeadSnakeParticles(sid);
           }
         }
+        ticksThisFrame++;
       }
 
       // Camera

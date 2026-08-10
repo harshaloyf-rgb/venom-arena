@@ -18,6 +18,12 @@ import {
   START_LENGTH, SNAKE_RADIUS_MIN, computeBodyLength, computeBodyRadius,
 } from './config';
 
+/** Camera position lerp — 0.5 → averages last 2 frames of head position.
+ *  Smooths out variable-speed camera movement during boost turns (SHARP_TURN_BRAKE).
+ *  At 60fps this adds ~16ms latency — imperceptible. During straight-line movement,
+ *  the lerp converges instantly since head displacement is constant. */
+const CAMERA_POS_LERP = 0.5;
+
 /** Camera zoom lerp factor — 0.15 → 90% convergence in ~14 frames (0.23s at 60fps). */
 const CAMERA_ZOOM_LERP = 0.15;
 
@@ -34,9 +40,13 @@ const ZOOM_DEADZONE = 0.005;
 export function updateCamera(camera: Camera, snake: Snake, _canvasWidth: number, _canvasHeight: number): void {
   if (snake.path.length === 0) return;
 
-  // Direct lock — head stays at dead center of screen.
-  camera.x = snake.path.headX;
-  camera.y = snake.path.headY;
+  // Smoothed position lock — lerp toward head position.
+  // Eliminates camera jitter from variable-speed head movement (SHARP_TURN_BRAKE during boost).
+  // At 0.5 lerp the camera averages the last 2 frames, smoothing speed variation.
+  const targetX = snake.path.headX;
+  const targetY = snake.path.headY;
+  camera.x += (targetX - camera.x) * CAMERA_POS_LERP;
+  camera.y += (targetY - camera.y) * CAMERA_POS_LERP;
 
   // Quantize score to brackets so zoom target is stable between brackets.
   // CRITICAL: also compute bodyRadius from quantizedScore (not live snake.bodyRadius)
