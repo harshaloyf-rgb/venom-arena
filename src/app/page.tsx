@@ -36,8 +36,6 @@ import { ClipShowcase } from '@/components/panels/clip-showcase';
 import { AdminPanel } from '@/components/panels/admin-panel';
 import { PlayerInspectorModal} from '@/components/panels/player-inspector-modal';
 import { GameRulesModal } from '@/components/modals/game-rules-modal';
-// AdminGameTuning will be restored in Phase 7
-// import { AdminGameTuning } from '@/components/game/admin-game-tuning';
 import { BottomTabBar } from '@/components/layout/bottom-tab-bar';
 import { ScrollTabStrip } from '@/components/layout/scroll-tab-strip';
 import { MoreMenu } from '@/components/layout/more-menu';
@@ -114,7 +112,6 @@ export default function Home() {
   const [gameMode, setGameMode] = useState<'online' | 'offline'>('offline');
 
   const [isRulesOpen, setIsRulesOpen] = useState(false);
-  const [isTuningOpen, setIsTuningOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [missions, setMissions] = useState<Mission[]>([]);
   const [challengesLoading, setChallengesLoading] = useState(false);
@@ -350,10 +347,6 @@ export default function Home() {
                 <BookOpen className="w-4 h-4 text-indigo-400" />
                 <span className="text-xs font-bold font-sans">Rules &amp; Guide</span>
               </button>
-              <button onClick={() => setIsTuningOpen(true)} className="bg-amber-600/20 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/30 p-2 py-2.5 rounded-xl transition duration-200 cursor-pointer flex items-center gap-1.5 shadow" title="Tune Game Parameters">
-                <Swords className="w-4 h-4 text-amber-400" />
-                <span className="text-xs font-bold font-sans">Tuning</span>
-              </button>
               <button onClick={handleLogout} className="bg-slate-900/60 hover:bg-red-950/40 hover:text-red-400 hover:border-red-500/20 border border-slate-800/80 p-2 py-2.5 rounded-xl transition duration-200 cursor-pointer flex items-center gap-1.5" title="Secure Logout">
                 <LogOut className="w-4 h-4" />
                 <span className="text-xs font-bold font-sans">Sign Out</span>
@@ -375,10 +368,6 @@ export default function Home() {
                   <DropdownMenuItem onClick={() => setIsRulesOpen(true)} className="cursor-pointer focus:bg-slate-800">
                     <BookOpen className="w-4 h-4 mr-2 text-indigo-400" />
                     <span className="text-xs">Rules & Guide</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setIsTuningOpen(true)} className="cursor-pointer focus:bg-slate-800">
-                    <Swords className="w-4 h-4 mr-2 text-amber-400" />
-                    <span className="text-xs">Game Tuning</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="bg-slate-800" />
                   <DropdownMenuItem onClick={handleLogout} className="cursor-pointer focus:bg-red-950/40 text-red-400 focus:text-red-400">
