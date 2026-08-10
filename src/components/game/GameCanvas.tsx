@@ -52,7 +52,7 @@ export default function GameCanvas({
   // State
   const [isDead, setIsDead] = useState(false);
   const [finalScore, setFinalScore] = useState(0);
-  const [leaderboard, setLeaderboard] = useState<{ name: string; score: number }[]>([]);
+  const [leaderboard, setLeaderboard] = useState<{ name: string; score: number; isPlayer: boolean }[]>([]);
   const isDeadRef = useRef(false);
   const deathTimeRef = useRef(0);
   const showControlsRef = useRef(true);
@@ -74,11 +74,14 @@ export default function GameCanvas({
 
   // ── Leaderboard updater ──
 
+  const playerSnakeIdRef = useRef('');
+
   const updateLeaderboard = useCallback((state: GameState) => {
-    const entries: { name: string; score: number }[] = [];
+    playerSnakeIdRef.current = state.player?.id ?? '';
+    const entries: { name: string; score: number; isPlayer: boolean }[] = [];
     for (const [, snake] of state.snakes) {
       if (snake.alive) {
-        entries.push({ name: snake.name, score: Math.floor(snake.score) });
+        entries.push({ name: snake.name, score: Math.floor(snake.score), isPlayer: snake.isPlayer });
       }
     }
     entries.sort((a, b) => b.score - a.score);
@@ -149,8 +152,9 @@ export default function GameCanvas({
       rarity: playerSkinAsset.rarity,
     };
 
-    // ── Init game state with player skin ──
-    gameStateRef.current = createInitialState(skinOverride, undefined, playerName);
+    // ── Init game state with player skin + real profile name ──
+    const resolvedName = playerName || authPlayer?.name || 'Player';
+    gameStateRef.current = createInitialState(skinOverride, undefined, resolvedName);
     // ── Spawn bots (offline mode only — online will have its own bot system) ──
     if (mode === 'offline') {
       gameStateRef.current.botsEnabled = true;
@@ -400,7 +404,7 @@ export default function GameCanvas({
             <div
               key={i}
               className={`flex justify-between text-[10px] font-mono px-1 py-0.5 rounded ${
-                entry.name === 'You' ? 'text-green-400 bg-white/5' : 'text-white/70'
+                entry.isPlayer ? 'text-green-400 bg-white/5' : 'text-white/70'
               }`}
             >
               <span>{i + 1}. {entry.name}</span>

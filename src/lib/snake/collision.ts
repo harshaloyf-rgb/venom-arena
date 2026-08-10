@@ -216,35 +216,26 @@ export function checkCollisions(
         prevDot.x, prevDot.y, dot.x, dot.y,
         otherPrevDot.x, otherPrevDot.y, otherDot.x, otherDot.y,
       )) {
-        const lenA = snake.path.length;
-        const lenB = otherSnake.path.length;
+        const scoreA = snake.score;
+        const scoreB = otherSnake.score;
         const aBoost = snake.boosting;
         const bBoost = otherSnake.boosting;
 
+        // Determine winner — there is ALWAYS exactly one winner (never both die).
+        // Priority: boost > higher score > deterministic ID tiebreaker.
+        let winnerIsA: boolean;
         if (HEAD_ON_HEAD_BOOST_WINS && aBoost !== bBoost) {
-          // Boosting snake wins
-          const loserId = aBoost ? otherId : snake.id;
-          const loserName = aBoost ? otherSnake.name : snake.name;
-          const winnerId = aBoost ? snake.id : otherId;
-          const winnerName = aBoost ? snake.name : otherSnake.name;
-          deadSnakes.add(loserId);
-          const loser = snakes.get(loserId)!;
-          killEvents.push({ victimId: loserId, victimName: loserName, killerId: winnerId, killerName: winnerName, score: loser.score, timestamp: now });
-        } else if (lenA > lenB) {
-          // Longer snake wins
-          deadSnakes.add(otherId);
-          killEvents.push({ victimId: otherId, victimName: otherSnake.name, killerId: snake.id, killerName: snake.name, score: otherSnake.score, timestamp: now });
-        } else if (lenB > lenA) {
-          // Longer snake wins
-          deadSnakes.add(snake.id);
-          killEvents.push({ victimId: snake.id, victimName: snake.name, killerId: otherId, killerName: otherSnake.name, score: snake.score, timestamp: now });
+          winnerIsA = aBoost; // boosting snake wins
+        } else if (scoreA !== scoreB) {
+          winnerIsA = scoreA > scoreB; // higher score wins
         } else {
-          // Same length: both die
-          deadSnakes.add(snake.id);
-          deadSnakes.add(otherId);
-          killEvents.push({ victimId: snake.id, victimName: snake.name, killerId: otherId, killerName: otherSnake.name, score: snake.score, timestamp: now });
-          killEvents.push({ victimId: otherId, victimName: otherSnake.name, killerId: snake.id, killerName: snake.name, score: otherSnake.score, timestamp: now });
+          winnerIsA = snake.id < otherId; // deterministic ID tiebreaker
         }
+
+        const victim = winnerIsA ? otherSnake : snake;
+        const killer = winnerIsA ? snake : otherSnake;
+        deadSnakes.add(victim.id);
+        killEvents.push({ victimId: victim.id, victimName: victim.name, killerId: killer.id, killerName: killer.name, score: victim.score, timestamp: now });
       }
     }
   }
@@ -255,6 +246,15 @@ export function checkCollisions(
   // Swept line-segment intersection + point-to-segment proximity.
   // No neck skip — ALL body segments are checked. No crawl exploit.
   // Snakes already dead from head-on-head are skipped.
+  //
+  // MUTUAL KILL RESOLUTION: If both A hits B's body AND B hits A's body
+  // in the same tick (common in head-on approaches where each head enters
+  // the other's neck zone), only the shorter snake dies. Longer snake
+  // survives. Equal length = both die. This matches slither.io convention:
+  // the body-owner has right-of-way; shorter snake is the aggressor.
+
+  // Collect all head→body hits as (attackerId, bodyOwnerId) pairs
+  const h2bHits: Array<[string, string]> = [];
 
   for (const [, snake] of snakes) {
     if (!snake.alive || deadSnakes.has(snake.id)) continue;
@@ -284,7 +284,7 @@ export function checkCollisions(
       checkedSnakes.add(otherId);
 
       const otherSnake = snakes.get(otherId);
-      if (!otherSnake || !otherSnake.alive) continue;
+      if (!otherSnake || !otherSnake.alive || deadSnakes.has(otherId)) continue;
       if (now - otherSnake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
       // Narrow phase: two independent detection methods.
@@ -321,13 +321,57 @@ export function checkCollisions(
       }
 
       if (hit) {
-        deadSnakes.add(snake.id);
-        killEvents.push({
-          victimId: snake.id, victimName: snake.name,
-          killerId: otherId, killerName: otherSnake.name,
-          score: snake.score, timestamp: now,
-        });
-        break;
+        h2bHits.push([snake.id, otherId]);
+        break; // one kill per attacker per tick
+      }
+    }
+  }
+
+  // ── Resolve head-to-body hits with mutual-kill protection ──
+  // Build a lookup: attackerId → bodyOwnerId for quick mutual pair check
+  const h2bMap = new Map<string, string>();
+  for (const [attackerId, bodyOwnerId] of h2bHits) {
+    h2bMap.set(attackerId, bodyOwnerId);
+  }
+
+  for (const [attackerId, bodyOwnerId] of h2bHits) {
+    const attacker = snakes.get(attackerId)!;
+    const bodyOwner = snakes.get(bodyOwnerId)!;
+    // Check if bodyOwner also hit attacker's body (mutual kill)
+    const reverseBodyOwnerId = h2bMap.get(bodyOwnerId);
+    if (reverseBodyOwnerId === attackerId) {
+      // Mutual: both heads are in each other's bodies.
+      // Longer snake survives, shorter dies. Equal = both die.
+      const lenA = attacker.path.length;
+      const lenB = bodyOwner.path.length;
+      if (lenA > lenB) {
+        // Attacker is longer → body owner (shorter) dies
+        if (!deadSnakes.has(bodyOwnerId)) {
+          deadSnakes.add(bodyOwnerId);
+          killEvents.push({ victimId: bodyOwnerId, victimName: bodyOwner.name, killerId: attackerId, killerName: attacker.name, score: bodyOwner.score, timestamp: now });
+        }
+      } else if (lenB > lenA) {
+        // Body owner is longer → attacker (shorter) dies
+        if (!deadSnakes.has(attackerId)) {
+          deadSnakes.add(attackerId);
+          killEvents.push({ victimId: attackerId, victimName: attacker.name, killerId: bodyOwnerId, killerName: bodyOwner.name, score: attacker.score, timestamp: now });
+        }
+      } else {
+        // Same length: both die
+        if (!deadSnakes.has(attackerId)) {
+          deadSnakes.add(attackerId);
+          killEvents.push({ victimId: attackerId, victimName: attacker.name, killerId: bodyOwnerId, killerName: bodyOwner.name, score: attacker.score, timestamp: now });
+        }
+        if (!deadSnakes.has(bodyOwnerId)) {
+          deadSnakes.add(bodyOwnerId);
+          killEvents.push({ victimId: bodyOwnerId, victimName: bodyOwner.name, killerId: attackerId, killerName: attacker.name, score: bodyOwner.score, timestamp: now });
+        }
+      }
+    } else {
+      // One-sided: attacker's head hit body, normal kill
+      if (!deadSnakes.has(attackerId)) {
+        deadSnakes.add(attackerId);
+        killEvents.push({ victimId: attackerId, victimName: attacker.name, killerId: bodyOwnerId, killerName: bodyOwner.name, score: attacker.score, timestamp: now });
       }
     }
   }

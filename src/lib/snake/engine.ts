@@ -459,7 +459,7 @@ export function createInitialState(
   const now = Date.now();
   const nextIdRef = { value: 0 };
 
-  const player = createSnake('player', playerName || 'You', initialScore ?? 0, 0, 0, now, playerSkin);
+  const player = createSnake('player', playerName || 'Player', initialScore ?? 0, 0, 0, now, playerSkin);
   state.player = player;
   state.snakes.set(player.id, player);
 
@@ -626,7 +626,7 @@ export function respawnPlayer(state: GameState): void {
     skinId: old.skinId, bodyColor: old.color, headColor: old.headColor,
     accentColor: '', rarity: old.rarity,
   } : null;
-  const newPlayer = createSnake('player', old?.name || 'You', 0, pos.x, pos.y, Date.now(), skinOverride);
+  const newPlayer = createSnake('player', old?.name || 'Player', 0, pos.x, pos.y, Date.now(), skinOverride);
   state.player = newPlayer;
   state.snakes.set(newPlayer.id, newPlayer);
 }

@@ -546,3 +546,19 @@ Work Log:
 Stage Summary:
 - Commit: a35171c pushed to main
 
+---
+Task ID: 2
+Agent: main
+Task: Fix player name + mutual head-to-body double-kill
+
+Work Log:
+- Changed name fallback from You to Player in engine.ts
+- Fixed GameCanvas to use authPlayer name with triple fallback
+- Fixed leaderboard to use isPlayer flag instead of string match
+- Rewrote collision PASS 2 with mutual kill resolution (longer survives)
+
+Stage Summary:
+- 3 files changed: GameCanvas.tsx, engine.ts, collision.ts
+- Name shows profile name, leaderboard highlights by isPlayer
+- Mutual head-to-body: shorter dies, longer survives, equal = both die
+
