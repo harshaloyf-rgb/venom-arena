@@ -225,11 +225,10 @@ export function checkCollisions(
     }
   }
 
-  // ── Head-on-head: dot proximity OR movement line crossing ──
-  // segsIntersect alone is too strict for two 1px dots moving ~3px/tick.
-  // If snakes approach with even 1px offset the movement lines are parallel
-  // and never cross — so we also check dot-to-dot distance.
-  const HEAD_HIT_DIST_SQ = 4; // 2px — two 1px dots touching
+  // ── Head-on-head: movement line crossing only (no proximity death) ──
+  // Eyes can graze/touch without dying. Only triggers if the two head
+  // movement lines geometrically cross = true head-on collision.
+  const HEAD_HIT_DIST_SQ = 0; // 0px — eyes can touch, only die on actual path crossing
 
   for (const [, snake] of snakes) {
     if (!snake.alive || deadSnakes.has(snake.id)) continue;
