@@ -533,3 +533,16 @@ Stage Summary:
 - Bots should now move smoothly with natural forward momentum
 - Head-on-head collisions: longer snake wins, equal = both die (no more false double-kill from neck)
 - Commit: 8a73bbf pushed to main
+---
+Task ID: collision-crawl-fix
+Agent: main
+Task: Fix crawling exploit
+
+Work Log:
+- Split collision into 2 detectors: line crossing (DOT vs spine) + proximity (CENTER vs spine, threshold=25)
+- Used head CENTER for proximity to avoid 4.5px DOT offset asymmetry
+- Hairline gap preserved: 1px gap survives (6.5^2=42.25 > 25)
+
+Stage Summary:
+- Commit: a35171c pushed to main
+
