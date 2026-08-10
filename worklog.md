@@ -720,3 +720,23 @@ Stage Summary:
 - P5 was a non-issue after P0 (boost glow already smooth)
 - All changes verified: lint clean, server running, game loads with zero runtime errors
 
+---
+Task ID: 2
+Agent: main
+Task: Implement 3 fixes for snake jitter — body interpolation, turn-rate brake, smooth eye angle
+
+Work Log:
+- Analyzed full rendering pipeline: GameCanvas.tsx → engine.ts → camera.ts → render-snake-atlas.tsx → renderer.ts
+- Identified root cause #1: Camera interpolates head position (alpha-based) but snake body renders at discrete tick positions → 4-8px screen oscillation at 60Hz
+- Identified root cause #2: SHARP_TURN_BRAKE reduces speed by 30% during turns → boost feels slow and stuttery
+- Identified root cause #3: Eye tracking uses tick-only angle updates → eyes freeze/jump between physics ticks
+- FIX 1 (engine.ts): Moved SHARP_TURN_BRAKE from speed reduction to turn-rate reduction. Speed is now CONSTANT (3.0 or 6.0). Turn rate decreases during sharp turns instead.
+- FIX 1 (render-snake-atlas.tsx): Added render-time interpolation offset (w2sOff wrapper) to both renderSnakeAtlas and renderSnakeFallback. Computes (prevHead + (head-prevHead)*alpha - head) * zoom offset and applies to all worldToScreen calls.
+- FIX 1 (GameCanvas.tsx): Passes alpha to renderSnakeAtlas and renderSnakeFallback for bot and player rendering.
+- FIX 3 (render-snake-atlas.tsx): Added per-frame smoothAngle lerp (0.35 factor) in drawResponsiveEyes. Eyes now use continuous angle instead of tick-discrete snake.angle.
+
+Stage Summary:
+- 4 files modified: engine.ts, render-snake-atlas.tsx, GameCanvas.tsx, types.ts (pupilSmoothMap type)
+- Lint passes clean, dev server compiles with no errors
+- Game loads and renders canvas in browser (verified via agent-browser)
+- No runtime console errors

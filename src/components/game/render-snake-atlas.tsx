@@ -138,7 +138,7 @@ interface RenderParticle {
 const particlePools: Map<string, RenderParticle[]> = new Map();
 
 /** Per-snake smoothed pupil state for lerp-based eye tracking */
-const pupilSmoothMap: Map<string, { shiftX: number; shiftY: number; prevAngle: number; angleReady: boolean }> = new Map();
+const pupilSmoothMap: Map<string, { shiftX: number; shiftY: number; prevAngle: number; angleReady: boolean; smoothAngle: number; prevSmoothAngle: number }> = new Map();
 
 // ─── Path Walker ────────────────────────────────────────────────────────────
 
@@ -346,6 +346,7 @@ export function renderSnakeAtlas(
   mouseScreenX?: number,
   mouseScreenY?: number,
   snap?: boolean,
+  alpha: number = 1.0,
   coiledPath?: PathLike,
 ): void {
   // Use coiled path for body rendering if provided
@@ -368,13 +369,13 @@ export function renderSnakeAtlas(
   const presetVisuals = !patternVisuals ? getPresetVisualProps(snake.skinId) : null;
 
   if (snake.skinId === 'custom-lab-skin' || hasCustomSegments || patternVisuals || presetVisuals) {
-    renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY, snap, effectivePath);
+    renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY, snap, alpha, effectivePath);
     return;
   }
 
   const atlas = atlasManager.getAtlas(snake.skinId);
   if (!atlas) {
-    renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY, snap, effectivePath);
+    renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY, snap, alpha, effectivePath);
     return;
   }
 
@@ -400,6 +401,20 @@ export function renderSnakeAtlas(
   const cw = viewport.width;
   const ch = viewport.height;
   const segRadius = snake.bodyRadius * zoom;
+
+  // FIX 1: Render-time interpolation offset.
+  // Shifts the entire snake to match the camera's interpolated head position,
+  // eliminating the camera/body desync that causes visible jitter.
+  const interpHeadX = snake.prevHeadX + (snake.path.headX - snake.prevHeadX) * alpha;
+  const interpHeadY = snake.prevHeadY + (snake.path.headY - snake.prevHeadY) * alpha;
+  const renderOffX = (interpHeadX - snake.path.headX) * zoom;
+  const renderOffY = (interpHeadY - snake.path.headY) * zoom;
+  const w2sOff = (wx: number, wy: number) => {
+    const r = worldToScreen(wx, wy, camera, cw, ch);
+    r.x += renderOffX;
+    r.y += renderOffY;
+    return r;
+  };
 
   // ── Spawn shield: rotating hexagonal ring that fades out ──
   const spawnAge = time - snake.spawnTime;
@@ -483,10 +498,10 @@ export function renderSnakeAtlas(
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.beginPath();
-      const s0 = worldToScreen(walked.xs[walked.count - 1], walked.ys[walked.count - 1], camera, cw, ch);
+      const s0 = w2sOff(walked.xs[walked.count - 1], walked.ys[walked.count - 1]);
       ctx.moveTo(s0.x, s0.y);
       for (let i = walked.count - 2; i >= 0; i--) {
-        const sp = worldToScreen(walked.xs[i], walked.ys[i], camera, cw, ch);
+        const sp = w2sOff(walked.xs[i], walked.ys[i]);
         ctx.lineTo(sp.x, sp.y);
       }
       ctx.stroke();
@@ -501,7 +516,7 @@ export function renderSnakeAtlas(
     const wy = walked.ys[i];
     if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
 
-    const { x: sx, y: sy } = worldToScreen(wx, wy, camera, cw, ch);
+    const { x: sx, y: sy } = w2sOff(wx, wy);
     const segAngle = walked.angles[i];
 
     // Pick body region (cycle through variants)
@@ -528,7 +543,7 @@ export function renderSnakeAtlas(
 
   // ── Head ──
   const headVisible = headWx >= vl && headWx <= vr && headWy >= vt && headWy <= vb;
-  const headScreen = headVisible ? worldToScreen(headWx, headWy, camera, cw, ch) : null;
+  const headScreen = headVisible ? w2sOff(headWx, headWy) : null;
   const atlasHeadR = segRadius * 1.05;
   if (headVisible && headScreen) {
     const hsx = headScreen.x;
@@ -692,7 +707,7 @@ export function renderSnakeAtlas(
     if (pool) {
       for (const p of pool) {
         if (p.x < vl || p.x > vr || p.y < vt || p.y > vb) continue;
-        const { x: px, y: py } = worldToScreen(p.x, p.y, camera, cw, ch);
+        const { x: px, y: py } = w2sOff(p.x, p.y);
         const alpha = clamp(p.life / p.maxLife, 0, 1);
         const pr = p.radius * zoom;
         ctx.globalAlpha = alpha * 0.8;
@@ -719,6 +734,7 @@ export function renderSnakeFallback(
   mouseScreenX?: number,
   mouseScreenY?: number,
   snap?: boolean,
+  alpha: number = 1.0,
   coiledPath?: PathLike,
 ): void {
   // Choose pixel-snapped or exact world-to-screen conversion
@@ -750,12 +766,24 @@ export function renderSnakeFallback(
   const ch = viewport.height;
   const segRadius = snake.bodyRadius * zoom;
 
+  // FIX 1: Render-time interpolation offset
+  const interpHeadX = snake.prevHeadX + (snake.path.headX - snake.prevHeadX) * alpha;
+  const interpHeadY = snake.prevHeadY + (snake.path.headY - snake.prevHeadY) * alpha;
+  const renderOffX = (interpHeadX - snake.path.headX) * zoom;
+  const renderOffY = (interpHeadY - snake.path.headY) * zoom;
+  const w2sOff = (wx: number, wy: number) => {
+    const r = w2s(wx, wy, camera, cw, ch);
+    r.x += renderOffX;
+    r.y += renderOffY;
+    return r;
+  };
+
   const vl = viewport.left - 20;
   const vr = viewport.right + 20;
   const vt = viewport.top - 20;
   const vb = viewport.bottom + 20;
 
-  const headScreen = w2s(headWorldX, headWorldY, camera, cw, ch);
+  const headScreen = w2sOff(headWorldX, headWorldY);
   const headVisible = headWorldX >= vl && headWorldX <= vr && headWorldY >= vt && headWorldY <= vb;
 
   // ── Spawn shield: rotating hexagonal ring that fades out ──
@@ -838,10 +866,10 @@ export function renderSnakeFallback(
       ctx.beginPath();
       const s0x = walked.xs[walked.count - 1];
       const s0y = walked.ys[walked.count - 1];
-      const scr0 = w2s(s0x, s0y, camera, cw, ch);
+      const scr0 = w2sOff(s0x, s0y);
       ctx.moveTo(scr0.x, scr0.y);
       for (let i = walked.count - 2; i >= 0; i--) {
-        const scr = w2s(walked.xs[i], walked.ys[i], camera, cw, ch);
+        const scr = w2sOff(walked.xs[i], walked.ys[i]);
         ctx.lineTo(scr.x, scr.y);
       }
       ctx.stroke();
@@ -892,7 +920,7 @@ export function renderSnakeFallback(
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-      const scr = w2s(wx, wy, camera, cw, ch);
+      const scr = w2sOff(wx, wy);
       const seg = segs[i % segs.length];
       const taperedR = segRadius * seg.sizeScale;
       const segAngle = walked.angles[i];
@@ -908,7 +936,7 @@ export function renderSnakeFallback(
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-      const scr = w2s(wx, wy, camera, cw, ch);
+      const scr = w2sOff(wx, wy);
       const segAngle = walked.angles[i];
       const segColor = pColors[i % pColors.length] ?? snake.color;
       const segShape = resolveShapeStyle(pBodyStyle, i);
@@ -925,7 +953,7 @@ export function renderSnakeFallback(
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-      const scr = w2s(wx, wy, camera, cw, ch);
+      const scr = w2sOff(wx, wy);
       const segAngle = walked.angles[i];
       const segColor = pColors[i % pColors.length] ?? snake.color;
       const segShape = resolveShapeStyle(pBodyStyle, i);
@@ -940,7 +968,7 @@ export function renderSnakeFallback(
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-      const scr = w2s(wx, wy, camera, cw, ch);
+      const scr = w2sOff(wx, wy);
       const segColor = getSegmentColor(snake.skinId, i) ?? snake.color;
       let group = colorGroups.get(segColor);
       if (!group) { group = []; colorGroups.set(segColor, group); }
@@ -967,7 +995,7 @@ export function renderSnakeFallback(
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-      const scr = w2s(wx, wy, camera, cw, ch);
+      const scr = w2sOff(wx, wy);
       ctx.moveTo(scr.x + segRadius, scr.y);
       ctx.arc(scr.x, scr.y, segRadius, 0, Math.PI * 2);
     }
@@ -1242,16 +1270,25 @@ function drawResponsiveEyes(
   const eyeOffset = headRadius * 0.42;
   const eyeRadius = headRadius * 0.38;
   let pupilRadius = eyeRadius * 0.52;
-  const perpAngle = moveAngle + Math.PI / 2;
-  const eyeForward = headRadius * 0.32;
   const maxShift = eyeRadius * 0.85;
 
   // ── SMOOTHING STATE (per-snake, keyed by snake ID) ──
   let smooth = pupilSmoothMap.get(snakeId);
   if (!smooth) {
-    smooth = { shiftX: 0, shiftY: 0, prevAngle: moveAngle, angleReady: false };
+    smooth = { shiftX: 0, shiftY: 0, prevAngle: moveAngle, angleReady: false, smoothAngle: moveAngle, prevSmoothAngle: moveAngle };
     pupilSmoothMap.set(snakeId, smooth);
   }
+
+  // FIX 3: Per-frame smoothed angle — eliminates tick-only angle jumps.
+  // snake.angle only updates on physics ticks; this lerp gives a continuous
+  // angle every render frame so the eyes don't freeze between ticks.
+  let angDiff = moveAngle - smooth.smoothAngle;
+  while (angDiff > Math.PI) angDiff -= 2 * Math.PI;
+  while (angDiff < -Math.PI) angDiff += 2 * Math.PI;
+  smooth.smoothAngle += angDiff * 0.35;
+  const smoothMoveAngle = smooth.smoothAngle;
+  const perpAngle = smoothMoveAngle + Math.PI / 2;
+  const eyeForward = headRadius * 0.32;
   // Prune stale entries (keep map small)
   if (pupilSmoothMap.size > 50) {
     const keys = [...pupilSmoothMap.keys()];
@@ -1279,15 +1316,15 @@ function drawResponsiveEyes(
   // Magnitude: combo of steering delta + angular velocity for sustained shift
   let angVel = 0;
   if (smooth.angleReady) {
-    angVel = moveAngle - smooth.prevAngle;
+    angVel = smoothMoveAngle - smooth.prevSmoothAngle;
     while (angVel > Math.PI) angVel -= 2 * Math.PI;
     while (angVel < -Math.PI) angVel += 2 * Math.PI;
   }
-  smooth.prevAngle = moveAngle;
+  smooth.prevSmoothAngle = smoothMoveAngle;
   smooth.angleReady = true;
 
-  // Steering delta for circular DIRECTION
-  let deltaAngle = targetAngle - moveAngle;
+  // Steering delta for circular DIRECTION (use smoothed angle)
+  let deltaAngle = targetAngle - smoothMoveAngle;
   while (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
   while (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
   const absDelta = Math.abs(deltaAngle);
@@ -1295,8 +1332,8 @@ function drawResponsiveEyes(
 
   // Look direction: use the full target direction (circular!), default to forward when idle
   const lookDir = absDelta < 0.06
-    ? moveAngle        // idle → look forward
-    : targetAngle;    // steering → look toward where we're going
+    ? smoothMoveAngle    // idle → look forward
+    : targetAngle;      // steering → look toward where we're going
 
   // Magnitude: combine steering delta with angular velocity
   // Angular velocity keeps the shift alive during sustained turns
@@ -1337,8 +1374,8 @@ function drawResponsiveEyes(
   }
 
   for (const side of [-1, 1]) {
-    const ex = hx + Math.cos(moveAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
-    const ey = hy + Math.sin(moveAngle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
+    const ex = hx + Math.cos(smoothMoveAngle) * eyeForward + Math.cos(perpAngle) * eyeOffset * side;
+    const ey = hy + Math.sin(smoothMoveAngle) * eyeForward + Math.sin(perpAngle) * eyeOffset * side;
 
     if (isBlinking) {
       // ── BLINK: thin eyelid arcs (top + bottom) closing inward ──
@@ -1347,11 +1384,11 @@ function drawResponsiveEyes(
       ctx.lineCap = 'round';
       // Top eyelid arc
       ctx.beginPath();
-      ctx.arc(ex, ey, eyeRadius * 0.75, moveAngle - 0.35, moveAngle + 0.35);
+      ctx.arc(ex, ey, eyeRadius * 0.75, smoothMoveAngle - 0.35, smoothMoveAngle + 0.35);
       ctx.stroke();
       // Bottom eyelid arc (slightly offset)
       ctx.beginPath();
-      ctx.arc(ex, ey, eyeRadius * 0.75, moveAngle + Math.PI - 0.35, moveAngle + Math.PI + 0.35);
+      ctx.arc(ex, ey, eyeRadius * 0.75, smoothMoveAngle + Math.PI - 0.35, smoothMoveAngle + Math.PI + 0.35);
       ctx.stroke();
       continue;
     }

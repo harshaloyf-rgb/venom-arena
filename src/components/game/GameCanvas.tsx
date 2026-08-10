@@ -331,12 +331,12 @@ export default function GameCanvas({
           if (s.path.headX < bvl || s.path.headX > bvr ||
               s.path.headY < bvt || s.path.headY > bvb) continue;
           const coiled = makeCoiledPath(s.path);
-          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, coiled);
+          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, alpha, coiled);
         }
       }
       if (gameState.player && gameState.player.alive) {
         const coiledPlayer = makeCoiledPath(gameState.player.path);
-        renderSnakeAtlas(ctx, gameState.player, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY, undefined, coiledPlayer);
+        renderSnakeAtlas(ctx, gameState.player, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY, undefined, alpha, coiledPlayer);
       }
 
       // Extraction progress ring on snake head (shared)

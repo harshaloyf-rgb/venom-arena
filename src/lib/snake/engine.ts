@@ -258,21 +258,19 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
   if (snake.angle > Math.PI) snake.angle -= 2 * Math.PI;
   else if (snake.angle < -Math.PI) snake.angle += 2 * Math.PI;
 
+  // FIX 2: Apply sharp turn braking to TURN RATE instead of SPEED.
+  // Eliminates speed oscillation — the #1 cause of boost stutter.
+  // At full turn, maxTurn is reduced by SHARP_TURN_BRAKE (30%),
+  // making the snake turn more slowly (realistic) without speed variation.
   const absClampedTurn = Math.abs(clampedTurn);
   const sharpness = maxTurn > 0 ? Math.min(absClampedTurn / maxTurn, 1.0) : 0;
   const smoothT = sharpness * sharpness * (3 - 2 * sharpness);
-  const rawBrake = 1 - SHARP_TURN_BRAKE * smoothT;
-
-  // P1: Smooth the brake factor over ~4 ticks instead of instant.
-  // Eliminates per-tick speed variation that causes camera jitter.
-  const BRAKE_LERP = 0.25;
-  snake.smoothBrakeFactor += (rawBrake - snake.smoothBrakeFactor) * BRAKE_LERP;
+  maxTurn *= (1 - SHARP_TURN_BRAKE * smoothT);
 
   // Detect boost transition for instant first drop
   const boostJustStarted = canBoost && !snake.boosting;
   snake.boosting = canBoost;
-  const baseSpeedForState = canBoost ? BOOST_SPEED : BASE_SPEED;
-  snake.speed = baseSpeedForState * snake.smoothBrakeFactor;
+  snake.speed = canBoost ? BOOST_SPEED : BASE_SPEED;
 
   // Path buffer movement
   const newHeadX = snake.path.getX(0) + Math.cos(snake.angle) * snake.speed;
