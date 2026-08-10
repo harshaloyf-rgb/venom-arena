@@ -669,3 +669,4 @@ Stage Summary:
 - camera.ts: worldToScreenSnapped no longer rounds, zoom target fully quantized, zoom lerp 0.08→0.15, zoom quantized to 0.001
 - The zoom target now ONLY changes when score crosses a 200-point bracket (was changing every food eaten)
 - All food/bot rendering now uses smooth sub-pixel positions instead of 1px-popping integer positions
+Session start: 2026-08-10T16:23:05Z, git: 13b118f
