@@ -13,6 +13,7 @@ import {
   updateAllBotAI, getBotBoost, spawnBots, respawnDeadBots, removeBot,
   BOT_TYPE_COLORS, type BotType, type BotSpawnConfig, DEFAULT_BOT_MIX,
 } from './bot-ai';
+import { SLITHER_PRESETS } from '@/components/panels/cosmetics/cosmetics-types';
 import {
   // MOVEMENT
   BASE_SPEED, BOOST_SPEED, BASE_TURN_RATE, MIN_TURN_RATE, SEGMENT_SPACING,
@@ -92,6 +93,21 @@ interface MoveContext {
 const foodHash = new SpatialHash();
 const bodyHash = new SpatialHash();
 const headHash = new SpatialHash();
+
+// ─── Bot Skin Pool ───────────────────────────────────────────────────────────
+/** Pre-computed skin overrides from all free presets for random bot assignment */
+const BOT_SKIN_POOL: PlayerSkinOverride[] = SLITHER_PRESETS.map((p) => ({
+  skinId: p.id,
+  bodyColor: p.colors[0],
+  headColor: p.colors[0],
+  accentColor: p.colors.length > 1 ? p.colors[1] : p.colors[0],
+  rarity: 'common' as SkinRarity,
+}));
+
+function getRandomBotSkin(): PlayerSkinOverride {
+  return BOT_SKIN_POOL[Math.floor(Math.random() * BOT_SKIN_POOL.length)];
+}
+
 const foodValueCache = new Map<number, number>();
 const DESPAWN_RADIUS_SQ = FOOD_DESPAWN_RADIUS * FOOD_DESPAWN_RADIUS;
 const VISIBLE_RADIUS_SQ = FOOD_VISIBLE_RADIUS * FOOD_VISIBLE_RADIUS;
@@ -119,14 +135,17 @@ function createSnake(
     path.appendTail(x, y);
   }
 
-  // Use type-specific colors for bots, otherwise skinOverride or random palette
+  // Use skinOverride if provided (bots get random presets), otherwise type-specific or random
   let color: string;
   let headColor: string;
-  if (botType && BOT_TYPE_COLORS[botType]) {
+  if (skinOverride) {
+    color = skinOverride.bodyColor;
+    headColor = skinOverride.headColor;
+  } else if (botType && BOT_TYPE_COLORS[botType]) {
     [color, headColor] = BOT_TYPE_COLORS[botType];
   } else {
-    color = skinOverride ? skinOverride.bodyColor : palette[0];
-    headColor = skinOverride ? skinOverride.headColor : palette[1];
+    color = palette[0];
+    headColor = palette[1];
   }
   const skinId = skinOverride ? skinOverride.skinId : 'skin-default';
   const rarity = skinOverride ? skinOverride.rarity : 'common' as SkinRarity;
@@ -525,7 +544,7 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
 function createBotSnakeFactory(
   id: string, name: string, score: number, x: number, y: number, now: number, botType: BotType,
 ): Snake {
-  return createSnake(id, name, score, x, y, now, undefined, botType);
+  return createSnake(id, name, score, x, y, now, getRandomBotSkin(), botType);
 }
 
 // ==========================================================================
