@@ -239,7 +239,10 @@ export default function GameCanvas({
       // GAME LOOP — full local simulation
       // ────────────────────────────────────────────────────────────────────
 
-      // Fixed timestep
+      // Fixed timestep — CAP TO 1 TICK PER FRAME.
+      // If a frame is slow, we skip physics ticks rather than piling them up.
+      // This eliminates the accumulator spiral that causes fast/slow stutter.
+      // The game runs at slightly lower physics rate during lag, but FEELS consistent.
       if (lastTimeRef.current === 0) {
         lastTimeRef.current = timestamp;
       }
@@ -248,10 +251,11 @@ export default function GameCanvas({
       accumulatorRef.current += elapsed;
 
       const tickMs = FIXED_DT * 1000;
-      let maxTicks = 10;
-      while (accumulatorRef.current >= tickMs && maxTicks-- > 0) {
+      // Run at most 1 tick per frame. Discard excess accumulated time
+      // (cap at 1 tick worth to prevent spiral on next frame).
+      if (accumulatorRef.current >= tickMs) {
         const killEvents = gameTick(gameState, inputState, FIXED_DT);
-        accumulatorRef.current -= tickMs;
+        accumulatorRef.current = Math.min(accumulatorRef.current - tickMs, tickMs);
 
 
         // Track player kills

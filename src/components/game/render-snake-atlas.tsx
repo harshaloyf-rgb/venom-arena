@@ -165,6 +165,24 @@ const _walker = {
   prevDy: 0,
 };
 
+// ─── Bot Walk Cache ─────────────────────────────────────────────────────
+// Caches walked world positions for bot snakes. Updated every BOT_WALK_CACHE_INTERVAL
+// frames. On cache-hit frames, re-uses previous world positions (screen coords
+// are still recomputed every frame since the camera moves). Saves ~8000 path
+// point evaluations per frame when 13 bots are visible.
+
+const BOT_WALK_CACHE_INTERVAL = 3;
+
+interface BotWalkCacheEntry {
+  xs: Float64Array;
+  ys: Float64Array;
+  angles: Float64Array;
+  count: number;
+  frame: number;
+}
+
+const _botWalkCache = new Map<string, BotWalkCacheEntry>();
+
 function walkPathFixedStep(
   path: { getX: (i: number) => number; getY: (i: number) => number; length: number; headX: number; headY: number },
   step: number,
@@ -783,7 +801,28 @@ export function renderSnakeFallback(
   }
 
   // ── Walk path at dynamic step (based on radius), capped to maxSegs ──
-  const walked = walkPathFixedStep(path, step, maxSegs, snake.angle);
+  // Bot walk cache: reuse walked world positions every BOT_WALK_CACHE_INTERVAL frames.
+  let walked: WalkResult;
+  if (snake.isBot) {
+    let cached = _botWalkCache.get(snake.id);
+    if (cached && (_frameCounter - cached.frame) < BOT_WALK_CACHE_INTERVAL) {
+      walked = cached;
+    } else {
+      walked = walkPathFixedStep(path, step, maxSegs, snake.angle);
+      // Copy to cache (walkPathFixedStep reuses shared buffers)
+      const cx = new Float64Array(walked.count);
+      const cy = new Float64Array(walked.count);
+      const ca = new Float64Array(walked.count);
+      cx.set(walked.xs.subarray(0, walked.count));
+      cy.set(walked.ys.subarray(0, walked.count));
+      ca.set(walked.angles.subarray(0, walked.count));
+      cached = { xs: cx, ys: cy, angles: ca, count: walked.count, frame: _frameCounter };
+      _botWalkCache.set(snake.id, cached);
+      walked = cached;
+    }
+  } else {
+    walked = walkPathFixedStep(path, step, maxSegs, snake.angle);
+  }
 
   // ── BOOST AURA: Full-body glow effect (fallback) ──
   if (snake.boosting) {
@@ -1401,4 +1440,5 @@ function getAnimationForSkin(skinId: string): string {
 export function cleanupSnakeParticles(snakeId: string): void {
   particlePools.delete(snakeId);
   pupilSmoothMap.delete(snakeId);
+  _botWalkCache.delete(snakeId);
 }

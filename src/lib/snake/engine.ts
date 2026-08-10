@@ -485,7 +485,9 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   };
 
   // 1. Update bot AI (compute target angles + boost decisions) — offline only
-  if (state.botsEnabled) {
+  // Throttled to every 3 ticks — bot decisions don't need 60fps updates.
+  // Cuts bot AI CPU cost by ~66% with no visible behavior change.
+  if (state.botsEnabled && state.tickCount % 3 === 0) {
     updateAllBotAI(state);
   }
 
