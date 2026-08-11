@@ -563,7 +563,7 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
 
   // 5. Density-based food spawning (every 10 ticks — density doesn't need 60fps)
   if (state.tickCount % 10 === 0) {
-    maintainFoodAroundPlayer(state, foodIdRef);
+    maintainFoodAroundPlayer(state, moveCtx.nextFoodId);
   }
 
   // 6. Check collisions (shared)
@@ -571,7 +571,7 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   for (const deadId of collisionResult.deadIds) {
     const deadSnake = state.snakes.get(deadId);
     if (deadSnake) {
-      killSnake(deadSnake, foodIdRef, state.foods);
+      killSnake(deadSnake, moveCtx.nextFoodId, state.foods);
       if (deadSnake.isBot) {
         removeBot(deadId);
         state.snakes.delete(deadId);
