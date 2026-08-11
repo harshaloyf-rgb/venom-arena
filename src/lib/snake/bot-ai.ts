@@ -49,9 +49,9 @@ export interface BotSpawnConfig {
   interceptor: number; grazer: number; trapper: number;
 }
 
-/** Default mix: 1000 bots — 400 peaceful, 600 aggressive */
+/** Default mix: 13 bots — 8 peaceful, 5 aggressive */
 export const DEFAULT_BOT_MIX: BotSpawnConfig = {
-  predator: 150, coiler: 80, baiter: 150, interceptor: 80, grazer: 290, trapper: 250,
+  predator: 2, coiler: 1, baiter: 2, interceptor: 1, grazer: 4, trapper: 3,
 };
 
 // ─── Performance Constants ───────────────────────────────────────────────────
