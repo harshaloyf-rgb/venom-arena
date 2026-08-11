@@ -179,16 +179,18 @@ function angleDiff(a: number, b: number): number {
   return normalizeAngle(b - a);
 }
 
-// ─── Food Scanning (unchanged from v1) ──────────────────────────────────────
+// ─── Food Scanning — pre-allocated sample buffer ──────────────────────────
 
+const _foodSampleBuf: FoodOrb[] = [];
 function sampleFood(foods: FoodOrb[], maxCount: number): FoodOrb[] {
   const len = foods.length;
   if (len <= maxCount) return foods;
-  const sampled: FoodOrb[] = new Array(maxCount);
+  // Reuse pre-allocated buffer (no Array allocation)
+  if (_foodSampleBuf.length < maxCount) _foodSampleBuf.length = maxCount;
   for (let i = 0; i < maxCount; i++) {
-    sampled[i] = foods[Math.floor(Math.random() * len)];
+    _foodSampleBuf[i] = foods[Math.floor(Math.random() * len)];
   }
-  return sampled;
+  return _foodSampleBuf;
 }
 
 function findNearestFood(
@@ -257,25 +259,37 @@ function scanBodyAhead(
   const scanDistSq = BODY_SCAN_DIST * BODY_SCAN_DIST;
   const headRangeSq = (BODY_SCAN_DIST * 2.5) * (BODY_SCAN_DIST * 2.5);
 
-  // Pre-sort: collect head distances, only scan 3 nearest snakes.
-  // When clustered with 10+ snakes, this cuts 70% of segment iterations.
-  type SnakeDist = { snake: Snake; distSq: number };
-  const nearby: SnakeDist[] = [];
+  // Keep top-3 nearest snakes using inline insertion (no array/sort allocation).
+  // Avoids creating SnakeDist[], calling sort(), and slice() per bot per call.
+  let near1: Snake | null = null, near1dSq = Infinity;
+  let near2: Snake | null = null, near2dSq = Infinity;
+  let near3: Snake | null = null, near3dSq = Infinity;
+
   for (const [id, other] of snakes) {
     if (id === snake.id || !other.alive) continue;
     const dSq = distSq(hx, hy, other.path.headX, other.path.headY);
-    if (dSq <= headRangeSq) nearby.push({ snake: other, distSq: dSq });
+    if (dSq > headRangeSq) continue;
+    // Insert into sorted top-3
+    if (dSq < near1dSq) {
+      near3 = near2; near3dSq = near2dSq;
+      near2 = near1; near2dSq = near1dSq;
+      near1 = other; near1dSq = dSq;
+    } else if (dSq < near2dSq) {
+      near3 = near2; near3dSq = near2dSq;
+      near2 = other; near2dSq = dSq;
+    } else if (dSq < near3dSq) {
+      near3 = other; near3dSq = dSq;
+    }
   }
-  // Sort by head distance, keep only 3 nearest
-  nearby.sort((a, b) => a.distSq - b.distSq);
-  const scanList = nearby.length > 3 ? nearby.slice(0, 3) : nearby;
 
   let closestDist = BODY_SCAN_DIST + 1;
   let closestFleeAngle = 0;
 
-  for (const { snake: other } of scanList) {
+  // Scan body segments of nearest 3 snakes
+  for (let s = 0; s < 3; s++) {
+    const other = s === 0 ? near1 : s === 1 ? near2 : near3;
+    if (!other) continue;
     const len = other.path.length;
-    // Check every 2nd body point (6px spacing at BASE_SPEED=3)
     for (let i = 2; i < len; i += 2) {
       const bx = other.path.getX(i);
       const by = other.path.getY(i);
@@ -285,7 +299,6 @@ function scanBodyAhead(
 
       if (dSq > scanDistSq || dSq < 1) continue;
 
-      // Is this point in my forward cone?
       const angleToPoint = Math.atan2(dy, dx);
       const aDiff = Math.abs(normalizeAngle(angleToPoint - myAngle));
       if (aDiff > BODY_SCAN_CONE) continue;
@@ -293,7 +306,6 @@ function scanBodyAhead(
       const d = Math.sqrt(dSq);
       if (d < closestDist) {
         closestDist = d;
-        // Flee: steer away from the body point
         closestFleeAngle = Math.atan2(-dy, -dx);
       }
     }
