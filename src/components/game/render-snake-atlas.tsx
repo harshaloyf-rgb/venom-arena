@@ -401,6 +401,8 @@ export function renderSnakeAtlas(
   const headWx = effectivePath.headX;
   const headWy = effectivePath.headY;
 
+  const zoom = camera.zoom;
+
   // ── Calculate logical body length (segments) using sqrt growth curve ──
   const logicalLen = computeBodyLength(snake.score);
   const visualLen = logicalLen * SEGMENT_SPACING;
@@ -412,8 +414,6 @@ export function renderSnakeAtlas(
   const cullMargin = visualLen + 100;
   if (headWx < viewport.left - cullMargin || headWx > viewport.right + cullMargin) return;
   if (headWy < viewport.top - cullMargin || headWy > viewport.bottom + cullMargin) return;
-
-  const zoom = camera.zoom;
   const cw = viewport.width;
   const ch = viewport.height;
   const segRadius = snake.bodyRadius * zoom;
