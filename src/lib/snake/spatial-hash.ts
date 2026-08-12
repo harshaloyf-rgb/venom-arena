@@ -34,14 +34,26 @@ export class SpatialHash {
   private cellMap: Map<number, Cell>;
   private invCellSize: number;
 
-  // P4: Pre-allocated query result buffer — avoids [] allocation per query.
-  // Grows as needed but never shrinks (reused across frames).
+  // P1 FIX #5: Pre-allocated query result buffer + entity object pool.
+  // Eliminates per-query [] and {x,y,radius,id} allocations.
   private _queryBuf: SpatialEntity[] = [];
+  private _entityPool: SpatialEntity[] = [];
 
   constructor(cellSize: number = SPATIAL_CELL_SIZE) {
     this.cellSize = cellSize;
     this.invCellSize = 1 / cellSize;
     this.cellMap = new Map();
+  }
+
+  /** Get a reusable entity object from the pool */
+  private _getEntity(x: number, y: number, radius: number, id: number | string): SpatialEntity {
+    const pool = this._entityPool;
+    if (pool.length > 0) {
+      const e = pool.pop()!;
+      e.x = x; e.y = y; e.radius = radius; e.id = id;
+      return e;
+    }
+    return { x, y, radius, id };
   }
 
   /** Encode 2D cell coords into a single number */
@@ -122,7 +134,7 @@ export class SpatialHash {
           const dy = cell.ys[i] - y;
           const threshold = radius + cell.rs[i];
           if (dx * dx + dy * dy <= threshold * threshold) {
-            result.push({ x: cell.xs[i], y: cell.ys[i], radius: cell.rs[i], id: cell.ids[i] });
+            result.push(this._getEntity(cell.xs[i], cell.ys[i], cell.rs[i], cell.ids[i]));
           }
         }
       }
@@ -131,8 +143,14 @@ export class SpatialHash {
     return result;
   }
 
-  /** Clear all entities — reset counts and prune empty cells to prevent unbounded memory growth */
+  /** Clear all entities — return query objects to pool, reset counts, prune empty cells */
   clear(): void {
+    // Return query buffer objects to pool
+    const buf = this._queryBuf;
+    const pool = this._entityPool;
+    for (let i = 0; i < buf.length; i++) pool.push(buf[i]);
+    buf.length = 0;
+    // Reset cell counts and prune empty cells
     for (const [key, cell] of this.cellMap) {
       if (cell.count === 0) {
         this.cellMap.delete(key);

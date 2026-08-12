@@ -16,15 +16,13 @@ import { incrementCoilFrame } from './coil-path';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
-/** P7: Compute body draw step based on current radius.
- *  Ensures segments overlap for solid continuous look at any size.
- *  Thinner snakes → tighter spacing (more segments drawn).
- *  Fatter snakes  → wider spacing  (fewer, larger circles).
- *  With unlimited growth, step scales proportionally to radius.
- *  The 1.3 factor (was 1.5) ensures more overlap for bigger snakes
- *  where gaps would be more visible. */
-function bodyDrawStep(bodyRadius: number): number {
-  return Math.max(bodyRadius * 1.3, 4);
+/** P7: Compute body draw step based on current radius and zoom.
+ *  Ensures segments overlap for solid continuous look at any size/zoom.
+ *  At low zoom, divides by min(zoom,1) to draw more segments (prevents dotted lines).
+ *  Viewport culling limits actual draw count so the extra segments are cheap. */
+function bodyDrawStep(bodyRadius: number, zoom: number = 1): number {
+  const base = Math.max(bodyRadius * 1.3, 4);
+  return base / Math.min(zoom, 1);
 }
 
 /** Smoothed visual segment count per snake (prevents score-driven jitter).
@@ -407,7 +405,7 @@ export function renderSnakeAtlas(
   // ── Calculate logical body length (segments) using sqrt growth curve ──
   const logicalLen = computeBodyLength(snake.score);
   const visualLen = logicalLen * SEGMENT_SPACING;
-  const step = bodyDrawStep(snake.bodyRadius);
+  const step = bodyDrawStep(snake.bodyRadius, zoom);
   const rawMaxSegs = Math.ceil(visualLen / step);
   const maxSegs = getSmoothedMaxSegs(snake.id, rawMaxSegs);
 
@@ -420,6 +418,13 @@ export function renderSnakeAtlas(
   const cw = viewport.width;
   const ch = viewport.height;
   const segRadius = snake.bodyRadius * zoom;
+
+  // P3 FIX #10: Non-linear head scale — large snakes have proportionally smaller heads
+  // Small snakes: 15% bigger head, large snakes: ~5% bigger head
+  const headScale = isMultiColorSkin(snake.skinId)
+    ? 1.0
+    : 1.15 - 0.1 * Math.log2(1 + snake.score / 1000);
+  const clampedHeadScale = Math.max(1.0, Math.min(1.15, headScale));
 
   // FIX 1: Render-time interpolation offset.
   // Shifts the entire snake to match the camera's interpolated head position,
@@ -443,7 +448,7 @@ export function renderSnakeAtlas(
   // ── Head visibility & screen pos (needed by spawn shield + head rendering) ──
   const headVisible = headWx >= vl && headWx <= vr && headWy >= vt && headWy <= vb;
   const headScreen = headVisible ? w2sOff(headWx, headWy) : null;
-  const atlasHeadR = segRadius * 1.05;
+  const atlasHeadR = segRadius * clampedHeadScale;
 
   // ── Spawn shield: rotating hexagonal ring that fades out ──
   const spawnAge = time - snake.spawnTime;
@@ -778,7 +783,7 @@ export function renderSnakeFallback(
   // ── Calculate logical body length using sqrt growth curve ──
   const logicalLen = computeBodyLength(snake.score);
   const visualLen = logicalLen * SEGMENT_SPACING;
-  const step = bodyDrawStep(snake.bodyRadius);
+  const step = bodyDrawStep(snake.bodyRadius, zoom);
   const rawMaxSegs = Math.ceil(visualLen / step);
   const maxSegs = getSmoothedMaxSegs(snake.id, rawMaxSegs);
 

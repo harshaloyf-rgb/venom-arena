@@ -586,7 +586,7 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   }
 
   // 6. Check collisions (shared)
-  const collisionResult = checkCollisions(state.snakes, bodyHash, headHash, now);
+  const collisionResult = checkCollisions(state.snakes, bodyHash, headHash, now, state.player?.path.headX, state.player?.path.headY);
   for (const deadId of collisionResult.deadIds) {
     const deadSnake = state.snakes.get(deadId);
     if (deadSnake) {

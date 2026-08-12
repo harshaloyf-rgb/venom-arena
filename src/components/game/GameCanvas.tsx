@@ -255,9 +255,10 @@ export default function GameCanvas({
       // GAME LOOP — full local simulation with P0 render interpolation
       // ────────────────────────────────────────────────────────────────────
 
-      // Fixed timestep — CAP TO 4 TICKS PER FRAME.
-      // Increased from 2→4 to prevent effective tick rate drop when render
-      // overhead increases (more visible bots → longer frames → fewer ticks).
+      // P0 FIX #2: Cap accumulator at 2 ticks max.
+      // More than 2 ticks without rendering causes visible "batch movement" —
+      // the snake appears to freeze then jump. Dropped physics ticks are
+      // better than the stop-start stutter.
       if (lastTimeRef.current === 0) {
         lastTimeRef.current = timestamp;
       }
@@ -266,21 +267,21 @@ export default function GameCanvas({
       accumulatorRef.current += elapsed;
 
       const tickMs = FIXED_DT * 1000;
-      const maxAccum = tickMs * 4;
+      const maxAccum = tickMs * 2;
       if (accumulatorRef.current > maxAccum) accumulatorRef.current = maxAccum;
 
+      // P0 FIX #2b: Save prevHeadX/Y for the PLAYER only.
+      // Must be saved BEFORE the LAST tick in the batch (not the first)
+      // so camera interpolation spans only 1 tick of movement.
       let ticksThisFrame = 0;
-
-      // P0: Save prevHeadX/Y for the PLAYER only (for render interpolation).
-      // Bots do NOT get alpha interpolation — only the player snake needs it
-      // because the camera tracks the player. Applying alpha to bots causes
-      // vibration (camera and body offset are independent → relative jitter).
-      const player = gameState.player;
-      if (player && player.alive) {
-        player.prevHeadX = player.path.headX;
-        player.prevHeadY = player.path.headY;
-      }
-      while (accumulatorRef.current >= tickMs && ticksThisFrame < 4) {
+      const maxTicks = 2;
+      while (accumulatorRef.current >= tickMs && ticksThisFrame < maxTicks) {
+        // Save prevHead BEFORE the last tick (for render interpolation)
+        const player = gameState.player;
+        if (player && player.alive && ticksThisFrame === maxTicks - 1) {
+          player.prevHeadX = player.path.headX;
+          player.prevHeadY = player.path.headY;
+        }
         const killEvents = gameTick(gameState, inputState, FIXED_DT);
         accumulatorRef.current -= tickMs;
 
@@ -320,9 +321,10 @@ export default function GameCanvas({
         seedInitialFood(gameState);
       }
 
-      // P0: Camera with interpolated position.
+      // Camera interpolation — only valid when player is alive
       // alpha = how far we are toward the next tick (0 to ~1).
       const alpha = Math.min(accumulatorRef.current / tickMs, 1.0);
+      const player = gameState.player;
       if (player && player.alive) {
         updateCameraInterpolated(cameraRef.current, player, w, h, alpha);
       }
@@ -359,14 +361,13 @@ export default function GameCanvas({
           // know heading per-axis, use the full margin in all directions.
           if (s.path.headX < viewport.left - margin || s.path.headX > viewport.right + margin ||
               s.path.headY < viewport.top - margin || s.path.headY > viewport.bottom + margin) continue;
-          // Bots use the same render alpha as the player for smooth
-          // interpolation between ticks (prevents stop-and-go stutter).
-          // All bot bodies always rendered (no far-LOD dot-only mode).
-          // lodFar still passed for minor perf skips (eyes/name/shield on far bots).
+          // P0 FIX #1: Bots do NOT get alpha interpolation — only the player needs it.
+          // Applying alpha to bots causes head-body separation: head renders ahead
+          // of path position while body is at fixed tick positions. alpha=1 => offset=0.
           const dx = s.path.headX - camX;
           const dy = s.path.headY - camY;
           const lodFar = Math.sqrt(dx * dx + dy * dy) > 1500 ? 1 : 0;
-          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, alpha, undefined, lodFar);
+          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, 1, undefined, lodFar);
         }
       }
       if (gameState.player && gameState.player.alive) {

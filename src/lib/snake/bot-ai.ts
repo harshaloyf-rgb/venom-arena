@@ -452,18 +452,35 @@ function wallAvoidAngle(x: number, y: number, currentAngle: number, boundary: nu
 // like real players instead of instantly snapping to new targets.
 
 function steerToward(data: BotAIData, desiredAngle: number, bias = 0.6): void {
-  data.targetAngle = normalizeAngle(
+  // P0 FIX #3: Dampen target angle changes to prevent snap turns.
+  // Don't allow more than ~15° (0.26 rad) of target angle change per AI tick.
+  // This makes bots curve smoothly toward threats instead of snapping.
+  const MAX_TARGET_CHANGE = 0.26; // ~15 degrees
+  let newAngle = normalizeAngle(
     data.targetAngle * bias + desiredAngle * (1 - bias),
   );
+  let diff = newAngle - data.targetAngle;
+  diff = Math.atan2(Math.sin(diff), Math.cos(diff)); // shortest path
+   if (Math.abs(diff) > MAX_TARGET_CHANGE) {
+    newAngle = data.targetAngle + Math.sign(diff) * MAX_TARGET_CHANGE;
+  }
+  data.targetAngle = newAngle;
 }
 
 /** Same as steerToward but with per-type food aggression bias */
 function steerToFoodBias(data: BotAIData, desiredAngle: number, type: BotType): void {
-  // More food-aggressive types turn harder toward food
-  const foodBias = 1.0 - FOOD_AGRESSION[type] * 0.5; // 0.8 (grazer) to 0.85 (coiler)
-  data.targetAngle = normalizeAngle(
+  // P0 FIX #3: Same 15° dampening as steerToward
+  const MAX_TARGET_CHANGE = 0.26;
+  const foodBias = 1.0 - FOOD_AGRESSION[type] * 0.5;
+  let newAngle = normalizeAngle(
     data.targetAngle * foodBias + desiredAngle * (1 - foodBias),
   );
+  let diff = newAngle - data.targetAngle;
+  diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+  if (Math.abs(diff) > MAX_TARGET_CHANGE) {
+    newAngle = data.targetAngle + Math.sign(diff) * MAX_TARGET_CHANGE;
+  }
+  data.targetAngle = newAngle;
 }
 
 // ─── Shared: Set angle to food or wander ────────────────────────────────────
@@ -655,14 +672,20 @@ function updateBaiter(snake: Snake, data: BotAIData, state: GameState): void {
     return;
   }
 
-  // Detect if someone is chasing me (behind + approaching)
+  // P1 FIX #4: Use spatial hash instead of iterating ALL snakes (O(N) → O(k)).
+  // Only check snakes within 400px — same as the distance filter below.
   let chaserDist = Infinity;
   let chaserId: string | null = null;
   let chaserAngle = 0;
-  for (const [id, other] of state.snakes) {
-    if (id === snake.id || !other.alive) continue;
-    const dx = other.path.headX - hx;
-    const dy = other.path.headY - hy;
+  const nearby = _aiHeadHash.query(hx, hy, 400);
+  for (let ni = 0; ni < nearby.length; ni++) {
+    const otherId = nearby[ni].id as string;
+    if (otherId === snake.id) continue;
+    const other = state.snakes.get(otherId);
+    if (!other || !other.alive) continue;
+
+    const dx = nearby[ni].x - hx;
+    const dy = nearby[ni].y - hy;
     const dSq = dx * dx + dy * dy;
     if (dSq > 400 * 400) continue;
 
@@ -680,7 +703,7 @@ function updateBaiter(snake: Snake, data: BotAIData, state: GameState): void {
     const d = Math.sqrt(dSq);
     if (d < chaserDist) {
       chaserDist = d;
-      chaserId = id;
+      chaserId = otherId;
       chaserAngle = angleToOther;
     }
   }
@@ -882,16 +905,22 @@ function updateRanked(snake: Snake, data: BotAIData, state: GameState): void {
   const hx = snake.path.headX;
   const hy = snake.path.headY;
 
-  // ── Phase 1: Flee any snake within danger range (much larger than normal) ──
+  // P1 FIX #4: Use spatial hash instead of iterating ALL snakes.
+  const dangerRange = Math.sqrt(RANKED_DANGER_RANGE_SQ);
+  const nearby = _aiHeadHash.query(hx, hy, dangerRange);
   let fleeX = 0, fleeY = 0;
   let dangerCount = 0;
   let closestDanger = Infinity;
   let closestDangerAngle = 0;
 
-  for (const [id, other] of state.snakes) {
-    if (id === snake.id || !other.alive) continue;
-    const dx = other.path.headX - hx;
-    const dy = other.path.headY - hy;
+  for (let ni = 0; ni < nearby.length; ni++) {
+    const otherId = nearby[ni].id as string;
+    if (otherId === snake.id) continue;
+    const other = state.snakes.get(otherId);
+    if (!other || !other.alive) continue;
+
+    const dx = nearby[ni].x - hx;
+    const dy = nearby[ni].y - hy;
     const dSq = dx * dx + dy * dy;
     if (dSq > RANKED_DANGER_RANGE_SQ || dSq < 1) continue;
 
@@ -919,14 +948,19 @@ function updateRanked(snake: Snake, data: BotAIData, state: GameState): void {
     return;
   }
 
-  // ── Phase 2: Repel from peer ranked bots (stay spread apart) ──
+  // P1 FIX #4: Use spatial hash for peer repel instead of iterating ALL snakes.
+  const peerRange = Math.sqrt(RANKED_PEER_RANGE_SQ);
+  const nearbyPeers = _aiHeadHash.query(hx, hy, peerRange);
   let repelX = 0, repelY = 0;
-  for (const [id, other] of state.snakes) {
-    if (id === snake.id || !other.alive || !other.isBot) continue;
-    const otherData = getBotData(id);
+  for (let ni = 0; ni < nearbyPeers.length; ni++) {
+    const otherId = nearbyPeers[ni].id as string;
+    if (otherId === snake.id) continue;
+    const other = state.snakes.get(otherId);
+    if (!other || !other.alive || !other.isBot) continue;
+    const otherData = getBotData(otherId);
     if (!otherData || otherData.type !== 'ranked') continue;
-    const dx = other.path.headX - hx;
-    const dy = other.path.headY - hy;
+    const dx = nearbyPeers[ni].x - hx;
+    const dy = nearbyPeers[ni].y - hy;
     const dSq = dx * dx + dy * dy;
     if (dSq > RANKED_PEER_RANGE_SQ || dSq < 1) continue;
     const d = Math.sqrt(dSq);
@@ -988,24 +1022,34 @@ function computeGuardRankedAngle(snake: Snake, state: GameState): number | null 
   const hx = snake.path.headX;
   const hy = snake.path.headY;
 
-  // Find nearest ranked bot within guard range
+  // P1 FIX #4: Use spatial hash to find nearest ranked bot instead of iterating ALL.
+  const guardRange = Math.sqrt(GUARD_DETECT_RANGE_SQ);
+  const nearby = _aiHeadHash.query(hx, hy, guardRange);
   let nearestRanked: { id: string; x: number; y: number; distSq: number } | null = null;
-  for (const [id, other] of state.snakes) {
-    if (id === snake.id || !other.alive || !other.isBot) continue;
-    const data = getBotData(id);
+  for (let ni = 0; ni < nearby.length; ni++) {
+    const otherId = nearby[ni].id as string;
+    if (otherId === snake.id) continue;
+    const other = state.snakes.get(otherId);
+    if (!other || !other.alive || !other.isBot) continue;
+    const data = getBotData(otherId);
     if (!data || data.type !== 'ranked') continue;
-    const dSq = distSq(hx, hy, other.path.headX, other.path.headY);
+    const dSq = distSq(hx, hy, nearby[ni].x, nearby[ni].y);
     if (dSq < GUARD_DETECT_RANGE_SQ && (!nearestRanked || dSq < nearestRanked.distSq)) {
-      nearestRanked = { id, x: other.path.headX, y: other.path.headY, distSq: dSq };
+      nearestRanked = { id: otherId, x: nearby[ni].x, y: nearby[ni].y, distSq: dSq };
     }
   }
   if (!nearestRanked) return null;
 
-  // Check if any threat (non-ranked snake) is heading toward the ranked bot
-  for (const [id, other] of state.snakes) {
-    if (id === snake.id || !other.alive) continue;
-    const otherData = getBotData(id);
-    if (otherData && otherData.type === 'ranked') continue; // don't guard against other ranked
+  // P1 FIX #4: Use spatial hash to find threats to the ranked bot.
+  const threatRange = Math.sqrt(GUARD_DETECT_RANGE_SQ);
+  const nearRanked = _aiHeadHash.query(nearestRanked.x, nearestRanked.y, threatRange);
+  for (let ni = 0; ni < nearRanked.length; ni++) {
+    const otherId = nearRanked[ni].id as string;
+    if (otherId === snake.id) continue;
+    const other = state.snakes.get(otherId);
+    if (!other || !other.alive) continue;
+    const otherData = getBotData(otherId);
+    if (otherData && otherData.type === 'ranked') continue;
 
     const tx = other.path.headX;
     const ty = other.path.headY;
@@ -1243,6 +1287,10 @@ export function getBotBoost(snakeId: string): boolean {
 // ─── Bot Spawning ────────────────────────────────────────────────────────────
 
 let nameCounters: Record<BotType, number> = { predator: 0, coiler: 0, baiter: 0, interceptor: 0, grazer: 0, trapper: 0, ranked: 0 };
+
+// P1 FIX #6: Monotonic counter for unique bot IDs.
+// Date.now() causes ID collisions when two bots die in the same millisecond.
+let _botIdCounter = 0;
 
 function pickBotName(type: BotType): string {
   const names = BOT_NAMES[type];
@@ -1498,7 +1546,7 @@ export function respawnDeadBots(
       pos = findBotSpawnPos(state, massSpawn);
       respawnScore = generateNormalBotScore(state);
     }
-    const id = `bot-${bestType}-${Date.now()}`;
+    const id = `bot-${bestType}-${_botIdCounter++}`;
     const name = pickBotName(bestType);
     const snake = createSnakeFn(id, name, respawnScore, pos.x, pos.y, now, bestType);
     snake.isBot = true; snake.isPlayer = false;

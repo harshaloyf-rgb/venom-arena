@@ -172,8 +172,13 @@ export function checkCollisions(
   bodyHash: SpatialHash,
   headHash: SpatialHash,
   now: number,
+  // P2 FIX #8: Viewport culling — skip expensive narrow-phase for bot pairs
+  // far from the player (player can't see them, so precision doesn't matter).
+  playerX?: number,
+  playerY?: number,
 ): CollisionResult {
   const scratch = _scratch;
+  const VIEWPORT_COLLISION_RANGE_SQ = 2000 * 2000;
 
   const aliveSnakes: Snake[] = [];
   for (const [, snake] of snakes) {
@@ -326,6 +331,20 @@ export function checkCollisions(
       const otherSnake = snakes.get(otherId);
       if (!otherSnake || !otherSnake.alive || deadSnakes.has(otherId)) continue;
       if (now - otherSnake.spawnTime < SPAWN_PROTECTION_MS) continue;
+
+      // P2 FIX #8: Skip expensive narrow-phase for bot-vs-bot pairs
+      // where BOTH are far from the player viewport.
+      if (playerX !== undefined && playerY !== undefined
+          && snake.isBot && otherSnake.isBot) {
+        const dxA = hcx - playerX;
+        const dyA = hcy - playerY;
+        const dxB = otherSnake.path.headX - playerX;
+        const dyB = otherSnake.path.headY - playerY;
+        if (dxA * dxA + dyA * dyA > VIEWPORT_COLLISION_RANGE_SQ
+            && dxB * dxB + dyB * dyB > VIEWPORT_COLLISION_RANGE_SQ) {
+          continue;
+        }
+      }
 
       // Narrow phase: two independent detection methods.
       // Starts from segment 1 (first body point, no neck skip).
