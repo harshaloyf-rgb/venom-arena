@@ -578,7 +578,7 @@ export function seedInitialFood(state: GameState): boolean {
 export function gameTick(state: GameState, input: InputState, _dt: number): KillEvent[] {
   state.tickCount++;
   const now = performance.now();
-
+  const ac = state.arenaConfig;
   const foodIdRef = { value: state.nextFoodId };
 
   const moveCtx: MoveContext = {
@@ -588,7 +588,6 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   };
 
   // 1. Update bot AI (compute target angles + boost decisions) — offline only
-  const ac = state.arenaConfig;
   if (state.botsEnabled && state.tickCount % ac.aiTickThrottle === 0) {
     // PERF: Pass foodHash so AI uses spatial food queries instead of random sampling
     updateAllBotAI(state, foodHash);
