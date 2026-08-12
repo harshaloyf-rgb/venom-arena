@@ -13,12 +13,13 @@
 
 import type { Camera, Snake, Viewport } from './types';
 import {
-  CAMERA_ZOOM_MIN, CAMERA_BASE_ZOOM,
+  CAMERA_ZOOM_MIN, CAMERA_BASE_ZOOM, CAMERA_ZOOM_LERP,
   START_LENGTH, SNAKE_RADIUS_MIN, computeBodyLength, computeBodyRadius,
 } from './config';
 
-/** Camera zoom lerp factor — 0.15 → 90% convergence in ~14 frames (0.23s at 60fps). */
-const CAMERA_ZOOM_LERP = 0.15;
+// Camera zoom lerp factor imported from config.ts (0.015).
+// Previously defined locally as 0.15 (10× too fast), causing visible zoom jitter.
+// 0.015 → 90% convergence in ~153 frames (2.55s at 60fps) — smooth zoom transitions.
 
 /** Score bracket size for zoom quantization — target only changes when score
  *  crosses a multiple of this value, preventing micro-oscillation. */

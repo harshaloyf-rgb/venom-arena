@@ -32,14 +32,12 @@ export function drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, viewport
 
   ctx.beginPath();
   for (let x = offsetX; x < viewport.width; x += zoomedGrid) {
-    const px = Math.round(x) + 0.5;
-    ctx.moveTo(px, 0);
-    ctx.lineTo(px, viewport.height);
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, viewport.height);
   }
   for (let y = offsetY; y < viewport.height; y += zoomedGrid) {
-    const py = Math.round(y) + 0.5;
-    ctx.moveTo(0, py);
-    ctx.lineTo(viewport.width, py);
+    ctx.moveTo(0, y);
+    ctx.lineTo(viewport.width, y);
   }
   ctx.stroke();
 }

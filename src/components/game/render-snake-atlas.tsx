@@ -26,8 +26,10 @@ function bodyDrawStep(bodyRadius: number, zoom: number = 1): number {
 }
 
 /** Smoothed visual segment count per snake (prevents score-driven jitter).
- * Keyed by snake.id. Lerps toward target at ~10% per frame. */
+ * Keyed by snake.id. Lerps toward target at ~10% per frame.
+ * FIX #13: Pruned every frame to prevent unbounded growth from bot respawns. */
 const _smoothSegs = new Map<string, number>();
+const _SMOOTH_SEGS_MAX = 1100; // 999 bots + player + margin
 
 /** Clean up smoothed segment entries for a snake. */
 export function clearSmoothedSegs(snakeId: string): void {
@@ -106,6 +108,14 @@ export function setCachedDpr(dpr: number): void { _cachedDpr = dpr; }
 export function beginRenderFrame(): void {
   _frameCounter++;
   incrementCoilFrame();
+  // FIX #13: Prune _smoothSegs to prevent unbounded Map growth
+  if (_smoothSegs.size > _SMOOTH_SEGS_MAX) {
+    let toRemove = _smoothSegs.size - _SMOOTH_SEGS_MAX;
+    for (const key of _smoothSegs.keys()) {
+      if (toRemove-- <= 0) break;
+      _smoothSegs.delete(key);
+    }
+  }
 }
 
 /** Cached readEquippedCosmetics — reads localStorage at most once per frame. */
@@ -168,23 +178,12 @@ const _walker = {
   prevDy: 0,
 };
 
-// ─── Bot Walk Cache ─────────────────────────────────────────────────────
-// Caches walked world positions for bot snakes. Updated every BOT_WALK_CACHE_INTERVAL
-// frames (3 = reuse for 2 frames, re-walk on 3rd). On cache-hit frames, re-uses
-// previous world positions (screen coords still recomputed since camera moves).
-// Saves ~16000 path point evaluations per frame when 13 bots are visible.
-
-const BOT_WALK_CACHE_INTERVAL = 3;
-
-interface BotWalkCacheEntry {
-  xs: Float64Array;
-  ys: Float64Array;
-  angles: Float64Array;
-  count: number;
-  frame: number;
-}
-
-const _botWalkCache = new Map<string, BotWalkCacheEntry>();
+// ─── Bot Walk Cache (REMOVED) ────────────────────────────────────────────
+// Bot walk cache was eliminated: caching walked positions for 2 frames caused
+// visible head-body separation because the head is rendered at a fresh position
+// each frame while cached body positions were 1-2 ticks stale. The walk function
+// already uses a shared _walker state + pre-allocated _walkResult buffer, so
+// the per-frame walk cost is minimal (~1-2ms for 13 visible bots).
 
 function walkPathFixedStep(
   path: { getX: (i: number) => number; getY: (i: number) => number; length: number; headX: number; headY: number },
@@ -871,27 +870,9 @@ export function renderSnakeFallback(
   // The furthest a visible segment can be from the head is the viewport diagonal + margin.
   const vpDiag = Math.sqrt(cw * cw + ch * ch) / zoom;
   const walkDistLimit = vpDiag + 500;
-  let walked: WalkResult;
-  if (snake.isBot) {
-    let cached = _botWalkCache.get(snake.id);
-    if (cached && (_frameCounter - cached.frame) < BOT_WALK_CACHE_INTERVAL) {
-      walked = cached;
-    } else {
-      walked = walkPathFixedStep(path, step, maxSegs, snake.angle, walkDistLimit);
-      // Copy to cache (walkPathFixedStep reuses shared buffers)
-      const cx = new Float64Array(walked.count);
-      const cy = new Float64Array(walked.count);
-      const ca = new Float64Array(walked.count);
-      cx.set(walked.xs.subarray(0, walked.count));
-      cy.set(walked.ys.subarray(0, walked.count));
-      ca.set(walked.angles.subarray(0, walked.count));
-      cached = { xs: cx, ys: cy, angles: ca, count: walked.count, frame: _frameCounter };
-      _botWalkCache.set(snake.id, cached);
-      walked = cached;
-    }
-  } else {
-    walked = walkPathFixedStep(path, step, maxSegs, snake.angle, walkDistLimit);
-  }
+  // All snakes (player + bots) walk every frame — no caching.
+  // Bot walk cache was removed to eliminate head-body separation bug.
+  const walked = walkPathFixedStep(path, step, maxSegs, snake.angle, walkDistLimit);
 
   // ── BOOST AURA: Full-body glow effect (fallback) ──
   if (snake.boosting) {
@@ -1331,10 +1312,14 @@ function drawResponsiveEyes(
   const smoothMoveAngle = smooth.smoothAngle;
   const perpAngle = smoothMoveAngle + Math.PI / 2;
   const eyeForward = headRadius * 0.32;
-  // Prune stale entries (keep map small)
+  // FIX #16: Prune stale entries without array allocation.
+  // Iterate and delete first entries until under limit.
   if (pupilSmoothMap.size > 50) {
-    const keys = [...pupilSmoothMap.keys()];
-    for (let i = 0; i < keys.length - 20; i++) pupilSmoothMap.delete(keys[i]);
+    let toRemove = pupilSmoothMap.size - 30;
+    for (const key of pupilSmoothMap.keys()) {
+      if (toRemove-- <= 0) break;
+      pupilSmoothMap.delete(key);
+    }
   }
 
   // ── BLINK SYSTEM ──

@@ -87,16 +87,27 @@ export default function GameCanvas({
 
   const playerSnakeIdRef = useRef('');
 
+  // Pre-allocated leaderboard buffer — reuses objects across updates (Issue #12)
+  const lbBuf = useRef<{ name: string; score: number; isPlayer: boolean }[]>([]);
   const updateLeaderboard = useCallback((state: GameState) => {
     playerSnakeIdRef.current = state.player?.id ?? '';
-    const entries: { name: string; score: number; isPlayer: boolean }[] = [];
+    const buf = lbBuf.current;
+    let count = 0;
     for (const [, snake] of state.snakes) {
-      if (snake.alive) {
-        entries.push({ name: snake.name, score: Math.floor(snake.score), isPlayer: snake.isPlayer });
+      if (!snake.alive) continue;
+      if (count < buf.length) {
+        buf[count].name = snake.name;
+        buf[count].score = Math.floor(snake.score);
+        buf[count].isPlayer = snake.isPlayer;
+      } else {
+        buf.push({ name: snake.name, score: Math.floor(snake.score), isPlayer: snake.isPlayer });
       }
+      count++;
     }
-    entries.sort((a, b) => b.score - a.score);
-    setLeaderboard(entries.slice(0, 10));
+    // Sort top entries (only need top 10, but partial sort is complex)
+    buf.length = count;
+    buf.sort((a, b) => b.score - a.score);
+    setLeaderboard(buf.slice(0, 10));
   }, []);
 
   // ── Respawn handler ──

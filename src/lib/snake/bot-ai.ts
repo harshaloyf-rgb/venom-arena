@@ -220,14 +220,18 @@ function angleDiff(a: number, b: number): number {
 
 // ─── Food Scanning (unchanged from v1) ──────────────────────────────────────
 
+const _sampleBuf: FoodOrb[] = [];
 function sampleFood(foods: FoodOrb[], maxCount: number): FoodOrb[] {
   const len = foods.length;
   if (len <= maxCount) return foods;
-  const sampled: FoodOrb[] = new Array(maxCount);
-  for (let i = 0; i < maxCount; i++) {
-    sampled[i] = foods[Math.floor(Math.random() * len)];
+  const buf = _sampleBuf;
+  if (buf.length < maxCount) {
+    for (let i = buf.length; i < maxCount; i++) buf.push(foods[0]);
   }
-  return sampled;
+  for (let i = 0; i < maxCount; i++) {
+    buf[i] = foods[(Math.random() * len) | 0];
+  }
+  return buf;
 }
 
 function findNearestFood(
@@ -264,16 +268,22 @@ function findFoodCluster(
 // ─── Snake Scanning ─────────────────────────────────────────────────────────
 
 function findNearestSnake(
-  snake: Snake, snakes: Map<string, Snake>, maxDistSq: number,
+  snake: Snake, snakes: Map<string, Snake>, maxDistSq: number, headHash: SpatialHash,
 ): { id: string; x: number; y: number; score: number; distSq: number; angle: number } | null {
   const hx = snake.path.headX;
   const hy = snake.path.headY;
+  const maxDist = Math.sqrt(maxDistSq);
+  const nearby = headHash.query(hx, hy, maxDist);
   let best: { id: string; x: number; y: number; score: number; distSq: number; angle: number } | null = null;
-  for (const [id, other] of snakes) {
-    if (id === snake.id || !other.alive) continue;
-    const dSq = distSq(hx, hy, other.path.headX, other.path.headY);
+  for (let i = 0; i < nearby.length; i++) {
+    const s = nearby[i];
+    const id = s.id as string;
+    if (id === snake.id) continue;
+    const other = snakes.get(id);
+    if (!other || !other.alive) continue;
+    const dSq = distSq(hx, hy, s.x, s.y);
     if (dSq < maxDistSq && (!best || dSq < best.distSq)) {
-      best = { id, x: other.path.headX, y: other.path.headY, score: other.score, distSq: dSq, angle: other.angle };
+      best = { id, x: s.x, y: s.y, score: other.score, distSq: dSq, angle: other.angle };
     }
   }
   return best;
@@ -533,7 +543,7 @@ function updatePredator(snake: Snake, data: BotAIData, state: GameState): void {
     // Prefer targeting the player
     let target = state.player?.alive ? { id: state.player.id, x: state.player.path.headX, y: state.player.path.headY, score: state.player.score, distSq: 0, angle: state.player.angle } : null;
     if (!target) {
-      target = findNearestSnake(snake, state.snakes, ac().sightRangeSq);
+      target = findNearestSnake(snake, state.snakes, ac().sightRangeSq, _aiHeadHash);
     }
     if (!target || target.id === snake.id) { steerToFood(snake, data, state); return; }
     ps.targetId = target.id;
@@ -612,7 +622,7 @@ function updateCoiler(snake: Snake, data: BotAIData, state: GameState): void {
   if (data.retargetTimer <= 0) {
     data.retargetTimer = ac().retargetInterval * 2;
     let target = state.player?.alive ? { id: state.player.id, x: state.player.path.headX, y: state.player.path.headY, distSq: 0, score: state.player.score, angle: state.player.angle } : null;
-    if (!target) target = findNearestSnake(snake, state.snakes, ac().sightRangeSq);
+    if (!target) target = findNearestSnake(snake, state.snakes, ac().sightRangeSq, _aiHeadHash);
     if (target && target.id !== snake.id) {
       cs.targetId = target.id;
       cs.orbitDir = Math.random() < 0.5 ? 1 : -1;
@@ -786,7 +796,7 @@ function updateInterceptor(snake: Snake, data: BotAIData, state: GameState): voi
 
     // Prefer player, then nearest snake
     let target = state.player?.alive ? { id: state.player.id, x: state.player.path.headX, y: state.player.path.headY, distSq: 0, score: state.player.score, angle: state.player.angle } : null;
-    if (!target) target = findNearestSnake(snake, state.snakes, ac().sightRangeSq);
+    if (!target) target = findNearestSnake(snake, state.snakes, ac().sightRangeSq, _aiHeadHash);
     if (target && target.id !== snake.id && target.distSq < 600 * 600) {
       is.watchId = target.id;
       is.prevAngle = target.angle;
@@ -1288,8 +1298,9 @@ export function getBotBoost(snakeId: string): boolean {
 
 let nameCounters: Record<BotType, number> = { predator: 0, coiler: 0, baiter: 0, interceptor: 0, grazer: 0, trapper: 0, ranked: 0 };
 
-// P1 FIX #6: Monotonic counter for unique bot IDs.
-// Date.now() causes ID collisions when two bots die in the same millisecond.
+// Monotonic counter for unique bot IDs.
+// Previous: Date.now() caused ID collisions when two bots died in the same millisecond.
+// Fixed: Monotonic counter guarantees uniqueness.
 let _botIdCounter = 0;
 
 function pickBotName(type: BotType): string {
@@ -1336,11 +1347,14 @@ function isSafeSpawnHeadOnly(
   x: number, y: number,
   snakes: Map<string, Snake>,
   minDistSq: number,
+  headHash: SpatialHash,
 ): boolean {
-  for (const [, s] of snakes) {
-    if (!s.alive) continue;
-    const dx = s.path.headX - x;
-    const dy = s.path.headY - y;
+  const minDist = Math.sqrt(minDistSq);
+  const nearby = headHash.query(x, y, minDist);
+  for (let i = 0; i < nearby.length; i++) {
+    const s = nearby[i];
+    const dx = s.x - x;
+    const dy = s.y - y;
     if (dx * dx + dy * dy < minDistSq) return false;
   }
   return true;
@@ -1420,7 +1434,7 @@ function findBotSpawnPos(state: GameState, massSpawn = true): { x: number; y: nu
     const d = dMin + Math.sqrt(Math.random()) * (dMax - dMin);
     const x = Math.cos(a) * d;
     const y = Math.sin(a) * d;
-    if (massSpawn ? isSafeSpawnHeadOnly(x, y, state.snakes, minDistSq) : isSafeSpawnPos(x, y, state.snakes, 250 * 250, 400, 2)) {
+    if (massSpawn ? isSafeSpawnHeadOnly(x, y, state.snakes, minDistSq, _aiHeadHash) : isSafeSpawnPos(x, y, state.snakes, 250 * 250, 400, 2)) {
       return { x, y };
     }
   }
@@ -1441,7 +1455,7 @@ function findRankedSpawnPos(state: GameState, homeAngle: number, homeRadius: num
     const r = Math.min(homeRadius + rJitter, maxR);
     const x = Math.cos(a) * r;
     const y = Math.sin(a) * r;
-    if (massSpawn ? isSafeSpawnHeadOnly(x, y, state.snakes, 600 * 600) : isSafeSpawnPos(x, y, state.snakes, 600 * 600, 600, 1)) {
+    if (massSpawn ? isSafeSpawnHeadOnly(x, y, state.snakes, 600 * 600, _aiHeadHash) : isSafeSpawnPos(x, y, state.snakes, 600 * 600, 600, 1)) {
       return { x, y };
     }
   }

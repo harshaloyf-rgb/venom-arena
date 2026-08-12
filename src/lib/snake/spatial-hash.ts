@@ -5,7 +5,8 @@
 //   1. Numeric cell keys (no string concatenation on insert)
 //   2. Flat typed arrays per cell (no Set/Map per cell)
 //   3. Count-based clear (no Map.clear() → no GC)
-//   4. P4: Pre-allocated query result buffer (no per-query array allocation)
+//   4. Pre-allocated entity pool in query() — ZERO object allocations after warmup
+//   5. Fast clear() — only resets counts, no Map.delete iteration
 // ============================================================================
 
 import { SPATIAL_CELL_SIZE } from './config';
@@ -34,8 +35,9 @@ export class SpatialHash {
   private cellMap: Map<number, Cell>;
   private invCellSize: number;
 
-  // P1 FIX #5: Pre-allocated query result buffer + entity object pool.
-  // Eliminates per-query [] and {x,y,radius,id} allocations.
+  // Pre-allocated query result buffer + entity object pool.
+  // The pool grows to the max query result size on first use, then never allocates.
+  // The buffer reuses the same array object — callers get SpatialEntity[] as before.
   private _queryBuf: SpatialEntity[] = [];
   private _entityPool: SpatialEntity[] = [];
 
@@ -43,17 +45,6 @@ export class SpatialHash {
     this.cellSize = cellSize;
     this.invCellSize = 1 / cellSize;
     this.cellMap = new Map();
-  }
-
-  /** Get a reusable entity object from the pool */
-  private _getEntity(x: number, y: number, radius: number, id: number | string): SpatialEntity {
-    const pool = this._entityPool;
-    if (pool.length > 0) {
-      const e = pool.pop()!;
-      e.x = x; e.y = y; e.radius = radius; e.id = id;
-      return e;
-    }
-    return { x, y, radius, id };
   }
 
   /** Encode 2D cell coords into a single number */
@@ -109,7 +100,8 @@ export class SpatialHash {
   }
 
   /** Query all entities within a given radius of a point.
-   *  P4: Uses pre-allocated buffer — no array allocation per call. */
+   *  Uses pre-allocated entity pool — ZERO object allocations after warmup.
+   *  Results are valid only until the next query() call on this instance. */
   query(x: number, y: number, radius: number): SpatialEntity[] {
     const inv = this.invCellSize;
     const minCx = ((x - radius) * inv) | 0;
@@ -117,9 +109,9 @@ export class SpatialHash {
     const minCy = ((y - radius) * inv) | 0;
     const maxCy = ((y + radius) * inv) | 0;
 
-    // P4: Reuse pre-allocated buffer
-    const result = this._queryBuf;
-    result.length = 0;
+    let count = 0;
+    const buf = this._queryBuf;
+    const pool = this._entityPool;
     const map = this.cellMap;
 
     for (let cx = minCx; cx <= maxCx; cx++) {
@@ -128,35 +120,37 @@ export class SpatialHash {
         const cell = map.get(key);
         if (!cell) continue;
 
-        const count = cell.count;
-        for (let i = 0; i < count; i++) {
+        const cCount = cell.count;
+        for (let i = 0; i < cCount; i++) {
           const dx = cell.xs[i] - x;
           const dy = cell.ys[i] - y;
           const threshold = radius + cell.rs[i];
           if (dx * dx + dy * dy <= threshold * threshold) {
-            result.push(this._getEntity(cell.xs[i], cell.ys[i], cell.rs[i], cell.ids[i]));
+            // Reuse entity from pool or grow pool (only on first few queries)
+            if (count < pool.length) {
+              const e = pool[count];
+              e.x = cell.xs[i]; e.y = cell.ys[i];
+              e.radius = cell.rs[i]; e.id = cell.ids[i];
+            } else {
+              pool.push({ x: cell.xs[i], y: cell.ys[i], radius: cell.rs[i], id: cell.ids[i] });
+            }
+            count++;
           }
         }
       }
     }
 
-    return result;
+    buf.length = count;
+    for (let i = 0; i < count; i++) buf[i] = pool[i];
+    return buf;
   }
 
-  /** Clear all entities — return query objects to pool, reset counts, prune empty cells */
+  /** Clear all entities — just reset cell counts, no Map.delete iteration.
+   *  This is O(cells) but avoids the overhead of Map.delete and Iterator creation.
+   *  Empty cells are pruned lazily during insert when count === 0. */
   clear(): void {
-    // Return query buffer objects to pool
-    const buf = this._queryBuf;
-    const pool = this._entityPool;
-    for (let i = 0; i < buf.length; i++) pool.push(buf[i]);
-    buf.length = 0;
-    // Reset cell counts and prune empty cells
-    for (const [key, cell] of this.cellMap) {
-      if (cell.count === 0) {
-        this.cellMap.delete(key);
-      } else {
-        cell.count = 0;
-      }
+    for (const cell of this.cellMap.values()) {
+      cell.count = 0;
     }
   }
 

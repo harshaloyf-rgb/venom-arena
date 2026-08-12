@@ -104,6 +104,10 @@ function getRandomBotSkin(): PlayerSkinOverride {
 const foodValueCache = new Map<number, number>();
 let _cachedFoodById = new Map<number, FoodOrb>();
 const _foodHashScratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
+// Track magnetized food IDs for efficient flag reset (Issue #10)
+const _magnetizedIds: number[] = [];
+// Pre-allocated eaten IDs set (Issue #6 GC fix — avoids new Set() per tick)
+const _eatenIdsSet = new Set<number>();
 
 function rebuildFoodHash(fh: SpatialHash, foods: FoodOrb[]): void {
   fh.clear();
@@ -212,9 +216,10 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
   snake.targetAngle = targetAngle;
   snake.prevAngle = snake.angle;
 
-  // P0: Save head position BEFORE this tick for render interpolation
-  snake.prevHeadX = snake.path.headX;
-  snake.prevHeadY = snake.path.headY;
+  // NOTE: prevHeadX/Y is saved by the GAME LOOP before the last tick in a batch
+  // (for player render interpolation). Bots don't need it (alpha=1.0 → offset=0).
+  // The old per-tick save here was redundant and could interfere with the
+  // game loop's carefully-timed save.
 
   let diff = targetAngle - snake.angle;
   diff = Math.atan2(Math.sin(diff), Math.cos(diff));
@@ -375,14 +380,22 @@ function checkFoodEating(
   fh: SpatialHash, fvc: Map<number, number>, now: number,
   useCachedHash: boolean,
 ): Set<number> {
-  for (let i = 0; i < foods.length; i++) foods[i].magnetized = false;
+  // FIX #10: Instead of resetting ALL food magnetized flags (O(20K-50K) writes/tick),
+  // only reset the ones that were magnetized last tick. Track them in _magnetizedIds.
+  for (let i = 0; i < _magnetizedIds.length; i++) {
+    const f = _cachedFoodById.get(_magnetizedIds[i]);
+    if (f) f.magnetized = false;
+  }
+  _magnetizedIds.length = 0;
 
-  // Rebuild hash from scratch (called every 3 ticks)
+  // Rebuild hash from scratch (called every N ticks per arena config)
+  // Uses module-level _foodHashScratch to avoid per-rebuild object allocation.
   if (!useCachedHash) {
     fh.clear();
     fvc.clear();
     _cachedFoodById.clear();
-    const scratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
+    _magnetizedIds.length = 0; // Clear magnetized tracking on full rebuild
+    const scratch = _foodHashScratch;
     for (let i = 0; i < foods.length; i++) {
       const f = foods[i];
       scratch.x = f.x; scratch.y = f.y; scratch.radius = f.radius; scratch.id = f.id;
@@ -394,7 +407,8 @@ function checkFoodEating(
 
   const foodById = _cachedFoodById;
 
-  const eatenIds = new Set<number>();
+  const eatenIds = _eatenIdsSet;
+  eatenIds.clear();
   const speedRange = FOOD_MAGNET_MAX_SPEED - FOOD_MAGNET_MIN_SPEED;
   const zoneWidth = MAGNET_PULL_DIST - MAGNET_DEATH_DIST;
 
@@ -424,6 +438,7 @@ function checkFoodEating(
 
       if (dSq <= MAGNET_PULL_DIST_SQ) {
         food.magnetized = true;
+        _magnetizedIds.push(fid);
         const dist = Math.sqrt(dSq);
         const closeness = Math.min(1, Math.max(0, 1 - (dist - MAGNET_DEATH_DIST) / zoneWidth));
         const pullSpeed = FOOD_MAGNET_MIN_SPEED + speedRange * closeness * closeness;

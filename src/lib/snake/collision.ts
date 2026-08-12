@@ -55,6 +55,11 @@ const CRAWL_HIT_DIST_SQ = (2 * SNAKE_RADIUS - 2) * (2 * SNAKE_RADIUS - 2); // 10
 // ─── Module-level scratch (avoids per-tick allocation) ──────────────────────
 
 const _scratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
+// Pre-allocated Sets/Maps — cleared each tick, never re-allocated (Issue #6 GC fix)
+const _deadSnakesSet = new Set<string>();
+const _hohCheckedSet = new Set<string>();
+const _checkedSnakesSet = new Set<string>();
+const _h2bMap = new Map<string, string>();
 
 // ─── Visual tail boundary (matches renderer exactly) ───────────────────────
 // The renderer (walkPathFixedStep) draws the body by walking the path from
@@ -179,21 +184,31 @@ export function checkCollisions(
 ): CollisionResult {
   const scratch = _scratch;
   const VIEWPORT_COLLISION_RANGE_SQ = 2000 * 2000;
-
-  const aliveSnakes: Snake[] = [];
-  for (const [, snake] of snakes) {
-    if (snake.alive) aliveSnakes.push(snake);
-  }
+  // FIX #5: Body hash optimization — skip segments for bots far from the player.
+  // With 1000 snakes × ~100 segments = 100K inserts per tick, this was the #1
+  // lag source. Now only snakes within BODY_HASH_RANGE of the player have
+  // their body segments inserted. Far bots' bodies are irrelevant since:
+  // 1. Player can't reach them (broad phase query won't find them)
+  // 2. Bot-vs-bot far pairs are already skipped by viewport culling (Issue #8)
+  const BODY_HASH_RANGE_SQ = 5000 * 5000;
+  const hasPlayerRef = playerX !== undefined && playerY !== undefined;
 
   // ── Build body spatial hash (broad phase) ──
   // Only insert segments within the visual body length (matches renderer).
-  // Without this limit, boosted snakes have invisible tail segments in
-  // the hash that kill players crossing apparent empty space.
+  // FIX #5: Skip body segments for snakes far from the player viewport.
   bodyHash.clear();
   scratch.radius = SNAKE_RADIUS;
   for (const [, snake] of snakes) {
     if (!snake.alive) continue;
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
+    // FIX #5: Skip far bots — their body segments are never queried by anyone
+    // near the player (broad phase radius is limited), and bot-vs-bot far
+    // pairs are already culled in the narrow phase.
+    if (hasPlayerRef && snake.isBot) {
+      const dx = snake.path.headX - playerX!;
+      const dy = snake.path.headY - playerY!;
+      if (dx * dx + dy * dy > BODY_HASH_RANGE_SQ) continue;
+    }
     const visualLenPx = computeBodyLength(snake.score) * SEGMENT_SPACING;
     const maxIdx = getVisualTailIdx(
       (i) => snake.path.getX(i),
@@ -221,17 +236,12 @@ export function checkCollisions(
     headHash.insert(scratch);
   }
 
-  const deadSnakes = new Set<string>();
+  // Reuse pre-allocated Sets/Maps (Issue #6 GC fix)
+  const deadSnakes = _deadSnakesSet;
+  deadSnakes.clear();
+  const hohChecked = _hohCheckedSet;
+  hohChecked.clear();
   const killEvents: KillEvent[] = [];
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // PASS 1: HEAD-ON-HEAD (checked FIRST)
-  // ══════════════════════════════════════════════════════════════════════════
-  // Movement line crossing only — eyes can touch without dying.
-  // Resolved with proper rules: boost wins, then longer snake wins, then tie.
-  // Once resolved, both snakes are in deadSnakes, so PASS 2 skips them.
-
-  const hohChecked = new Set<string>(); // prevent double-processing pairs
 
   for (const [, snake] of snakes) {
     if (!snake.alive || deadSnakes.has(snake.id)) continue;
@@ -320,7 +330,8 @@ export function checkCollisions(
     const nearX = (hcx + prevHcx) * 0.5;
     const nearY = (hcy + prevHcy) * 0.5;
     const nearby = bodyHash.query(nearX, nearY, SNAKE_RADIUS * 6);
-    const checkedSnakes = new Set<string>();
+    const checkedSnakes = _checkedSnakesSet;
+    checkedSnakes.clear();
 
     for (let i = 0; i < nearby.length; i++) {
       const entity = nearby[i];
@@ -394,17 +405,17 @@ export function checkCollisions(
   }
 
   // ── Resolve head-to-body hits with mutual-kill protection ──
-  // Build a lookup: attackerId → bodyOwnerId for quick mutual pair check
-  const h2bMap = new Map<string, string>();
+  const h2bMapScratch = _h2bMap;
+  h2bMapScratch.clear();
   for (const [attackerId, bodyOwnerId] of h2bHits) {
-    h2bMap.set(attackerId, bodyOwnerId);
+    h2bMapScratch.set(attackerId, bodyOwnerId);
   }
 
   for (const [attackerId, bodyOwnerId] of h2bHits) {
     const attacker = snakes.get(attackerId)!;
     const bodyOwner = snakes.get(bodyOwnerId)!;
     // Check if bodyOwner also hit attacker's body (mutual kill)
-    const reverseBodyOwnerId = h2bMap.get(bodyOwnerId);
+    const reverseBodyOwnerId = h2bMapScratch.get(bodyOwnerId);
     if (reverseBodyOwnerId === attackerId) {
       // Mutual: both heads are in each other's bodies.
       // Longer snake survives, shorter dies. Equal = both die.
