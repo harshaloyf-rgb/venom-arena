@@ -10,7 +10,7 @@ import { getPlayerSkinAsset, registerSkinAsset } from '@/lib/snake/skin-registry
 import { type GameState, type Camera, type Viewport, FIXED_DT } from '@/lib/snake';
 import { drawDeathOverlay, drawEliminatedBanner, drawControlsHint } from './renderer';
 import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrameWithDpr } from './render-snake-atlas';
-import { cleanupDeadSnakeParticles, renderBackground, renderHUD } from './hud';
+import { cleanupDeadSnakeParticles, renderBackground, renderHUD, handleMinimapClick, resetMinimapZoom } from './hud';
 import { InputHandler } from './input';
 import { makeCoiledPath } from './coil-path';
 import { computeBodyLength, SEGMENT_SPACING } from '@/lib/snake/config';
@@ -213,6 +213,18 @@ export default function GameCanvas({
     const input = new InputHandler(canvas);
     inputRef.current = input;
     input.attach();
+
+    // Minimap zoom click handler
+    const onCanvasClick = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      handleMinimapClick(x, y);
+    };
+    canvas.addEventListener('click', onCanvasClick);
+
+    // Reset minimap zoom on new game
+    resetMinimapZoom();
 
     // ── Game loop ──
     let running = true;
@@ -505,6 +517,7 @@ export default function GameCanvas({
       running = false;
       cancelAnimationFrame(animFrameRef.current);
       input.detach();
+      canvas.removeEventListener('click', onCanvasClick);
       window.removeEventListener('resize', resize);
       window.removeEventListener('keydown', onRespawnKey);
       canvas.removeEventListener('click', onRespawnClick);
