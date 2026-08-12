@@ -156,16 +156,9 @@ export class SkinAtlasManager {
     const cy = region.y + region.height / 2;
     const r = region.width / 2 - 4;
 
-    // Base circle with 3D gradient
-    const grad = ctx.createRadialGradient(
-      cx - r * 0.3, cy - r * 0.3, r * 0.1,
-      cx, cy, r,
-    );
-    grad.addColorStop(0, lighten(color, 0.35));
-    grad.addColorStop(0.6, color);
-    grad.addColorStop(1, darken(color, 0.3));
-
-    ctx.fillStyle = grad;
+    // Flat fill — no 3D gradient baked in. The gradient is applied at render time
+    // in screen space so it doesn't rotate with the head (fixes tilt illusion).
+    ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
@@ -177,24 +170,7 @@ export class SkinAtlasManager {
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Eyes
-    const eyeOffset = r * 0.35;
-    const eyeR = r * 0.2;
-    const pupilR = eyeR * 0.55;
-    const forwardOffset = r * 0.25;
-
-    for (const side of [-1, 1]) {
-      const ex = cx + forwardOffset;
-      const ey = cy + eyeOffset * side;
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(ex, ey, eyeR, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#111111';
-      ctx.beginPath();
-      ctx.arc(ex + pupilR * 0.3, ey, pupilR, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    // No baked-in eyes — responsive eyes are drawn at render time in screen space.
   }
 
   // ── Tail sprite ─────────────────────────────────────────────────────────

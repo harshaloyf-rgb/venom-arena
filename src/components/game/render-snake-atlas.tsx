@@ -669,6 +669,27 @@ export function renderSnakeAtlas(
     atlasManager.resetEpicEffect(ctx);
     ctx.restore();
 
+    // Screen-space 3D shading overlay — fixed light from upper-left.
+    // Drawn AFTER ctx.restore() so it does NOT rotate with the head.
+    // This fixes the tilt illusion where the baked gradient rotated with
+    // the head, making it look like the head banked the wrong way when turning.
+    const headR = headDrawSize / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(hsx, hsy, headR, 0, Math.PI * 2);
+    ctx.clip();
+    const headShade = ctx.createRadialGradient(
+      hsx - headR * 0.3, hsy - headR * 0.3, headR * 0.05,
+      hsx + headR * 0.1, hsy + headR * 0.1, headR * 1.05,
+    );
+    headShade.addColorStop(0, 'rgba(255,255,255,0.30)');
+    headShade.addColorStop(0.45, 'rgba(255,255,255,0.05)');
+    headShade.addColorStop(0.55, 'rgba(0,0,0,0)');
+    headShade.addColorStop(1, 'rgba(0,0,0,0.28)');
+    ctx.fillStyle = headShade;
+    ctx.fillRect(hsx - headR, hsy - headR, headDrawSize, headDrawSize);
+    ctx.restore();
+
     // Direction pointer — player only, shows where snake is steering (arrow replaces mouse cursor)
     if (snake.isPlayer) {
       drawDirectionPointer(ctx, snake.id, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting);

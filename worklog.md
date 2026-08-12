@@ -1178,3 +1178,27 @@ Work Log:
 
 Stage Summary:
 - All systems operational. Admin login needs correct password.
+
+---
+Task ID: 2
+Agent: main
+Task: Fix snake head/eye tilt illusion when steering
+
+Work Log:
+- Audited full pipeline: input.ts → engine.ts → camera.ts → render-snake-atlas.tsx → atlas.ts
+- Pupil tracking math verified correct (lookDir = targetAngle, cos/sin shift in screen space)
+- Eye white positioning verified correct (perpAngle = smoothAngle + pi/2)
+- Found root cause: 3D radial gradient baked into atlas head sprite at upper-left, rotates with ctx.rotate(snake.angle)
+- This creates optical tilt illusion: turn left → highlight slides right in head frame → brain reads as wrong-way tilt
+- Also found baked-in static eyes on atlas sprite that rotated with head (cosmetic contributor)
+
+Fix applied:
+- atlas.ts: Changed renderHeadSprite to flat fill (no 3D gradient), removed baked-in eyes
+- render-snake-atlas.tsx: Added screen-space radial gradient overlay AFTER ctx.restore() (not rotated with head)
+- Gradient uses fixed upper-left light direction in screen space: white highlight → clear → dark shadow
+- Verified: no compile errors, no lint errors in changed files, no runtime errors, game renders correctly
+
+Stage Summary:
+- Root cause: baked 3D gradient rotating with head created wrong-way tilt illusion
+- Fix: flat sprite + screen-space gradient overlay preserves 3D look without rotation artifact
+- Files changed: src/lib/snake/atlas.ts, src/components/game/render-snake-atlas.tsx
