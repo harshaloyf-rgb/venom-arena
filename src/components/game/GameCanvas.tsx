@@ -130,6 +130,10 @@ export default function GameCanvas({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    // Cache the 2D context once — getContext('2d') returns the same object
+    // for the same canvas + type, but the function call itself has overhead at 60fps.
+    const ctx = canvas.getContext('2d');
+
     // Size canvas to fill parent
     const resize = () => {
       const parent = canvas.parentElement;
@@ -141,7 +145,6 @@ export default function GameCanvas({
       canvas.height = h * dpr;
       canvas.style.width = w + 'px';
       canvas.style.height = h + 'px';
-      const ctx = canvas.getContext('2d');
       if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       if (inputRef.current) inputRef.current.updateRect();
     };
@@ -223,7 +226,6 @@ export default function GameCanvas({
         fc.lastTime = timestamp;
       }
 
-      const ctx = canvas.getContext('2d');
       if (!ctx) {
         animFrameRef.current = requestAnimationFrame(loop);
         return;
@@ -351,6 +353,7 @@ export default function GameCanvas({
       beginRenderFrame();
       const dpr = window.devicePixelRatio || 1;
       setCachedDpr(dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       renderBackground(ctx, gameState, cameraRef.current, viewport, fc.fps, now);
 
       // ── Render snakes: bots use fallback, player uses atlas ──
@@ -512,7 +515,7 @@ export default function GameCanvas({
     <div className="relative w-full h-full bg-[#0a0a0f] overflow-hidden">
       <canvas
           ref={canvasRef}
-          className="block w-full h-full"
+          className="block"
           style={{ touchAction: 'none', cursor: 'crosshair' }}
         />
 

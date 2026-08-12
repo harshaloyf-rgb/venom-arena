@@ -250,6 +250,10 @@ export interface ArenaConfig {
   playerFleeRange: number;
   /** Food aggression multiplier (1.0 = default) */
   foodAggressionMult: number;
+  /** Fraction of aggressive bots that permanently hunt the player (0 = none, 0.4 = 40%) */
+  hunterFraction: number;
+  /** Offensive boost multiplier (0 = never boost offensively, 1 = always boost when AI wants) */
+  botBoostMult: number;
 
   // ── Precomputed (set by buildArenaConfig) ──
   mapHalf: number;

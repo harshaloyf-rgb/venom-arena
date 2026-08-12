@@ -174,6 +174,8 @@ interface BotAIData {
   retargetTimer: number;
   wanderAngle: number;
   wanderChangeTimer: number;
+  /** Whether this bot permanently hunts the player (rolled on spawn) */
+  isHunter: boolean;
   predator?: PredatorState;
   coiler?: CoilerState;
   baiter?: BaiterState;
@@ -1147,6 +1149,7 @@ export function updateAllBotAI(state: GameState): void {
   const wallBoundary = ac.spawnRadius;
   const retargetInterval = ac.retargetInterval;
   const foodAggMult = ac.foodAggressionMult;
+  const botBoostMult = ac.botBoostMult;
   const rankedBodyScanDist = bodyScanDist * 3;
   const rankedBodyScanCone = Math.PI * 0.7;
 
@@ -1165,6 +1168,8 @@ export function updateAllBotAI(state: GameState): void {
     const dyToPlayer = snake.path.headY - playerY;
     const isFarFromPlayer = isNaN(playerX) || (dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer > farThresholdSq);
 
+    // ── AI Tier ──
+    let defensiveBoost = false;
     if (!isFarFromPlayer) {
       // ── FULL AI ──
       const bodyThreat = scanBodyAhead(
@@ -1180,6 +1185,7 @@ export function updateAllBotAI(state: GameState): void {
         const evaded = normalizeAngle(data.targetAngle * (1 - blend) + flee * blend);
         steerToward(data, evaded, 0.7);
         data.wantBoost = bodyThreat.severity > 0.7;
+        defensiveBoost = data.wantBoost;
       } else if (headOnThreat) {
         steerToward(data, headOnThreat.avoidAngle, 0.5);
         data.wantBoost = false;
@@ -1198,7 +1204,15 @@ export function updateAllBotAI(state: GameState): void {
       }
     } else {
       // ── LITE AI: Far from player ──
-      steerToWander(data, snake);
+      if (data.isHunter && !isNaN(playerX)) {
+        // Hunter bots steer toward the player from anywhere on the map.
+        // Collision avoidance (Layer 1.5) still protects them from crashing.
+        const huntAngle = Math.atan2(playerY - snake.path.headY, playerX - snake.path.headX);
+        steerToward(data, huntAngle, 0.6);
+        data.wantBoost = true;
+      } else {
+        steerToWander(data, snake);
+      }
     }
 
     // ── Layer 1.5: Collision Avoidance ──
@@ -1285,6 +1299,13 @@ export function updateAllBotAI(state: GameState): void {
     // ── Wall avoidance ──
     data.targetAngle = wallAvoidAngle(snake.path.headX, snake.path.headY, data.targetAngle, wallBoundary);
 
+    // ── Per-arena offensive boost scaling ──
+    // Defensive boosts (body threat evasion) are always honored.
+    // Offensive boosts (from personality/hunting) are scaled by botBoostMult.
+    if (data.wantBoost && !defensiveBoost && botBoostMult < 1) {
+      data.wantBoost = Math.random() < botBoostMult;
+    }
+
     // ── Output ──
     snake.targetAngle = data.targetAngle;
   }
@@ -1315,12 +1336,20 @@ function createBotAIData(type: BotType, rank?: number, state?: GameState): BotAI
     type, targetAngle: Math.random() * Math.PI * 2, wantBoost: false,
     retargetTimer: 0, wanderAngle: Math.random() * Math.PI * 2,
     wanderChangeTimer: Math.floor(Math.random() * 30),
+    isHunter: false,
   };
   if (type === 'predator') data.predator = { targetId: null, phase: 'seek', phaseTimer: 0, cutDir: 1 };
   if (type === 'coiler') data.coiler = { targetId: null, orbitDir: 1, orbitRadius: 220, ticksOrbiting: 0 };
   if (type === 'baiter') data.baiter = { chaserId: null, chaseTicks: 0, cooldown: 0 };
   if (type === 'interceptor') data.interceptor = { watchId: null, prevAngle: 0, angleChange: 0, watchTicks: 0, strikeCooldown: 0 };
   if (type === 'trapper') data.trapper = { centerX: 0, centerY: 0, arcAngle: 0, arcDir: 1, arcRadius: 300, arcProgress: 1 };
+
+  // Roll hunter status — aggressive types can become permanent player hunters
+  const isAggressive = type === 'predator' || type === 'coiler' || type === 'interceptor' || type === 'ranked';
+  const hunterFrac = state?.arenaConfig.hunterFraction ?? 0;
+  if (isAggressive && hunterFrac > 0 && Math.random() < hunterFrac) {
+    data.isHunter = true;
+  }
   if (type === 'ranked') {
     const r = rank ?? 1;
     const ac = state?.arenaConfig;

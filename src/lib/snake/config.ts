@@ -370,10 +370,10 @@ const ARENA_EASY = buildArenaConfig({
   rankedHomeMax: 25000,
   rankedHomeJitter: 3000,
 
-  // AI: slow reactions, wide lite-AI tier
+  // AI: slow reactions, narrow full-AI tier (only nearby bots run personality)
   aiTickThrottle: 6,
-  aiDistanceTier: 5000,
-  rankedAiDistanceTier: 8000,
+  aiDistanceTier: 2000,
+  rankedAiDistanceTier: 4000,
   respawnPerTick: 8,
   foodHashRebuildInterval: 6,
   mapFoodInterval: 30,
@@ -387,6 +387,8 @@ const ARENA_EASY = buildArenaConfig({
   headOnRange: 250,
   playerFleeRange: 350,
   foodAggressionMult: 1.0,
+  hunterFraction: 0,
+  botBoostMult: 0.3,
 });
 
 // ── Medium: Smaller map, balanced bots, moderate food ───────────────────
@@ -423,10 +425,10 @@ const ARENA_MEDIUM = buildArenaConfig({
   rankedHomeMax: 16000,
   rankedHomeJitter: 2000,
 
-  // AI: faster reactions (every 4 ticks), narrower lite-AI tier
+  // AI: faster reactions (every 4 ticks), wider full-AI tier
   aiTickThrottle: 4,
-  aiDistanceTier: 4000,
-  rankedAiDistanceTier: 6000,
+  aiDistanceTier: 1500,
+  rankedAiDistanceTier: 3500,
   respawnPerTick: 8,
   foodHashRebuildInterval: 4,
   mapFoodInterval: 20,
@@ -440,6 +442,8 @@ const ARENA_MEDIUM = buildArenaConfig({
   headOnRange: 300,
   playerFleeRange: 200,
   foodAggressionMult: 1.3,
+  hunterFraction: 0.15,
+  botBoostMult: 0.6,
 });
 
 // ── Hard: Tight map, aggressive hunters, scarce food ─────────────────────
@@ -476,10 +480,10 @@ const ARENA_HARD = buildArenaConfig({
   rankedHomeMax: 11000,
   rankedHomeJitter: 1500,
 
-  // AI: very fast reactions (every 2 ticks), tight lite-AI tier
+  // AI: very fast reactions (every 2 ticks), widest full-AI tier
   aiTickThrottle: 2,
-  aiDistanceTier: 3000,
-  rankedAiDistanceTier: 5000,
+  aiDistanceTier: 1200,
+  rankedAiDistanceTier: 3000,
   respawnPerTick: 10,
   foodHashRebuildInterval: 2,
   mapFoodInterval: 15,
@@ -493,6 +497,8 @@ const ARENA_HARD = buildArenaConfig({
   headOnRange: 350,
   playerFleeRange: 0,
   foodAggressionMult: 1.6,
+  hunterFraction: 0.40,
+  botBoostMult: 1.0,
 });
 
 /** Map from arena ID to its configuration */

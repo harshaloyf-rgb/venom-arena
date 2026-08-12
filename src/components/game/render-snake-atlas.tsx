@@ -1505,5 +1505,4 @@ function getAnimationForSkin(skinId: string): string {
 export function cleanupSnakeParticles(snakeId: string): void {
   particlePools.delete(snakeId);
   pupilSmoothMap.delete(snakeId);
-  _botWalkCache.delete(snakeId);
 }

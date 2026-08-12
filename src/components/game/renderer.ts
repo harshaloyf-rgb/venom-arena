@@ -14,30 +14,40 @@ const GRID_SIZE = ARENA_GRID_SIZE;
 const GRID_COLOR = 'rgba(255, 255, 255, 0.06)';
 
 export function drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, viewport: Viewport): void {
-  ctx.strokeStyle = GRID_COLOR;
-  ctx.lineWidth = 1;
+  const zoom = camera.zoom;
+  const dpr = window.devicePixelRatio || 1;
 
-  const zoomedGrid = GRID_SIZE * camera.zoom;
+  // Grid line width: always 1 physical pixel regardless of DPR.
+  // At DPR=2, lineWidth=0.5 CSS pixels × 2 = 1 physical pixel → crisp.
+  // At DPR=1, lineWidth=1 CSS pixel = 1 physical pixel → same crisp.
+  ctx.lineWidth = 1 / dpr;
+  ctx.strokeStyle = GRID_COLOR;
+
+  const zoomedGrid = GRID_SIZE * zoom;
   if (zoomedGrid < 4) return;
 
-  // P3: Grid offset WITHOUT Math.round — the camera is now interpolated (P0)
-  // so it moves smoothly. Math.round caused periodic 1px jumps as rounding
-  // error accumulated (every ~67 frames at zoom 1.35). Now the grid scrolls
-  // perfectly smoothly with the camera.
-  let offsetX = (-camera.x * camera.zoom + viewport.width / 2) % zoomedGrid;
-  let offsetY = (-camera.y * camera.zoom + viewport.height / 2) % zoomedGrid;
-  // Ensure positive modulo (JS % can be negative)
+  // Compute initial offset — how far the first grid line is from screen edge.
+  // This scrolls smoothly with camera (no Math.round here to avoid 1px jumps).
+  let offsetX = (-camera.x * zoom + viewport.width / 2) % zoomedGrid;
+  let offsetY = (-camera.y * zoom + viewport.height / 2) % zoomedGrid;
   if (offsetX < 0) offsetX += zoomedGrid;
   if (offsetY < 0) offsetY += zoomedGrid;
 
+  // CRITICAL BLUR FIX: Snap EACH individual grid line to integer CSS pixel.
+  // Previously only the offset was rounded, so line N was at offset + N*zoomedGrid
+  // (floating-point). Sub-pixel line positions trigger canvas anti-aliasing → blurry
+  // grid lines. During boosting the camera moves fast, amplifying the shimmer.
+  // Now every line is drawn at the nearest integer pixel → always crisp.
   ctx.beginPath();
   for (let x = offsetX; x < viewport.width; x += zoomedGrid) {
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, viewport.height);
+    const ix = (x + 0.5) | 0; // fast Math.round for positive numbers
+    ctx.moveTo(ix, 0);
+    ctx.lineTo(ix, viewport.height);
   }
   for (let y = offsetY; y < viewport.height; y += zoomedGrid) {
-    ctx.moveTo(0, y);
-    ctx.lineTo(viewport.width, y);
+    const iy = (y + 0.5) | 0;
+    ctx.moveTo(0, iy);
+    ctx.lineTo(viewport.width, iy);
   }
   ctx.stroke();
 }
@@ -83,9 +93,17 @@ export function drawFood(
     if (f.y < viewport.top - 20 || f.y > viewport.bottom + 20) continue;
 
     const { x: sx, y: sy } = worldToScreenSnapped(f.x, f.y, camera, cw, ch);
-    const baseR = f.radius * zoom;
-    const r = f.magnetized ? baseR / 3 : baseR;
+    let baseR = f.radius * zoom;
+    let r = f.magnetized ? baseR / 3 : baseR;
     if (r < 0.5) continue;
+
+    // BLUR FIX: Snap radius for small orbs (r < 4px CSS).
+    // Sub-pixel radii cause the anti-aliased edge ring to shift shape each frame
+    // as the camera moves → visible shimmer/blur on tiny food particles.
+    // Snapping to 0.5px keeps circles round while eliminating frame-to-frame variation.
+    if (r < 4) {
+      r = Math.round(r * 2) / 2;
+    }
 
     // Bucket index: 0=small(green), 1=medium(blue), 2=large(pink)
     const bi = f.size === 'small' ? 0 : f.size === 'medium' ? 1 : 2;
@@ -103,8 +121,9 @@ export function drawFood(
 
   // Draw magnetized glow rings first (behind food)
   if (glowXs.length > 0) {
+    const dpr = window.devicePixelRatio || 1;
     ctx.globalAlpha = 0.4;
-    ctx.lineWidth = 1.0 * zoom;
+    ctx.lineWidth = (1.0 * zoom) / dpr;
     for (let ci = 0; ci < 3; ci++) {
       let hasAny = false;
       for (let j = 0; j < glowXs.length; j++) {

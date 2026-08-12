@@ -107,9 +107,8 @@ export function worldToScreen(
 }
 
 /** World-to-screen for food, bot snakes, and other non-player elements.
- *  Uses raw floating-point positions — NO Math.round.
- *  Sub-pixel anti-aliasing on small circles (1.5–3px) is invisible;
- *  the 1px pop from Math.round is far worse. */
+ *  Uses Math.round to snap to integer CSS pixel positions — prevents
+ *  sub-pixel anti-aliasing that causes blurry/stationary shimmer during motion. */
 export function worldToScreenSnapped(
   wx: number,
   wy: number,
@@ -118,7 +117,7 @@ export function worldToScreenSnapped(
   canvasHeight: number,
 ): { x: number; y: number } {
   return {
-    x: (wx - camera.x) * camera.zoom + canvasWidth / 2,
-    y: (wy - camera.y) * camera.zoom + canvasHeight / 2,
+    x: Math.round((wx - camera.x) * camera.zoom + canvasWidth / 2),
+    y: Math.round((wy - camera.y) * camera.zoom + canvasHeight / 2),
   };
 }

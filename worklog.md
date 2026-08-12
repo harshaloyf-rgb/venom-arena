@@ -1026,3 +1026,64 @@ Stage Summary:
 - 17 of 18 issues fixed (Issue #3 Date.now() deemed negligible impact at 0.3ms/sec)
 - Biggest wins: body hash viewport culling (~80% fewer segments), spatial hash entity pool (zero query allocs), food magnetized O(M) reset, bot walk cache elimination (head-body separation fix)
 - All changes maintain backward API compatibility (SpatialEntity[] return type preserved)
+
+---
+Task ID: 1
+Agent: main
+Task: Fix canvas rendering blurriness (grid lines, food orbs during motion/boost)
+
+Work Log:
+- Deep-audited entire render pipeline: GameCanvas.tsx, renderer.ts, camera.ts, hud.ts, render-snake-atlas.tsx
+- Identified ROOT CAUSE: grid lines drawn at floating-point sub-pixel positions. Only the initial offset was Math.round'd, but subsequent lines (offset + N * zoomedGrid) drifted to sub-pixel positions. Canvas anti-aliases sub-pixel lines → visible blur/shimmer, amplified during boosting.
+- Identified SECONDARY CAUSE: food orb radii were floating-point, causing AA edge shape to shift each frame as camera moves → shimmer on tiny food particles.
+- Identified TERTIARY CAUSE: grid lineWidth=1 (CSS px) = DPR physical pixels. At DPR=2, grid lines were 2 physical pixels wide (thicker than intended).
+- Identified MINOR ISSUE: imageRendering: crisp-edges was set on canvas but our DPR scaling already produces 1:1 pixel mapping. crisp-edges can cause jaggies at non-integer DPR (1.25x, 1.5x).
+- Identified PERF ISSUE: canvas.getContext('2d') called every frame (60x/sec) instead of cached.
+
+Implemented fixes:
+
+1. P0: renderer.ts drawGrid — snap EACH grid line to integer pixel (ix = (x + 0.5) | 0). Previously only offset was rounded.
+2. P0: GameCanvas.tsx — removed imageRendering: crisp-edges from canvas style.
+3. P1: GameCanvas.tsx — cached canvas 2D context outside game loop (was calling getContext 60x/sec).
+4. P1: renderer.ts drawFood — snap food radii for small orbs (r < 4px) to 0.5px increments. Prevents AA edge shape shifting between frames.
+5. P2: renderer.ts drawGrid — lineWidth = 1/dpr (always 1 physical pixel regardless of DPR).
+6. P2: renderer.ts drawFood glow — lineWidth = (1.0 * zoom) / dpr for DPR-correct glow rings.
+7. P1: camera.ts — fixed incorrect JSDoc on worldToScreenSnapped (said "NO Math.round" but code has Math.round).
+
+Stage Summary:
+- 3 files changed: renderer.ts (grid + food), GameCanvas.tsx (canvas style + ctx cache), camera.ts (comment fix)
+- Lint: 0 new errors (2 pre-existing ref-during-render warnings unchanged)
+- Browser E2E: game loads, grid lines visible, food dots visible, snakes/bots visible, HUD visible
+- Browser confirms: canvas pixel dimensions exactly match CSS dimensions, no blur detected, crisp edges
+- The blur was caused by sub-pixel grid line positions — now every line is at integer pixel → always crisp
+
+---
+Task ID: 1
+Agent: main
+Task: Make 3 offline difficulty modes feel different (hunter bots, boost scaling, expanded AI)
+
+Work Log:
+- Analyzed why Easy/Medium/Hard all feel the same (P2 distance tiering neuters 90% of bots, same speed/turn rate)
+- Added `hunterFraction` and `botBoostMult` to ArenaConfig interface (types.ts)
+- Added config values:
+  - Easy: hunterFraction=0, botBoostMult=0.3
+  - Medium: hunterFraction=0.15, botBoostMult=0.6
+  - Hard: hunterFraction=0.40, botBoostMult=1.0
+- Expanded full AI range (more bots run personality near player):
+  - Easy: aiDistanceTier 5000→2000, rankedAiDistanceTier 8000→4000
+  - Medium: aiDistanceTier 4000→1500, rankedAiDistanceTier 6000→3500
+  - Hard: aiDistanceTier 3000→1200, rankedAiDistanceTier 5000→3000
+- Added `isHunter` boolean to BotAIData (bot-ai.ts)
+- Hunter roll: aggressive bot types (predator, coiler, interceptor, ranked) roll against hunterFraction on spawn
+- Hunter behavior: in LITE AI branch, hunter bots steer toward player with boost (collision avoidance still protects them)
+- Per-arena boost scaling: offensive boosts scaled by botBoostMult (0=never, 1=always). Defensive boosts (body threat evasion) always honored.
+- Tracked `defensiveBoost` flag through FULL AI branch to distinguish from offensive boosting.
+
+Stage Summary:
+- 3 files changed: types.ts (2 new fields), config.ts (6 new values + 6 range changes), bot-ai.ts (hunter system + boost scaling)
+- Easy: no hunters, bots flee player, rare boosts → feels safe
+- Medium: 15% of aggressive bots hunt player, moderate boosts, wider full-AI range → noticeable pressure
+- Hard: 40% of aggressive bots hunt from anywhere, aggressive boosts, widest full-AI range → constant danger
+- Lint: 0 new errors (2 pre-existing unchanged)
+- Server compiles (200 OK)
+- Note: online tier arenas (tier-1..30) don't use these configs — they fall back to Easy. This is pre-existing (online mode has no bot system yet). Offline practice arenas (practice-easy/medium/hard) correctly use the 3 configs.
