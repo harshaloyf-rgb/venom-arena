@@ -1298,16 +1298,9 @@ io.on('connection', (socket) => {
 });
 
 // ─── HTTP Stats endpoint ───────────────────────────────────────────────────
-
-httpServer.on('request', (req, res) => {
-  if (req.url === '/stats' && req.method === 'GET') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(getStats()));
-  } else {
-    res.writeHead(404);
-    res.end('Not Found');
-  }
-});
+// NOTE: We do NOT use httpServer.on('request') because in Bun it replaces
+// Socket.IO's request listener. Stats are available via the 'stats' socket event.
+// If an HTTP endpoint is needed, use a separate HTTP server.
 
 // ─── Start Server ──────────────────────────────────────────────────────────
 
