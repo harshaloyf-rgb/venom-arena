@@ -779,6 +779,8 @@ export function renderSnakeFallback(
   const headWorldX = path.headX;
   const headWorldY = path.headY;
 
+  const zoom = camera.zoom;
+
   // ── Calculate logical body length using sqrt growth curve ──
   const logicalLen = computeBodyLength(snake.score);
   const visualLen = logicalLen * SEGMENT_SPACING;
@@ -791,7 +793,6 @@ export function renderSnakeFallback(
   // caused the double-cull bug: outer cull passed the bot through but
   // inner cull rejected it, making bots invisible.
 
-  const zoom = camera.zoom;
   const cw = viewport.width;
   const ch = viewport.height;
   const segRadius = snake.bodyRadius * zoom;
