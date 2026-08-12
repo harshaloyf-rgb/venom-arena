@@ -78,6 +78,7 @@ const MAGNET_DEATH_DIST_SQ = MAGNET_DEATH_DIST * MAGNET_DEATH_DIST;
 interface MoveContext {
   foods: FoodOrb[];
   nextFoodId: { value: number };
+  mapHalf: number;
 }
 
 // ─── Module-level singletons ─────────────────────────────────────────────────
@@ -282,8 +283,22 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
   snake.speed = canBoost ? BOOST_SPEED : BASE_SPEED;
 
   // Path buffer movement
-  const newHeadX = snake.path.getX(0) + Math.cos(snake.angle) * snake.speed;
-  const newHeadY = snake.path.getY(0) + Math.sin(snake.angle) * snake.speed;
+  let newHeadX = snake.path.getX(0) + Math.cos(snake.angle) * snake.speed;
+  let newHeadY = snake.path.getY(0) + Math.sin(snake.angle) * snake.speed;
+
+  // Arena boundary clamp — prevent snakes from leaving the map
+  const wallDist = snake.isPlayer ? 100 : 200; // players get closer to wall
+  const maxDist = ctx.mapHalf - wallDist;
+  const distFromCenter = Math.sqrt(newHeadX * newHeadX + newHeadY * newHeadY);
+  if (distFromCenter > maxDist) {
+    // Push back inside
+    const angle = Math.atan2(newHeadY, newHeadX);
+    newHeadX = Math.cos(angle) * maxDist;
+    newHeadY = Math.sin(angle) * maxDist;
+    // Steer toward center on next tick
+    snake.targetAngle = angle + Math.PI;
+  }
+
   snake.path.prepend(newHeadX, newHeadY);
 
   // Growth / Shrink — use cached body length, recompute only when score changes.
@@ -569,6 +584,7 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   const moveCtx: MoveContext = {
     foods: state.foods,
     nextFoodId: foodIdRef,
+    mapHalf: ac.mapHalf,
   };
 
   // 1. Update bot AI (compute target angles + boost decisions) — offline only

@@ -11,7 +11,6 @@ import { type GameState, type Camera, type Viewport, FIXED_DT } from '@/lib/snak
 import { drawDeathOverlay, drawEliminatedBanner, drawControlsHint } from './renderer';
 import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrameWithDpr } from './render-snake-atlas';
 import { cleanupDeadSnakeParticles, renderBackground, renderHUD } from './hud';
-import { drawMinimap } from './minimap';
 import { InputHandler } from './input';
 import { makeCoiledPath } from './coil-path';
 import { computeBodyLength, SEGMENT_SPACING } from '@/lib/snake/config';
@@ -404,11 +403,6 @@ export default function GameCanvas({
       renderHUD(ctx, gameState, cameraRef.current, viewport, fc.fps, now, killsRef.current, highScoreRef.current);
       if (showControlsRef.current && gameState.player && gameState.player.alive) {
         drawControlsHint(ctx, viewport);
-      }
-
-      // Minimap (bottom-right, on canvas)
-      if (gameState.player?.alive) {
-        drawMinimap(ctx, gameState, cameraRef.current, viewport, w, h);
       }
 
       // ── Killer highlight: pulsing red glow on the bot that killed you ──

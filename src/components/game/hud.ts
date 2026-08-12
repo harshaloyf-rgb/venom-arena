@@ -7,6 +7,7 @@ import { InputHandler } from './input';
 
 const MAP_SIZE = 120;
 const MAP_PAD = 12;
+const DANGER_RANGE_SQ = 2000 * 2000;
 
 // ============================================================================
 // Cleanup dead snake particles
@@ -40,6 +41,9 @@ export function renderBackground(
 
   // Food
   drawFood(ctx, state.foods, camera, viewport);
+
+  // Arena boundary wall — visible glowing red ring at map edge
+  drawArenaBoundary(ctx, state, camera, viewport);
 }
 
 // ============================================================================
@@ -61,7 +65,7 @@ export function renderHUD(
   const ch = viewport.height;
 
   // ── Minimap: top-left ──
-  drawMinimapTopLeft(ctx, state.snakes, state.player, cw, ch);
+  drawMinimapTopLeft(ctx, state, cw, ch);
 
   // ── Rank below minimap ──
   const aliveSnakes = state.snakes.size;
@@ -117,48 +121,149 @@ export function renderHUD(
 
 function drawMinimapTopLeft(
   ctx: CanvasRenderingContext2D,
-  snakes: Map<string, Snake>,
-  player: Snake | null,
-  cw: number,
+  state: GameState,
+  _cw: number,
   _ch: number,
 ): void {
   const size = MAP_SIZE;
   const pad = MAP_PAD;
   const mx = pad;
   const my = pad;
+  const player = state.player;
+  const mapHalf = state.arenaConfig.mapHalf;
 
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+  // Background
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
   ctx.beginPath();
   ctx.roundRect(mx, my, size, size, 6);
   ctx.fill();
 
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  // Clip to minimap area
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(mx, my, size, size, 6);
+  ctx.clip();
 
-  if (!player || !player.alive || player.path.length === 0) return;
-
-  const scale = 0.02;
   const cx = mx + size / 2;
   const cy = my + size / 2;
-  const px = player.path.headX;
-  const py = player.path.headY;
-  const halfSize = size / 2 - 4;
+  const scale = (size / 2 - 4) / mapHalf;
 
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-  for (const [, snake] of snakes) {
-    if (!snake.alive || snake.isPlayer) continue;
-    if (snake.path.length === 0) continue;
-    const dx = (snake.path.headX - px) * scale;
-    const dy = (snake.path.headY - py) * scale;
-    if (Math.abs(dx) > halfSize || Math.abs(dy) > halfSize) continue;
-    ctx.fillRect(cx + dx - 1, cy + dy - 1, 2, 2);
+  // Arena boundary circle
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(cx, cy, mapHalf * scale, 0, Math.PI * 2);
+  ctx.stroke();
+
+  if (!player || !player.alive || player.path.length === 0) {
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(mx, my, size, size, 6);
+    ctx.stroke();
+    return;
   }
 
+  const playerX = player.path.headX;
+  const playerY = player.path.headY;
+  const playerScore = player.score;
+
+  // Draw all other snakes as small white dots
+  for (const [, snake] of state.snakes) {
+    if (!snake.alive || snake.isPlayer || snake.path.length === 0) continue;
+    const sx = cx + snake.path.headX * scale;
+    const sy = cy + snake.path.headY * scale;
+
+    // Danger: bigger snake within 2000px
+    const dx = snake.path.headX - playerX;
+    const dy = snake.path.headY - playerY;
+    const isDanger = snake.score > playerScore && (dx * dx + dy * dy) < DANGER_RANGE_SQ;
+
+    if (isDanger) {
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.4)';
+      ctx.beginPath();
+      ctx.arc(sx, sy, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = isDanger ? '#ef4444' : 'rgba(255, 255, 255, 0.5)';
+    ctx.fillRect(sx - 1, sy - 1, 2, 2);
+  }
+
+  // Player dot (green, larger)
+  const px = cx + playerX * scale;
+  const py = cy + playerY * scale;
+  ctx.fillStyle = 'rgba(34, 197, 94, 0.25)';
+  ctx.beginPath();
+  ctx.arc(px, py, 5, 0, Math.PI * 2);
+  ctx.fill();
   ctx.fillStyle = '#22c55e';
   ctx.beginPath();
-  ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+  ctx.arc(px, py, 2.5, 0, Math.PI * 2);
   ctx.fill();
+
+  // Direction line
+  const dirLen = 7;
+  ctx.strokeStyle = 'rgba(34, 197, 94, 0.6)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.lineTo(px + Math.cos(player.angle) * dirLen, py + Math.sin(player.angle) * dirLen);
+  ctx.stroke();
+
+  ctx.restore();
+
+  // Border (outside clip)
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(mx, my, size, size, 6);
+  ctx.stroke();
+}
+
+// ============================================================================
+// Arena boundary wall — glowing red ring visible in-game at map edge
+// ============================================================================
+
+function drawArenaBoundary(
+  ctx: CanvasRenderingContext2D,
+  state: GameState,
+  camera: Camera,
+  viewport: Viewport,
+): void {
+  const mapRadius = state.arenaConfig.mapHalf;
+  const zoom = camera.zoom;
+  const cw = viewport.width;
+  const ch = viewport.height;
+  const sx = cw / 2 - camera.x * zoom;
+  const sy = ch / 2 - camera.y * zoom;
+  const screenRadius = mapRadius * zoom;
+
+  // Cull: skip if the entire boundary is off-screen
+  if (sx + screenRadius < -50 || sx - screenRadius > cw + 50 ||
+      sy + screenRadius < -50 || sy - screenRadius > ch + 50) return;
+
+  // Outer glow (thick, faint)
+  ctx.strokeStyle = 'rgba(239, 68, 68, 0.08)';
+  ctx.lineWidth = 60 * zoom;
+  ctx.beginPath();
+  ctx.arc(sx, sy, screenRadius, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Mid glow
+  ctx.strokeStyle = 'rgba(239, 68, 68, 0.15)';
+  ctx.lineWidth = 20 * zoom;
+  ctx.beginPath();
+  ctx.arc(sx, sy, screenRadius, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Core wall line (bright, thin)
+  ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
+  ctx.lineWidth = 3 * zoom;
+  ctx.beginPath();
+  ctx.arc(sx, sy, screenRadius, 0, Math.PI * 2);
+  ctx.stroke();
 }
 
 // ============================================================================
