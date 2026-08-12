@@ -60,6 +60,9 @@ const _deadSnakesSet = new Set<string>();
 const _hohCheckedSet = new Set<string>();
 const _checkedSnakesSet = new Set<string>();
 const _h2bMap = new Map<string, string>();
+// PERF: Cache visualTailIdx per tick — avoids recomputing the sqrt-walk
+// for the same snake in both body hash build AND narrow phase.
+const _tailIdxCache = new Map<string, number>();
 
 // ─── Visual tail boundary (matches renderer exactly) ───────────────────────
 // The renderer (walkPathFixedStep) draws the body by walking the path from
@@ -184,6 +187,8 @@ export function checkCollisions(
 ): CollisionResult {
   const scratch = _scratch;
   const VIEWPORT_COLLISION_RANGE_SQ = 2000 * 2000;
+  // PERF: Clear per-tick caches
+  _tailIdxCache.clear();
   // FIX #5: Body hash optimization — skip segments for bots far from the player.
   // With 1000 snakes × ~100 segments = 100K inserts per tick, this was the #1
   // lag source. Now only snakes within BODY_HASH_RANGE of the player have
@@ -216,6 +221,8 @@ export function checkCollisions(
       snake.path.length,
       visualLenPx,
     );
+    // PERF: Cache for reuse in narrow phase
+    _tailIdxCache.set(snake.id, maxIdx);
     scratch.id = snake.id;
     for (let i = 1; i <= maxIdx; i++) {
       scratch.x = snake.path.getX(i);
@@ -359,14 +366,8 @@ export function checkCollisions(
 
       // Narrow phase: two independent detection methods.
       // Starts from segment 1 (first body point, no neck skip).
-      // Only checks within the visual body length (matches renderer).
-      const visualLenPx = computeBodyLength(otherSnake.score) * SEGMENT_SPACING;
-      const maxCheckIdx = getVisualTailIdx(
-        (i) => otherSnake.path.getX(i),
-        (i) => otherSnake.path.getY(i),
-        otherSnake.path.length,
-        visualLenPx,
-      );
+      // PERF: Use cached tailIdx from body hash build (avoids sqrt walk).
+      const maxCheckIdx = _tailIdxCache.get(otherId) ?? otherSnake.path.length - 2;
       let hit = false;
       // Midpoint of head CENTER movement
       const midHcx = (prevHcx + hcx) * 0.5;

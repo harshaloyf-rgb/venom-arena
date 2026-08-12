@@ -10,13 +10,18 @@
 //   Layer 2: Smooth Steering — per-type lerp, no jitter
 //   Layer 3: Type Personality — kill strategy, food priority
 //
-// PERFORMANCE: food scans capped at MAX_FOOD_SAMPLE. Body scanner only
-// checks nearby snakes. No O(bots × total_segments) full scans.
+// PERFORMANCE: food scans use spatial hash when available, falling back to
+// random sampling. Body scanner only checks nearby snakes.
 // ============================================================================
 
 import type { GameState, Snake, FoodOrb, ArenaConfig } from './types';
 import { BASE_SPEED, SPAWN_RADIUS, computeBodyRadius, computeBodyLength, SEGMENT_SPACING } from './config';
 import { SpatialHash, type SpatialEntity } from './spatial-hash';
+
+// PERF: Module-level ref to the engine's food spatial hash.
+// Set by updateAllBotAI() so food scanning helpers can use spatial queries
+// instead of random sampling from the full 50K food array.
+let _foodHash: SpatialHash | null = null;
 
 // ─── Bot Types ──────────────────────────────────────────────────────────────
 
@@ -220,7 +225,9 @@ function angleDiff(a: number, b: number): number {
   return normalizeAngle(b - a);
 }
 
-// ─── Food Scanning (unchanged from v1) ──────────────────────────────────────
+// ─── Food Scanning ──────────────────────────────────────────────────────
+// PERF: When _foodHash is set, uses spatial queries (O(k) nearby items)
+// instead of random sampling from the full 50K array (O(120) random reads).
 
 const _sampleBuf: FoodOrb[] = [];
 function sampleFood(foods: FoodOrb[], maxCount: number): FoodOrb[] {
@@ -239,6 +246,21 @@ function sampleFood(foods: FoodOrb[], maxCount: number): FoodOrb[] {
 function findNearestFood(
   hx: number, hy: number, foods: FoodOrb[], maxDistSq: number,
 ): { x: number; y: number; distSq: number } | null {
+  // PERF: Use spatial hash when available — instant nearby food lookup.
+  if (_foodHash) {
+    const maxDist = Math.sqrt(maxDistSq);
+    const nearby = _foodHash.query(hx, hy, maxDist);
+    let best: { x: number; y: number; distSq: number } | null = null;
+    for (let i = 0; i < nearby.length; i++) {
+      const s = nearby[i];
+      const dSq = (s.x - hx) * (s.x - hx) + (s.y - hy) * (s.y - hy);
+      if (dSq < maxDistSq && (!best || dSq < best.distSq)) {
+        best = { x: s.x, y: s.y, distSq: dSq };
+      }
+    }
+    return best;
+  }
+  // Fallback: random sampling (when foodHash not set)
   const sampled = sampleFood(foods, MAX_FOOD_SAMPLE);
   let best: { x: number; y: number; distSq: number } | null = null;
   for (let i = 0; i < sampled.length; i++) {
@@ -254,6 +276,21 @@ function findNearestFood(
 function findFoodCluster(
   hx: number, hy: number, foods: FoodOrb[], radius: number,
 ): { x: number; y: number } | null {
+  // PERF: Use spatial hash when available.
+  if (_foodHash) {
+    const nearby = _foodHash.query(hx, hy, radius);
+    let sumX = 0, sumY = 0, count = 0;
+    for (let i = 0; i < nearby.length; i++) {
+      const s = nearby[i];
+      const dSq = (s.x - hx) * (s.x - hx) + (s.y - hy) * (s.y - hy);
+      if (dSq < radius * radius) {
+        sumX += s.x; sumY += s.y; count++;
+      }
+    }
+    if (count < 3) return null;
+    return { x: sumX / count, y: sumY / count };
+  }
+  // Fallback: random sampling
   const sampled = sampleFood(foods, MAX_CLUSTER_SAMPLE);
   const rSq = radius * radius;
   let sumX = 0, sumY = 0, count = 0;
@@ -1123,13 +1160,109 @@ function buildAIHeadHash(snakes: Map<string, Snake>): void {
   }
 }
 
+// ─── Layer 1.5: Collision Avoidance (shared by staggered and full AI) ────
+// PERF: Extracted into a function so staggered bots can run it cheaply
+// without duplicating the code. Only the personal-space repulsion and
+// player-flee logic — no body proximity scan (that's expensive).
+function runCollisionAvoidance(
+  snake: Snake, data: BotData, state: GameState,
+  isFarFromPlayer: boolean, isRanked: boolean, playerFleeRangeSq: number,
+  skipBodyProximity = false,
+): void {
+  const shx = snake.path.headX;
+  const shy = snake.path.headY;
+  let avX = 0, avY = 0;
+  let hasAvoid = false;
+
+  const nearby = _aiHeadHash.query(shx, shy, PS_RANGE);
+  for (let ni = 0; ni < nearby.length; ni++) {
+    const otherId = nearby[ni].id as string;
+    if (otherId === snake.id) continue;
+    const other = state.snakes.get(otherId);
+    if (!other || !other.alive) continue;
+
+    const dx = nearby[ni].x - shx;
+    const dy = nearby[ni].y - shy;
+    const dSq = dx * dx + dy * dy;
+    if (dSq < 1) continue;
+    const d = Math.sqrt(dSq);
+
+    const isPlayer = other.isPlayer;
+
+    // (A) Normal bots flee from player (range varies per arena, 0 = never flee)
+    if (isPlayer && !isRanked && playerFleeRangeSq > 0 && dSq < playerFleeRangeSq) {
+      const fleeRange = Math.sqrt(playerFleeRangeSq);
+      const fleeUrgency = 1 - (d / fleeRange);
+      const fleeWeight = 2.5 * fleeUrgency;
+      avX -= (dx / d) * fleeWeight;
+      avY -= (dy / d) * fleeWeight;
+      hasAvoid = true;
+      continue;
+    }
+
+    // (B) Personal space repulsion
+    let weight: number;
+    if (dSq < PS_STRONG_SQ) {
+      const otherR = computeBodyRadius(other.score);
+      const sizeFactor = 1 + otherR * 0.15;
+      weight = 1.8 * (1 - d / PS_STRONG) * sizeFactor;
+    } else {
+      weight = 0.5 * (1 - d / PS_RANGE);
+    }
+    avX -= (dx / d) * weight;
+    avY -= (dy / d) * weight;
+    hasAvoid = true;
+  }
+
+  // (C) Body proximity — only for aggressive types and only when near player.
+  // PERF: Skipped when skipBodyProximity=true (staggered bots).
+  if (!skipBodyProximity && !isFarFromPlayer && (data.type === 'predator' || data.type === 'coiler' || data.type === 'interceptor' || data.type === 'ranked')) {
+    const bodyNearby = _aiHeadHash.query(shx, shy, 600);
+    for (let ni = 0; ni < bodyNearby.length; ni++) {
+      const otherId = bodyNearby[ni].id as string;
+      if (otherId === snake.id) continue;
+      const other = state.snakes.get(otherId);
+      if (!other || !other.alive) continue;
+      const pathLen = other.path.length;
+      const step = Math.max(4, Math.floor(pathLen / 20));
+      for (let i = 4; i < pathLen; i += step) {
+        const bx = other.path.getX(i);
+        const by = other.path.getY(i);
+        const bdx = bx - shx;
+        const bdy = by - shy;
+        const bSq = bdx * bdx + bdy * bdy;
+        if (bSq < BODY_AVOID_RANGE_SQ && bSq > 1) {
+          const bd = Math.sqrt(bSq);
+          avX += -(bdx / bd) * (1 - bd / BODY_AVOID_RANGE) * 0.4;
+          avY += -(bdy / bd) * (1 - bd / BODY_AVOID_RANGE) * 0.4;
+          hasAvoid = true;
+        }
+      }
+    }
+  }
+
+  if (hasAvoid) {
+    const avoidAngle = Math.atan2(avY, avX);
+    const avoidMag = Math.sqrt(avX * avX + avY * avY);
+    const blend = Math.min(0.75, avoidMag * 0.25);
+    data.targetAngle = normalizeAngle(data.targetAngle * (1 - blend) + avoidAngle * blend);
+  }
+}
+
 // ============================================================================
 // MAIN LOOP — Called every tick for all bots
 // ============================================================================
 
-export function updateAllBotAI(state: GameState): void {
+// PERF: Stagger FULL AI bots into N groups so they don't all compute
+// expensive AI (body scan + head-on + personality) on the same tick.
+// Each tick only processes 1/N of the FULL AI bots; others reuse last
+// targetAngle. LITE AI (far bots) is cheap and always runs.
+const AI_STAGGER_GROUPS = 3;
+
+export function updateAllBotAI(state: GameState, foodHash?: SpatialHash): void {
   const ac = state.arenaConfig;
   _ac = ac; // Set module-level ref for type updaters and helpers
+  _foodHash = foodHash ?? null; // PERF: Set food hash for spatial food queries
   // P0 OPTIMIZATION: Build head hash once for all bots to share.
   buildAIHeadHash(state.snakes);
 
@@ -1137,6 +1270,10 @@ export function updateAllBotAI(state: GameState): void {
   const player = state.player;
   const playerX = player?.alive ? player.path.headX : NaN;
   const playerY = player?.alive ? player.path.headY : NaN;
+
+  // PERF: AI stagger group — only this group runs FULL AI this tick.
+  const staggerSlot = state.tickCount % AI_STAGGER_GROUPS;
+  let fullAiCounter = 0;
 
   // Arena-specific AI params
   const farDistSq = ac.aiDistanceTierSq;
@@ -1171,6 +1308,17 @@ export function updateAllBotAI(state: GameState): void {
     // ── AI Tier ──
     let defensiveBoost = false;
     if (!isFarFromPlayer) {
+      // PERF: Skip this bot's FULL AI if it's not in this tick's stagger group.
+      // It keeps its last targetAngle/wantBoost (same behavior as between AI ticks).
+      if (fullAiCounter++ % AI_STAGGER_GROUPS !== staggerSlot) {
+        // Only run wall avoidance — cheapest safety net for skipped bots.
+        data.targetAngle = wallAvoidAngle(snake.path.headX, snake.path.headY, data.targetAngle, wallBoundary);
+        // Still run Layer 1.5 personal-space collision avoidance (cheap spatial query).
+        // skipBodyProximity=true to avoid expensive body segment scanning.
+        { runCollisionAvoidance(snake, data, state, isFarFromPlayer, isRanked, playerFleeRangeSq, true); }
+        snake.targetAngle = data.targetAngle;
+        continue;
+      }
       // ── FULL AI ──
       const bodyThreat = scanBodyAhead(
         snake, state.snakes, _aiHeadHash,
@@ -1215,86 +1363,8 @@ export function updateAllBotAI(state: GameState): void {
       }
     }
 
-    // ── Layer 1.5: Collision Avoidance ──
-    {
-      const shx = snake.path.headX;
-      const shy = snake.path.headY;
-      let avX = 0, avY = 0;
-      let hasAvoid = false;
-
-      const nearby = _aiHeadHash.query(shx, shy, PS_RANGE);
-      for (let ni = 0; ni < nearby.length; ni++) {
-        const otherId = nearby[ni].id as string;
-        if (otherId === snake.id) continue;
-        const other = state.snakes.get(otherId);
-        if (!other || !other.alive) continue;
-
-        const dx = nearby[ni].x - shx;
-        const dy = nearby[ni].y - shy;
-        const dSq = dx * dx + dy * dy;
-        if (dSq < 1) continue;
-        const d = Math.sqrt(dSq);
-
-        const isPlayer = other.isPlayer;
-
-        // (A) Normal bots flee from player (range varies per arena, 0 = never flee)
-        if (isPlayer && !isRanked && playerFleeRangeSq > 0 && dSq < playerFleeRangeSq) {
-          const fleeRange = Math.sqrt(playerFleeRangeSq);
-          const fleeUrgency = 1 - (d / fleeRange);
-          const fleeWeight = 2.5 * fleeUrgency;
-          avX -= (dx / d) * fleeWeight;
-          avY -= (dy / d) * fleeWeight;
-          hasAvoid = true;
-          continue;
-        }
-
-        // (B) Personal space repulsion
-        let weight: number;
-        if (dSq < PS_STRONG_SQ) {
-          const otherR = computeBodyRadius(other.score);
-          const sizeFactor = 1 + otherR * 0.15;
-          weight = 1.8 * (1 - d / PS_STRONG) * sizeFactor;
-        } else {
-          weight = 0.5 * (1 - d / PS_RANGE);
-        }
-        avX -= (dx / d) * weight;
-        avY -= (dy / d) * weight;
-        hasAvoid = true;
-      }
-
-      // (C) Body proximity
-      if (!isFarFromPlayer && (data.type === 'predator' || data.type === 'coiler' || data.type === 'interceptor' || data.type === 'ranked')) {
-        const bodyNearby = _aiHeadHash.query(shx, shy, 600);
-        for (let ni = 0; ni < bodyNearby.length; ni++) {
-          const otherId = bodyNearby[ni].id as string;
-          if (otherId === snake.id) continue;
-          const other = state.snakes.get(otherId);
-          if (!other || !other.alive) continue;
-          const pathLen = other.path.length;
-          const step = Math.max(4, Math.floor(pathLen / 20));
-          for (let i = 4; i < pathLen; i += step) {
-            const bx = other.path.getX(i);
-            const by = other.path.getY(i);
-            const bdx = bx - shx;
-            const bdy = by - shy;
-            const bSq = bdx * bdx + bdy * bdy;
-            if (bSq < BODY_AVOID_RANGE_SQ && bSq > 1) {
-              const bd = Math.sqrt(bSq);
-              avX += -(bdx / bd) * (1 - bd / BODY_AVOID_RANGE) * 0.4;
-              avY += -(bdy / bd) * (1 - bd / BODY_AVOID_RANGE) * 0.4;
-              hasAvoid = true;
-            }
-          }
-        }
-      }
-
-      if (hasAvoid) {
-        const avoidAngle = Math.atan2(avY, avX);
-        const avoidMag = Math.sqrt(avX * avX + avY * avY);
-        const blend = Math.min(0.75, avoidMag * 0.25);
-        data.targetAngle = normalizeAngle(data.targetAngle * (1 - blend) + avoidAngle * blend);
-      }
-    }
+    // ── Layer 1.5: Collision Avoidance (shared function) ──
+    runCollisionAvoidance(snake, data, state, isFarFromPlayer, isRanked, playerFleeRangeSq);
 
     // ── Wall avoidance ──
     data.targetAngle = wallAvoidAngle(snake.path.headX, snake.path.headY, data.targetAngle, wallBoundary);

@@ -562,7 +562,8 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   // 1. Update bot AI (compute target angles + boost decisions) — offline only
   const ac = state.arenaConfig;
   if (state.botsEnabled && state.tickCount % ac.aiTickThrottle === 0) {
-    updateAllBotAI(state);
+    // PERF: Pass foodHash so AI uses spatial food queries instead of random sampling
+    updateAllBotAI(state, foodHash);
   }
 
   // 2. Move player
