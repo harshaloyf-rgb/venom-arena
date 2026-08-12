@@ -287,17 +287,21 @@ export default function GameCanvas({
       const maxAccum = tickMs * 6;
       if (accumulatorRef.current > maxAccum) accumulatorRef.current = maxAccum;
 
-      // Save prevHeadX/Y for the PLAYER before the LAST tick in the batch
-      // so camera interpolation spans only 1 tick of movement.
+      // Save prevHeadX/Y BEFORE any ticks run (standard fixed-timestep interpolation).
+      // The camera interpolates: cam = prevHead + (curHead - prevHead) * alpha,
+      // where alpha = remaining accumulator / tickMs (0→1 toward next tick).
+      // Previously this was gated behind ticksThisFrame === maxTicks-1, which only
+      // fired when 6 ticks ran in one frame (100ms spike) — effectively never
+      // at 60fps. The camera froze at spawn, causing world teleporting.
+      const player = gameState.player;
+      if (player && player.alive) {
+        player.prevHeadX = player.path.headX;
+        player.prevHeadY = player.path.headY;
+      }
+
       let ticksThisFrame = 0;
       const maxTicks = 6;
       while (accumulatorRef.current >= tickMs && ticksThisFrame < maxTicks) {
-        // Save prevHead BEFORE the last tick (for render interpolation)
-        const player = gameState.player;
-        if (player && player.alive && ticksThisFrame === maxTicks - 1) {
-          player.prevHeadX = player.path.headX;
-          player.prevHeadY = player.path.headY;
-        }
         const killEvents = gameTick(gameState, inputState, FIXED_DT);
         accumulatorRef.current -= tickMs;
 
@@ -338,9 +342,8 @@ export default function GameCanvas({
       }
 
       // Camera interpolation — only valid when player is alive
-      // alpha = how far we are toward the next tick (0 to ~1).
-      const alpha = Math.min(accumulatorRef.current / tickMs, 1.0);
-      const player = gameState.player;
+      // alpha = how far we are toward the next tick (0 to 1).
+      const alpha = Math.max(0, Math.min(accumulatorRef.current / tickMs, 1.0));
       if (player && player.alive) {
         updateCameraInterpolated(cameraRef.current, player, w, h, alpha);
       }

@@ -1307,6 +1307,7 @@ export function updateAllBotAI(state: GameState, foodHash?: SpatialHash): void {
 
     // ── AI Tier ──
     let defensiveBoost = false;
+    let ranFullAI = false;
     if (!isFarFromPlayer) {
       // PERF: Skip this bot's FULL AI if it's not in this tick's stagger group.
       // It keeps its last targetAngle/wantBoost (same behavior as between AI ticks).
@@ -1322,6 +1323,7 @@ export function updateAllBotAI(state: GameState, foodHash?: SpatialHash): void {
         continue;
       }
       // ── FULL AI ──
+      ranFullAI = true;
       const bodyThreat = scanBodyAhead(
         snake, state.snakes, _aiHeadHash,
         isRanked ? rankedBodyScanDist : bodyScanDist,
@@ -1369,7 +1371,9 @@ export function updateAllBotAI(state: GameState, foodHash?: SpatialHash): void {
     // _aiHeadHash.query() costs ~700ns/bot × 999 bots = ~700μs/tick.
     // Skipping far bots eliminates ~80% of these queries.
     // Only hunter bots (steering toward player) need it for safety.
-    if (!isFarFromPlayer || data.isHunter) {
+    // FULL AI bots already handled body/head-on threats — skip to avoid
+    // double-blending their carefully computed avoidance angles.
+    if ((!isFarFromPlayer || data.isHunter) && !ranFullAI) {
       runCollisionAvoidance(snake, data, state, isFarFromPlayer, isRanked, playerFleeRangeSq);
     }
 
