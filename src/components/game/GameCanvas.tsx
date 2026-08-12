@@ -9,7 +9,7 @@ import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, registerSkinAsset } from '@/lib/snake/skin-registry';
 import { type GameState, type Camera, type Viewport, FIXED_DT } from '@/lib/snake';
 import { drawDeathOverlay, drawEliminatedBanner, drawControlsHint } from './renderer';
-import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrame, setCachedDpr } from './render-snake-atlas';
+import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrameWithDpr } from './render-snake-atlas';
 import { cleanupDeadSnakeParticles, renderBackground, renderHUD } from './hud';
 import { InputHandler } from './input';
 import { makeCoiledPath } from './coil-path';
@@ -134,17 +134,21 @@ export default function GameCanvas({
     // for the same canvas + type, but the function call itself has overhead at 60fps.
     const ctx = canvas.getContext('2d');
 
+    // PERF: Cache parent dimensions — reading clientWidth/clientHeight
+    // every frame forces a synchronous layout reflow.
+    let _cachedW = 0;
+    let _cachedH = 0;
     // Size canvas to fill parent
     const resize = () => {
       const parent = canvas.parentElement;
       if (!parent) return;
       const dpr = window.devicePixelRatio || 1;
-      const w = parent.clientWidth;
-      const h = parent.clientHeight;
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
-      canvas.style.width = w + 'px';
-      canvas.style.height = h + 'px';
+      _cachedW = parent.clientWidth;
+      _cachedH = parent.clientHeight;
+      canvas.width = _cachedW * dpr;
+      canvas.height = _cachedH * dpr;
+      canvas.style.width = _cachedW + 'px';
+      canvas.style.height = _cachedH + 'px';
       if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       if (inputRef.current) inputRef.current.updateRect();
     };
@@ -231,9 +235,8 @@ export default function GameCanvas({
         return;
       }
 
-      const parent = canvas.parentElement;
-      const w = parent ? parent.clientWidth : canvas.width;
-      const h = parent ? parent.clientHeight : canvas.height;
+      const w = _cachedW || (canvas.parentElement ? canvas.parentElement.clientWidth : canvas.width);
+      const h = _cachedH || (canvas.parentElement ? canvas.parentElement.clientHeight : canvas.height);
       const now = Date.now();
       const inputState = input.getState();
 
@@ -350,9 +353,8 @@ export default function GameCanvas({
       const mouseSY = mousePos?.y;
 
       // ── Render: background ──
-      beginRenderFrame();
       const dpr = window.devicePixelRatio || 1;
-      setCachedDpr(dpr);
+      beginRenderFrameWithDpr(dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       renderBackground(ctx, gameState, cameraRef.current, viewport, fc.fps, now);
 
@@ -380,7 +382,7 @@ export default function GameCanvas({
           // of path position while body is at fixed tick positions. alpha=1 => offset=0.
           const dx = s.path.headX - camX;
           const dy = s.path.headY - camY;
-          const lodFar = Math.sqrt(dx * dx + dy * dy) > 1500 ? 1 : 0;
+          const lodFar = dx * dx + dy * dy > 1500 * 1500 ? 1 : 0;
           renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, 1, undefined, lodFar);
         }
       }

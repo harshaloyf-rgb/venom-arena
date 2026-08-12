@@ -9,7 +9,7 @@ import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
 import { isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
 import { renderEquippedCosmetics, readEquippedCosmetics, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
-import { drawSegmentShape, readCustomSkinState, getSkinVisualProps, getPresetVisualProps, resolveShapeStyle, computeTaperRadius } from '@/components/panels/cosmetics/cosmetics-utils';
+import { drawSegmentShape, readCustomSkinState, getSkinVisualProps, getPresetVisualProps, resolveShapeStyle, computeTaperRadius, setSpriteDpr } from '@/components/panels/cosmetics/cosmetics-utils';
 import type { CustomSkinState } from '@/components/panels/cosmetics/cosmetics-types';
 import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-types';
 import { incrementCoilFrame } from './coil-path';
@@ -116,6 +116,13 @@ export function beginRenderFrame(): void {
       _smoothSegs.delete(key);
     }
   }
+}
+
+/** Set DPR for both gradient circle cache and glow sprite cache. */
+export function beginRenderFrameWithDpr(dpr: number): void {
+  setCachedDpr(dpr);
+  setSpriteDpr(dpr);
+  beginRenderFrame();
 }
 
 /** Cached readEquippedCosmetics — reads localStorage at most once per frame. */
