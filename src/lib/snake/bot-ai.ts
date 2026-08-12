@@ -1291,7 +1291,7 @@ export function updateAllBotAI(state: GameState, foodHash?: SpatialHash): void {
   const playerFleeRangeSq = ac.playerFleeRangeSq;
   const sightRangeSq = ac.sightRangeSq;
   const foodSeekRangeSq = ac.foodSeekRangeSq;
-  const wallBoundary = ac.spawnRadius;
+  const wallBoundary = state.boundaryRadius;
   const retargetInterval = ac.retargetInterval;
   const foodAggMult = ac.foodAggressionMult;
   const botBoostMult = ac.botBoostMult;

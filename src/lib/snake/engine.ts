@@ -79,6 +79,8 @@ interface MoveContext {
   foods: FoodOrb[];
   nextFoodId: { value: number };
   mapHalf: number;
+  /** Current pulsing boundary radius (kill zone) */
+  boundaryRadius: number;
 }
 
 // ─── Module-level singletons ─────────────────────────────────────────────────
@@ -217,7 +219,7 @@ function findSafeSpawn(
 // Snake Movement
 // ==========================================================================
 
-function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: number, ctx: MoveContext): void {
+function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: number, ctx: MoveContext): boolean {
   snake.targetAngle = targetAngle;
   snake.prevAngle = snake.angle;
 
@@ -286,17 +288,12 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
   let newHeadX = snake.path.getX(0) + Math.cos(snake.angle) * snake.speed;
   let newHeadY = snake.path.getY(0) + Math.sin(snake.angle) * snake.speed;
 
-  // Arena boundary clamp — prevent snakes from leaving the map
-  const wallDist = snake.isPlayer ? 100 : 200; // players get closer to wall
-  const maxDist = ctx.mapHalf - wallDist;
+  // Arena boundary — DEATH on touch, no food drop
   const distFromCenter = Math.sqrt(newHeadX * newHeadX + newHeadY * newHeadY);
-  if (distFromCenter > maxDist) {
-    // Push back inside
-    const angle = Math.atan2(newHeadY, newHeadX);
-    newHeadX = Math.cos(angle) * maxDist;
-    newHeadY = Math.sin(angle) * maxDist;
-    // Steer toward center on next tick
-    snake.targetAngle = angle + Math.PI;
+  const bRadius = ctx.boundaryRadius;
+  if (distFromCenter >= bRadius) {
+    // Snake crossed the boundary — mark dead, no food
+    return true; // caller must kill this snake
   }
 
   snake.path.prepend(newHeadX, newHeadY);
@@ -363,6 +360,7 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
   // Margin = 10% extra for collision detection lookback + coil rendering.
   const pathCeil = Math.ceil(targetLength * 1.1) + 20;
   snake.path.trimTo(pathCeil);
+  return false; // survived
 }
 
 // ==========================================================================
@@ -540,6 +538,7 @@ export function createInitialState(
     extractionZone: { x: 0, y: 0, radius: 0, active: false },
     botsEnabled: false,
     arenaConfig,
+    boundaryRadius: arenaConfig.mapHalf,
   };
 
   const now = performance.now();
@@ -581,10 +580,21 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   const ac = state.arenaConfig;
   const foodIdRef = { value: state.nextFoodId };
 
+  // ── Pulsing boundary: 30s shrink inward, 30s grow outward ──
+  // Full cycle = 60 seconds (3600 ticks at 60fps).
+  // Amplitude = 8% of mapHalf. Cosine gives smooth accel/decel at endpoints.
+  const PULSE_CYCLE_TICKS = 60 * 60; // 60 seconds
+  const PULSE_AMPLITUDE = 0.08; // 8%
+  const phase = (state.tickCount % PULSE_CYCLE_TICKS) / PULSE_CYCLE_TICKS;
+  const pulseOffset = PULSE_AMPLITUDE * 0.5 * (1 - Math.cos(phase * 2 * Math.PI));
+  const boundaryRadius = ac.mapHalf * (1 - pulseOffset);
+  state.boundaryRadius = boundaryRadius;
+
   const moveCtx: MoveContext = {
     foods: state.foods,
     nextFoodId: foodIdRef,
     mapHalf: ac.mapHalf,
+    boundaryRadius,
   };
 
   // 1. Update bot AI (compute target angles + boost decisions) — offline only
@@ -593,10 +603,14 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
     updateAllBotAI(state, foodHash);
   }
 
+  // Collect boundary-killed snakes (separate from collision kills)
+  const boundaryDead: string[] = [];
+
   // 2. Move player
   const player = state.player;
   if (player && player.alive) {
-    moveSnake(player, input.targetAngle, input.boosting, now, moveCtx);
+    const hitWall = moveSnake(player, input.targetAngle, input.boosting, now, moveCtx);
+    if (hitWall) boundaryDead.push(player.id);
   }
 
   // 3. Move all bots — offline only
@@ -604,7 +618,20 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
     for (const [id, snake] of state.snakes) {
       if (!snake.isBot || !snake.alive) continue;
       const botBoost = getBotBoost(id);
-      moveSnake(snake, snake.targetAngle, botBoost, now, moveCtx);
+      const hitWall = moveSnake(snake, snake.targetAngle, botBoost, now, moveCtx);
+      if (hitWall) boundaryDead.push(id);
+    }
+  }
+
+  // 3b. Kill boundary-hit snakes (no food drop)
+  for (const deadId of boundaryDead) {
+    const deadSnake = state.snakes.get(deadId);
+    if (deadSnake && deadSnake.alive) {
+      deadSnake.alive = false;
+      if (deadSnake.isBot) {
+        removeBot(deadId);
+        state.snakes.delete(deadId);
+      }
     }
   }
 

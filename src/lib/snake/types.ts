@@ -294,6 +294,8 @@ export interface GameState {
   botsEnabled: boolean;
   /** Per-arena configuration (map size, food, bots, AI) */
   arenaConfig: ArenaConfig;
+  /** Current pulsing boundary radius (changes every tick — 30s shrink, 30s grow) */
+  boundaryRadius: number;
 }
 
 // ─── Input ──────────────────────────────────────────────────────────────────

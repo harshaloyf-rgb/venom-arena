@@ -131,6 +131,7 @@ function drawMinimapTopLeft(
   const my = pad;
   const player = state.player;
   const mapHalf = state.arenaConfig.mapHalf;
+  const boundaryR = state.boundaryRadius;
 
   // Background
   ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
@@ -148,11 +149,13 @@ function drawMinimapTopLeft(
   const cy = my + size / 2;
   const scale = (size / 2 - 4) / mapHalf;
 
-  // Arena boundary circle
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+  // Arena boundary circle (pulsing — red when shrinking)
+  const shrinkPct = 1 - boundaryR / mapHalf;
+  const bAlpha = 0.15 + shrinkPct * 1.5; // brighter as it shrinks
+  ctx.strokeStyle = `rgba(239, 68, 68, ${Math.min(bAlpha, 0.8).toFixed(2)})`;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.arc(cx, cy, mapHalf * scale, 0, Math.PI * 2);
+  ctx.arc(cx, cy, boundaryR * scale, 0, Math.PI * 2);
   ctx.stroke();
 
   if (!player || !player.alive || player.path.length === 0) {
@@ -232,7 +235,7 @@ function drawArenaBoundary(
   camera: Camera,
   viewport: Viewport,
 ): void {
-  const mapRadius = state.arenaConfig.mapHalf;
+  const mapRadius = state.boundaryRadius;
   const zoom = camera.zoom;
   const cw = viewport.width;
   const ch = viewport.height;
