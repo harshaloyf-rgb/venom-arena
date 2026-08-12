@@ -1202,3 +1202,21 @@ Stage Summary:
 - Root cause: baked 3D gradient rotating with head created wrong-way tilt illusion
 - Fix: flat sprite + screen-space gradient overlay preserves 3D look without rotation artifact
 - Files changed: src/lib/snake/atlas.ts, src/components/game/render-snake-atlas.tsx
+---
+Task ID: 1
+Agent: Main
+Task: Fix in-game leaderboard jumping + add crown for #1 rank
+
+Work Log:
+- Investigated leaderboard code: found TWO leaderboards (panel leaderboard via /api/leaderboard + in-game canvas leaderboard via React state)
+- User's issue was with the IN-GAME leaderboard (top-right overlay during gameplay)
+- Root cause for jumping: bots spawn gradually via respawnDeadBots (8/tick) to avoid main thread blocking. Regular bots (score 0-500) spawned first, ranked bots (score 10K-48K) spawned last due to type iteration order in deficit logic. This caused leaderboard to show low-score entries first, then jump to high-score entries ~2s later.
+- Root cause for no crown: the in-game leaderboard JSX simply rendered name without any rank-1 decoration
+- Fix 1 (bot-ai.ts respawnDeadBots): Added priority check - when ranked bots are not fully populated, force bestType='ranked' before running deficit logic. Ranked bots (only 10) now spawn in ~2 ticks (< 0.04s), making them appear on the first leaderboard update.
+- Fix 2 (GameCanvas.tsx): Added crown emoji (\u{1F451}) after rank 1 player name in the leaderboard JSX
+- Verified via agent-browser DOM eval: leaderboard shows Apex👑48732, Titan41258, etc. immediately
+
+Stage Summary:
+- Modified: src/lib/snake/bot-ai.ts (respawnDeadBots - ranked bot priority)
+- Modified: src/components/game/GameCanvas.tsx (crown emoji for #1)
+- Both fixes verified working via browser testing

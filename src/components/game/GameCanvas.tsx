@@ -551,7 +551,7 @@ export default function GameCanvas({
                 entry.isPlayer ? 'text-green-400 bg-white/5' : 'text-white/70'
               }`}
             >
-              <span>{i + 1}. {entry.name}</span>
+              <span>{i + 1}. {entry.name}{i === 0 && '\u{1F451}'}</span>
               <span>{Math.floor(entry.score)}</span>
             </div>
           ))}

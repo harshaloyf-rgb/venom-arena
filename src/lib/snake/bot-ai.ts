@@ -1645,11 +1645,20 @@ export function respawnDeadBots(
   const alivePerType: Record<BotType, number> = { predator: 0, coiler: 0, baiter: 0, interceptor: 0, grazer: 0, trapper: 0, ranked: 0 };
   for (const [id, s] of state.snakes) { if (s.isBot && s.alive) { const data = getBotData(id); if (data) alivePerType[data.type]++; } }
 
+  // PRIORITY FIX: Spawn ranked bots first during early game population.
+  // Without this, regular bots (score 0-500) fill the leaderboard first,
+  // then ranked bots (score 10K-48K) appear ~2s later causing a jarring jump.
+  // Ranked bots are only 10 — they fill in ~2 ticks (< 0.04s) then normal deficit logic resumes.
   let bestType: BotType = 'grazer';
   let biggestDeficit = -Infinity;
-  for (let t = 0; t < types.length; t++) {
-    const deficit = counts[t] - alivePerType[types[t]];
-    if (deficit > biggestDeficit) { biggestDeficit = deficit; bestType = types[t]; }
+  if (alivePerType.ranked < config.ranked) {
+    bestType = 'ranked';
+    biggestDeficit = config.ranked - alivePerType.ranked;
+  } else {
+    for (let t = 0; t < types.length; t++) {
+      const deficit = counts[t] - alivePerType[types[t]];
+      if (deficit > biggestDeficit) { biggestDeficit = deficit; bestType = types[t]; }
+    }
   }
 
   if (biggestDeficit > 0) {
