@@ -1312,3 +1312,27 @@ Stage Summary:
 - Full multiplayer snake game loop with bots, collision, food, snapshots
 - Auth + buy-in + match result integration with main Next.js server
 
+---
+Task ID: fix-online-disconnect
+Agent: main
+Task: Fix online mode showing 'disconnected' — diagnose and resolve all connection issues
+
+Work Log:
+- Diagnosed 3 root causes for 'disconnected' state:
+  1. INTERNAL_SECRET not in .env — /api/match/verify throws error, auth always fails
+  2. Game server on port 3001 not running — no Socket.IO server to connect to
+  3. httpServer.on('request') in game-server/index.ts intercepts ALL requests before Socket.IO in Bun, returning 404 for /socket.io/ paths
+- Fix 1: Added INTERNAL_SECRET=dev-secret to .env
+- Fix 2: Created game-server-supervisor.py (double-fork daemon like next-supervisor.py) for persistent game server
+- Fix 3: Removed httpServer.on('request') handler entirely — in Bun, it replaces Socket.IO's listener instead of adding to it
+- Updated start-game-server.sh to use game-server-supervisor.py instead of direct bun --hot
+- Improved supervisor with port-in-use detection and fuser -k cleanup
+- Verified full end-to-end flow: Guest login → Arena Selector → Online PvP → Buy In (10c) → Socket.IO connection → Auth verification → Arena join → Game renders with bots
+- VLM verified: 'fully loaded and functional, not displaying any error messages or disconnection notices'
+- Game server log confirms: auth works, arena created, 30 bots spawned, snapshots at 20Hz
+
+Stage Summary:
+- Root causes: missing env var, no daemon supervisor, Bun event listener behavior
+- Files modified: .env, mini-services/game-server/index.ts, start-game-server.sh
+- Files created: game-server-supervisor.py, mini-services/game-server/start.sh
+- Online mode fully operational: Socket.IO handshake works through Caddy proxy, JWT auth validates, buy-in deducted, game renders
