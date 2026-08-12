@@ -1,4 +1,4 @@
-import type { GameState, Camera, Viewport, Snake } from '@/lib/snake/types';
+import type { GameState, Camera, Viewport } from '@/lib/snake/types';
 import { drawGrid, drawFood } from './renderer';
 import { cleanupSnakeParticles, clearSmoothedSegs } from './render-snake-atlas';
 import { InputHandler } from './input';
@@ -9,22 +9,22 @@ const MAP_SIZE = 120;
 const MAP_PAD = 12;
 const DANGER_RANGE_SQ = 2000 * 2000;
 
-// Minimap zoom: 4 levels — click the Z button to cycle
-const ZOOM_LABELS = ['RADAR', 'CLOSE', 'WIDE', 'FULL'] as const;
-const ZOOM_RADII = [0, 0.25, 0.5, 1.0] as const; // fraction of mapHalf
+// Minimap zoom: 3 levels — click the zoom button to cycle
+const ZOOM_LABELS = ['CLOSE', 'WIDE', 'FULL'] as const;
+const ZOOM_RADII = [0.25, 0.5, 1.0] as const; // fraction of mapHalf
 const ZOOM_LERP = 0.12; // smooth transition speed per frame
 const LABEL_FADE_MS = 1500; // label visible duration
 
 // ─── Minimap Zoom State (module-level, persists across frames) ─────────────
 
-let minimapZoomLevel = 3; // start at FULL
+let minimapZoomLevel = 2; // 0=CLOSE, 1=WIDE, 2=FULL
 let minimapCurrentRadius = 1.0; // animated fraction of mapHalf (starts at full)
 let minimapLabelTime = 0;
 let minimapLabelText = 'FULL';
 
 /** Reset minimap zoom when starting a new game */
 export function resetMinimapZoom(): void {
-  minimapZoomLevel = 3;
+  minimapZoomLevel = 2;
   minimapCurrentRadius = 1.0;
   minimapLabelTime = 0;
   minimapLabelText = 'FULL';
@@ -34,13 +34,14 @@ export function resetMinimapZoom(): void {
 export function handleMinimapClick(canvasX: number, canvasY: number): boolean {
   const mx = MAP_PAD;
   const my = MAP_PAD;
-  // Zoom button: 22x16 box at bottom-right of minimap
-  const btnX = mx + MAP_SIZE - 24;
-  const btnY = my + MAP_SIZE - 20;
-  const btnW = 22;
-  const btnH = 16;
-  if (canvasX >= btnX && canvasX <= btnX + btnW && canvasY >= btnY && canvasY <= btnY + btnH) {
-    minimapZoomLevel = (minimapZoomLevel + 1) % 4;
+  // Zoom button: 18px circle at bottom-right of minimap
+  const btnSize = 18;
+  const btnCx = mx + MAP_SIZE - btnSize / 2 - 3;
+  const btnCy = my + MAP_SIZE - btnSize / 2 - 3;
+  const dx = canvasX - btnCx;
+  const dy = canvasY - btnCy;
+  if (dx * dx + dy * dy <= (btnSize / 2) * (btnSize / 2)) {
+    minimapZoomLevel = (minimapZoomLevel + 1) % 3;
     minimapLabelTime = performance.now();
     minimapLabelText = ZOOM_LABELS[minimapZoomLevel];
     return true;
@@ -180,7 +181,7 @@ function drawMinimapTopLeft(
     minimapCurrentRadius = targetRadius;
   }
 
-  const isPlayerCentered = minimapZoomLevel <= 1; // radar & close center on player
+  const isPlayerCentered = minimapZoomLevel === 0; // CLOSE centers on player
 
   // Visible world radius in pixels at current zoom
   const visibleWorldRadius = mapHalf * minimapCurrentRadius;
@@ -249,20 +250,10 @@ function drawMinimapTopLeft(
   const playerScore = player.score;
 
   // ── Draw snakes ──
-  // At radar zoom, only draw snakes within a reasonable range for perf
-  const radarCullSq = minimapCurrentRadius < 0.3 ? (visibleWorldRadius + 500) ** 2 : Infinity;
-
   for (const [, snake] of state.snakes) {
     if (!snake.alive || snake.isPlayer || snake.path.length === 0) continue;
     const sx = snake.path.headX;
     const sy = snake.path.headY;
-
-    // Perf cull for radar mode
-    if (radarCullSq !== Infinity) {
-      const cdx = sx - viewCenterX;
-      const cdy = sy - viewCenterY;
-      if (cdx * cdx + cdy * cdy > radarCullSq) continue;
-    }
 
     const miniSx = toMiniX(sx);
     const miniSy = toMiniY(sy);
@@ -308,28 +299,34 @@ function drawMinimapTopLeft(
   ctx.stroke();
 
   // ── Zoom button (bottom-right corner of minimap) ──
-  const btnW = 22;
-  const btnH = 16;
-  const btnX = mx + size - btnW - 3;
-  const btnY = my + size - btnH - 3;
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+  const btnSize = 18;
+  const btnX = mx + size - btnSize - 3;
+  const btnY = my + size - btnSize - 3;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
   ctx.beginPath();
-  ctx.roundRect(btnX, btnY, btnW, btnH, 3);
+  ctx.arc(btnX + btnSize / 2, btnY + btnSize / 2, btnSize / 2, 0, Math.PI * 2);
   ctx.fill();
 
-  // Zoom level indicator: 1-4 small bars
-  const barCount = minimapZoomLevel + 1;
-  const barW = 3;
-  const barGap = 1.5;
-  const barsW = barCount * barW + (barCount - 1) * barGap;
-  const barsX = btnX + (btnW - barsW) / 2;
-  const barsY = btnY + btnH / 2;
-  for (let i = 0; i < 4; i++) {
-    const barH = 3 + i * 2; // increasing height: 3, 5, 7, 9
-    const bx = barsX + i * (barW + barGap);
-    ctx.fillStyle = i < barCount ? 'rgba(255, 255, 255, 0.8)' : 'rgba(255, 255, 255, 0.15)';
-    ctx.fillRect(bx, barsY - barH / 2, barW, barH);
-  }
+  // Magnifying glass icon
+  const icCx = btnX + btnSize / 2 - 1;
+  const icCy = btnY + btnSize / 2 - 1;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(icCx, icCy, 4, 0, Math.PI * 2);
+  ctx.stroke();
+  // Handle
+  ctx.beginPath();
+  ctx.moveTo(icCx + 2.8, icCy + 2.8);
+  ctx.lineTo(icCx + 6, icCy + 6);
+  ctx.stroke();
+
+  // Zoom level number
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.font = 'bold 7px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(String(minimapZoomLevel + 1), btnX + btnSize - 3, btnY + btnSize - 2);
 
   ctx.restore();
 
