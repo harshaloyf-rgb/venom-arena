@@ -1220,3 +1220,21 @@ Stage Summary:
 - Modified: src/lib/snake/bot-ai.ts (respawnDeadBots - ranked bot priority)
 - Modified: src/components/game/GameCanvas.tsx (crown emoji for #1)
 - Both fixes verified working via browser testing
+---
+Task ID: 2
+Agent: Main
+Task: Fix crown position, ranked bot dynamic scores, food density, and renderer bug
+
+Work Log:
+- Fixed crown emoji: moved from after name to before name in GameCanvas.tsx line 554
+- Fixed ranked bot constant scores: reduced rankedScores from 8K-48K to 150-5000 range across all 3 arenas (config.ts). Now food eating (value 1-5) causes visible score changes.
+- Fixed food density: reduced initial spawn ring from 3000→200 food, foodDensityTarget from 1500→400 (easy), 1200→350 (medium), 800→250 (hard), foodRespawnBatch significantly reduced, initialFoodTarget reduced, mapFoodTargetPerCell reduced. Also reduced seed batch from 5000→2000.
+- Fixed hardcoded 20000 food check to use arenaConfig.initialFoodTarget
+- Discovered and fixed pre-existing bug: renderSnakeAtlas had `cam.x`, `cam.y`, `camX`, `camY` undefined references (should be `camera.x`, `camera.y`). This caused ReferenceError every frame, preventing leaderboard updates.
+
+Stage Summary:
+- Modified: src/components/game/GameCanvas.tsx (crown position, food check)
+- Modified: src/components/game/render-snake-atlas.tsx (cam → camera fix)
+- Modified: src/lib/snake/config.ts (food density + ranked scores for all 3 arenas)
+- Modified: src/lib/snake/engine.ts (initial food 3000→200, seed batch 5000→2000)
+- Verified: leaderboard shows 👑Apex1501, Titan1201 etc. with scores actively changing

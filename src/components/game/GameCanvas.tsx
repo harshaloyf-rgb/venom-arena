@@ -335,9 +335,9 @@ export default function GameCanvas({
         ticksThisFrame++;
       }
 
-      // P0 FIX: Incrementally seed food across the map (5K/frame).
-      // Prevents initial 20K food spawn from blocking the main thread.
-      if (gameState.foods.length < 20000) {
+      // P0 FIX: Incrementally seed food across the map.
+      // Prevents initial food spawn from blocking the main thread.
+      if (gameState.foods.length < gameState.arenaConfig.initialFoodTarget) {
         seedInitialFood(gameState);
       }
 
@@ -551,7 +551,7 @@ export default function GameCanvas({
                 entry.isPlayer ? 'text-green-400 bg-white/5' : 'text-white/70'
               }`}
             >
-              <span>{i + 1}. {entry.name}{i === 0 && '\u{1F451}'}</span>
+              <span>{i + 1}. {i === 0 && '\u{1F451}'}{entry.name}</span>
               <span>{Math.floor(entry.score)}</span>
             </div>
           ))}

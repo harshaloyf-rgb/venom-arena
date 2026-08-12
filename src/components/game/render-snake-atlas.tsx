@@ -550,8 +550,8 @@ export function renderSnakeAtlas(
   // worldToScreen math to avoid 200 object allocations per frame.
   const drawSize = segRadius * 2;
   const halfDraw = drawSize / 2;
-  const camZoomX = cw / 2 - cam.x * zoom;
-  const camZoomY = ch / 2 - cam.y * zoom;
+  const camZoomX = cw / 2 - camera.x * zoom;
+  const camZoomY = ch / 2 - camera.y * zoom;
   const bodyLen = atlas.body.length;
   const hasEpicEffect = isEpic && animation;
   for (let i = walked.count - 1; i >= 0; i--) {
@@ -560,8 +560,8 @@ export function renderSnakeAtlas(
     if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
 
     // Inline worldToScreen + renderOffset (avoids object allocation)
-    const sx = (wx - camX) * zoom + camZoomX + renderOffX;
-    const sy = (wy - camY) * zoom + camZoomY + renderOffY;
+    const sx = (wx - camera.x) * zoom + camZoomX + renderOffX;
+    const sy = (wy - camera.y) * zoom + camZoomY + renderOffY;
     const segAngle = walked.angles[i];
 
     const bodyIdx = i % bodyLen;

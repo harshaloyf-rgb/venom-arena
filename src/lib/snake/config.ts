@@ -345,23 +345,23 @@ const ARENA_EASY = buildArenaConfig({
   safeSpawnDist: 300,
   safeSpawnAttempts: 50,
 
-  // Food: abundant, dense
-  foodMaxCount: 50000,
-  foodDensityTarget: 1500,
+  // Food: moderate density — player shouldn't gain 400 score in 5 sec at spawn
+  foodMaxCount: 20000,
+  foodDensityTarget: 400,
   foodVisibleRadius: 4000,
-  foodRespawnBatch: 40,
+  foodRespawnBatch: 12,
   initialSpawnRadius: 29000,
-  initialFoodTarget: 20000,
+  initialFoodTarget: 8000,
   mapFoodGridSize: 5000,
-  mapFoodTargetPerCell: 150,
-  mapFoodSpawnPerCell: 25,
+  mapFoodTargetPerCell: 40,
+  mapFoodSpawnPerCell: 8,
 
   // Bots: 989 normal + 10 ranked = 999
   botMix: { predator: 160, coiler: 80, baiter: 120, interceptor: 120, grazer: 270, trapper: 239, ranked: 10 },
   normalBotScoreMin: 0,
   normalBotScoreMax: 500,
   normalBotScoreExp: 1.5,
-  rankedScores: [48723, 41256, 36891, 29437, 25183, 19764, 16238, 11847, 9326, 8154],
+  rankedScores: [1500, 1200, 1000, 850, 700, 550, 450, 350, 250, 150],
 
   // Spawn: spread across 1000-26000px ring
   botSpawnInner: 1000,
@@ -401,22 +401,22 @@ const ARENA_MEDIUM = buildArenaConfig({
   safeSpawnAttempts: 50,
 
   // Food: moderate, less abundant
-  foodMaxCount: 35000,
-  foodDensityTarget: 1200,
+  foodMaxCount: 15000,
+  foodDensityTarget: 350,
   foodVisibleRadius: 3500,
-  foodRespawnBatch: 35,
+  foodRespawnBatch: 10,
   initialSpawnRadius: 20000,
-  initialFoodTarget: 15000,
+  initialFoodTarget: 6000,
   mapFoodGridSize: 4000,
-  mapFoodTargetPerCell: 100,
-  mapFoodSpawnPerCell: 20,
+  mapFoodTargetPerCell: 30,
+  mapFoodSpawnPerCell: 6,
 
   // Bots: more aggressive mix (more predators/coilers/interceptors, fewer grazers)
   botMix: { predator: 220, coiler: 120, baiter: 90, interceptor: 180, grazer: 159, trapper: 220, ranked: 10 },
   normalBotScoreMin: 200,
   normalBotScoreMax: 2000,
   normalBotScoreExp: 1.5,
-  rankedScores: [67234, 58412, 52187, 43823, 38192, 31547, 26731, 21384, 17642, 15328],
+  rankedScores: [3000, 2500, 2000, 1700, 1400, 1100, 900, 700, 500, 350],
 
   // Spawn: tighter ring proportional to smaller map
   botSpawnInner: 800,
@@ -456,22 +456,22 @@ const ARENA_HARD = buildArenaConfig({
   safeSpawnAttempts: 50,
 
   // Food: scarce — forces competition
-  foodMaxCount: 25000,
-  foodDensityTarget: 800,
+  foodMaxCount: 10000,
+  foodDensityTarget: 250,
   foodVisibleRadius: 3000,
-  foodRespawnBatch: 25,
+  foodRespawnBatch: 8,
   initialSpawnRadius: 14000,
-  initialFoodTarget: 10000,
+  initialFoodTarget: 4000,
   mapFoodGridSize: 3500,
-  mapFoodTargetPerCell: 60,
-  mapFoodSpawnPerCell: 15,
+  mapFoodTargetPerCell: 20,
+  mapFoodSpawnPerCell: 4,
 
   // Bots: very aggressive mix (predators/coilers/interceptors dominate)
   botMix: { predator: 280, coiler: 180, baiter: 60, interceptor: 220, grazer: 49, trapper: 200, ranked: 10 },
   normalBotScoreMin: 500,
   normalBotScoreMax: 5000,
   normalBotScoreExp: 1.3,
-  rankedScores: [91245, 82341, 74326, 65218, 58432, 49876, 42193, 34756, 28194, 23647],
+  rankedScores: [5000, 4000, 3500, 3000, 2500, 2000, 1700, 1300, 900, 600],
 
   // Spawn: tight ring on small map
   botSpawnInner: 600,

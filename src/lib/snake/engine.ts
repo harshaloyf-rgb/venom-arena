@@ -534,21 +534,22 @@ export function createInitialState(
   state.snakes.set(player.id, player);
 
   // Seed a small ring of food around player spawn (0-2000px) so the screen
-  // isn't empty on the first frame. The rest fills in via maintainMapFood.
+  // isn't empty on the first frame. Keep it light — dense food makes the
+  // player gain score too fast. The rest fills in via maintainMapFood.
   const nextIdRef = { value: 0 };
-  spawnFoodBatch(nextIdRef, state.foods, 3000, 0, 0, 2000);
+  spawnFoodBatch(nextIdRef, state.foods, 200, 0, 0, 2000);
   state.nextFoodId = nextIdRef.value;
 
   return state;
 }
 
 /** Incrementally seed food across the map. Call once per frame until returns false.
- *  Spawns 5000 food per call (safe budget for 1-2ms). */
+ *  Spawns 2000 food per call (safe budget for <1ms). */
 export function seedInitialFood(state: GameState): boolean {
   const ac = state.arenaConfig;
   if (state.foods.length >= ac.initialFoodTarget) return false;
 
-  const BATCH = 5000;
+  const BATCH = 2000;
   const nextIdRef = { value: state.nextFoodId };
   spawnFoodBatch(nextIdRef, state.foods, BATCH, 0, 0, ac.initialSpawnRadius);
   state.nextFoodId = nextIdRef.value;
