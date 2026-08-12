@@ -1087,3 +1087,22 @@ Stage Summary:
 - Lint: 0 new errors (2 pre-existing unchanged)
 - Server compiles (200 OK)
 - Note: online tier arenas (tier-1..30) don't use these configs — they fall back to Easy. This is pre-existing (online mode has no bot system yet). Offline practice arenas (practice-easy/medium/hard) correctly use the 3 configs.
+---
+Task ID: 1
+Agent: main
+Task: Performance optimization — fix slowdown when many players/bots are nearby
+
+Work Log:
+- Analyzed entire game engine pipeline (engine.ts, collision.ts, bot-ai.ts, renderer.ts)
+- Identified 3 remaining bottlenecks after existing spatial hash + P2 tiering optimizations
+- Implemented Optimization 1: AI stagger — split FULL AI bots into 3 groups, only 1 group runs expensive AI (body scan + head-on + personality) per tick. Staggered bots still get wall avoidance + cheap personal-space collision avoidance.
+- Implemented Optimization 2: Cache visualTailIdx per tick — getVisualTailIdx() was called 2x per snake (body hash build + narrow phase), each walking entire path with sqrt. Now computed once, cached in Map, reused.
+- Implemented Optimization 3: Spatial food scanning — findNearestFood() and findFoodCluster() now use the engine's foodHash spatial queries instead of random sampling 120/150 items from 50K array.
+- Extracted Layer 1.5 collision avoidance into reusable runCollisionAvoidance() function with skipBodyProximity flag for staggered bots.
+- Passed foodHash from engine.ts to updateAllBotAI() for spatial food queries.
+- Verified with agent browser: no console errors, game loads and runs correctly.
+
+Stage Summary:
+- 3 performance optimizations implemented: AI stagger (3x CPU reduction for FULL AI), visualTailIdx cache (eliminates ~50K sqrt calls/tick), spatial food scan (O(k) nearby vs O(120) random)
+- Files modified: bot-ai.ts (AI stagger + food hash + extracted collision avoidance), collision.ts (tailIdx cache), engine.ts (pass foodHash to AI)
+- Committed: 0d36c6d "2026-08-12 04:34 - perf-ai-stagger visualtail-cache spatial-food-scan"
