@@ -1277,3 +1277,38 @@ Stage Summary:
 - Modified: src/components/game/GameCanvas.tsx (import + draw call)
 - 160px circular minimap, bottom-right corner, semi-transparent dark background
 
+---
+Task ID: 7
+Agent: main
+Task: Create Socket.IO game server for Venom Arena multiplayer snake game
+
+Work Log:
+- Read worklog and all 10+ source files for full architecture understanding
+- Created `mini-services/game-server/package.json` with socket.io dependency
+- Created `mini-services/game-server/index.ts` — complete standalone game server (~750 lines)
+- Reimplemented engine functions server-side: createSnake, findSafeSpawn, makeFood, moveSnake, killSnake, checkFoodEating, maintainFoodAroundPlayer, maintainMapFood
+- Engine functions reimplemented because engine.ts imports client-side SLITHER_PRESETS (can't import in server)
+- Imported pure shared modules from parent: types, config, collision, bot-ai, pool, spatial-hash, game-config
+- Implemented ArenaInstance class with: per-arena GameState, SpatialHashes, food cache, player map, game loop
+- Game loop: 60 ticks/sec, 20Hz snapshot broadcast, pulsing boundary, bot AI, food management, collision detection
+- Socket.IO server on port 3001 with CORS, auth middleware calling /api/match/verify
+- Join flow: verify → buy-in deduction via /api/match/join → spawn player → start snapshots
+- Input handling: stores angle+boost per player, used each tick
+- Death handling: matchEnd emit → /api/match/result API call → disconnect after 2s delay
+- Collision deaths drop food; boundary deaths do not drop food
+- Bot spawning: proportional distribution of bot types based on tier's botsCount
+- Tier-to-config mapping: Beginner→Easy, Medium→Medium, High Stakes/Extreme/Legendary→Hard
+- Snapshot optimization: only head position+angle+bodyLen (no body points) for bandwidth savings
+- Snake visibility range: 8000px; food visibility range: 4000px per player
+- HTTP /stats endpoint + socket.io 'stats' event for arena population data
+- Graceful shutdown on SIGINT/SIGTERM
+- Installed socket.io@4.8.3 via bun install
+- Verified: bun build succeeds (exit 0), server starts cleanly, /stats returns {}
+
+Stage Summary:
+- New directory: mini-services/game-server/
+- New files: package.json, index.ts (~750 lines)
+- Standalone Bun Socket.IO server on port 3001
+- Full multiplayer snake game loop with bots, collision, food, snapshots
+- Auth + buy-in + match result integration with main Next.js server
+
