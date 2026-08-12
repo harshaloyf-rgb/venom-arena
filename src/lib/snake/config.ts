@@ -101,7 +101,7 @@ export const FOOD_RESPAWN_BATCH = 40;
 export const FOOD_SPAWN_WEIGHTS: [number, number, number] = [0.93, 0.04, 0.03];
 
 /** Point values for [small, medium, large] food */
-export const FOOD_VALUES: [number, number, number] = [1, 2, 5];
+export const FOOD_VALUES: [number, number, number] = [5, 15, 50];
 
 /** Visual radii for [small, medium, large] food — reduced for cleaner look */
 export const FOOD_RADII: [number, number, number] = [1.5, 2, 3];
@@ -358,10 +358,10 @@ const ARENA_EASY = buildArenaConfig({
 
   // Bots: 989 normal + 10 ranked = 999
   botMix: { predator: 160, coiler: 80, baiter: 120, interceptor: 120, grazer: 270, trapper: 239, ranked: 10 },
-  normalBotScoreMin: 0,
-  normalBotScoreMax: 500,
+  normalBotScoreMin: 500,
+  normalBotScoreMax: 8000,
   normalBotScoreExp: 1.5,
-  rankedScores: [1500, 1200, 1000, 850, 700, 550, 450, 350, 250, 150],
+  rankedScores: [50000, 42000, 35000, 28000, 22000, 17000, 13000, 10000, 8500, 8000],
 
   // Spawn: spread across 1000-26000px ring
   botSpawnInner: 1000,
@@ -413,10 +413,10 @@ const ARENA_MEDIUM = buildArenaConfig({
 
   // Bots: more aggressive mix (more predators/coilers/interceptors, fewer grazers)
   botMix: { predator: 220, coiler: 120, baiter: 90, interceptor: 180, grazer: 159, trapper: 220, ranked: 10 },
-  normalBotScoreMin: 200,
-  normalBotScoreMax: 2000,
+  normalBotScoreMin: 1000,
+  normalBotScoreMax: 15000,
   normalBotScoreExp: 1.5,
-  rankedScores: [3000, 2500, 2000, 1700, 1400, 1100, 900, 700, 500, 350],
+  rankedScores: [70000, 60000, 50000, 42000, 35000, 28000, 22000, 17000, 12000, 10000],
 
   // Spawn: tighter ring proportional to smaller map
   botSpawnInner: 800,
@@ -468,10 +468,10 @@ const ARENA_HARD = buildArenaConfig({
 
   // Bots: very aggressive mix (predators/coilers/interceptors dominate)
   botMix: { predator: 280, coiler: 180, baiter: 60, interceptor: 220, grazer: 49, trapper: 200, ranked: 10 },
-  normalBotScoreMin: 500,
-  normalBotScoreMax: 5000,
+  normalBotScoreMin: 2000,
+  normalBotScoreMax: 30000,
   normalBotScoreExp: 1.3,
-  rankedScores: [5000, 4000, 3500, 3000, 2500, 2000, 1700, 1300, 900, 600],
+  rankedScores: [100000, 85000, 70000, 58000, 48000, 38000, 30000, 23000, 18000, 12000],
 
   // Spawn: tight ring on small map
   botSpawnInner: 600,
