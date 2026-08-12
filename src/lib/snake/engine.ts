@@ -27,15 +27,13 @@ import {
   FOOD_MAGNET_PULL_RADIUS, FOOD_MAGNET_DEATH_RADIUS,
   FOOD_MAGNET_MIN_SPEED, FOOD_MAGNET_MAX_SPEED,
   // BOOST
-  BOOST_DROP_INTERVAL, BOOST_MIN_BODY, BOOST_MIN_SCORE, BOOST_DROP_COUNT,
+  BOOST_DROP_INTERVAL, BOOST_MIN_SCORE, BOOST_DROP_COUNT,
   BOOST_SCORE_COST_AMOUNT, BOOST_SCORE_COST_INTERVAL,
-  // SPAWN
-  INITIAL_SPAWN_RADIUS, SAFE_SPAWN_DIST, SAFE_SPAWN_ATTEMPTS,
   // SPIRAL
   SPIRAL_TURN_THRESHOLD, SPIRAL_ENTER_TICKS, SPIRAL_MAX_MULTIPLIER,
   SPIRAL_RAMP_TICKS, SPIRAL_EXIT_THRESHOLD,
-  FOOD_DENSITY_TARGET, FOOD_VISIBLE_RADIUS, FOOD_DESPAWN_RADIUS,
-  FOOD_RESPAWN_BATCH, FOOD_MAX_COUNT,
+  // ARENA
+  getArenaConfig,
 } from './config';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -58,8 +56,6 @@ export interface PlayerSkinOverride {
  * This ratio scales path-length-dependent values accordingly. */
 const SPACING_RATIO = SEGMENT_SPACING / BASE_SPEED;
 
-/** Scaled boost min body: covers same physical distance as BOOST_MIN_BODY * SEGMENT_SPACING */
-const BOOST_MIN_BODY_SCALED = Math.ceil(BOOST_MIN_BODY * SPACING_RATIO);
 
 
 const SNAKE_PALETTES: [string, string][] = [
@@ -121,8 +117,12 @@ function rebuildFoodHash(fh: SpatialHash, foods: FoodOrb[]): void {
   }
 }
 
-const DESPAWN_RADIUS_SQ = FOOD_DESPAWN_RADIUS * FOOD_DESPAWN_RADIUS;
-const VISIBLE_RADIUS_SQ = FOOD_VISIBLE_RADIUS * FOOD_VISIBLE_RADIUS;
+// NOTE: MAP_FOOD_GRID_SIZE, MAP_HALF, MAP_GRID_COLS/ROWS, MAP_RADIUS_SQ, DESPAWN_RADIUS_SQ,
+// VISIBLE_RADIUS_SQ, MAP_FOOD_TARGET_PER_CELL, MAP_FOOD_SPAWN_PER_CELL are now per-arena
+// and read from state.arenaConfig. Module-level fallbacks kept for spatial hash sizing.
+
+// Grid counts buffer — pre-allocated for largest possible grid (29K map, 5K cells = 12×12 = 144)
+const _gridCounts = new Int32Array(144);
 
 // ==========================================================================
 // Snake Creation
@@ -181,9 +181,9 @@ function createSnake(
 function findSafeSpawn(
   snakes: Map<string, Snake>,
   nearX: number, nearY: number,
-  spawnRadius: number = INITIAL_SPAWN_RADIUS,
-  safeDist: number = SAFE_SPAWN_DIST,
-  attempts: number = SAFE_SPAWN_ATTEMPTS,
+  spawnRadius: number = 29000,
+  safeDist: number = 300,
+  attempts: number = 50,
 ): { x: number; y: number } {
   for (let attempt = 0; attempt < attempts; attempt++) {
     const a = Math.random() * Math.PI * 2;
@@ -219,7 +219,7 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
   let diff = targetAngle - snake.angle;
   diff = Math.atan2(Math.sin(diff), Math.cos(diff));
 
-  const canBoost = wantBoost && snake.score >= BOOST_MIN_SCORE && snake.path.length > BOOST_MIN_BODY_SCALED;
+  const canBoost = wantBoost && snake.score >= BOOST_MIN_SCORE;
   const currentSpeed = canBoost ? BOOST_SPEED : BASE_SPEED;
   const speedT = Math.min(1, Math.max(0, (currentSpeed - BASE_SPEED) / (BOOST_SPEED - BASE_SPEED)));
   let maxTurn = BASE_TURN_RATE + (MIN_TURN_RATE - BASE_TURN_RATE) * speedT;
@@ -288,7 +288,7 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
     const pathLen = snake.path.length;
     const dropCount = Math.min(BOOST_DROP_COUNT, pathLen - 1);
     if (dropCount > 0) {
-      const startFrac = 0.15;
+      const startFrac = 0.8;
       for (let d = 0; d < dropCount; d++) {
         const frac = startFrac + (1 - startFrac) * (d / (dropCount - 1 || 1));
         const idx = Math.min(Math.floor(frac * pathLen), pathLen - 1);
@@ -482,30 +482,51 @@ function killSnake(snake: Snake, nextFoodId: { value: number }, foods: FoodOrb[]
 // Initialization
 // ==========================================================================
 
-/** Create the initial game state (player + 3000 initial food) */
+/** Create the initial game state (player + food spawned in batches).
+ *  Food is NOT spawned synchronously — the caller must call seedInitialFood()
+ *  to populate food in chunks across multiple frames. This prevents the
+ *  main thread from blocking for 30-50ms creating 30K objects. */
 export function createInitialState(
   playerSkin?: PlayerSkinOverride | null,
   initialScore?: number,
   playerName?: string,
+  arenaId?: string,
 ): GameState {
+  const arenaConfig = getArenaConfig(arenaId);
   const state: GameState = {
     snakes: new Map(), foods: [], player: null,
     nextFoodId: 0, showControls: true, tickCount: 0,
     extractionZone: { x: 0, y: 0, radius: 0, active: false },
     botsEnabled: false,
+    arenaConfig,
   };
 
   const now = Date.now();
-  const nextIdRef = { value: 0 };
 
   const player = createSnake('player', playerName || 'Player', initialScore ?? 0, 0, 0, now, playerSkin);
   state.player = player;
   state.snakes.set(player.id, player);
 
-  spawnFoodBatch(nextIdRef, state.foods, 3000, 0, 0, INITIAL_SPAWN_RADIUS);
+  // Seed a small ring of food around player spawn (0-2000px) so the screen
+  // isn't empty on the first frame. The rest fills in via maintainMapFood.
+  const nextIdRef = { value: 0 };
+  spawnFoodBatch(nextIdRef, state.foods, 3000, 0, 0, 2000);
   state.nextFoodId = nextIdRef.value;
 
   return state;
+}
+
+/** Incrementally seed food across the map. Call once per frame until returns false.
+ *  Spawns 5000 food per call (safe budget for 1-2ms). */
+export function seedInitialFood(state: GameState): boolean {
+  const ac = state.arenaConfig;
+  if (state.foods.length >= ac.initialFoodTarget) return false;
+
+  const BATCH = 5000;
+  const nextIdRef = { value: state.nextFoodId };
+  spawnFoodBatch(nextIdRef, state.foods, BATCH, 0, 0, ac.initialSpawnRadius);
+  state.nextFoodId = nextIdRef.value;
+  return state.foods.length < ac.initialFoodTarget;
 }
 
 // ==========================================================================
@@ -524,9 +545,8 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   };
 
   // 1. Update bot AI (compute target angles + boost decisions) — offline only
-  // Throttled to every 3 ticks — bot decisions don't need 60fps updates.
-  // Cuts bot AI CPU cost by ~66% with no visible behavior change.
-  if (state.botsEnabled && state.tickCount % 3 === 0) {
+  const ac = state.arenaConfig;
+  if (state.botsEnabled && state.tickCount % ac.aiTickThrottle === 0) {
     updateAllBotAI(state);
   }
 
@@ -545,8 +565,8 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
     }
   }
 
-  // 4. Check food eating (rebuild spatial hash every 3 ticks, query every tick)
-  const rebuildHash = state.tickCount % 3 === 0;
+  // 4. Check food eating (rebuild spatial hash per arena config)
+  const rebuildHash = state.tickCount % ac.foodHashRebuildInterval === 0;
   const eatenIds = checkFoodEating(state.snakes.values(), state.foods, foodHash, foodValueCache, now, rebuildHash);
   if (eatenIds.size > 0) {
     let writeIdx = 0;
@@ -556,9 +576,13 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
     state.foods.length = writeIdx;
   }
 
-  // 5. Density-based food spawning (every 10 ticks — density doesn't need 60fps)
-  if (state.tickCount % 10 === 0) {
-    maintainFoodAroundPlayer(state, foodIdRef);
+  // 5. Food management
+  if (state.tickCount % ac.playerFoodInterval === 0) {
+    maintainFoodAroundPlayer(state, foodIdRef, foodHash);
+  }
+  // Global map food for far-away bots
+  if (state.tickCount % ac.mapFoodInterval === 0) {
+    maintainMapFood(state, foodIdRef);
   }
 
   // 6. Check collisions (shared)
@@ -574,9 +598,11 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
     }
   }
 
-  // 7. Respawn dead bots (1 per tick max) — offline only
+  // 7. Respawn dead bots — offline only
   if (state.botsEnabled) {
-    respawnDeadBots(state, DEFAULT_BOT_MIX, createBotSnakeFactory);
+    for (let r = 0; r < ac.respawnPerTick; r++) {
+      respawnDeadBots(state, ac.botMix as any, createBotSnakeFactory);
+    }
   }
 
   state.nextFoodId = foodIdRef.value;
@@ -607,34 +633,35 @@ export function initBots(state: GameState, config?: BotSpawnConfig): void {
 // Food Management (density-based, slither.io style)
 // ==========================================================================
 
-function maintainFoodAroundPlayer(state: GameState, nextIdRef: { value: number }): void {
+function maintainFoodAroundPlayer(state: GameState, nextIdRef: { value: number }, fh: SpatialHash): void {
   const player = state.player;
   const refSnake = (player && player.alive && player.path.length > 0)
     ? player
     : [...state.snakes.values()].find(s => s.alive && s.path.length > 0);
   if (!refSnake) return;
 
+  const ac = state.arenaConfig;
   const hx = refSnake.path.headX;
   const hy = refSnake.path.headY;
   const angle = refSnake.angle;
   const foods = state.foods;
+  const visibleR = ac.foodVisibleRadius;
+  const visibleRSq = ac.visibleRadiusSq;
 
+  // P5 OPTIMIZATION: Use food spatial hash to count nearby food instead of
+  // iterating all food items.
   let nearbyCount = 0;
-  let writeIdx = 0;
-  for (let i = 0; i < foods.length; i++) {
-    const f = foods[i];
-    const dx = f.x - hx; const dy = f.y - hy;
-    const dSq = dx * dx + dy * dy;
-    if (dSq > DESPAWN_RADIUS_SQ) continue;
-    if (writeIdx !== i) foods[writeIdx] = f;
-    writeIdx++;
-    if (dSq < VISIBLE_RADIUS_SQ) nearbyCount++;
+  const nearby = fh.query(hx, hy, visibleR);
+  for (let i = 0; i < nearby.length; i++) {
+    const dx = nearby[i].x - hx;
+    const dy = nearby[i].y - hy;
+    if (dx * dx + dy * dy < visibleRSq) nearbyCount++;
   }
-  foods.length = writeIdx;
 
-  const deficit = FOOD_DENSITY_TARGET - nearbyCount;
-  if (deficit <= 0 || foods.length >= FOOD_MAX_COUNT) return;
-  const batch = Math.min(deficit, FOOD_RESPAWN_BATCH);
+  // Spawn food near player to maintain high density
+  const deficit = ac.foodDensityTarget - nearbyCount;
+  if (deficit <= 0 || foods.length >= ac.foodMaxCount) return;
+  const batch = Math.min(deficit, ac.foodRespawnBatch);
 
   const uniformCount = Math.ceil(batch * 0.5);
   const aheadCount = Math.ceil(batch * 0.3);
@@ -642,19 +669,76 @@ function maintainFoodAroundPlayer(state: GameState, nextIdRef: { value: number }
 
   for (let i = 0; i < uniformCount; i++) {
     const a = Math.random() * Math.PI * 2;
-    const dist = 200 + Math.random() * (FOOD_VISIBLE_RADIUS - 200);
+    const dist = 200 + Math.random() * (visibleR - 200);
     foods.push(makeFood(nextIdRef, hx + Math.cos(a) * dist, hy + Math.sin(a) * dist));
   }
   for (let i = 0; i < aheadCount; i++) {
     const spread = (Math.random() - 0.5) * Math.PI * 0.8;
-    const dist = 200 + Math.random() * (FOOD_VISIBLE_RADIUS - 200);
+    const dist = 200 + Math.random() * (visibleR - 200);
     const a = angle + spread;
     foods.push(makeFood(nextIdRef, hx + Math.cos(a) * dist, hy + Math.sin(a) * dist));
   }
   for (let i = 0; i < aroundCount; i++) {
     const a = Math.random() * Math.PI * 2;
-    const dist = 800 + Math.random() * (FOOD_VISIBLE_RADIUS - 800);
+    const dist = 800 + Math.random() * (visibleR - 800);
     foods.push(makeFood(nextIdRef, hx + Math.cos(a) * dist, hy + Math.sin(a) * dist));
+  }
+}
+
+/** Spawn food across the entire map using a grid-based system.
+ *  Divides the map into grid cells, counts food per cell in O(food), then spawns
+ *  in deficit cells. Also handles despawn of out-of-bounds food. */
+function maintainMapFood(state: GameState, nextIdRef: { value: number }): void {
+  const ac = state.arenaConfig;
+  const foods = state.foods;
+  const cellSize = ac.mapFoodGridSize;
+  const halfMap = ac.mapHalf;
+  const cols = ac.mapGridCols;
+  const rows = ac.mapGridRows;
+  const radiusSq = ac.mapRadiusSq;
+  const despawnRSq = ac.despawnRadiusSq;
+  const targetPerCell = ac.mapFoodTargetPerCell;
+  const spawnPerCell = ac.mapFoodSpawnPerCell;
+  const maxFood = ac.foodMaxCount;
+
+  // Phase 0: Despawn out-of-bounds food + count per cell in one pass — O(food)
+  const counts = _gridCounts;
+  counts.fill(0);
+  let writeIdx = 0;
+  for (let i = 0; i < foods.length; i++) {
+    const f = foods[i];
+    if (f.x * f.x + f.y * f.y > despawnRSq) continue;
+    if (writeIdx !== i) foods[writeIdx] = f;
+    writeIdx++;
+    const col = Math.floor((f.x + halfMap) / cellSize);
+    const row = Math.floor((f.y + halfMap) / cellSize);
+    if (col >= 0 && col < cols && row >= 0 && row < rows) {
+      counts[row * cols + col]++;
+    }
+  }
+  foods.length = writeIdx;
+
+  if (foods.length >= maxFood) return;
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const count = counts[row * cols + col];
+      if (count >= targetPerCell) continue;
+
+      const cx = col * cellSize + cellSize / 2 - halfMap;
+      const cy = row * cellSize + cellSize / 2 - halfMap;
+      if (cx * cx + cy * cy > radiusSq) continue;
+
+      const deficit = targetPerCell - count;
+      const toSpawn = Math.min(deficit, spawnPerCell);
+      for (let i = 0; i < toSpawn; i++) {
+        if (state.foods.length >= maxFood) return;
+        const x = cx + (Math.random() - 0.5) * cellSize;
+        const y = cy + (Math.random() - 0.5) * cellSize;
+        if (x * x + y * y < radiusSq) {
+          foods.push(makeFood(nextIdRef, x, y));
+        }
+      }
+    }
   }
 }
 
@@ -663,9 +747,10 @@ function maintainFoodAroundPlayer(state: GameState, nextIdRef: { value: number }
 // ==========================================================================
 
 export function respawnPlayer(state: GameState): void {
+  const ac = state.arenaConfig;
   const old = state.player;
   if (old) old.alive = false;
-  const pos = findSafeSpawn(state.snakes, 0, 0);
+  const pos = findSafeSpawn(state.snakes, 0, 0, 2000, ac.safeSpawnDist, ac.safeSpawnAttempts);
   const skinOverride = old ? {
     skinId: old.skinId, bodyColor: old.color, headColor: old.headColor,
     accentColor: '', rarity: old.rarity,

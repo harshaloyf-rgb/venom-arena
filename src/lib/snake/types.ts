@@ -171,6 +171,100 @@ export interface Snake {
   rarity: SkinRarity;
 }
 
+// ─── Arena Config ─────────────────────────────────────────────────────────
+
+/** Per-arena configuration that controls map size, food, bots, and AI behavior */
+export interface ArenaConfig {
+  // ── Map ──
+  /** Arena boundary radius (px) */
+  spawnRadius: number;
+  /** Food beyond this distance from origin gets despawned */
+  foodDespawnRadius: number;
+  /** Minimum distance from other snakes for safe spawn */
+  safeSpawnDist: number;
+  /** Max attempts to find safe spawn position */
+  safeSpawnAttempts: number;
+
+  // ── Food ──
+  foodMaxCount: number;
+  foodDensityTarget: number;
+  foodVisibleRadius: number;
+  foodRespawnBatch: number;
+  /** Initial food spawn area radius */
+  initialSpawnRadius: number;
+  /** Target initial food count (seeded incrementally) */
+  initialFoodTarget: number;
+  mapFoodGridSize: number;
+  mapFoodTargetPerCell: number;
+  mapFoodSpawnPerCell: number;
+
+  // ── Bots ──
+  botMix: { predator: number; coiler: number; baiter: number; interceptor: number; grazer: number; trapper: number; ranked: number };
+  /** Normal bot score range [min, max] */
+  normalBotScoreMin: number;
+  normalBotScoreMax: number;
+  /** Power curve exponent for score distribution */
+  normalBotScoreExp: number;
+  /** Pre-set scores for ranked bots (index 0 = rank 1) */
+  rankedScores: number[];
+
+  // ── Bot Spawning ──
+  /** Min radius from center for normal bot spawn */
+  botSpawnInner: number;
+  /** Factor × spawnRadius for max bot spawn distance */
+  botSpawnOuterFactor: number;
+  /** Ranked bot home radius range [min, max] */
+  rankedHomeMin: number;
+  rankedHomeMax: number;
+  /** Jitter range for ranked home radius */
+  rankedHomeJitter: number;
+
+  // ── AI Performance ──
+  /** AI runs every N ticks (lower = smarter but heavier) */
+  aiTickThrottle: number;
+  /** Distance threshold for lite AI (skip body scan) */
+  aiDistanceTier: number;
+  /** Distance threshold for ranked lite AI */
+  rankedAiDistanceTier: number;
+  /** Dead bots respawned per tick */
+  respawnPerTick: number;
+  /** Food hash rebuild interval (ticks) */
+  foodHashRebuildInterval: number;
+  /** Map food maintenance interval (ticks) */
+  mapFoodInterval: number;
+  /** Player food maintenance interval (ticks) */
+  playerFoodInterval: number;
+  /** Retarget interval for bot AI (ticks) */
+  retargetInterval: number;
+
+  // ── AI Behavior ──
+  /** Bot sight range (px) */
+  sightRange: number;
+  /** Food seek range (px) */
+  foodSeekRange: number;
+  /** Body scan distance ahead (px) */
+  bodyScanDist: number;
+  /** Head-on threat detection range (px) */
+  headOnRange: number;
+  /** Range at which normal bots flee the player (0 = never flee) */
+  playerFleeRange: number;
+  /** Food aggression multiplier (1.0 = default) */
+  foodAggressionMult: number;
+
+  // ── Precomputed (set by buildArenaConfig) ──
+  mapHalf: number;
+  mapRadiusSq: number;
+  despawnRadiusSq: number;
+  visibleRadiusSq: number;
+  mapGridCols: number;
+  mapGridRows: number;
+  sightRangeSq: number;
+  foodSeekRangeSq: number;
+  aiDistanceTierSq: number;
+  rankedAiDistanceTierSq: number;
+  playerFleeRangeSq: number;
+}
+
 // ─── Game State ─────────────────────────────────────────────────────────────
 
 /** Full game state */
@@ -188,6 +282,8 @@ export interface GameState {
   extractionZone: { x: number; y: number; radius: number; active: boolean };
   /** Whether offline bots are enabled (false in online mode) */
   botsEnabled: boolean;
+  /** Per-arena configuration (map size, food, bots, AI) */
+  arenaConfig: ArenaConfig;
 }
 
 // ─── Input ──────────────────────────────────────────────────────────────────

@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Zap, CircleDot } from 'lucide-react';
 import { createExtractionState, updateExtractionProgress, drawExtractRing } from '@/lib/snake/extraction';
-import { createInitialState, gameTick, respawnPlayer, initBots, type PlayerSkinOverride } from '@/lib/snake/engine';
+import { createInitialState, gameTick, respawnPlayer, seedInitialFood, type PlayerSkinOverride } from '@/lib/snake/engine';
 import { createCamera, updateCameraInterpolated, getViewport } from '@/lib/snake/camera';
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, registerSkinAsset } from '@/lib/snake/skin-registry';
 import { type GameState, type Camera, type Viewport, FIXED_DT } from '@/lib/snake';
 import { drawDeathOverlay, drawEliminatedBanner, drawControlsHint } from './renderer';
 import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrame, setCachedDpr } from './render-snake-atlas';
-import { cleanupDeadSnakeParticles, renderBackground, renderHUD, drawMouseCursor } from './hud';
+import { cleanupDeadSnakeParticles, renderBackground, renderHUD } from './hud';
 import { InputHandler } from './input';
 import { makeCoiledPath } from './coil-path';
 import { computeBodyLength, SEGMENT_SPACING } from '@/lib/snake/config';
@@ -37,6 +37,14 @@ export default function GameCanvas({
   // ── Player skin (read from auth + localStorage) ──
   const { player: authPlayer } = useAuth();
 
+  // P0 FIX: Stabilize auth values as refs so the game useEffect doesn't
+  // re-initialize (resetting the entire game) when authPlayer reference changes.
+  // Previously, any auth refresh during gameplay killed the game.
+  const authSkinRef = useRef(authPlayer?.currentSkin ?? 'skin-default');
+  const authNameRef = useRef(authPlayer?.name || 'Player');
+  if (authPlayer?.currentSkin) authSkinRef.current = authPlayer.currentSkin;
+  if (authPlayer?.name) authNameRef.current = authPlayer.name;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameStateRef = useRef<GameState | null>(null);
   const cameraRef = useRef<Camera>({ x: 0, y: 0, zoom: 1.0 });
@@ -60,6 +68,8 @@ export default function GameCanvas({
   const controlsDismissedRef = useRef(false);
   const leaderboardTimerRef = useRef(0);
   const killsRef = useRef(0);
+  const killedByRef = useRef('');
+  const killerIdRef = useRef('');
   const highScoreRef = useRef(0);
   const [displayHighScore, setDisplayHighScore] = useState(0);
 
@@ -96,6 +106,8 @@ export default function GameCanvas({
     respawnPlayer(gameStateRef.current);
     isDeadRef.current = false;
     deathTimeRef.current = 0;
+    killedByRef.current = '';
+    killerIdRef.current = '';
     setIsDead(false);
     setFinalScore(0);
 
@@ -133,8 +145,8 @@ export default function GameCanvas({
       atlasManager.buildAtlas(skin);
     }
 
-    // ── Resolve player's selected skin ──
-    const serverSkinId = authPlayer?.currentSkin ?? 'skin-default';
+    // ── Resolve player's selected skin (from stabilized ref) ──
+    const serverSkinId = authSkinRef.current;
     const playerSkinAsset = getPlayerSkinAsset(serverSkinId);
 
     // Build atlas for player's skin if it's not already a DEFAULT_SKIN
@@ -153,13 +165,15 @@ export default function GameCanvas({
       rarity: playerSkinAsset.rarity,
     };
 
-    // ── Init game state with player skin + real profile name ──
-    const resolvedName = playerName || authPlayer?.name || 'Player';
-    gameStateRef.current = createInitialState(skinOverride, undefined, resolvedName);
-    // ── Spawn bots (offline mode only — online will have its own bot system) ──
+    // ── Init game state with player skin + real profile name (from stabilized ref) ──
+    const resolvedName = playerName || authNameRef.current || 'Player';
+    gameStateRef.current = createInitialState(skinOverride, undefined, resolvedName, arenaId);
+    // ── Enable bots (offline mode only — online will have its own bot system) ──
+    // Bots are NOT spawned synchronously here (that blocked the main thread
+    // for 500ms+ with 999 bots → blank screen). Instead, respawnDeadBots in
+    // gameTick fills them in gradually at 8/tick ≈ 480/sec → full in ~2s.
     if (mode === 'offline') {
       gameStateRef.current.botsEnabled = true;
-      initBots(gameStateRef.current);
     }
     cameraRef.current = createCamera(0, 0);
     isDeadRef.current = false;
@@ -188,6 +202,7 @@ export default function GameCanvas({
     const loop = (timestamp: number) => {
       if (!running) return;
 
+      try {
       // FPS counter
       const fc = fpsCounterRef.current;
       fc.frames++;
@@ -269,11 +284,14 @@ export default function GameCanvas({
         const killEvents = gameTick(gameState, inputState, FIXED_DT);
         accumulatorRef.current -= tickMs;
 
-
-        // Track player kills
+        // Track player kills + detect who killed the player
         if (gameState.player) {
           for (const ev of killEvents) {
             if (ev.killerId === gameState.player.id) killsRef.current++;
+            if (ev.victimId === gameState.player.id) {
+              killedByRef.current = ev.killerName;
+              killerIdRef.current = ev.killerId;
+            }
           }
           // Track high score (per arena, mode-specific key)
           if (gameState.player.score > highScoreRef.current) {
@@ -294,6 +312,12 @@ export default function GameCanvas({
           }
         }
         ticksThisFrame++;
+      }
+
+      // P0 FIX: Incrementally seed food across the map (5K/frame).
+      // Prevents initial 20K food spawn from blocking the main thread.
+      if (gameState.foods.length < 20000) {
+        seedInitialFood(gameState);
       }
 
       // P0: Camera with interpolated position.
@@ -337,11 +361,11 @@ export default function GameCanvas({
               s.path.headY < viewport.top - margin || s.path.headY > viewport.bottom + margin) continue;
           // Bots use the same render alpha as the player for smooth
           // interpolation between ticks (prevents stop-and-go stutter).
-          // P8: Compute distance from camera for LOD (0=near, 1=far)
+          // All bot bodies always rendered (no far-LOD dot-only mode).
+          // lodFar still passed for minor perf skips (eyes/name/shield on far bots).
           const dx = s.path.headX - camX;
           const dy = s.path.headY - camY;
-          const distFromCam = Math.sqrt(dx * dx + dy * dy);
-          const lodFar = distFromCam > 1500 ? 1 : 0;
+          const lodFar = Math.sqrt(dx * dx + dy * dy) > 1500 ? 1 : 0;
           renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, alpha, undefined, lodFar);
         }
       }
@@ -361,15 +385,65 @@ export default function GameCanvas({
         drawControlsHint(ctx, viewport);
       }
 
-      // Mouse cursor
-      drawMouseCursor(ctx, input);
+      // ── Killer highlight: pulsing red glow on the bot that killed you ──
+      // Renders for 5s after death so you can SEE what killed you.
+      if (isDeadRef.current && killerIdRef.current) {
+        const deathElapsed = performance.now() - deathTimeRef.current;
+        if (deathElapsed < 5000) {
+          const killerSnake = gameState.snakes.get(killerIdRef.current);
+          if (killerSnake && killerSnake.alive && killerSnake.path.length >= 2) {
+            const cam = cameraRef.current;
+            const pulse = 0.4 + 0.6 * Math.abs(Math.sin(deathElapsed * 0.005));
+            const glowR = (killerSnake.bodyRadius + 6) * cam.zoom;
+            const step = Math.max(1, Math.floor(8 / (killerSnake.bodyRadius * 2 + 1)));
+            ctx.save();
+            ctx.globalAlpha = pulse;
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 3;
+            ctx.shadowColor = '#ef4444';
+            ctx.shadowBlur = 20;
+            ctx.beginPath();
+            for (let i = 0; i < killerSnake.path.length; i += step) {
+              const wx = killerSnake.path.getX(i);
+              const wy = killerSnake.path.getY(i);
+              const sx = (wx - cam.x) * cam.zoom + w / 2;
+              const sy = (wy - cam.y) * cam.zoom + h / 2;
+              if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+            }
+            ctx.stroke();
+            // Red glow circles along body
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.35)';
+            ctx.shadowBlur = 15;
+            for (let i = 0; i < killerSnake.path.length; i += step * 2) {
+              const wx = killerSnake.path.getX(i);
+              const wy = killerSnake.path.getY(i);
+              const sx = (wx - cam.x) * cam.zoom + w / 2;
+              const sy = (wy - cam.y) * cam.zoom + h / 2;
+              ctx.beginPath();
+              ctx.arc(sx, sy, glowR, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            // Killer name label above head
+            const headSx = (killerSnake.path.headX - cam.x) * cam.zoom + w / 2;
+            const headSy = (killerSnake.path.headY - cam.y) * cam.zoom + h / 2;
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = Math.min(1, deathElapsed / 300);
+            ctx.fillStyle = '#ef4444';
+            ctx.font = 'bold 14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(killedByRef.current, headSx, headSy - glowR - 8);
+            ctx.restore();
+          }
+        }
+      }
 
       if (isDeadRef.current) {
         const deathElapsed = performance.now() - deathTimeRef.current;
         if (deathElapsed < 5000) {
           drawEliminatedBanner(ctx, viewport, deathElapsed);
         } else {
-          drawDeathOverlay(ctx, finalScore || gameState.player?.score || 0, viewport);
+          drawDeathOverlay(ctx, finalScore || gameState.player?.score || 0, viewport, killedByRef.current);
         }
       }
 
@@ -381,6 +455,11 @@ export default function GameCanvas({
       }
 
       animFrameRef.current = requestAnimationFrame(loop);
+      } catch (err) {
+        console.error('[GameCanvas] Game loop error:', err);
+        // Try to continue the loop even after an error
+        animFrameRef.current = requestAnimationFrame(loop);
+      }
     };
 
     // ── Death overlay: Space/click to respawn (only after 5s elimination) ──
@@ -410,7 +489,9 @@ export default function GameCanvas({
       window.removeEventListener('keydown', onRespawnKey);
       canvas.removeEventListener('click', onRespawnClick);
     };
-  }, [arenaId, mode, handleRespawn, updateLeaderboard, authPlayer, onExit, playerName]);
+  // NOTE: authPlayer is NOT in the dependency array — it's captured via refs.
+  // Adding it here caused the game to reset every time auth refreshed.
+  }, [arenaId, mode, handleRespawn, updateLeaderboard, onExit, playerName]);
 
   // ── Render ──
 
@@ -420,7 +501,7 @@ export default function GameCanvas({
       <canvas
           ref={canvasRef}
           className="block w-full h-full"
-          style={{ touchAction: 'none', cursor: 'none' }}
+          style={{ touchAction: 'none', cursor: 'crosshair' }}
         />
 
       {/* Exit button */}

@@ -52,23 +52,21 @@ export const START_LENGTH = 4;
 /** Logarithmic body length growth — same pattern as bodyRadius.
  *  Formula: length = START_LENGTH + RATE × ln(1 + score / OFFSET)
  *  No hard cap — naturally flattens but ALWAYS grows (different scores = different lengths).
- *  Checkpoints: 0→4 | 100→9 | 500→26 | 1K→40 | 5K→93 | 10K→121 | 100K→222 | 1M→325 | 10M→429 */
+ *  Fitted to checkpoints: 0→15 | 1K→100 | 10K→288 | 50K→451 | 100K→523 | 1M→764 */
 export const LENGTH_GROWTH_RATE = 45;
 export const LENGTH_GROWTH_OFFSET = 800;
 
 /** Compute visual body length (segments) from score using logarithmic growth.
  *  Same structure as computeBodyRadius — fast early, flattens at high scores, no cap.
- *  Score 0→4 | 100→9 | 500→26 | 1K→40 | 5K→93 | 10K→121 | 100K→222 | 1M→325 | 10M→429 */
+ *  Score 0→4 | 100→20 | 500→60 | 1K→93 | 5K→214 | 10K→276 | 50K→435 | 100K→507 | 1M→748 */
 export function computeBodyLength(score: number): number {
   return Math.floor(START_LENGTH + LENGTH_GROWTH_RATE * Math.log(1 + score / LENGTH_GROWTH_OFFSET));
 }
 
-/** Compute visual body radius from score using dual-logarithmic growth curve.
- *  NO HARD CAP — grows indefinitely (logarithmically) with score.
- *  Visual-only: collision radius stays constant at SNAKE_RADIUS (fairness).
- *  Primary log handles 0→~100K (gradual, balanced growth).
- *  Secondary log adds extra thickness at high scores (50K+).
- *  Score 0→3  |  100→3.7  |  500→5.3  |  1K→6.5  |  5K→9.8  |  10K→11.4  |  25K→13.6  |  50K→15.4  |  100K→17.2  |  1M→23.7  |  10M→30.6  |  100M→37.5 */
+/** Dual-logarithmic radius growth — two logarithmic terms for balanced growth.
+ *  Primary: fast early growth (RATE_1=2.36 / OFFSET_1=300)
+ *  Secondary: slow continuous growth at high scores (RATE_2=0.65 / OFFSET_2=100K)
+ *  Score 0→3  |  1K→6.5  |  5K→9.8  |  10K→11.4  |  25K→13.6  |  100K→17.2  |  1M→25.0 */
 export function computeBodyRadius(score: number): number {
   return SNAKE_RADIUS_MIN
     + SNAKE_RADIUS_GROWTH_RATE_1 * Math.log(1 + score / SNAKE_RADIUS_GROWTH_OFFSET_1)
@@ -81,20 +79,23 @@ export function computeBodyRadius(score: number): number {
 // ============================================================================
 
 /** Target food count within the player's visible radius (density-based spawning).
- *  2000 in a 4000px radius ≈ 0.04 food per 1000 sq px ≈ ~50 food visible on screen at zoom 1.0.
+ *  1500 in a 4000px radius — reduced from 2500 to lower food count
+ *  and reduce food iteration overhead. Still feels dense enough.
  */
-export const FOOD_DENSITY_TARGET = 2000;
+export const FOOD_DENSITY_TARGET = 1500;
 
 /** Radius around the player to count food for density checks and spawn food into. */
 export const FOOD_VISIBLE_RADIUS = 4000;
 
-/** Food beyond this distance from the player gets despawned (memory management). */
-export const FOOD_DESPAWN_RADIUS = 6000;
+/** Food beyond this distance from ORIGIN gets despawned (out of map bounds).
+ *  Set to SPAWN_RADIUS + buffer so food persists across the whole map.
+ *  29000px map radius + 1000px buffer = 30000px. */
+export const FOOD_DESPAWN_RADIUS = 30000;
 
 /** Number of food orbs to spawn per tick when density is below target.
- *  80 × 60fps = 4800 food/sec max respawn rate — fast enough to keep screen full.
- */
-export const FOOD_RESPAWN_BATCH = 80;
+ *  40 × 60fps = 2400 food/sec max respawn rate.
+ *  Reduced from 80 to match lower FOOD_DENSITY_TARGET. */
+export const FOOD_RESPAWN_BATCH = 40;
 
 /** Spawn weight probabilities for [small, medium, large] food */
 export const FOOD_SPAWN_WEIGHTS: [number, number, number] = [0.93, 0.04, 0.03];
@@ -111,11 +112,14 @@ export const FOOD_COLORS: [string, string, string] = ['#34d399', '#38bdf8', '#f4
 /** Glow colors for [small, medium, large] food */
 export const FOOD_GLOW_COLORS: [string, string, string] = ['#10b981', '#0ea5e9', '#ec4899'];
 
-/** Initial food spawn area radius (around origin at game start) */
-export const INITIAL_SPAWN_RADIUS = 4000;
+/** Initial food spawn area radius (around origin at game start).
+ *  Set to map size so food covers the entire arena. */
+export const INITIAL_SPAWN_RADIUS = 29000;
 
-/** Maximum food array length (safety cap to prevent unbounded memory growth). */
-export const FOOD_MAX_COUNT = 10000;
+/** Maximum food array length (safety cap to prevent unbounded memory growth).
+ *  50K is sufficient for 1000-bot arena — 150K was overkill causing
+ *  O(30K) iteration in maintainFoodAroundPlayer every 10 ticks. */
+export const FOOD_MAX_COUNT = 50000;
 
 // ============================================================================
 // 4. COLLISION — snake radius, protection zones, death rules
@@ -128,29 +132,25 @@ export const SNAKE_RADIUS = 3;
 /** Minimum visual body radius (at score 0). Thin starting snake. */
 export const SNAKE_RADIUS_MIN = 3;
 
-/** Dual-log radius growth — primary curve handles 0→~100K.
- *  Formula: radius = MIN + RATE_1 × ln(1 + score / OFFSET_1) + RATE_2 × ln(1 + score / OFFSET_2)
- *  Higher offset = slower, more gradual growth (avoids getting fat too fast).
- *  300 = radius reaches ~6 around score ~7K (gradual early growth). */
-export const SNAKE_RADIUS_GROWTH_OFFSET_1 = 300;
-
-/** Primary radius growth rate: handles 0→~100K.
- *  Fitted so radius ≈ 13.6 at score 25K.
- *  Score 0→3  |  100→3.7  |  500→5.3  |  1K→6.5  |  5K→9.8  |  10K→11.4  |  25K→13.6  |  50K→15.4  |  100K→17.2  |  1M→23.7  |  10M→30.6 */
+/** Primary radius growth rate: dominant early-game growth.
+ *  Formula term: RATE_1 × ln(1 + score / OFFSET_1)
+ *  Reaches ~13.6 radius at score 25K. */
 export const SNAKE_RADIUS_GROWTH_RATE_1 = 2.36;
 
-/** Dual-log radius growth — secondary curve adds extra thickness at high scores (50K+).
- *  100,000 offset = this term is negligible below 10K, meaningful at 100K+. */
-export const SNAKE_RADIUS_GROWTH_OFFSET_2 = 100000;
+/** Primary radius growth offset. */
+export const SNAKE_RADIUS_GROWTH_OFFSET_1 = 300;
 
-/** Secondary radius growth rate: extra thickness for big snakes.
- *  Adds ~+2.5px at 1M, ~+5.4px at 10M, ~+8.2px at 100M on top of primary. */
+/** Secondary radius growth rate: slow continuous growth at high scores.
+ *  Prevents radius from completely flattening. */
 export const SNAKE_RADIUS_GROWTH_RATE_2 = 0.65;
 
-/** @deprecated Use SNAKE_RADIUS_GROWTH_RATE_1 / OFFSET_1 instead */
-export const SNAKE_RADIUS_GROWTH_OFFSET = SNAKE_RADIUS_GROWTH_OFFSET_1;
-/** @deprecated Use SNAKE_RADIUS_GROWTH_RATE_1 instead */
+/** Secondary radius growth offset. */
+export const SNAKE_RADIUS_GROWTH_OFFSET_2 = 100000;
+
+/** @deprecated Use SNAKE_RADIUS_GROWTH_RATE_1 and SNAKE_RADIUS_GROWTH_RATE_2 */
 export const SNAKE_RADIUS_GROWTH_RATE = SNAKE_RADIUS_GROWTH_RATE_1;
+/** @deprecated Use SNAKE_RADIUS_GROWTH_OFFSET_1 */
+export const SNAKE_RADIUS_GROWTH_OFFSET = SNAKE_RADIUS_GROWTH_OFFSET_1;
 
 /** First N segments of a snake's body that cannot kill on collision */
 export const NECK_PROTECTION = 5;
@@ -168,44 +168,50 @@ export const SPATIAL_CELL_SIZE = 100;
 // 5. BOOST — drop interval, prerequisites, speed multiplier
 // ============================================================================
 
-/** Milliseconds between boost food drops (3 per second). */
-export const BOOST_DROP_INTERVAL = 333;
+/** Milliseconds between boost food drops (~12.5 per second). */
+export const BOOST_DROP_INTERVAL = 80;
 
 /** Number of food orbs to drop per boost interval.
- *  1 drop × 500ms = 2 food/sec. */
+ *  1 drop × 80ms ≈ 12.5 food/sec. */
 export const BOOST_DROP_COUNT = 1;
 
-/** Minimum body segments required to boost */
-export const BOOST_MIN_BODY = 8;
+/** Minimum body segments required to boost.
+ *  Kept as config reference but NOT enforced — score check is sufficient. */
+export const BOOST_MIN_BODY = 3;
 
 /** Minimum score required to boost — must have score to spend.
- *  Set to 0 so the player can always boost (food drops continue as visual feedback).
- *  Score still drains but the snake won't suddenly stop boosting at score=0.
- *  Body length shrinks naturally as score drops, eventually hitting BOOST_MIN_BODY. */
-export const BOOST_MIN_SCORE = 0;
+ *  Score > 0 required. Boost drains 1 point every 5 ticks (~12/sec).
+ *  When score hits 0, boost automatically stops. */
+export const BOOST_MIN_SCORE = 1;
 
 /** Score deducted each interval while boosting (integer — no decimals in score).
- *  Combined with BOOST_SCORE_COST_INTERVAL: 1 point every 12 ticks ≈ 5/sec at 60fps. */
+ *  Combined with BOOST_SCORE_COST_INTERVAL: 1 point every 5 ticks ≈ 12/sec at 60fps. */
 export const BOOST_SCORE_COST_AMOUNT = 1;
 
 /** Ticks between each score deduction while boosting.
- *  At 60fps: 1 point every 12 ticks = 5 points/sec.
+ *  At 60fps: 1 point every 5 ticks ≈ 12 points/sec (matches 80ms drop interval).
  *  Replaces old float-based BOOST_SCORE_COST_PER_TICK (0.08) which caused decimal scores. */
-export const BOOST_SCORE_COST_INTERVAL = 12;
+export const BOOST_SCORE_COST_INTERVAL = 5;
 
 
 // ============================================================================
 // 7. SPAWN — initial spawn radius, safe positioning, respawn timing
 // ============================================================================
 
-/** Radius used for placing new snakes safely (also see INITIAL_SPAWN_RADIUS in FOOD) */
-export const SPAWN_RADIUS = 3000;
+/** Map boundary radius — the arena is a circle of this radius.
+ *  29000px = 58000×58000px map. Calculated for 1000 entities:
+ *  - 4000px radius for 20 bots → 2,513,274 sq px per bot
+ *  - 1000 bots → √(800,000,000/π) ≈ 28,284px → rounded to 29,000px
+ *  - Each bot gets ~2.6M sq px of roaming space
+ *  - ~320 sec to cross at base speed — massive arena feel */
+export const SPAWN_RADIUS = 29000;
 
-/** Minimum distance from all other snakes for safe spawn */
-export const SAFE_SPAWN_DIST = 500;
+/** Minimum distance from all other snakes for safe spawn.
+ *  Lower for 1000-bot arena — bots are smaller (avg score ~250) and map is huge. */
+export const SAFE_SPAWN_DIST = 300;
 
 /** Max attempts to find a safe spawn position before forcing placement */
-export const SAFE_SPAWN_ATTEMPTS = 30;
+export const SAFE_SPAWN_ATTEMPTS = 50;
 
 // ============================================================================
 // 8. SPIRAL_TURN — Progressive spiral assist for tight circular motion
@@ -242,8 +248,7 @@ export const COIL_CONTRACTION = 0.45;
 /** Fixed timestep in seconds for offline game loop (targeting 60fps) */
 export const FIXED_DT = 1 / 60;
 
-/** Base camera zoom — slightly higher (1.6) so the small 3px-radius snake is clearly visible at spawn.
- *  Old value 1.35 made the 75%-smaller snake too tiny on screen. */
+/** Base camera zoom — starts closer for better visibility */
 export const CAMERA_BASE_ZOOM = 1.6;
 
 /** Minimum camera zoom level — lowered to support massive snakes (unlimited growth).
@@ -300,6 +305,208 @@ export const FOOD_MAGNET_MIN_SPEED = 1.0;
  *  Quadratic ramp from MIN to MAX creates the snappy vacuum snap. */
 export const FOOD_MAGNET_MAX_SPEED = 10.0;
 
+// ============================================================================
+// 13. ARENA CONFIG — per-arena presets for easy/medium/hard practice arenas
+// ============================================================================
 
+import type { ArenaConfig } from './types';
 
+/** Build an ArenaConfig with all precomputed derived values */
+function buildArenaConfig(overrides: Omit<ArenaConfig,
+  'mapHalf' | 'mapRadiusSq' | 'despawnRadiusSq' | 'visibleRadiusSq'
+  | 'mapGridCols' | 'mapGridRows'
+  | 'sightRangeSq' | 'foodSeekRangeSq'
+  | 'aiDistanceTierSq' | 'rankedAiDistanceTierSq' | 'playerFleeRangeSq'
+>): ArenaConfig {
+  const mapHalf = overrides.spawnRadius;
+  const mapGridCols = Math.ceil(mapHalf * 2 / overrides.mapFoodGridSize);
+  return {
+    ...overrides,
+    mapHalf,
+    mapRadiusSq: mapHalf * mapHalf,
+    despawnRadiusSq: overrides.foodDespawnRadius * overrides.foodDespawnRadius,
+    visibleRadiusSq: overrides.foodVisibleRadius * overrides.foodVisibleRadius,
+    mapGridCols,
+    mapGridRows: mapGridCols,
+    sightRangeSq: overrides.sightRange * overrides.sightRange,
+    foodSeekRangeSq: overrides.foodSeekRange * overrides.foodSeekRange,
+    aiDistanceTierSq: overrides.aiDistanceTier * overrides.aiDistanceTier,
+    rankedAiDistanceTierSq: overrides.rankedAiDistanceTier * overrides.rankedAiDistanceTier,
+    playerFleeRangeSq: overrides.playerFleeRange * overrides.playerFleeRange,
+  };
+}
+
+// ── Easy: Spacious map, passive bots, abundant food ─────────────────────
+
+const ARENA_EASY = buildArenaConfig({
+  // Map: 29000px radius (58000×58000) — 2.6M sq px per bot
+  spawnRadius: 29000,
+  foodDespawnRadius: 30000,
+  safeSpawnDist: 300,
+  safeSpawnAttempts: 50,
+
+  // Food: abundant, dense
+  foodMaxCount: 50000,
+  foodDensityTarget: 1500,
+  foodVisibleRadius: 4000,
+  foodRespawnBatch: 40,
+  initialSpawnRadius: 29000,
+  initialFoodTarget: 20000,
+  mapFoodGridSize: 5000,
+  mapFoodTargetPerCell: 150,
+  mapFoodSpawnPerCell: 25,
+
+  // Bots: 989 normal + 10 ranked = 999
+  botMix: { predator: 160, coiler: 80, baiter: 120, interceptor: 120, grazer: 270, trapper: 239, ranked: 10 },
+  normalBotScoreMin: 0,
+  normalBotScoreMax: 500,
+  normalBotScoreExp: 1.5,
+  rankedScores: [48723, 41256, 36891, 29437, 25183, 19764, 16238, 11847, 9326, 8154],
+
+  // Spawn: spread across 1000-26000px ring
+  botSpawnInner: 1000,
+  botSpawnOuterFactor: 0.9,
+  rankedHomeMin: 15000,
+  rankedHomeMax: 25000,
+  rankedHomeJitter: 3000,
+
+  // AI: slow reactions, wide lite-AI tier
+  aiTickThrottle: 6,
+  aiDistanceTier: 5000,
+  rankedAiDistanceTier: 8000,
+  respawnPerTick: 8,
+  foodHashRebuildInterval: 6,
+  mapFoodInterval: 30,
+  playerFoodInterval: 10,
+  retargetInterval: 60,
+
+  // Behavior: standard aggression, bots flee player
+  sightRange: 900,
+  foodSeekRange: 1200,
+  bodyScanDist: 180,
+  headOnRange: 250,
+  playerFleeRange: 350,
+  foodAggressionMult: 1.0,
+});
+
+// ── Medium: Smaller map, balanced bots, moderate food ───────────────────
+
+const ARENA_MEDIUM = buildArenaConfig({
+  // Map: 20000px radius (40000×40000) — 1.26M sq px per bot (2.1× denser)
+  spawnRadius: 20000,
+  foodDespawnRadius: 21000,
+  safeSpawnDist: 250,
+  safeSpawnAttempts: 50,
+
+  // Food: moderate, less abundant
+  foodMaxCount: 35000,
+  foodDensityTarget: 1200,
+  foodVisibleRadius: 3500,
+  foodRespawnBatch: 35,
+  initialSpawnRadius: 20000,
+  initialFoodTarget: 15000,
+  mapFoodGridSize: 4000,
+  mapFoodTargetPerCell: 100,
+  mapFoodSpawnPerCell: 20,
+
+  // Bots: more aggressive mix (more predators/coilers/interceptors, fewer grazers)
+  botMix: { predator: 220, coiler: 120, baiter: 90, interceptor: 180, grazer: 159, trapper: 220, ranked: 10 },
+  normalBotScoreMin: 200,
+  normalBotScoreMax: 2000,
+  normalBotScoreExp: 1.5,
+  rankedScores: [67234, 58412, 52187, 43823, 38192, 31547, 26731, 21384, 17642, 15328],
+
+  // Spawn: tighter ring proportional to smaller map
+  botSpawnInner: 800,
+  botSpawnOuterFactor: 0.88,
+  rankedHomeMin: 10000,
+  rankedHomeMax: 16000,
+  rankedHomeJitter: 2000,
+
+  // AI: faster reactions (every 4 ticks), narrower lite-AI tier
+  aiTickThrottle: 4,
+  aiDistanceTier: 4000,
+  rankedAiDistanceTier: 6000,
+  respawnPerTick: 8,
+  foodHashRebuildInterval: 4,
+  mapFoodInterval: 20,
+  playerFoodInterval: 8,
+  retargetInterval: 45,
+
+  // Behavior: more aggressive, less fearful of player
+  sightRange: 1000,
+  foodSeekRange: 1400,
+  bodyScanDist: 220,
+  headOnRange: 300,
+  playerFleeRange: 200,
+  foodAggressionMult: 1.3,
+});
+
+// ── Hard: Tight map, aggressive hunters, scarce food ─────────────────────
+
+const ARENA_HARD = buildArenaConfig({
+  // Map: 14000px radius (28000×28000) — 616K sq px per bot (4.3× denser than easy)
+  spawnRadius: 14000,
+  foodDespawnRadius: 15000,
+  safeSpawnDist: 200,
+  safeSpawnAttempts: 50,
+
+  // Food: scarce — forces competition
+  foodMaxCount: 25000,
+  foodDensityTarget: 800,
+  foodVisibleRadius: 3000,
+  foodRespawnBatch: 25,
+  initialSpawnRadius: 14000,
+  initialFoodTarget: 10000,
+  mapFoodGridSize: 3500,
+  mapFoodTargetPerCell: 60,
+  mapFoodSpawnPerCell: 15,
+
+  // Bots: very aggressive mix (predators/coilers/interceptors dominate)
+  botMix: { predator: 280, coiler: 180, baiter: 60, interceptor: 220, grazer: 49, trapper: 200, ranked: 10 },
+  normalBotScoreMin: 500,
+  normalBotScoreMax: 5000,
+  normalBotScoreExp: 1.3,
+  rankedScores: [91245, 82341, 74326, 65218, 58432, 49876, 42193, 34756, 28194, 23647],
+
+  // Spawn: tight ring on small map
+  botSpawnInner: 600,
+  botSpawnOuterFactor: 0.85,
+  rankedHomeMin: 7000,
+  rankedHomeMax: 11000,
+  rankedHomeJitter: 1500,
+
+  // AI: very fast reactions (every 2 ticks), tight lite-AI tier
+  aiTickThrottle: 2,
+  aiDistanceTier: 3000,
+  rankedAiDistanceTier: 5000,
+  respawnPerTick: 10,
+  foodHashRebuildInterval: 2,
+  mapFoodInterval: 15,
+  playerFoodInterval: 6,
+  retargetInterval: 30,
+
+  // Behavior: very aggressive, bots DON'T flee player — they're the predators
+  sightRange: 1200,
+  foodSeekRange: 1600,
+  bodyScanDist: 280,
+  headOnRange: 350,
+  playerFleeRange: 0,
+  foodAggressionMult: 1.6,
+});
+
+/** Map from arena ID to its configuration */
+export const ARENA_CONFIGS: Record<string, ArenaConfig> = {
+  'practice-easy': ARENA_EASY,
+  'practice-medium': ARENA_MEDIUM,
+  'practice-hard': ARENA_HARD,
+};
+
+/** Default config used when no arena ID is specified (matches easy) */
+export const DEFAULT_ARENA_CONFIG: ArenaConfig = ARENA_EASY;
+
+/** Resolve arena config from arena ID, fallback to default */
+export function getArenaConfig(arenaId?: string): ArenaConfig {
+  return ARENA_CONFIGS[arenaId ?? ''] ?? DEFAULT_ARENA_CONFIG;
+}
 

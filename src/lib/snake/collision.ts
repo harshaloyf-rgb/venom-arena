@@ -22,7 +22,7 @@
 
 import type { Snake } from './types';
 import { SpatialHash, type SpatialEntity } from './spatial-hash';
-import { SPAWN_PROTECTION_MS, HEAD_ON_HEAD_BOOST_WINS, SNAKE_RADIUS } from './config';
+import { SPAWN_PROTECTION_MS, HEAD_ON_HEAD_BOOST_WINS, SNAKE_RADIUS, SEGMENT_SPACING, computeBodyLength } from './config';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -55,6 +55,32 @@ const CRAWL_HIT_DIST_SQ = (2 * SNAKE_RADIUS - 2) * (2 * SNAKE_RADIUS - 2); // 10
 // ─── Module-level scratch (avoids per-tick allocation) ──────────────────────
 
 const _scratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
+
+// ─── Visual tail boundary (matches renderer exactly) ───────────────────────
+// The renderer (walkPathFixedStep) draws the body by walking the path from
+// head and accumulating actual pixel distance. It stops at visualLenPx =
+// computeBodyLength(score) * SEGMENT_SPACING. When a snake boosts (6 px/tick
+// vs 3 px/tick), path points are further apart so fewer path indices cover
+// the same visual length. This function returns the last path index whose
+// segment (idx, idx+1) starts within the visual body — matching the renderer.
+// Without this, collision checks invisible stretched tail during/after boost.
+
+function getVisualTailIdx(
+  getX: (i: number) => number,
+  getY: (i: number) => number,
+  pathLen: number,
+  visualLenPx: number,
+): number {
+  if (pathLen < 2) return 0;
+  let acc = 0;
+  for (let i = 0; i < pathLen - 1; i++) {
+    const dx = getX(i + 1) - getX(i);
+    const dy = getY(i + 1) - getY(i);
+    acc += Math.sqrt(dx * dx + dy * dy);
+    if (acc > visualLenPx) return i;
+  }
+  return pathLen - 2;
+}
 
 // ─── 2D cross product ──────────────────────────────────────────────────────
 
@@ -155,18 +181,23 @@ export function checkCollisions(
   }
 
   // ── Build body spatial hash (broad phase) ──
-  // ALL alive non-protected snakes' FULL bodies are inserted.
-  // Previous optimizations (nearbyIds head filter + 40% front-only)
-  // created massive blind spots: bots crawling on tails, bodies
-  // invisible when heads were far apart. Full insertion is correct.
+  // Only insert segments within the visual body length (matches renderer).
+  // Without this limit, boosted snakes have invisible tail segments in
+  // the hash that kill players crossing apparent empty space.
   bodyHash.clear();
   scratch.radius = SNAKE_RADIUS;
   for (const [, snake] of snakes) {
     if (!snake.alive) continue;
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
-    const len = snake.path.length;
+    const visualLenPx = computeBodyLength(snake.score) * SEGMENT_SPACING;
+    const maxIdx = getVisualTailIdx(
+      (i) => snake.path.getX(i),
+      (i) => snake.path.getY(i),
+      snake.path.length,
+      visualLenPx,
+    );
     scratch.id = snake.id;
-    for (let i = 1; i < len; i++) {
+    for (let i = 1; i <= maxIdx; i++) {
       scratch.x = snake.path.getX(i);
       scratch.y = snake.path.getY(i);
       bodyHash.insert(scratch);
@@ -298,13 +329,19 @@ export function checkCollisions(
 
       // Narrow phase: two independent detection methods.
       // Starts from segment 1 (first body point, no neck skip).
-      // Check ALL body segments — no tiered truncation.
-      const len = otherSnake.path.length;
+      // Only checks within the visual body length (matches renderer).
+      const visualLenPx = computeBodyLength(otherSnake.score) * SEGMENT_SPACING;
+      const maxCheckIdx = getVisualTailIdx(
+        (i) => otherSnake.path.getX(i),
+        (i) => otherSnake.path.getY(i),
+        otherSnake.path.length,
+        visualLenPx,
+      );
       let hit = false;
       // Midpoint of head CENTER movement
       const midHcx = (prevHcx + hcx) * 0.5;
       const midHcy = (prevHcy + hcy) * 0.5;
-      for (let j = 1; j < len - 1; j++) {
+      for (let j = 1; j <= maxCheckIdx; j++) {
         const sx = otherSnake.path.getX(j);
         const sy = otherSnake.path.getY(j);
         const ex = otherSnake.path.getX(j + 1);

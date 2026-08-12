@@ -22,8 +22,7 @@ import { incrementCoilFrame } from './coil-path';
  *  Fatter snakes  → wider spacing  (fewer, larger circles).
  *  With unlimited growth, step scales proportionally to radius.
  *  The 1.3 factor (was 1.5) ensures more overlap for bigger snakes
- *  where gaps would be more visible.
- *  Floor of 4 (was 8) scaled down to match the smaller base snake size. */
+ *  where gaps would be more visible. */
 function bodyDrawStep(bodyRadius: number): number {
   return Math.max(bodyRadius * 1.3, 4);
 }
@@ -177,7 +176,7 @@ const _walker = {
 // previous world positions (screen coords still recomputed since camera moves).
 // Saves ~16000 path point evaluations per frame when 13 bots are visible.
 
-const BOT_WALK_CACHE_INTERVAL = 1;
+const BOT_WALK_CACHE_INTERVAL = 3;
 
 interface BotWalkCacheEntry {
   xs: Float64Array;
@@ -436,13 +435,23 @@ export function renderSnakeAtlas(
     return r;
   };
 
+  const vl = viewport.left - 40;
+  const vr = viewport.right + 40;
+  const vt = viewport.top - 40;
+  const vb = viewport.bottom + 40;
+
+  // ── Head visibility & screen pos (needed by spawn shield + head rendering) ──
+  const headVisible = headWx >= vl && headWx <= vr && headWy >= vt && headWy <= vb;
+  const headScreen = headVisible ? w2sOff(headWx, headWy) : null;
+  const atlasHeadR = segRadius * 1.05;
+
   // ── Spawn shield: rotating hexagonal ring that fades out ──
   const spawnAge = time - snake.spawnTime;
   if (spawnAge < SPAWN_PROTECTION_MS && headScreen) {
-    const t = spawnAge / SPAWN_PROTECTION_MS; // 0→1 over protection duration
-    const shieldAlpha = 1 - t; // fade out
+    const t = spawnAge / SPAWN_PROTECTION_MS;
+    const shieldAlpha = 1 - t;
     const shieldR = atlasHeadR * (2.2 + 0.3 * Math.sin(time * 0.006));
-    const rot = time * 0.003; // slow rotation
+    const rot = time * 0.003;
     const sides = 6;
     ctx.save();
     ctx.globalAlpha = shieldAlpha * 0.6;
@@ -458,11 +467,9 @@ export function renderSnakeAtlas(
     }
     ctx.closePath();
     ctx.stroke();
-    // Inner glow ring
     ctx.globalAlpha = shieldAlpha * 0.15;
     ctx.fillStyle = '#00e5ff';
     ctx.fill();
-    // Second ring (counter-rotating)
     ctx.globalAlpha = shieldAlpha * 0.35;
     ctx.strokeStyle = '#80f0ff';
     ctx.lineWidth = 1 * zoom;
@@ -477,14 +484,8 @@ export function renderSnakeAtlas(
     ctx.closePath();
     ctx.stroke();
     ctx.restore();
-    // Snake body also semi-transparent during shield
     ctx.globalAlpha = 0.5 + 0.5 * t;
   }
-
-  const vl = viewport.left - 40;
-  const vr = viewport.right + 40;
-  const vt = viewport.top - 40;
-  const vb = viewport.bottom + 40;
 
   const isEpic = atlas.rarity === 'epic';
   const isLegendary = atlas.rarity === 'legendary';
@@ -564,9 +565,6 @@ export function renderSnakeAtlas(
   }
 
   // ── Head ──
-  const headVisible = headWx >= vl && headWx <= vr && headWy >= vt && headWy <= vb;
-  const headScreen = headVisible ? w2sOff(headWx, headWy) : null;
-  const atlasHeadR = segRadius * 1.05;
   if (headVisible && headScreen) {
     const hsx = headScreen.x;
     const hsy = headScreen.y;
@@ -648,8 +646,10 @@ export function renderSnakeAtlas(
     atlasManager.resetEpicEffect(ctx);
     ctx.restore();
 
-    // Direction pointer — thin line extending far ahead, shows where snake is steering
-    drawDirectionPointer(ctx, snake.id, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting);
+    // Direction pointer — player only, shows where snake is steering (arrow replaces mouse cursor)
+    if (snake.isPlayer) {
+      drawDirectionPointer(ctx, snake.id, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting);
+    }
 
     // Ultra-responsive eyes — track raw mouse position relative to head
     // Skip if a custom eye cosmetic is equipped (it draws its own eyes)
@@ -699,7 +699,7 @@ export function renderSnakeAtlas(
     if (segRadius > 3) {
       let nameAlpha = snake.isPlayer ? 0.9 : 0.5;
       if (snake.isPlayer) {
-        const elapsed = now - snake.spawnTime;
+        const elapsed = time - snake.spawnTime;
         if (elapsed > 3000) {
           nameAlpha = Math.max(0, 0.9 * (1 - (elapsed - 3000) / 1000));
         }
@@ -798,20 +798,9 @@ export function renderSnakeFallback(
   const vt = viewport.top - 20;
   const vb = viewport.bottom + 20;
 
-  // ── FAR LOD: single dot, skip body walk entirely ──
-  // At distance >1500px, the body is tiny on screen. Drawing 1 circle
-  // instead of walking ~25 segments + 25 arcs saves ~95% render cost.
-  if (isFar) {
-    const farHeadScr = w2s(headWorldX, headWorldY, camera, cw, ch);
-    if (headWorldX >= vl && headWorldX <= vr && headWorldY >= vt && headWorldY <= vb) {
-      ctx.fillStyle = snake.color;
-      ctx.beginPath();
-      ctx.arc(farHeadScr.x, farHeadScr.y, segRadius, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    return;
-  }
+  // ── FAR LOD: eyes/name/shield skip only — body is ALWAYS rendered ──
+  // Removed single-dot early return: invisible bodies caused unexplained deaths.
+  // Far bots still skip eyes, name, shield, and direction pointer for performance.
 
   // FIX 1: Render-time interpolation offset
   const interpHeadX = snake.prevHeadX + (snake.path.headX - snake.prevHeadX) * alpha;
@@ -1077,8 +1066,8 @@ export function renderSnakeFallback(
       ctx.fill();
     }
 
-    // Direction pointer — P8: skip for far LOD bots
-    if (!isFar) {
+    // Direction pointer — player only, not bots
+    if (snake.isPlayer) {
       drawDirectionPointer(ctx, snake.id, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting);
     }
 
@@ -1219,10 +1208,9 @@ function drawCollisionChain(
   ctx.restore();
 }
 
-// ─── Direction Pointer (thin needle extending far ahead) ──────────────────
-// Like slither.io, the mouse cursor IS the primary direction indicator.
-// This pointer is just a subtle visual aid — a thin line extending from the
-// head in the direction the snake is turning, so you can see the turn intent.
+// ─── Direction Pointer (player-only steering arrow) ──────────────────
+// Replaces the mouse cursor — shows where the player is steering.
+// Visible curved line + arrowhead, stretches forward when boosting.
 
 function drawDirectionPointer(
   ctx: CanvasRenderingContext2D,
@@ -1234,8 +1222,6 @@ function drawDirectionPointer(
   headRadius: number,
   boosting: boolean,
 ): void {
-  // steerAngle is already smoothed by the game loop — use directly
-
   // How much the steering deviates from current facing
   let steerDiff = steerAngle - faceAngle;
   while (steerDiff > Math.PI) steerDiff -= 2 * Math.PI;
@@ -1243,14 +1229,16 @@ function drawDirectionPointer(
 
   const absDiff = Math.abs(steerDiff);
 
-  // Line grows slightly with snake size: base 5x headRadius, scales up to 7x at large sizes
-  // headRadius ranges from ~6 (start) to ~31 (100K score)
+  // Boost slightly stretches the arrow forward
+  const boostStretch = boosting ? 1.15 : 1.0;
+
+  // Line length: 6× head radius, scales up to 8× for big snakes, ×1.15 when boosting
   const sizeScale = Math.min(1.4, 1.0 + (headRadius - 6) * 0.015);
-  const lineLen = headRadius * 5.0 * sizeScale;
-  const startDist = headRadius * 1.1;
+  const lineLen = headRadius * 6.0 * sizeScale * boostStretch;
+  const startDist = headRadius * 1.5;
   const endDist = startDist + lineLen;
 
-  // Start point: just in front of the head
+  // Start point: in front of the head
   const sx = hx + Math.cos(faceAngle) * startDist;
   const sy = hy + Math.sin(faceAngle) * startDist;
 
@@ -1267,12 +1255,12 @@ function drawDirectionPointer(
   const mx = hx + Math.cos(midAngle) * midDist;
   const my = hy + Math.sin(midAngle) * midDist;
 
-  // Opacity: always visible (subtle when straight, brighter when turning/boosting)
+  // Opacity: subtle when straight, brighter when turning, brightest when boosting
   const turnIntensity = Math.min(absDiff / 0.6, 1.0);
-  const alpha = boosting ? 0.7 : 0.15 + 0.45 * turnIntensity;
-  const lineW = boosting ? 2.5 : 1.5;
+  const alpha = boosting ? 0.8 : 0.3 + 0.4 * turnIntensity;
+  const lineW = boosting ? 2.5 : 1.8;
 
-  // Direction line — invisible
+  // Direction line — hidden (arrowhead only)
   ctx.strokeStyle = `rgba(255, 255, 255, 0)`;
   ctx.lineWidth = lineW;
   ctx.lineCap = 'round';
@@ -1282,10 +1270,10 @@ function drawDirectionPointer(
   ctx.quadraticCurveTo(mx, my, ex, ey);
   ctx.stroke();
 
-  // Arrowhead at the tip
-  const arrowLen = headRadius * 0.9 * sizeScale;
-  const arrowHalfAngle = 0.4; // ~23° spread
-  const arrowAlpha = Math.min(alpha * 1.1, 0.85);
+  // Arrowhead at the tip — bigger
+  const arrowLen = headRadius * 1.3 * sizeScale * boostStretch;
+  const arrowHalfAngle = 0.4;
+  const arrowAlpha = Math.min(alpha * 1.2, 0.9);
 
   ctx.fillStyle = `rgba(255, 255, 255, ${arrowAlpha})`;
   ctx.beginPath();

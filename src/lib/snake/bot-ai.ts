@@ -14,12 +14,13 @@
 // checks nearby snakes. No O(bots × total_segments) full scans.
 // ============================================================================
 
-import type { GameState, Snake, FoodOrb } from './types';
-import { BASE_SPEED, SPAWN_RADIUS, INITIAL_SPAWN_RADIUS } from './config';
+import type { GameState, Snake, FoodOrb, ArenaConfig } from './types';
+import { BASE_SPEED, SPAWN_RADIUS, computeBodyRadius, computeBodyLength, SEGMENT_SPACING } from './config';
+import { SpatialHash, type SpatialEntity } from './spatial-hash';
 
 // ─── Bot Types ──────────────────────────────────────────────────────────────
 
-export type BotType = 'predator' | 'coiler' | 'baiter' | 'interceptor' | 'grazer' | 'trapper';
+export type BotType = 'predator' | 'coiler' | 'baiter' | 'interceptor' | 'grazer' | 'trapper' | 'ranked';
 
 /** Color palette per bot type: [bodyColor, headColor] */
 export const BOT_TYPE_COLORS: Record<BotType, [string, string]> = {
@@ -29,6 +30,7 @@ export const BOT_TYPE_COLORS: Record<BotType, [string, string]> = {
   interceptor: ['#06b6d4', '#67e8f9'],
   grazer:      ['#22c55e', '#86efac'],
   trapper:     ['#8b5cf6', '#c4b5fd'],
+  ranked:      ['#f59e0b', '#fbbf24'],
 };
 
 // ─── Bot Names ──────────────────────────────────────────────────────────────
@@ -40,6 +42,7 @@ const BOT_NAMES: Record<BotType, string[]> = {
   interceptor: ['Falcon', 'Hawk', 'Eagle', 'Raptor', 'Strike', 'Blitz', 'Flash', 'Dash'],
   grazer:      ['Nibbles', 'Munch', 'Grazer', 'Harvest', 'Bloom', 'Sprout', 'Clover', 'Meadow'],
   trapper:     ['Web', 'Net', 'Cage', 'Trap', 'Fort', 'Wall', 'Barricade', 'Fence'],
+  ranked:      ['Apex', 'Titan', 'Phantom X', 'Nemesis', 'Warden', 'Oracle', 'Sovereign', 'Sentinel', 'Vanguard', 'Champion'],
 };
 
 // ─── Bot Spawn Mix ──────────────────────────────────────────────────────────
@@ -47,11 +50,14 @@ const BOT_NAMES: Record<BotType, string[]> = {
 export interface BotSpawnConfig {
   predator: number; coiler: number; baiter: number;
   interceptor: number; grazer: number; trapper: number;
+  ranked: number;
 }
 
-/** Default mix: 13 bots — 8 peaceful, 5 aggressive */
+/** Default mix: 989 regular bots + 10 ranked = 999 bots + 1 player = 1000 entities
+ *  Types scaled proportionally: grazers dominate (peaceful), trappers & predators are aggressive minority.
+ *  Predator(160) Coiler(80) Baiter(120) Interceptor(120) Grazer(270) Trapper(239) Ranked(10) = 999 */
 export const DEFAULT_BOT_MIX: BotSpawnConfig = {
-  predator: 2, coiler: 1, baiter: 2, interceptor: 1, grazer: 4, trapper: 3,
+  predator: 160, coiler: 80, baiter: 120, interceptor: 120, grazer: 270, trapper: 239, ranked: 10,
 };
 
 // ─── Performance Constants ───────────────────────────────────────────────────
@@ -59,20 +65,39 @@ export const DEFAULT_BOT_MIX: BotSpawnConfig = {
 const MAX_FOOD_SAMPLE = 120;
 const MAX_CLUSTER_SAMPLE = 150;
 
-// ─── Ranges ──────────────────────────────────────────────────────────────────
+// ─── Ranges (defaults for easy arena — overridden per-arena via state.arenaConfig) ──
 
-const SIGHT_RANGE_SQ = 900 * 900;
-const FOOD_SEEK_RANGE_SQ = 1200 * 1200;
+const DEFAULT_SIGHT_RANGE_SQ = 900 * 900;
+const DEFAULT_FOOD_SEEK_RANGE_SQ = 1200 * 1200;
 const CLUSTER_RANGE = 500;
-const WALL_BOUNDARY = SPAWN_RADIUS;
-const RETARGET_INTERVAL = 45;
+const DEFAULT_WALL_BOUNDARY = SPAWN_RADIUS;
+const DEFAULT_RETARGET_INTERVAL = 60;
 
-// ─── Body Scanner Config ─────────────────────────────────────────────────────
+// ─── Collision Avoidance Config ────────────────────────────────────────────
+/** Personal space range — bots start repelling at this distance */
+const PS_RANGE = 300;
+const PS_RANGE_SQ = PS_RANGE * PS_RANGE;
+/** Strong avoidance range — harder push within this distance */
+const PS_STRONG = 120;
+const PS_STRONG_SQ = PS_STRONG * PS_STRONG;
+/** Default player flee range (overridden per-arena) */
+const DEFAULT_PLAYER_FLEE_RANGE_SQ = 350 * 350;
+/** Body proximity avoidance — steer away from any body segment within this range */
+const BODY_AVOID_RANGE = 120;
+const BODY_AVOID_RANGE_SQ = BODY_AVOID_RANGE * BODY_AVOID_RANGE;
 
-const BODY_SCAN_DIST = 180;       // px ahead to scan for body threats
+// ─── Body Scanner Config (defaults — overridden per-arena) ─────────────────
+
+const DEFAULT_BODY_SCAN_DIST = 180;       // px ahead to scan for body threats
 const BODY_SCAN_CONE = Math.PI * 0.45; // 81° half-cone
-const HEAD_ON_RANGE = 250;        // px to detect head-on approach
+const DEFAULT_HEAD_ON_RANGE = 250;        // px to detect head-on approach
 
+// ─── Active Arena Config (set at the start of updateAllBotAI) ─────────────
+// Type updaters and helper functions read from this instead of module constants.
+let _ac: ArenaConfig | null = null;
+function ac(): ArenaConfig {
+  return _ac!;
+}
 // ─── Per-Type Food Aggression ───────────────────────────────────────────────
 /** How aggressively the type chases food vs holds its heading.
  *  0 = pure forward (no food pull), 1 = full food chase */
@@ -83,6 +108,7 @@ const FOOD_AGRESSION: Record<BotType, number> = {
   interceptor: 0.4,
   grazer: 0.7,
   trapper: 0.3,
+  ranked: 0.6,
 };
 
 // ─── Bot AI State ────────────────────────────────────────────────────────────
@@ -124,6 +150,18 @@ interface TrapperState {
   arcProgress: number;
 }
 
+interface RankedState {
+  /** This bot's rank (1-10) — determines score tier and spacing */
+  rank: number;
+  /** Desired home sector angle (radians) — spread bots around the map */
+  homeAngle: number;
+  /** Home orbit radius from center */
+  homeRadius: number;
+  /** Wandering within home sector */
+  sectorWanderAngle: number;
+  sectorWanderTimer: number;
+}
+
 interface BodyThreat {
   avoidAngle: number;
   severity: number; // 0 (far) → 1 (touching)
@@ -141,6 +179,7 @@ interface BotAIData {
   baiter?: BaiterState;
   interceptor?: InterceptorState;
   trapper?: TrapperState;
+  ranked?: RankedState;
 }
 
 // ─── Module-level State ─────────────────────────────────────────────────────
@@ -250,27 +289,39 @@ function findNearestSnake(
 function scanBodyAhead(
   snake: Snake,
   snakes: Map<string, Snake>,
+  headHash: SpatialHash,
+  scanDist = DEFAULT_BODY_SCAN_DIST,
+  scanCone = BODY_SCAN_CONE,
 ): BodyThreat | null {
   const hx = snake.path.headX;
   const hy = snake.path.headY;
   const myAngle = snake.angle;
-  const scanDistSq = BODY_SCAN_DIST * BODY_SCAN_DIST;
-  const headRangeSq = (BODY_SCAN_DIST * 2.5) * (BODY_SCAN_DIST * 2.5);
+  const scanDistSq = scanDist * scanDist;
+  const headRange = scanDist * 2.5;
 
-  // Pre-sort: collect head distances, only scan 3 nearest snakes.
-  // When clustered with 10+ snakes, this cuts 70% of segment iterations.
+  // P1 OPTIMIZATION: Use spatial hash instead of O(n) full snake iteration.
+  // With 999 bots on a 58K×58K map, PS_RANGE=300, cell=100px, each query
+  // returns ~3-8 neighbors instead of scanning all 999 snakes.
+  // Total: 999 × ~6 = 6K iterations instead of 999 × 999 = 1M.
   type SnakeDist = { snake: Snake; distSq: number };
   const nearby: SnakeDist[] = [];
-  for (const [id, other] of snakes) {
-    if (id === snake.id || !other.alive) continue;
-    const dSq = distSq(hx, hy, other.path.headX, other.path.headY);
-    if (dSq <= headRangeSq) nearby.push({ snake: other, distSq: dSq });
+  const heads = headHash.query(hx, hy, headRange);
+  for (let hi = 0; hi < heads.length; hi++) {
+    const h = heads[hi];
+    const otherId = h.id as string;
+    if (otherId === snake.id) continue;
+    const other = snakes.get(otherId);
+    if (!other || !other.alive) continue;
+    const dx = h.x - hx;
+    const dy = h.y - hy;
+    const dSq = dx * dx + dy * dy;
+    if (dSq <= headRange * headRange) nearby.push({ snake: other, distSq: dSq });
   }
   // Sort by head distance, keep only 3 nearest
   nearby.sort((a, b) => a.distSq - b.distSq);
   const scanList = nearby.length > 3 ? nearby.slice(0, 3) : nearby;
 
-  let closestDist = BODY_SCAN_DIST + 1;
+  let closestDist = scanDist + 1;
   let closestFleeAngle = 0;
 
   for (const { snake: other } of scanList) {
@@ -288,7 +339,7 @@ function scanBodyAhead(
       // Is this point in my forward cone?
       const angleToPoint = Math.atan2(dy, dx);
       const aDiff = Math.abs(normalizeAngle(angleToPoint - myAngle));
-      if (aDiff > BODY_SCAN_CONE) continue;
+      if (aDiff > scanCone) continue;
 
       const d = Math.sqrt(dSq);
       if (d < closestDist) {
@@ -299,11 +350,11 @@ function scanBodyAhead(
     }
   }
 
-  if (closestDist > BODY_SCAN_DIST) return null;
+  if (closestDist > scanDist) return null;
 
   return {
     avoidAngle: closestFleeAngle,
-    severity: Math.max(0, 1 - closestDist / BODY_SCAN_DIST),
+    severity: Math.max(0, 1 - closestDist / scanDist),
   };
 }
 
@@ -316,20 +367,27 @@ function scanBodyAhead(
 function checkHeadOnThreat(
   snake: Snake,
   snakes: Map<string, Snake>,
+  headHash: SpatialHash,
 ): BodyThreat | null {
   const hx = snake.path.headX;
   const hy = snake.path.headY;
   const myVx = Math.cos(snake.angle) * snake.speed;
   const myVy = Math.sin(snake.angle) * snake.speed;
-  const rangeSq = HEAD_ON_RANGE * HEAD_ON_RANGE;
+  const rangeSq = ac().headOnRange * ac().headOnRange;
 
   let bestThreat: BodyThreat | null = null;
 
-  for (const [id, other] of snakes) {
-    if (id === snake.id || !other.alive) continue;
+  // P1 OPTIMIZATION: Use spatial hash instead of O(n) full iteration.
+  const heads = headHash.query(hx, hy, ac().headOnRange);
+  for (let hi = 0; hi < heads.length; hi++) {
+    const h = heads[hi];
+    const otherId = h.id as string;
+    if (otherId === snake.id) continue;
+    const other = snakes.get(otherId);
+    if (!other || !other.alive) continue;
 
-    const dx = other.path.headX - hx;
-    const dy = other.path.headY - hy;
+    const dx = h.x - hx;
+    const dy = h.y - hy;
     const dSq = dx * dx + dy * dy;
     if (dSq > rangeSq || dSq < 1) continue;
 
@@ -348,7 +406,7 @@ function checkHeadOnThreat(
     const aDiff = Math.abs(normalizeAngle(angleToThem - snake.angle));
     if (aDiff > Math.PI / 3) continue;
 
-    const severity = 1 - (d / HEAD_ON_RANGE);
+    const severity = 1 - (d / ac().headOnRange);
     if (!bestThreat || severity > bestThreat.severity) {
       // Steer perpendicular — pick the side requiring less turn
       const perpLeft = normalizeAngle(angleToThem + Math.PI / 2);
@@ -369,7 +427,7 @@ function checkHeadOnThreat(
 // No more flat 50/50 fighting near boundaries.
 
 function wallAvoidAngle(x: number, y: number, currentAngle: number, boundary: number): number {
-  const margin = 600;
+  const margin = 1500; // larger margin for 29000px map
   let steerX = 0, steerY = 0;
   let maxPenetration = 0;
 
@@ -417,7 +475,7 @@ function steerToFood(snake: Snake, data: BotAIData, state: GameState): void {
   if (cluster) {
     steerToFoodBias(data, angleTo(hx, hy, cluster.x, cluster.y), data.type);
   } else {
-    const food = findNearestFood(hx, hy, state.foods, FOOD_SEEK_RANGE_SQ);
+    const food = findNearestFood(hx, hy, state.foods, ac().foodSeekRangeSq);
     steerToFoodBias(data, food ? angleTo(hx, hy, food.x, food.y) : data.wanderAngle, data.type);
   }
   data.wantBoost = false;
@@ -454,11 +512,11 @@ function updatePredator(snake: Snake, data: BotAIData, state: GameState): void {
   // ── SEEK: find a target ──
   if (ps.phase === 'seek') {
     if (data.retargetTimer > 0) { data.retargetTimer--; steerToFood(snake, data, state); return; }
-    data.retargetTimer = RETARGET_INTERVAL;
+    data.retargetTimer = ac().retargetInterval;
     // Prefer targeting the player
     let target = state.player?.alive ? { id: state.player.id, x: state.player.path.headX, y: state.player.path.headY, score: state.player.score, distSq: 0, angle: state.player.angle } : null;
     if (!target) {
-      target = findNearestSnake(snake, state.snakes, SIGHT_RANGE_SQ);
+      target = findNearestSnake(snake, state.snakes, ac().sightRangeSq);
     }
     if (!target || target.id === snake.id) { steerToFood(snake, data, state); return; }
     ps.targetId = target.id;
@@ -535,9 +593,9 @@ function updateCoiler(snake: Snake, data: BotAIData, state: GameState): void {
 
   // Find or validate target
   if (data.retargetTimer <= 0) {
-    data.retargetTimer = RETARGET_INTERVAL * 2;
+    data.retargetTimer = ac().retargetInterval * 2;
     let target = state.player?.alive ? { id: state.player.id, x: state.player.path.headX, y: state.player.path.headY, distSq: 0, score: state.player.score, angle: state.player.angle } : null;
-    if (!target) target = findNearestSnake(snake, state.snakes, SIGHT_RANGE_SQ);
+    if (!target) target = findNearestSnake(snake, state.snakes, ac().sightRangeSq);
     if (target && target.id !== snake.id) {
       cs.targetId = target.id;
       cs.orbitDir = Math.random() < 0.5 ? 1 : -1;
@@ -698,14 +756,14 @@ function updateInterceptor(snake: Snake, data: BotAIData, state: GameState): voi
 
   // Find a snake to watch
   if (data.retargetTimer <= 0) {
-    data.retargetTimer = RETARGET_INTERVAL;
+    data.retargetTimer = ac().retargetInterval;
     is.watchId = null;
     is.angleChange = 0;
     is.watchTicks = 0;
 
     // Prefer player, then nearest snake
     let target = state.player?.alive ? { id: state.player.id, x: state.player.path.headX, y: state.player.path.headY, distSq: 0, score: state.player.score, angle: state.player.angle } : null;
-    if (!target) target = findNearestSnake(snake, state.snakes, SIGHT_RANGE_SQ);
+    if (!target) target = findNearestSnake(snake, state.snakes, ac().sightRangeSq);
     if (target && target.id !== snake.id && target.distSq < 600 * 600) {
       is.watchId = target.id;
       is.prevAngle = target.angle;
@@ -813,18 +871,231 @@ function updateTrapper(snake: Snake, data: BotAIData, state: GameState): void {
   data.wantBoost = false;
 }
 
+const RANKED_DANGER_RANGE_SQ = 500 * 500;
+const RANKED_PEER_RANGE_SQ = 800 * 800;
+
+// Ranked bots have 3× the body scan range and wider cone for early detection
+// (now computed inline in updateAllBotAI from arenaConfig.bodyScanDist)
+
+function updateRanked(snake: Snake, data: BotAIData, state: GameState): void {
+  const rs = data.ranked!;
+  const hx = snake.path.headX;
+  const hy = snake.path.headY;
+
+  // ── Phase 1: Flee any snake within danger range (much larger than normal) ──
+  let fleeX = 0, fleeY = 0;
+  let dangerCount = 0;
+  let closestDanger = Infinity;
+  let closestDangerAngle = 0;
+
+  for (const [id, other] of state.snakes) {
+    if (id === snake.id || !other.alive) continue;
+    const dx = other.path.headX - hx;
+    const dy = other.path.headY - hy;
+    const dSq = dx * dx + dy * dy;
+    if (dSq > RANKED_DANGER_RANGE_SQ || dSq < 1) continue;
+
+    const d = Math.sqrt(dSq);
+    dangerCount++;
+    if (d < closestDanger) {
+      closestDanger = d;
+      closestDangerAngle = Math.atan2(dy, dx);
+    }
+    // Accumulate flee vector (stronger when closer)
+    const weight = 1 - (d / 500);
+    fleeX -= (dx / d) * weight;
+    fleeY -= (dy / d) * weight;
+  }
+
+  if (dangerCount > 0) {
+    // Flee: blend accumulated repulsion with strong forward bias
+    const fleeAngle = Math.atan2(fleeY, fleeX);
+    const urgency = 1 - (closestDanger / 500);
+    const blend = 0.3 + 0.7 * urgency;
+    const evaded = normalizeAngle(data.targetAngle * (1 - blend) + fleeAngle * blend);
+    steerToward(data, evaded, 0.5);
+    // Boost to escape when very close
+    data.wantBoost = closestDanger < 200 && snake.score > 10;
+    return;
+  }
+
+  // ── Phase 2: Repel from peer ranked bots (stay spread apart) ──
+  let repelX = 0, repelY = 0;
+  for (const [id, other] of state.snakes) {
+    if (id === snake.id || !other.alive || !other.isBot) continue;
+    const otherData = getBotData(id);
+    if (!otherData || otherData.type !== 'ranked') continue;
+    const dx = other.path.headX - hx;
+    const dy = other.path.headY - hy;
+    const dSq = dx * dx + dy * dy;
+    if (dSq > RANKED_PEER_RANGE_SQ || dSq < 1) continue;
+    const d = Math.sqrt(dSq);
+    const weight = 1 - (d / 800);
+    repelX -= (dx / d) * weight * 0.6;
+    repelY -= (dy / d) * weight * 0.6;
+  }
+
+  // ── Phase 3: Drift toward home sector (gentle pull) ──
+  const homeX = Math.cos(rs.homeAngle) * rs.homeRadius;
+  const homeY = Math.sin(rs.homeAngle) * rs.homeRadius;
+  const toHomeAngle = angleTo(hx, hy, homeX, homeY);
+  const homeDist = Math.sqrt(distSq(hx, hy, homeX, homeY));
+  // Pull harder when far from home, very gentle when close
+  const homePull = Math.min(homeDist / 1000, 0.4);
+
+  // ── Phase 4: Gentle food seeking within sector ──
+  const cluster = findFoodCluster(hx, hy, state.foods, CLUSTER_RANGE);
+  let foodAngle = rs.sectorWanderAngle;
+  if (cluster) {
+    foodAngle = angleTo(hx, hy, cluster.x, cluster.y);
+  }
+
+  // ── Phase 5: Wander within sector ──
+  if (rs.sectorWanderTimer <= 0) {
+    rs.sectorWanderAngle += (Math.random() - 0.5) * 0.4;
+    rs.sectorWanderTimer = 90 + Math.floor(Math.random() * 180);
+  }
+  rs.sectorWanderTimer--;
+
+  // ── Combine: repel + home + food ──
+  const repelMag = Math.sqrt(repelX * repelX + repelY * repelY);
+  let combinedAngle: number;
+  if (repelMag > 0.01) {
+    const repelAngle = Math.atan2(repelY, repelX);
+    // When peer repulsion is active, blend it with food/home
+    combinedAngle = normalizeAngle(
+      repelAngle * 0.5 + foodAngle * 0.3 + toHomeAngle * 0.2
+    );
+  } else {
+    // No peer nearby: mostly food, gentle home pull
+    combinedAngle = normalizeAngle(
+      foodAngle * (1 - homePull) + toHomeAngle * homePull
+    );
+  }
+
+  steerToward(data, combinedAngle, 0.7); // stronger forward bias = smoother
+  data.wantBoost = false;
+}
+
+// ─── Guard System: Normal bots protect nearby ranked bots ─────────────────
+// When a non-ranked bot detects a threat (player or big snake) heading toward
+// a nearby ranked bot, it steers to get between the threat and the ranked bot.
+
+const GUARD_DETECT_RANGE_SQ = 600 * 600;
+const GUARD_INTERCEPT_RANGE_SQ = 400 * 400;
+
+function computeGuardRankedAngle(snake: Snake, state: GameState): number | null {
+  const hx = snake.path.headX;
+  const hy = snake.path.headY;
+
+  // Find nearest ranked bot within guard range
+  let nearestRanked: { id: string; x: number; y: number; distSq: number } | null = null;
+  for (const [id, other] of state.snakes) {
+    if (id === snake.id || !other.alive || !other.isBot) continue;
+    const data = getBotData(id);
+    if (!data || data.type !== 'ranked') continue;
+    const dSq = distSq(hx, hy, other.path.headX, other.path.headY);
+    if (dSq < GUARD_DETECT_RANGE_SQ && (!nearestRanked || dSq < nearestRanked.distSq)) {
+      nearestRanked = { id, x: other.path.headX, y: other.path.headY, distSq: dSq };
+    }
+  }
+  if (!nearestRanked) return null;
+
+  // Check if any threat (non-ranked snake) is heading toward the ranked bot
+  for (const [id, other] of state.snakes) {
+    if (id === snake.id || !other.alive) continue;
+    const otherData = getBotData(id);
+    if (otherData && otherData.type === 'ranked') continue; // don't guard against other ranked
+
+    const tx = other.path.headX;
+    const ty = other.path.headY;
+    const dToRanked = Math.sqrt(distSq(tx, ty, nearestRanked.x, nearestRanked.y));
+    if (dToRanked > 500) continue; // threat too far from ranked bot
+
+    // Is the threat heading toward the ranked bot? (within 60° of the direction)
+    const threatAngle = other.angle;
+    const angleToRanked = angleTo(tx, ty, nearestRanked.x, nearestRanked.y);
+    const headingDiff = Math.abs(normalizeAngle(angleToRanked - threatAngle));
+    if (headingDiff > Math.PI / 3) continue; // not heading toward ranked bot
+
+    // Threat detected! Steer to get between the threat and the ranked bot
+    // Target: midpoint between threat and ranked bot, offset perpendicular
+    const midX = (tx + nearestRanked.x) / 2;
+    const midY = (ty + nearestRanked.y) / 2;
+    return angleTo(hx, hy, midX, midY);
+  }
+
+  return null;
+}
+
 // ─── Main Update Dispatch ────────────────────────────────────────────────────
 
 const BOT_UPDATERS: Record<BotType, (snake: Snake, data: BotAIData, state: GameState) => void> = {
   predator: updatePredator, coiler: updateCoiler, baiter: updateBaiter,
   interceptor: updateInterceptor, grazer: updateGrazer, trapper: updateTrapper,
+  ranked: updateRanked,
 };
+
+/** Dispatch to type-specific updater (reads arena config from _ac) */
+function updateBotPersonality(snake: Snake, data: BotAIData, state: GameState, _ac: ArenaConfig): void {
+  BOT_UPDATERS[data.type](snake, data, state);
+}
+
+// ─── AI Spatial Hash — reusable head hash for O(n×k) neighbor queries ──
+// Built once per AI update, then queried by all bots for personal space.
+// Eliminates the O(n²) full-scan loop that cost 5-10ms with 999 bots.
+
+const _aiHeadHash = new SpatialHash();
+const _aiScratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
+
+// P2 OPTIMIZATION: Distance-based AI tiering.
+// Bots far from player skip expensive body/head scanning.
+// Thresholds are per-arena via state.arenaConfig.
+// Full AI: scanBodyAhead + checkHeadOnThreat + body proximity (~200μs/bot)
+// Lite AI:  personal space (hash query) + wall + wander (~15μs/bot)
+const DEFAULT_FAR_BOT_DIST_SQ = 5000 * 5000;
+const DEFAULT_RANKED_FAR_DIST_SQ = 8000 * 8000;
+function buildAIHeadHash(snakes: Map<string, Snake>): void {
+  _aiHeadHash.clear();
+  for (const [id, snake] of snakes) {
+    if (!snake.alive) continue;
+    _aiScratch.x = snake.path.headX;
+    _aiScratch.y = snake.path.headY;
+    _aiScratch.radius = 0;
+    _aiScratch.id = id;
+    _aiHeadHash.insert(_aiScratch);
+  }
+}
 
 // ============================================================================
 // MAIN LOOP — Called every tick for all bots
 // ============================================================================
 
 export function updateAllBotAI(state: GameState): void {
+  const ac = state.arenaConfig;
+  _ac = ac; // Set module-level ref for type updaters and helpers
+  // P0 OPTIMIZATION: Build head hash once for all bots to share.
+  buildAIHeadHash(state.snakes);
+
+  // P2 OPTIMIZATION: Cache player position for distance-based AI tiering.
+  const player = state.player;
+  const playerX = player?.alive ? player.path.headX : NaN;
+  const playerY = player?.alive ? player.path.headY : NaN;
+
+  // Arena-specific AI params
+  const farDistSq = ac.aiDistanceTierSq;
+  const rankedFarDistSq = ac.rankedAiDistanceTierSq;
+  const bodyScanDist = ac.bodyScanDist;
+  const headOnRange = ac.headOnRange;
+  const playerFleeRangeSq = ac.playerFleeRangeSq;
+  const sightRangeSq = ac.sightRangeSq;
+  const foodSeekRangeSq = ac.foodSeekRangeSq;
+  const wallBoundary = ac.spawnRadius;
+  const retargetInterval = ac.retargetInterval;
+  const foodAggMult = ac.foodAggressionMult;
+  const rankedBodyScanDist = bodyScanDist * 3;
+  const rankedBodyScanCone = Math.PI * 0.7;
+
   for (const [id, snake] of state.snakes) {
     if (!snake.isBot || !snake.alive) continue;
     const data = getBotData(id);
@@ -833,28 +1104,132 @@ export function updateAllBotAI(state: GameState): void {
     data.retargetTimer--;
     data.wanderChangeTimer = Math.max(0, data.wanderChangeTimer - 1);
 
-    // ── Layer 1: Survival ──
-    const bodyThreat = scanBodyAhead(snake, state.snakes);
-    const headOnThreat = !bodyThreat ? checkHeadOnThreat(snake, state.snakes) : null;
+    // ── P2: Distance-based AI tiering ──
+    const isRanked = data.type === 'ranked';
+    const farThresholdSq = isRanked ? rankedFarDistSq : farDistSq;
+    const dxToPlayer = snake.path.headX - playerX;
+    const dyToPlayer = snake.path.headY - playerY;
+    const isFarFromPlayer = isNaN(playerX) || (dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer > farThresholdSq);
 
-    if (bodyThreat && bodyThreat.severity > 0.3) {
-      // Evade body: only react when severity > 0.3 (body < 126px away)
-      // Use forward bias so evasion is smooth, not jerky
-      const flee = bodyThreat.avoidAngle;
-      const blend = 0.2 + 0.8 * bodyThreat.severity; // 0.36 at 0.2, ramps to 1.0
-      const evaded = normalizeAngle(data.targetAngle * (1 - blend) + flee * blend);
-      steerToward(data, evaded, 0.7); // lighter forward bias during evasion
-      data.wantBoost = bodyThreat.severity > 0.7;
-    } else if (headOnThreat) {
-      steerToward(data, headOnThreat.avoidAngle, 0.5); // less bias for head-on (need to turn)
-      data.wantBoost = false;
+    if (!isFarFromPlayer) {
+      // ── FULL AI ──
+      const bodyThreat = scanBodyAhead(
+        snake, state.snakes, _aiHeadHash,
+        isRanked ? rankedBodyScanDist : bodyScanDist,
+        isRanked ? rankedBodyScanCone : BODY_SCAN_CONE,
+      );
+      const headOnThreat = !bodyThreat ? checkHeadOnThreat(snake, state.snakes, _aiHeadHash) : null;
+
+      if (bodyThreat && bodyThreat.severity > 0.3) {
+        const flee = bodyThreat.avoidAngle;
+        const blend = 0.2 + 0.8 * bodyThreat.severity;
+        const evaded = normalizeAngle(data.targetAngle * (1 - blend) + flee * blend);
+        steerToward(data, evaded, 0.7);
+        data.wantBoost = bodyThreat.severity > 0.7;
+      } else if (headOnThreat) {
+        steerToward(data, headOnThreat.avoidAngle, 0.5);
+        data.wantBoost = false;
+      } else {
+        if (!isRanked) {
+          const guardAngle = computeGuardRankedAngle(snake, state);
+          if (guardAngle !== null) {
+            steerToward(data, guardAngle, 0.4);
+            data.wantBoost = true;
+          } else {
+            updateBotPersonality(snake, data, state, ac);
+          }
+        } else {
+          updateBotPersonality(snake, data, state, ac);
+        }
+      }
     } else {
-      // ── Layer 3: Type Personality ──
-      BOT_UPDATERS[data.type](snake, data, state);
+      // ── LITE AI: Far from player ──
+      steerToWander(data, snake);
     }
 
-    // ── Wall avoidance (distance-proportional, not flat 50/50) ──
-    data.targetAngle = wallAvoidAngle(snake.path.headX, snake.path.headY, data.targetAngle, WALL_BOUNDARY);
+    // ── Layer 1.5: Collision Avoidance ──
+    {
+      const shx = snake.path.headX;
+      const shy = snake.path.headY;
+      let avX = 0, avY = 0;
+      let hasAvoid = false;
+
+      const nearby = _aiHeadHash.query(shx, shy, PS_RANGE);
+      for (let ni = 0; ni < nearby.length; ni++) {
+        const otherId = nearby[ni].id as string;
+        if (otherId === snake.id) continue;
+        const other = state.snakes.get(otherId);
+        if (!other || !other.alive) continue;
+
+        const dx = nearby[ni].x - shx;
+        const dy = nearby[ni].y - shy;
+        const dSq = dx * dx + dy * dy;
+        if (dSq < 1) continue;
+        const d = Math.sqrt(dSq);
+
+        const isPlayer = other.isPlayer;
+
+        // (A) Normal bots flee from player (range varies per arena, 0 = never flee)
+        if (isPlayer && !isRanked && playerFleeRangeSq > 0 && dSq < playerFleeRangeSq) {
+          const fleeRange = Math.sqrt(playerFleeRangeSq);
+          const fleeUrgency = 1 - (d / fleeRange);
+          const fleeWeight = 2.5 * fleeUrgency;
+          avX -= (dx / d) * fleeWeight;
+          avY -= (dy / d) * fleeWeight;
+          hasAvoid = true;
+          continue;
+        }
+
+        // (B) Personal space repulsion
+        let weight: number;
+        if (dSq < PS_STRONG_SQ) {
+          const otherR = computeBodyRadius(other.score);
+          const sizeFactor = 1 + otherR * 0.15;
+          weight = 1.8 * (1 - d / PS_STRONG) * sizeFactor;
+        } else {
+          weight = 0.5 * (1 - d / PS_RANGE);
+        }
+        avX -= (dx / d) * weight;
+        avY -= (dy / d) * weight;
+        hasAvoid = true;
+      }
+
+      // (C) Body proximity
+      if (!isFarFromPlayer && (data.type === 'predator' || data.type === 'coiler' || data.type === 'interceptor' || data.type === 'ranked')) {
+        const bodyNearby = _aiHeadHash.query(shx, shy, 600);
+        for (let ni = 0; ni < bodyNearby.length; ni++) {
+          const otherId = bodyNearby[ni].id as string;
+          if (otherId === snake.id) continue;
+          const other = state.snakes.get(otherId);
+          if (!other || !other.alive) continue;
+          const pathLen = other.path.length;
+          const step = Math.max(4, Math.floor(pathLen / 20));
+          for (let i = 4; i < pathLen; i += step) {
+            const bx = other.path.getX(i);
+            const by = other.path.getY(i);
+            const bdx = bx - shx;
+            const bdy = by - shy;
+            const bSq = bdx * bdx + bdy * bdy;
+            if (bSq < BODY_AVOID_RANGE_SQ && bSq > 1) {
+              const bd = Math.sqrt(bSq);
+              avX += -(bdx / bd) * (1 - bd / BODY_AVOID_RANGE) * 0.4;
+              avY += -(bdy / bd) * (1 - bd / BODY_AVOID_RANGE) * 0.4;
+              hasAvoid = true;
+            }
+          }
+        }
+      }
+
+      if (hasAvoid) {
+        const avoidAngle = Math.atan2(avY, avX);
+        const avoidMag = Math.sqrt(avX * avX + avY * avY);
+        const blend = Math.min(0.75, avoidMag * 0.25);
+        data.targetAngle = normalizeAngle(data.targetAngle * (1 - blend) + avoidAngle * blend);
+      }
+    }
+
+    // ── Wall avoidance ──
+    data.targetAngle = wallAvoidAngle(snake.path.headX, snake.path.headY, data.targetAngle, wallBoundary);
 
     // ── Output ──
     snake.targetAngle = data.targetAngle;
@@ -867,7 +1242,7 @@ export function getBotBoost(snakeId: string): boolean {
 
 // ─── Bot Spawning ────────────────────────────────────────────────────────────
 
-let nameCounters: Record<BotType, number> = { predator: 0, coiler: 0, baiter: 0, interceptor: 0, grazer: 0, trapper: 0 };
+let nameCounters: Record<BotType, number> = { predator: 0, coiler: 0, baiter: 0, interceptor: 0, grazer: 0, trapper: 0, ranked: 0 };
 
 function pickBotName(type: BotType): string {
   const names = BOT_NAMES[type];
@@ -876,7 +1251,7 @@ function pickBotName(type: BotType): string {
   return names[idx];
 }
 
-function createBotAIData(type: BotType): BotAIData {
+function createBotAIData(type: BotType, rank?: number, state?: GameState): BotAIData {
   const data: BotAIData = {
     type, targetAngle: Math.random() * Math.PI * 2, wantBoost: false,
     retargetTimer: 0, wanderAngle: Math.random() * Math.PI * 2,
@@ -887,36 +1262,157 @@ function createBotAIData(type: BotType): BotAIData {
   if (type === 'baiter') data.baiter = { chaserId: null, chaseTicks: 0, cooldown: 0 };
   if (type === 'interceptor') data.interceptor = { watchId: null, prevAngle: 0, angleChange: 0, watchTicks: 0, strikeCooldown: 0 };
   if (type === 'trapper') data.trapper = { centerX: 0, centerY: 0, arcAngle: 0, arcDir: 1, arcRadius: 300, arcProgress: 1 };
+  if (type === 'ranked') {
+    const r = rank ?? 1;
+    const ac = state?.arenaConfig;
+    const homeMin = ac?.rankedHomeMin ?? 15000;
+    const homeMax = ac?.rankedHomeMax ?? 25000;
+    const sectorAngle = ((r - 1) / 10) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
+    const homeRadius = homeMin + Math.random() * (homeMax - homeMin);
+    data.ranked = {
+      rank: r,
+      homeAngle: sectorAngle,
+      homeRadius,
+      sectorWanderAngle: sectorAngle + (Math.random() - 0.5) * 0.5,
+      sectorWanderTimer: Math.floor(Math.random() * 120),
+    };
+    data.targetAngle = sectorAngle;
+    data.wanderAngle = sectorAngle;
+  }
   return data;
 }
 
-/** Find a safe spawn position */
-function findBotSpawnPos(state: GameState): { x: number; y: number } {
-  const radius = INITIAL_SPAWN_RADIUS * 0.8;
-  const SAFE_DIST_SQ = 1000 * 1000;
-  for (let attempt = 0; attempt < 30; attempt++) {
+/** Fast head-only distance check — O(snakes), no body segment scan.
+ *  Used during mass spawn of 989 bots where body checks are too expensive. */
+function isSafeSpawnHeadOnly(
+  x: number, y: number,
+  snakes: Map<string, Snake>,
+  minDistSq: number,
+): boolean {
+  for (const [, s] of snakes) {
+    if (!s.alive) continue;
+    const dx = s.path.headX - x;
+    const dy = s.path.headY - y;
+    if (dx * dx + dy * dy < minDistSq) return false;
+  }
+  return true;
+}
+
+function isSafeSpawnPos(
+  x: number, y: number,
+  snakes: Map<string, Snake>,
+  headDistSq: number,
+  bodyCheckRange: number,
+  maxNeighbors: number,
+): boolean {
+  let neighborCount = 0;
+  const neighborAngles: number[] = [];
+
+  for (const [, s] of snakes) {
+    if (!s.alive) continue;
+    const hdx = s.path.headX - x;
+    const hdy = s.path.headY - y;
+    const hdSq = hdx * hdx + hdy * hdy;
+
+    // Dynamic head distance: scale with the other snake's body size
+    const otherRadius = computeBodyRadius(s.score);
+    const otherLength = computeBodyLength(s.score);
+    // Min safe head dist = max(100, bodyRadius * 8, bodyLength * 2)
+    const minHeadDist = Math.max(100, otherRadius * 8, otherLength * SEGMENT_SPACING * 0.4);
+    if (hdSq < minHeadDist * minHeadDist) return false;
+
+    // Neighbor count (within 800px)
+    if (hdSq < 800 * 800) {
+      neighborCount++;
+      neighborAngles.push(Math.atan2(hdy, hdx));
+    }
+
+    // Body segment check — only for snakes within bodyCheckRange of head
+    if (hdSq < bodyCheckRange * bodyCheckRange) {
+      // Safe distance scales with the other snake's body radius
+      const bodySafeDist = Math.max(40, otherRadius * 4 + 20);
+      const pathLen = s.path.length;
+      const step = Math.max(2, Math.floor(pathLen / 50)); // sample ~50 segments max
+      for (let i = 0; i < pathLen; i += step) {
+        const bx = s.path.getX(i);
+        const by = s.path.getY(i);
+        const bdx = bx - x;
+        const bdy = by - y;
+        if (bdx * bdx + bdy * bdy < bodySafeDist * bodySafeDist) return false;
+      }
+    }
+  }
+
+  // Crowded area check
+  if (neighborCount > maxNeighbors) return false;
+
+  // Between-snakes check: reject if we're between two snakes whose heads
+  // are on roughly opposite sides (angle diff > 120°) and both within 600px
+  if (neighborAngles.length >= 2) {
+    for (let i = 0; i < neighborAngles.length; i++) {
+      for (let j = i + 1; j < neighborAngles.length; j++) {
+        const diff = Math.abs(normalizeAngle(neighborAngles[i] - neighborAngles[j]));
+        if (diff > Math.PI * 0.67) return false; // > 120° apart = between them
+      }
+    }
+  }
+
+  return true;
+}
+
+/** Find a safe spawn position for normal bots.
+ *  Uses arenaConfig for spawn ring dimensions. */
+function findBotSpawnPos(state: GameState, massSpawn = true): { x: number; y: number } {
+  const ac = state.arenaConfig;
+  const minDistSq = ac.safeSpawnDist * ac.safeSpawnDist;
+  const dMin = ac.botSpawnInner;
+  const dMax = ac.spawnRadius * ac.botSpawnOuterFactor;
+  for (let attempt = 0; attempt < 60; attempt++) {
     const a = Math.random() * Math.PI * 2;
-    const d = 800 + Math.random() * (radius - 800);
+    const d = dMin + Math.sqrt(Math.random()) * (dMax - dMin);
     const x = Math.cos(a) * d;
     const y = Math.sin(a) * d;
-    let safe = true;
-    for (const [, s] of state.snakes) {
-      if (!s.alive) continue;
-      if (distSq(x, y, s.path.headX, s.path.headY) < SAFE_DIST_SQ) { safe = false; break; }
+    if (massSpawn ? isSafeSpawnHeadOnly(x, y, state.snakes, minDistSq) : isSafeSpawnPos(x, y, state.snakes, 250 * 250, 400, 2)) {
+      return { x, y };
     }
-    if (safe) return { x, y };
   }
   const a = Math.random() * Math.PI * 2;
-  const d = 1200 + Math.random() * (radius - 1200);
+  const d = dMin + Math.random() * (dMax - dMin);
   return { x: Math.cos(a) * d, y: Math.sin(a) * d };
 }
 
-// ─── Bot Starting Score Tiers ───────────────────────────────────────────────
-// Bots spawn with varying scores so the leaderboard looks populated and
-// motivating. 13 bots: rank ~1 at 25K, rank ~10 at 3K, rank ~13 at 1.5K.
-const BOT_SCORE_TIERS = [
-  25000, 22000, 19000, 16000, 13000, 10000, 8000, 6000, 4500, 3000, 2200, 1800, 1500,
-];
+/** Spawn a ranked bot in its home sector.
+ *  Uses arenaConfig for max radius and jitter. */
+function findRankedSpawnPos(state: GameState, homeAngle: number, homeRadius: number, massSpawn = true): { x: number; y: number } {
+  const ac = state.arenaConfig;
+  const maxR = ac.spawnRadius * 0.92;
+  const jitter = ac.rankedHomeJitter;
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const a = homeAngle + (Math.random() - 0.5) * 0.2;
+    const rJitter = (Math.random() - 0.5) * jitter;
+    const r = Math.min(homeRadius + rJitter, maxR);
+    const x = Math.cos(a) * r;
+    const y = Math.sin(a) * r;
+    if (massSpawn ? isSafeSpawnHeadOnly(x, y, state.snakes, 600 * 600) : isSafeSpawnPos(x, y, state.snakes, 600 * 600, 600, 1)) {
+      return { x, y };
+    }
+  }
+  return { x: Math.cos(homeAngle) * homeRadius, y: Math.sin(homeAngle) * homeRadius };
+}
+
+// ─── Bot Starting Score Generation ──────────────────────────────────────────
+// Score range is per-arena via state.arenaConfig
+function generateNormalBotScore(state: GameState): number {
+  const ac = state.arenaConfig;
+  return ac.normalBotScoreMin + Math.floor(
+    (ac.normalBotScoreMax - ac.normalBotScoreMin) * Math.pow(Math.random(), ac.normalBotScoreExp)
+  );
+}
+
+// Ranked scores are per-arena via state.arenaConfig.rankedScores
+function getRankedScore(rank: number, state: GameState): number {
+  return state.arenaConfig.rankedScores[(rank - 1) % state.arenaConfig.rankedScores.length] ?? 5000;
+}
 
 export function spawnBots(
   state: GameState,
@@ -928,19 +1424,37 @@ export function spawnBots(
   const types: BotType[] = ['predator', 'coiler', 'baiter', 'interceptor', 'grazer', 'trapper'];
   const counts = [config.predator, config.coiler, config.baiter, config.interceptor, config.grazer, config.trapper];
 
+  // Spawn regular bots first — mass spawn with fast head-only safety check
   for (let t = 0; t < types.length; t++) {
     for (let i = 0; i < counts[t]; i++) {
       const type = types[t];
-      const pos = findBotSpawnPos(state);
+      const pos = findBotSpawnPos(state, true);
       const id = `bot-${type}-${botIndex++}`;
       const name = pickBotName(type);
-      const startScore = BOT_SCORE_TIERS[botIndex % BOT_SCORE_TIERS.length] ?? 0;
+      const startScore = generateNormalBotScore(state);
       const snake = createSnakeFn(id, name, startScore, pos.x, pos.y, now, type);
       snake.isBot = true;
       snake.isPlayer = false;
       state.snakes.set(id, snake);
-      setBotData(id, createBotAIData(type));
+      setBotData(id, createBotAIData(type, undefined, state));
     }
+  }
+
+  // Spawn ranked bots — spread across sectors, high scores
+  for (let r = 1; r <= config.ranked; r++) {
+    const rank = r;
+    const startScore = getRankedScore(rank, state);
+    const tempData = createBotAIData('ranked', rank, state);
+    const homeAngle = tempData.ranked!.homeAngle;
+    const homeRadius = tempData.ranked!.homeRadius;
+    const pos = findRankedSpawnPos(state, homeAngle, homeRadius, true);
+    const id = `bot-ranked-${r}`;
+    const name = BOT_NAMES.ranked[(r - 1) % BOT_NAMES.ranked.length];
+    const snake = createSnakeFn(id, name, startScore, pos.x, pos.y, now, 'ranked');
+    snake.isBot = true;
+    snake.isPlayer = false;
+    state.snakes.set(id, snake);
+    setBotData(id, tempData);
   }
 }
 
@@ -949,14 +1463,14 @@ export function respawnDeadBots(
   config: BotSpawnConfig = DEFAULT_BOT_MIX,
   createSnakeFn: (id: string, name: string, score: number, x: number, y: number, now: number, botType: BotType) => Snake,
 ): void {
-  const targetCount = config.predator + config.coiler + config.baiter + config.interceptor + config.grazer + config.trapper;
+  const targetCount = config.predator + config.coiler + config.baiter + config.interceptor + config.grazer + config.trapper + config.ranked;
   let aliveBots = 0;
   for (const [, s] of state.snakes) { if (s.isBot && s.alive) aliveBots++; }
   if (aliveBots >= targetCount) return;
 
-  const types: BotType[] = ['predator', 'coiler', 'baiter', 'interceptor', 'grazer', 'trapper'];
-  const counts = [config.predator, config.coiler, config.baiter, config.interceptor, config.grazer, config.trapper];
-  const alivePerType: Record<BotType, number> = { predator: 0, coiler: 0, baiter: 0, interceptor: 0, grazer: 0, trapper: 0 };
+  const types: BotType[] = ['predator', 'coiler', 'baiter', 'interceptor', 'grazer', 'trapper', 'ranked'];
+  const counts = [config.predator, config.coiler, config.baiter, config.interceptor, config.grazer, config.trapper, config.ranked];
+  const alivePerType: Record<BotType, number> = { predator: 0, coiler: 0, baiter: 0, interceptor: 0, grazer: 0, trapper: 0, ranked: 0 };
   for (const [id, s] of state.snakes) { if (s.isBot && s.alive) { const data = getBotData(id); if (data) alivePerType[data.type]++; } }
 
   let bestType: BotType = 'grazer';
@@ -968,15 +1482,28 @@ export function respawnDeadBots(
 
   if (biggestDeficit > 0) {
     const now = Date.now();
-    const pos = findBotSpawnPos(state);
+    // Use fast head-only check when filling in (< 50% of target) to avoid
+    // expensive body segment scans during initial bot population.
+    const massSpawn = aliveBots < targetCount * 0.5;
+    let pos: { x: number; y: number };
+    let respawnScore: number;
+    if (bestType === 'ranked') {
+      // Find which rank slot is empty and respawn it
+      const aliveRanked = alivePerType.ranked;
+      const rank = aliveRanked + 1;
+      const tempData = createBotAIData('ranked', rank, state);
+      pos = findRankedSpawnPos(state, tempData.ranked!.homeAngle, tempData.ranked!.homeRadius, massSpawn);
+      respawnScore = getRankedScore(rank, state);
+    } else {
+      pos = findBotSpawnPos(state, massSpawn);
+      respawnScore = generateNormalBotScore(state);
+    }
     const id = `bot-${bestType}-${Date.now()}`;
     const name = pickBotName(bestType);
-    // Respawned bots get a random mid-tier score to stay competitive
-    const respawnScore = BOT_SCORE_TIERS[Math.floor(Math.random() * BOT_SCORE_TIERS.length)];
     const snake = createSnakeFn(id, name, respawnScore, pos.x, pos.y, now, bestType);
     snake.isBot = true; snake.isPlayer = false;
     state.snakes.set(id, snake);
-    setBotData(id, createBotAIData(bestType));
+    setBotData(id, bestType === 'ranked' ? createBotAIData('ranked', alivePerType.ranked + 1, state) : createBotAIData(bestType, undefined, state));
   }
 }
 
