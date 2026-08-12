@@ -183,13 +183,6 @@ export default function GameCanvas({
     input.attach();
 
     // ── Game loop ──
-    // Cache canvas 2D context (getContext is cheap but still a C++ bridge call per frame)
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      animFrameRef.current = requestAnimationFrame(loop);
-      return;
-    }
-
     let running = true;
 
     const loop = (timestamp: number) => {
@@ -202,6 +195,12 @@ export default function GameCanvas({
         fc.fps = fc.frames;
         fc.frames = 0;
         fc.lastTime = timestamp;
+      }
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        animFrameRef.current = requestAnimationFrame(loop);
+        return;
       }
 
       const parent = canvas.parentElement;
@@ -336,16 +335,14 @@ export default function GameCanvas({
           // know heading per-axis, use the full margin in all directions.
           if (s.path.headX < viewport.left - margin || s.path.headX > viewport.right + margin ||
               s.path.headY < viewport.top - margin || s.path.headY > viewport.bottom + margin) continue;
-          // Bots do NOT get alpha interpolation — the camera already provides smoothness.
-          // Applying alpha causes head-body jumping: the head oscillates between
-          // prevHead and headX as alpha sweeps 0→1, but the body is walked from the
-          // fixed path buffer, creating ~3px pulsing head-body separation.
+          // Bots use the same render alpha as the player for smooth
+          // interpolation between ticks (prevents stop-and-go stutter).
           // P8: Compute distance from camera for LOD (0=near, 1=far)
           const dx = s.path.headX - camX;
           const dy = s.path.headY - camY;
           const distFromCam = Math.sqrt(dx * dx + dy * dy);
           const lodFar = distFromCam > 1500 ? 1 : 0;
-          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, 1.0, undefined, lodFar);
+          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, alpha, undefined, lodFar);
         }
       }
       if (gameState.player && gameState.player.alive) {

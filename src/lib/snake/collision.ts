@@ -18,9 +18,6 @@
 //
 // ORDER: Head-on-head checked FIRST to prevent false double-kills on neck
 // segments. Head-to-body checked SECOND, skips already-dead snakes.
-//
-// PERF: All containers are module-level singletons, cleared each tick.
-// No per-tick Set/Map/Array allocation — eliminates GC pauses with 1000 bots.
 // ============================================================================
 
 import type { Snake } from './types';
@@ -55,21 +52,9 @@ const DOT_DIST_FACTOR = 0.75;
 // crawling where swept line crossing misses (parallel lines never cross).
 const CRAWL_HIT_DIST_SQ = (2 * SNAKE_RADIUS - 2) * (2 * SNAKE_RADIUS - 2); // 100 for R=6
 
-// ─── Module-level singletons (ZERO per-tick allocation) ───────────────────
+// ─── Module-level scratch (avoids per-tick allocation) ──────────────────────
 
 const _scratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
-const _aliveSnakes: Snake[] = [];
-const _deadSnakes = new Set<string>();
-const _killEvents: KillEvent[] = [];
-const _h2bHits: [string, string][] = [];
-const _h2bMap = new Map<string, string>();
-const _checkedSnakes = new Set<string>();
-
-// Scratch objects for head dot positions (avoids per-call {x,y} allocation)
-const _headDot = { x: 0, y: 0 };
-const _prevHeadDot = { x: 0, y: 0 };
-const _otherHeadDot = { x: 0, y: 0 };
-const _otherPrevHeadDot = { x: 0, y: 0 };
 
 // ─── 2D cross product ──────────────────────────────────────────────────────
 
@@ -119,27 +104,32 @@ function distPointToSegSq(
   return cx * cx + cy * cy;
 }
 
-// ─── Get head dot position into scratch object (no allocation) ─────────────
+// ─── Get head dot position (offset forward from head center) ───────────────
 
-function fillHeadDot(out: { x: number; y: number }, snake: Snake): void {
-  out.x = snake.path.headX + Math.cos(snake.angle) * SNAKE_RADIUS * DOT_DIST_FACTOR;
-  out.y = snake.path.headY + Math.sin(snake.angle) * SNAKE_RADIUS * DOT_DIST_FACTOR;
+function getHeadDot(snake: Snake): { x: number; y: number } {
+  return {
+    x: snake.path.headX + Math.cos(snake.angle) * SNAKE_RADIUS * DOT_DIST_FACTOR,
+    y: snake.path.headY + Math.sin(snake.angle) * SNAKE_RADIUS * DOT_DIST_FACTOR,
+  };
 }
 
-// ─── Get PREVIOUS head dot position into scratch object (no allocation) ───
+// ─── Get PREVIOUS head dot position (from path history) ────────────────────
 
-function fillPrevHeadDot(out: { x: number; y: number }, snake: Snake): void {
+function getPrevHeadDot(snake: Snake): { x: number; y: number } {
   if (snake.path.length < 2) {
-    fillHeadDot(out, snake);
-    return;
+    // No history yet — use current position as fallback
+    return getHeadDot(snake);
   }
   const prevHX = snake.path.getX(1);
   const prevHY = snake.path.getY(1);
+  // Estimate previous angle from the direction path[1] → path[0]
   const dx = snake.path.headX - prevHX;
   const dy = snake.path.headY - prevHY;
   const prevAngle = (dx * dx + dy * dy > 0.01) ? Math.atan2(dy, dx) : snake.angle;
-  out.x = prevHX + Math.cos(prevAngle) * SNAKE_RADIUS * DOT_DIST_FACTOR;
-  out.y = prevHY + Math.sin(prevAngle) * SNAKE_RADIUS * DOT_DIST_FACTOR;
+  return {
+    x: prevHX + Math.cos(prevAngle) * SNAKE_RADIUS * DOT_DIST_FACTOR,
+    y: prevHY + Math.sin(prevAngle) * SNAKE_RADIUS * DOT_DIST_FACTOR,
+  };
 }
 
 // ─── Collision Detection ───────────────────────────────────────────────────
@@ -159,18 +149,16 @@ export function checkCollisions(
 ): CollisionResult {
   const scratch = _scratch;
 
-  // ── Reuse module-level containers (clear, don't reallocate) ──
-  _aliveSnakes.length = 0;
-  _deadSnakes.clear();
-  _killEvents.length = 0;
-  _h2bHits.length = 0;
-  _h2bMap.clear();
-
+  const aliveSnakes: Snake[] = [];
   for (const [, snake] of snakes) {
-    if (snake.alive) _aliveSnakes.push(snake);
+    if (snake.alive) aliveSnakes.push(snake);
   }
 
   // ── Build body spatial hash (broad phase) ──
+  // ALL alive non-protected snakes' FULL bodies are inserted.
+  // Previous optimizations (nearbyIds head filter + 40% front-only)
+  // created massive blind spots: bots crawling on tails, bodies
+  // invisible when heads were far apart. Full insertion is correct.
   bodyHash.clear();
   scratch.radius = SNAKE_RADIUS;
   for (const [, snake] of snakes) {
@@ -189,43 +177,53 @@ export function checkCollisions(
   headHash.clear();
   for (const [, snake] of snakes) {
     if (!snake.alive) continue;
-    fillHeadDot(scratch, snake);
+    const dot = getHeadDot(snake);
+    scratch.x = dot.x;
+    scratch.y = dot.y;
     scratch.radius = SNAKE_RADIUS;
     scratch.id = snake.id;
     headHash.insert(scratch);
   }
+
+  const deadSnakes = new Set<string>();
+  const killEvents: KillEvent[] = [];
 
   // ══════════════════════════════════════════════════════════════════════════
   // PASS 1: HEAD-ON-HEAD (checked FIRST)
   // ══════════════════════════════════════════════════════════════════════════
   // Movement line crossing only — eyes can touch without dying.
   // Resolved with proper rules: boost wins, then longer snake wins, then tie.
-  // No pair-key Set needed: only process where snake.id < otherId.
+  // Once resolved, both snakes are in deadSnakes, so PASS 2 skips them.
+
+  const hohChecked = new Set<string>(); // prevent double-processing pairs
 
   for (const [, snake] of snakes) {
-    if (!snake.alive || _deadSnakes.has(snake.id)) continue;
+    if (!snake.alive || deadSnakes.has(snake.id)) continue;
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
-    fillHeadDot(_headDot, snake);
-    fillPrevHeadDot(_prevHeadDot, snake);
+    const dot = getHeadDot(snake);
+    const prevDot = getPrevHeadDot(snake);
 
-    const nearby = headHash.query(_headDot.x, _headDot.y, SNAKE_RADIUS * 4);
+    const nearby = headHash.query(dot.x, dot.y, SNAKE_RADIUS * 4);
     for (let i = 0; i < nearby.length; i++) {
       const otherId = nearby[i].id as string;
-      // Only process each pair once: smaller ID is always the initiator
-      if (otherId <= snake.id || _deadSnakes.has(otherId)) continue;
+      if (otherId === snake.id || deadSnakes.has(otherId)) continue;
+      // Prevent checking the same pair twice (A→B and B→A)
+      const pairKey = snake.id < otherId ? `${snake.id}|${otherId}` : `${otherId}|${snake.id}`;
+      if (hohChecked.has(pairKey)) continue;
+      hohChecked.add(pairKey);
 
       const otherSnake = snakes.get(otherId);
       if (!otherSnake || !otherSnake.alive) continue;
       if (now - otherSnake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
-      fillHeadDot(_otherHeadDot, otherSnake);
-      fillPrevHeadDot(_otherPrevHeadDot, otherSnake);
+      const otherDot = getHeadDot(otherSnake);
+      const otherPrevDot = getPrevHeadDot(otherSnake);
 
       // Only movement line crossing — no proximity death (eyes can touch)
       if (segsIntersect(
-        _prevHeadDot.x, _prevHeadDot.y, _headDot.x, _headDot.y,
-        _otherPrevHeadDot.x, _otherPrevHeadDot.y, _otherHeadDot.x, _otherHeadDot.y,
+        prevDot.x, prevDot.y, dot.x, dot.y,
+        otherPrevDot.x, otherPrevDot.y, otherDot.x, otherDot.y,
       )) {
         const scoreA = snake.score;
         const scoreB = otherSnake.score;
@@ -245,8 +243,8 @@ export function checkCollisions(
 
         const victim = winnerIsA ? otherSnake : snake;
         const killer = winnerIsA ? snake : otherSnake;
-        _deadSnakes.add(victim.id);
-        _killEvents.push({ victimId: victim.id, victimName: victim.name, killerId: killer.id, killerName: killer.name, score: victim.score, timestamp: now });
+        deadSnakes.add(victim.id);
+        killEvents.push({ victimId: victim.id, victimName: victim.name, killerId: killer.id, killerName: killer.name, score: victim.score, timestamp: now });
       }
     }
   }
@@ -254,14 +252,26 @@ export function checkCollisions(
   // ══════════════════════════════════════════════════════════════════════════
   // PASS 2: HEAD-TO-BODY (checked SECOND, skips head-on-head victims)
   // ══════════════════════════════════════════════════════════════════════════
+  // Swept line-segment intersection + point-to-segment proximity.
+  // No neck skip — ALL body segments are checked. No crawl exploit.
+  // Snakes already dead from head-on-head are skipped.
+  //
+  // MUTUAL KILL RESOLUTION: If both A hits B's body AND B hits A's body
+  // in the same tick (common in head-on approaches where each head enters
+  // the other's neck zone), only the shorter snake dies. Longer snake
+  // survives. Equal length = both die. This matches slither.io convention:
+  // the body-owner has right-of-way; shorter snake is the aggressor.
+
+  // Collect all head→body hits as (attackerId, bodyOwnerId) pairs
+  const h2bHits: Array<[string, string]> = [];
 
   for (const [, snake] of snakes) {
-    if (!snake.alive || _deadSnakes.has(snake.id)) continue;
+    if (!snake.alive || deadSnakes.has(snake.id)) continue;
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
-    fillHeadDot(_headDot, snake);
-    fillPrevHeadDot(_prevHeadDot, snake);
-    // Head CENTER for proximity (crawl detection)
+    const dot = getHeadDot(snake);
+    const prevDot = getPrevHeadDot(snake);
+    // Head CENTER for proximity (crawl detection) — symmetric, no dot-offset bias
     const hcx = snake.path.headX;
     const hcy = snake.path.headY;
     let prevHcx = hcx, prevHcy = hcy;
@@ -274,21 +284,24 @@ export function checkCollisions(
     const nearX = (hcx + prevHcx) * 0.5;
     const nearY = (hcy + prevHcy) * 0.5;
     const nearby = bodyHash.query(nearX, nearY, SNAKE_RADIUS * 6);
-    _checkedSnakes.clear();
+    const checkedSnakes = new Set<string>();
 
     for (let i = 0; i < nearby.length; i++) {
       const entity = nearby[i];
       const otherId = entity.id as string;
-      if (otherId === snake.id || _checkedSnakes.has(otherId)) continue;
-      _checkedSnakes.add(otherId);
+      if (otherId === snake.id || checkedSnakes.has(otherId)) continue;
+      checkedSnakes.add(otherId);
 
       const otherSnake = snakes.get(otherId);
-      if (!otherSnake || !otherSnake.alive || _deadSnakes.has(otherId)) continue;
+      if (!otherSnake || !otherSnake.alive || deadSnakes.has(otherId)) continue;
       if (now - otherSnake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
       // Narrow phase: two independent detection methods.
+      // Starts from segment 1 (first body point, no neck skip).
+      // Check ALL body segments — no tiered truncation.
       const len = otherSnake.path.length;
       let hit = false;
+      // Midpoint of head CENTER movement
       const midHcx = (prevHcx + hcx) * 0.5;
       const midHcy = (prevHcy + hcy) * 0.5;
       for (let j = 1; j < len - 1; j++) {
@@ -296,13 +309,19 @@ export function checkCollisions(
         const sy = otherSnake.path.getY(j);
         const ex = otherSnake.path.getX(j + 1);
         const ey = otherSnake.path.getY(j + 1);
+        // 1. LINE CROSSING: head DOT swept line vs body SPINE segment.
+        //    Catches perpendicular/angled approaches (tunneling prevention).
+        //    No distance threshold — any geometric crossing = death.
         if (segsIntersect(
-          _prevHeadDot.x, _prevHeadDot.y, _headDot.x, _headDot.y,
+          prevDot.x, prevDot.y, dot.x, dot.y,
           sx, sy, ex, ey,
         )) {
           hit = true;
           break;
         }
+        // 2. PROXIMITY: head CENTER vs body SPINE segment.
+        //    Catches parallel crawling where lines don't cross.
+        //    Threshold: 2*R-2 = 10px (2px grace before surfaces touch).
         if (distPointToSegSq(hcx, hcy, sx, sy, ex, ey) <= CRAWL_HIT_DIST_SQ
           || distPointToSegSq(prevHcx, prevHcy, sx, sy, ex, ey) <= CRAWL_HIT_DIST_SQ
           || distPointToSegSq(midHcx, midHcy, sx, sy, ex, ey) <= CRAWL_HIT_DIST_SQ) {
@@ -312,53 +331,60 @@ export function checkCollisions(
       }
 
       if (hit) {
-        _h2bHits.push([snake.id, otherId]);
+        h2bHits.push([snake.id, otherId]);
         break; // one kill per attacker per tick
       }
     }
   }
 
   // ── Resolve head-to-body hits with mutual-kill protection ──
-  for (let i = 0; i < _h2bHits.length; i++) {
-    _h2bMap.set(_h2bHits[i][0], _h2bHits[i][1]);
+  // Build a lookup: attackerId → bodyOwnerId for quick mutual pair check
+  const h2bMap = new Map<string, string>();
+  for (const [attackerId, bodyOwnerId] of h2bHits) {
+    h2bMap.set(attackerId, bodyOwnerId);
   }
 
-  for (let i = 0; i < _h2bHits.length; i++) {
-    const attackerId = _h2bHits[i][0];
-    const bodyOwnerId = _h2bHits[i][1];
+  for (const [attackerId, bodyOwnerId] of h2bHits) {
     const attacker = snakes.get(attackerId)!;
     const bodyOwner = snakes.get(bodyOwnerId)!;
-    const reverseBodyOwnerId = _h2bMap.get(bodyOwnerId);
+    // Check if bodyOwner also hit attacker's body (mutual kill)
+    const reverseBodyOwnerId = h2bMap.get(bodyOwnerId);
     if (reverseBodyOwnerId === attackerId) {
+      // Mutual: both heads are in each other's bodies.
+      // Longer snake survives, shorter dies. Equal = both die.
       const lenA = attacker.path.length;
       const lenB = bodyOwner.path.length;
       if (lenA > lenB) {
-        if (!_deadSnakes.has(bodyOwnerId)) {
-          _deadSnakes.add(bodyOwnerId);
-          _killEvents.push({ victimId: bodyOwnerId, victimName: bodyOwner.name, killerId: attackerId, killerName: attacker.name, score: bodyOwner.score, timestamp: now });
+        // Attacker is longer → body owner (shorter) dies
+        if (!deadSnakes.has(bodyOwnerId)) {
+          deadSnakes.add(bodyOwnerId);
+          killEvents.push({ victimId: bodyOwnerId, victimName: bodyOwner.name, killerId: attackerId, killerName: attacker.name, score: bodyOwner.score, timestamp: now });
         }
       } else if (lenB > lenA) {
-        if (!_deadSnakes.has(attackerId)) {
-          _deadSnakes.add(attackerId);
-          _killEvents.push({ victimId: attackerId, victimName: attacker.name, killerId: bodyOwnerId, killerName: bodyOwner.name, score: attacker.score, timestamp: now });
+        // Body owner is longer → attacker (shorter) dies
+        if (!deadSnakes.has(attackerId)) {
+          deadSnakes.add(attackerId);
+          killEvents.push({ victimId: attackerId, victimName: attacker.name, killerId: bodyOwnerId, killerName: bodyOwner.name, score: attacker.score, timestamp: now });
         }
       } else {
-        if (!_deadSnakes.has(attackerId)) {
-          _deadSnakes.add(attackerId);
-          _killEvents.push({ victimId: attackerId, victimName: attacker.name, killerId: bodyOwnerId, killerName: bodyOwner.name, score: attacker.score, timestamp: now });
+        // Same length: both die
+        if (!deadSnakes.has(attackerId)) {
+          deadSnakes.add(attackerId);
+          killEvents.push({ victimId: attackerId, victimName: attacker.name, killerId: bodyOwnerId, killerName: bodyOwner.name, score: attacker.score, timestamp: now });
         }
-        if (!_deadSnakes.has(bodyOwnerId)) {
-          _deadSnakes.add(bodyOwnerId);
-          _killEvents.push({ victimId: bodyOwnerId, victimName: bodyOwner.name, killerId: attackerId, killerName: attacker.name, score: bodyOwner.score, timestamp: now });
+        if (!deadSnakes.has(bodyOwnerId)) {
+          deadSnakes.add(bodyOwnerId);
+          killEvents.push({ victimId: bodyOwnerId, victimName: bodyOwner.name, killerId: attackerId, killerName: attacker.name, score: bodyOwner.score, timestamp: now });
         }
       }
     } else {
-      if (!_deadSnakes.has(attackerId)) {
-        _deadSnakes.add(attackerId);
-        _killEvents.push({ victimId: attackerId, victimName: attacker.name, killerId: bodyOwnerId, killerName: bodyOwner.name, score: attacker.score, timestamp: now });
+      // One-sided: attacker's head hit body, normal kill
+      if (!deadSnakes.has(attackerId)) {
+        deadSnakes.add(attackerId);
+        killEvents.push({ victimId: attackerId, victimName: attacker.name, killerId: bodyOwnerId, killerName: bodyOwner.name, score: attacker.score, timestamp: now });
       }
     }
   }
 
-  return { deadIds: _deadSnakes, killEvents: _killEvents };
+  return { deadIds: deadSnakes, killEvents };
 }

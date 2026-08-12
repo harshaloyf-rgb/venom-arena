@@ -90,10 +90,6 @@ const foodHash = new SpatialHash();
 const bodyHash = new SpatialHash();
 const headHash = new SpatialHash();
 
-// Pre-allocated food eating containers (avoid per-tick GC)
-const _eatenIds = new Set<number>();
-const _foodScratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
-
 // ─── Bot Skin Pool ───────────────────────────────────────────────────────────
 /** Pre-computed skin overrides from all free presets for random bot assignment */
 const BOT_SKIN_POOL: PlayerSkinOverride[] = SLITHER_PRESETS.map((p) => ({
@@ -386,10 +382,11 @@ function checkFoodEating(
     fh.clear();
     fvc.clear();
     _cachedFoodById.clear();
+    const scratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
     for (let i = 0; i < foods.length; i++) {
       const f = foods[i];
-      _foodScratch.x = f.x; _foodScratch.y = f.y; _foodScratch.radius = f.radius; _foodScratch.id = f.id;
-      fh.insert(_foodScratch);
+      scratch.x = f.x; scratch.y = f.y; scratch.radius = f.radius; scratch.id = f.id;
+      fh.insert(scratch);
       fvc.set(f.id, f.value);
       _cachedFoodById.set(f.id, f);
     }
@@ -397,9 +394,7 @@ function checkFoodEating(
 
   const foodById = _cachedFoodById;
 
-  // Reuse pre-allocated set
-  _eatenIds.clear();
-  const eatenIds = _eatenIds;
+  const eatenIds = new Set<number>();
   const speedRange = FOOD_MAGNET_MAX_SPEED - FOOD_MAGNET_MIN_SPEED;
   const zoneWidth = MAGNET_PULL_DIST - MAGNET_DEATH_DIST;
 
@@ -513,9 +508,6 @@ export function createInitialState(
   return state;
 }
 
-// Pre-allocated move context (avoid per-tick object allocation)
-const _moveCtx: MoveContext = { foods: [], nextFoodId: { value: 0 } };
-
 // ==========================================================================
 // Main Game Tick
 // ==========================================================================
@@ -524,9 +516,12 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   state.tickCount++;
   const now = Date.now();
 
-  _moveCtx.foods = state.foods;
-  _moveCtx.nextFoodId.value = state.nextFoodId;
-  const moveCtx = _moveCtx;
+  const foodIdRef = { value: state.nextFoodId };
+
+  const moveCtx: MoveContext = {
+    foods: state.foods,
+    nextFoodId: foodIdRef,
+  };
 
   // 1. Update bot AI (compute target angles + boost decisions) — offline only
   // Throttled to every 3 ticks — bot decisions don't need 60fps updates.
@@ -584,7 +579,7 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
     respawnDeadBots(state, DEFAULT_BOT_MIX, createBotSnakeFactory);
   }
 
-  state.nextFoodId = _moveCtx.nextFoodId.value;
+  state.nextFoodId = foodIdRef.value;
 
   return collisionResult.killEvents;
 }
