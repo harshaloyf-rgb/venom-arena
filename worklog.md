@@ -1129,3 +1129,34 @@ Stage Summary:
 - Rendering cost for 30 glowing bots: 200-660ms → ~1ms (200-660x speedup)
 - The game should now maintain 60fps even with 300 players nearby
 - Committed: 9bcf62f "2026-08-12 05:07 - glow-sprite-cache shadowBlur-elimination clientWidth-cache"
+---
+Task ID: 1-6 (performance fixes batch)
+Agent: main
+Task: Implement 6 priority-ordered performance fixes for snake game lag
+
+Work Log:
+- Audited all 6 requested fixes against current codebase
+- Found 5 of 6 fixes were ALREADY implemented in previous sessions:
+  - Fix #1: maxTicks raised from 2 to 6 (GameCanvas.tsx lines 287, 293)
+  - Fix #2: snake.cachedVisualTailIdx with -1 dirty flag (collision.ts lines 209-218)
+  - Fix #4: Far bots skip runCollisionAvoidance (bot-ai.ts lines 1371-1373)
+  - Fix #5: setTransform instead of save/translate/rotate/restore (render-snake-atlas.tsx lines 580-585)
+  - Fix #6: performance.now() used everywhere, Date.now() only as cosmetic fallback
+- Implemented Fix #3: Score-change-gated cache for computeBodyLength + computeBodyRadius
+  - Added cachedBodyScore field to Snake type (types.ts)
+  - Initialized cachedBodyScore in createSnake (engine.ts)
+  - Changed moveSnake to only recompute body length/radius when score changes
+  - Eliminates ~18,000 Math.log calls/frame (1000 snakes × 6 ticks × 3 logs)
+  - Also moved visualTailIdx invalidation into the score-change block
+  - Removed redundant computeBodyRadius call at end of moveSnake
+- Fixed CRITICAL pre-existing bug: bot-ai.ts missing closing brace
+  - The `else` block for far bots (line 1355) was never closed
+  - Common code (collision avoidance, wall avoidance, output) was trapped inside the else
+  - This meant near bots (non-staggered) never got wall avoidance or targetAngle output
+  - Added missing `}` to close the else block, making common code run for ALL bots
+- Verified: server returns 200, no browser errors, canvas renders correctly
+
+Stage Summary:
+- Fix #3 is the only new code change (types.ts, engine.ts)
+- bot-ai.ts brace fix was a critical correctness bug that also blocked compilation
+- All 6 performance fixes are now verified as implemented

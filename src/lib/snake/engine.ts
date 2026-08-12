@@ -175,6 +175,7 @@ function createSnake(
     spiral: { active: false, consecutiveTurns: 0, ticksElapsed: 0, direction: 1 },
     bodyRadius: computeBodyRadius(startScore),
     cachedBodyLength: computeBodyLength(startScore),
+    cachedBodyScore: startScore,
     cachedVisualTailIdx: 0,
     skinId, rarity,
     prevHeadX: posX, prevHeadY: posY, smoothBrakeFactor: 1.0,
@@ -285,9 +286,16 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
   const newHeadY = snake.path.getY(0) + Math.sin(snake.angle) * snake.speed;
   snake.path.prepend(newHeadX, newHeadY);
 
-  // Growth / Shrink — use cached body length, update only on score change
-  const prevScore = snake.cachedBodyLength;
-  snake.cachedBodyLength = computeBodyLength(snake.score);
+  // Growth / Shrink — use cached body length, recompute only when score changes.
+  // This saves ~3 Math.log calls per snake per tick (~18,000 logs/frame at 6 ticks).
+  const prevBodyScore = snake.cachedBodyScore;
+  const scoreChanged = snake.score !== prevBodyScore;
+  if (scoreChanged) {
+    snake.cachedBodyLength = computeBodyLength(snake.score);
+    snake.bodyRadius = computeBodyRadius(snake.score);
+    snake.cachedBodyScore = snake.score;
+    snake.cachedVisualTailIdx = -1; // Invalidate visual tail cache too
+  }
   const logicalLen = snake.cachedBodyLength;
   const targetLength = Math.ceil(logicalLen * SPACING_RATIO);
 
@@ -340,12 +348,6 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
   // Margin = 10% extra for collision detection lookback + coil rendering.
   const pathCeil = Math.ceil(targetLength * 1.1) + 20;
   snake.path.trimTo(pathCeil);
-
-  snake.bodyRadius = computeBodyRadius(snake.score);
-  // Invalidate visual tail cache when body length changes (score changed)
-  if (snake.cachedBodyLength !== prevScore) {
-    snake.cachedVisualTailIdx = -1; // -1 = dirty, will recompute in collision
-  }
 }
 
 // ==========================================================================

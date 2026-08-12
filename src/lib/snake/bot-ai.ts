@@ -1362,6 +1362,7 @@ export function updateAllBotAI(state: GameState, foodHash?: SpatialHash): void {
       } else {
         steerToWander(data, snake);
       }
+    } // close isFarFromPlayer else
 
     // ── Layer 1.5: Collision Avoidance — SKIP for far bots (PERF FIX).
     // Far bots have no nearby snakes to avoid (PS_RANGE=300px). The
