@@ -173,7 +173,10 @@ function createSnake(
     spawnTime: now, color, headColor,
     lastBoostDrop: 0, targetAngle: angle,
     spiral: { active: false, consecutiveTurns: 0, ticksElapsed: 0, direction: 1 },
-    bodyRadius: computeBodyRadius(startScore), skinId, rarity,
+    bodyRadius: computeBodyRadius(startScore),
+    cachedBodyLength: computeBodyLength(startScore),
+    cachedVisualTailIdx: 0,
+    skinId, rarity,
     prevHeadX: posX, prevHeadY: posY, smoothBrakeFactor: 1.0,
   };
 }
@@ -282,8 +285,10 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
   const newHeadY = snake.path.getY(0) + Math.sin(snake.angle) * snake.speed;
   snake.path.prepend(newHeadX, newHeadY);
 
-  // Growth / Shrink
-  const logicalLen = computeBodyLength(snake.score);
+  // Growth / Shrink — use cached body length, update only on score change
+  const prevScore = snake.cachedBodyLength;
+  snake.cachedBodyLength = computeBodyLength(snake.score);
+  const logicalLen = snake.cachedBodyLength;
   const targetLength = Math.ceil(logicalLen * SPACING_RATIO);
 
   // Boost food drop — instant on press, then every BOOST_DROP_INTERVAL
@@ -337,6 +342,10 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
   snake.path.trimTo(pathCeil);
 
   snake.bodyRadius = computeBodyRadius(snake.score);
+  // Invalidate visual tail cache when body length changes (score changed)
+  if (snake.cachedBodyLength !== prevScore) {
+    snake.cachedVisualTailIdx = -1; // -1 = dirty, will recompute in collision
+  }
 }
 
 // ==========================================================================
@@ -516,7 +525,7 @@ export function createInitialState(
     arenaConfig,
   };
 
-  const now = Date.now();
+  const now = performance.now();
 
   const player = createSnake('player', playerName || 'Player', initialScore ?? 0, 0, 0, now, playerSkin);
   state.player = player;
@@ -550,7 +559,7 @@ export function seedInitialFood(state: GameState): boolean {
 
 export function gameTick(state: GameState, input: InputState, _dt: number): KillEvent[] {
   state.tickCount++;
-  const now = Date.now();
+  const now = performance.now();
 
   const foodIdRef = { value: state.nextFoodId };
 
@@ -771,7 +780,7 @@ export function respawnPlayer(state: GameState): void {
     skinId: old.skinId, bodyColor: old.color, headColor: old.headColor,
     accentColor: '', rarity: old.rarity,
   } : null;
-  const newPlayer = createSnake('player', old?.name || 'Player', 0, pos.x, pos.y, Date.now(), skinOverride);
+  const newPlayer = createSnake('player', old?.name || 'Player', 0, pos.x, pos.y, performance.now(), skinOverride);
   state.player = newPlayer;
   state.snakes.set(newPlayer.id, newPlayer);
 }

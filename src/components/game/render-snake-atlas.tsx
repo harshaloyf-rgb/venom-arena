@@ -3,7 +3,7 @@
 // ============================================================================
 
 import type { Camera, Snake, Viewport } from '@/lib/snake/types';
-import { SEGMENT_SPACING, SPAWN_PROTECTION_MS, LEGENDARY_GLOW_SIZE, computeBodyLength } from '@/lib/snake/config';
+import { SEGMENT_SPACING, SPAWN_PROTECTION_MS, LEGENDARY_GLOW_SIZE } from '@/lib/snake/config';
 import { worldToScreen, worldToScreenSnapped } from '@/lib/snake/camera';
 import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
@@ -410,8 +410,8 @@ export function renderSnakeAtlas(
 
   const zoom = camera.zoom;
 
-  // ── Calculate logical body length (segments) using sqrt growth curve ──
-  const logicalLen = computeBodyLength(snake.score);
+  // ── Calculate logical body length using cached value (avoids Math.log per frame) ──
+  const logicalLen = snake.cachedBodyLength;
   const visualLen = logicalLen * SEGMENT_SPACING;
   const step = bodyDrawStep(snake.bodyRadius, zoom);
   const rawMaxSegs = Math.ceil(visualLen / step);
@@ -543,37 +543,49 @@ export function renderSnakeAtlas(
     ctx.restore();
   }
 
-  // Draw body segments (tail → head for proper layering)
+  // ── Draw body segments (tail → head for proper layering) ──
+  // PERF FIX: Replace per-segment save/translate/rotate/restore with setTransform.
+  // save/restore pushes/pops entire canvas state (~1μs each × 200 segments = 200μs).
+  // setTransform just sets 6 numbers directly (~0.1μs each). Also inlines
+  // worldToScreen math to avoid 200 object allocations per frame.
   const drawSize = segRadius * 2;
+  const halfDraw = drawSize / 2;
+  const camZoomX = cw / 2 - cam.x * zoom;
+  const camZoomY = ch / 2 - cam.y * zoom;
+  const bodyLen = atlas.body.length;
+  const hasEpicEffect = isEpic && animation;
   for (let i = walked.count - 1; i >= 0; i--) {
     const wx = walked.xs[i];
     const wy = walked.ys[i];
     if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
 
-    const { x: sx, y: sy } = w2sOff(wx, wy);
+    // Inline worldToScreen + renderOffset (avoids object allocation)
+    const sx = (wx - camX) * zoom + camZoomX + renderOffX;
+    const sy = (wy - camY) * zoom + camZoomY + renderOffY;
     const segAngle = walked.angles[i];
 
-    // Pick body region (cycle through variants)
-    const bodyIdx = i % atlas.body.length;
+    const bodyIdx = i % bodyLen;
     const region = atlas.body[bodyIdx];
 
-    ctx.save();
-    ctx.translate(sx, sy);
-    ctx.rotate(segAngle);
-
-    if (isEpic && animation) {
+    if (hasEpicEffect) {
+      // Epic/legendary effects need save/restore for globalAlpha changes
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(segAngle);
       atlasManager.applyEpicEffect(ctx, animation, time, 0, 0, drawSize, snake.color);
+      ctx.drawImage(atlas.canvas, region.x, region.y, region.width, region.height, -halfDraw, -halfDraw, drawSize, drawSize);
+      atlasManager.resetEpicEffect(ctx);
+      ctx.restore();
+    } else {
+      // Standard skin: use setTransform (much faster than save/translate/rotate/restore)
+      const cosA = Math.cos(segAngle);
+      const sinA = Math.sin(segAngle);
+      ctx.setTransform(cosA * _cachedDpr, sinA * _cachedDpr, -sinA * _cachedDpr, cosA * _cachedDpr, sx * _cachedDpr, sy * _cachedDpr);
+      ctx.drawImage(atlas.canvas, region.x, region.y, region.width, region.height, -halfDraw, -halfDraw, drawSize, drawSize);
     }
-
-    ctx.drawImage(
-      atlas.canvas,
-      region.x, region.y, region.width, region.height,
-      -drawSize / 2, -drawSize / 2, drawSize, drawSize,
-    );
-
-    atlasManager.resetEpicEffect(ctx);
-    ctx.restore();
   }
+  // Reset transform to base DPR scale after setTransform usage
+  ctx.setTransform(_cachedDpr, 0, 0, _cachedDpr, 0, 0);
 
   // ── Head ──
   if (headVisible && headScreen) {
@@ -788,8 +800,8 @@ export function renderSnakeFallback(
 
   const zoom = camera.zoom;
 
-  // ── Calculate logical body length using sqrt growth curve ──
-  const logicalLen = computeBodyLength(snake.score);
+  // ── Calculate logical body length using cached value (avoids Math.log per frame) ──
+  const logicalLen = snake.cachedBodyLength;
   const visualLen = logicalLen * SEGMENT_SPACING;
   const step = bodyDrawStep(snake.bodyRadius, zoom);
   const rawMaxSegs = Math.ceil(visualLen / step);

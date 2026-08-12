@@ -153,6 +153,10 @@ export interface Snake {
   };
   /** Cached body radius (avoids recalculation) */
   bodyRadius: number;
+  /** Cached body length in segments (avoids Math.log per tick/frame) */
+  cachedBodyLength: number;
+  /** Cached visual tail path index (avoids sqrt-walk per tick in collision) */
+  cachedVisualTailIdx: number;
   /** Tick accumulator for integer-based boost score cost */
   boostCostAccum?: number;
 

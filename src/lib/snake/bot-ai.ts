@@ -1313,9 +1313,11 @@ export function updateAllBotAI(state: GameState, foodHash?: SpatialHash): void {
       if (fullAiCounter++ % AI_STAGGER_GROUPS !== staggerSlot) {
         // Only run wall avoidance — cheapest safety net for skipped bots.
         data.targetAngle = wallAvoidAngle(snake.path.headX, snake.path.headY, data.targetAngle, wallBoundary);
-        // Still run Layer 1.5 personal-space collision avoidance (cheap spatial query).
-        // skipBodyProximity=true to avoid expensive body segment scanning.
-        { runCollisionAvoidance(snake, data, state, isFarFromPlayer, isRanked, playerFleeRangeSq, true); }
+        // PERF: Skip collision avoidance for far staggered bots too.
+        // They're far from the player and not in their stagger group's full AI turn.
+        if (!isFarFromPlayer) {
+          runCollisionAvoidance(snake, data, state, isFarFromPlayer, isRanked, playerFleeRangeSq, true);
+        }
         snake.targetAngle = data.targetAngle;
         continue;
       }
@@ -1354,17 +1356,21 @@ export function updateAllBotAI(state: GameState, foodHash?: SpatialHash): void {
       // ── LITE AI: Far from player ──
       if (data.isHunter && !isNaN(playerX)) {
         // Hunter bots steer toward the player from anywhere on the map.
-        // Collision avoidance (Layer 1.5) still protects them from crashing.
         const huntAngle = Math.atan2(playerY - snake.path.headY, playerX - snake.path.headX);
         steerToward(data, huntAngle, 0.6);
         data.wantBoost = true;
       } else {
         steerToWander(data, snake);
       }
-    }
 
-    // ── Layer 1.5: Collision Avoidance (shared function) ──
-    runCollisionAvoidance(snake, data, state, isFarFromPlayer, isRanked, playerFleeRangeSq);
+    // ── Layer 1.5: Collision Avoidance — SKIP for far bots (PERF FIX).
+    // Far bots have no nearby snakes to avoid (PS_RANGE=300px). The
+    // _aiHeadHash.query() costs ~700ns/bot × 999 bots = ~700μs/tick.
+    // Skipping far bots eliminates ~80% of these queries.
+    // Only hunter bots (steering toward player) need it for safety.
+    if (!isFarFromPlayer || data.isHunter) {
+      runCollisionAvoidance(snake, data, state, isFarFromPlayer, isRanked, playerFleeRangeSq);
+    }
 
     // ── Wall avoidance ──
     data.targetAngle = wallAvoidAngle(snake.path.headX, snake.path.headY, data.targetAngle, wallBoundary);
@@ -1580,7 +1586,7 @@ export function spawnBots(
   config: BotSpawnConfig = DEFAULT_BOT_MIX,
   createSnakeFn: (id: string, name: string, score: number, x: number, y: number, now: number, botType: BotType) => Snake,
 ): void {
-  const now = Date.now();
+  const now = performance.now();
   let botIndex = 0;
   const types: BotType[] = ['predator', 'coiler', 'baiter', 'interceptor', 'grazer', 'trapper'];
   const counts = [config.predator, config.coiler, config.baiter, config.interceptor, config.grazer, config.trapper];
@@ -1642,7 +1648,7 @@ export function respawnDeadBots(
   }
 
   if (biggestDeficit > 0) {
-    const now = Date.now();
+    const now = performance.now();
     // Use fast head-only check when filling in (< 50% of target) to avoid
     // expensive body segment scans during initial bot population.
     const massSpawn = aliveBots < targetCount * 0.5;

@@ -22,7 +22,7 @@
 
 import type { Snake } from './types';
 import { SpatialHash, type SpatialEntity } from './spatial-hash';
-import { SPAWN_PROTECTION_MS, HEAD_ON_HEAD_BOOST_WINS, SNAKE_RADIUS, SEGMENT_SPACING, computeBodyLength } from './config';
+import { SPAWN_PROTECTION_MS, HEAD_ON_HEAD_BOOST_WINS, SNAKE_RADIUS, SEGMENT_SPACING } from './config';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -190,38 +190,34 @@ export function checkCollisions(
   // PERF: Clear per-tick caches
   _tailIdxCache.clear();
   // FIX #5: Body hash optimization — skip segments for bots far from the player.
-  // With 1000 snakes × ~100 segments = 100K inserts per tick, this was the #1
-  // lag source. Now only snakes within BODY_HASH_RANGE of the player have
-  // their body segments inserted. Far bots' bodies are irrelevant since:
-  // 1. Player can't reach them (broad phase query won't find them)
-  // 2. Bot-vs-bot far pairs are already skipped by viewport culling (Issue #8)
   const BODY_HASH_RANGE_SQ = 5000 * 5000;
   const hasPlayerRef = playerX !== undefined && playerY !== undefined;
 
   // ── Build body spatial hash (broad phase) ──
-  // Only insert segments within the visual body length (matches renderer).
-  // FIX #5: Skip body segments for snakes far from the player viewport.
   bodyHash.clear();
   scratch.radius = SNAKE_RADIUS;
   for (const [, snake] of snakes) {
     if (!snake.alive) continue;
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
-    // FIX #5: Skip far bots — their body segments are never queried by anyone
-    // near the player (broad phase radius is limited), and bot-vs-bot far
-    // pairs are already culled in the narrow phase.
     if (hasPlayerRef && snake.isBot) {
       const dx = snake.path.headX - playerX!;
       const dy = snake.path.headY - playerY!;
       if (dx * dx + dy * dy > BODY_HASH_RANGE_SQ) continue;
     }
-    const visualLenPx = computeBodyLength(snake.score) * SEGMENT_SPACING;
-    const maxIdx = getVisualTailIdx(
-      (i) => snake.path.getX(i),
-      (i) => snake.path.getY(i),
-      snake.path.length,
-      visualLenPx,
-    );
-    // PERF: Cache for reuse in narrow phase
+    // PERF: Use cached visual tail idx (avoids sqrt-walk every tick).
+    // Recompute only when score changed (cachedVisualTailIdx === -1).
+    let maxIdx = snake.cachedVisualTailIdx;
+    if (maxIdx < 0) {
+      const visualLenPx = snake.cachedBodyLength * SEGMENT_SPACING;
+      maxIdx = getVisualTailIdx(
+        (i) => snake.path.getX(i),
+        (i) => snake.path.getY(i),
+        snake.path.length,
+        visualLenPx,
+      );
+      snake.cachedVisualTailIdx = maxIdx;
+    }
+    // Cache for narrow phase reuse
     _tailIdxCache.set(snake.id, maxIdx);
     scratch.id = snake.id;
     for (let i = 1; i <= maxIdx; i++) {

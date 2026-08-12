@@ -237,7 +237,7 @@ export default function GameCanvas({
 
       const w = _cachedW || (canvas.parentElement ? canvas.parentElement.clientWidth : canvas.width);
       const h = _cachedH || (canvas.parentElement ? canvas.parentElement.clientHeight : canvas.height);
-      const now = Date.now();
+      const now = performance.now();
       const inputState = input.getState();
 
       // ── Frame elapsed (for extraction progress) ──
@@ -271,10 +271,11 @@ export default function GameCanvas({
       // GAME LOOP — full local simulation with P0 render interpolation
       // ────────────────────────────────────────────────────────────────────
 
-      // P0 FIX #2: Cap accumulator at 2 ticks max.
-      // More than 2 ticks without rendering causes visible "batch movement" —
-      // the snake appears to freeze then jump. Dropped physics ticks are
-      // better than the stop-start stutter.
+      // PERF FIX: Raised max ticks from 2→6 and accumulator cap from 2→6.
+      // The old cap of 2 directly coupled snake speed to framerate:
+      // 45fps = 75% speed, 30fps = 50% speed. Now the snake catches up
+      // after frame drops. 6 ticks max = 100ms of physics = 6px movement,
+      // which is visually indistinguishable from normal (no noticeable jump).
       if (lastTimeRef.current === 0) {
         lastTimeRef.current = timestamp;
       }
@@ -283,14 +284,13 @@ export default function GameCanvas({
       accumulatorRef.current += elapsed;
 
       const tickMs = FIXED_DT * 1000;
-      const maxAccum = tickMs * 2;
+      const maxAccum = tickMs * 6;
       if (accumulatorRef.current > maxAccum) accumulatorRef.current = maxAccum;
 
-      // P0 FIX #2b: Save prevHeadX/Y for the PLAYER only.
-      // Must be saved BEFORE the LAST tick in the batch (not the first)
+      // Save prevHeadX/Y for the PLAYER before the LAST tick in the batch
       // so camera interpolation spans only 1 tick of movement.
       let ticksThisFrame = 0;
-      const maxTicks = 2;
+      const maxTicks = 6;
       while (accumulatorRef.current >= tickMs && ticksThisFrame < maxTicks) {
         // Save prevHead BEFORE the last tick (for render interpolation)
         const player = gameState.player;
@@ -368,7 +368,7 @@ export default function GameCanvas({
       const camY = cameraRef.current.y;
       for (const [, s] of gameState.snakes) {
         if (s.alive && !s.isPlayer) {
-          const bodyLen = computeBodyLength(s.score) * SEGMENT_SPACING;
+          const bodyLen = s.cachedBodyLength * SEGMENT_SPACING;
           const margin = bodyLen + baseMargin;
           // Body-aware cull: the snake is off-screen if BOTH its head (front)
           // and the end of its body (behind head) are outside the viewport.
