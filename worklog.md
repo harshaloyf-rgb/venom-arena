@@ -1256,3 +1256,24 @@ Stage Summary:
 - Scores now drift dynamically every ~6 ticks via AI throttle
 - Browser verified: no round figures, scores changing between snapshots
 
+---
+Task ID: 2
+Agent: main
+Task: Implement minimap for game canvas
+
+Work Log:
+- Created src/components/game/minimap.ts with circular minimap renderer
+- Features: arena boundary circle, faint grid lines, all snake dots, player glow + direction arrow, danger indicators
+- Integrated into GameCanvas.tsx render loop (after HUD, before death overlay)
+- Minimap hidden when player is dead
+- Pre-allocated buffer for snake positions to avoid GC
+- Direction arrow: line + arrowhead triangle pointing in player heading
+- Danger: red glow for snakes with higher score within 2000px range
+- Verified via browser + VLM: circular minimap visible in bottom-right, green player dot confirmed
+- Committed and pushed to git
+
+Stage Summary:
+- New file: src/components/game/minimap.ts (~190 lines)
+- Modified: src/components/game/GameCanvas.tsx (import + draw call)
+- 160px circular minimap, bottom-right corner, semi-transparent dark background
+
