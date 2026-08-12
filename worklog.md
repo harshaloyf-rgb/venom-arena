@@ -1238,3 +1238,21 @@ Stage Summary:
 - Modified: src/lib/snake/config.ts (food density + ranked scores for all 3 arenas)
 - Modified: src/lib/snake/engine.ts (initial food 3000→200, seed batch 5000→2000)
 - Verified: leaderboard shows 👑Apex1501, Titan1201 etc. with scores actively changing
+---
+Task ID: 1
+Agent: main
+Task: Fix ranked bot scores - remove round figures + add dynamic score drift
+
+Work Log:
+- Analyzed root cause: ranked bots spawn 15000-25000px from center where food is sparse, CLUSTER_RANGE only 500px, so they rarely eat real food
+- Modified getRankedScore() in bot-ai.ts to add ±12% random jitter (88%-112% of base) so initial scores are organic (e.g. 50000 → 48234)
+- Added score drift in updateRanked() function: each AI tick, ranked bots gain +1-4 (85% chance) or lose -1 to -3 (15% chance), floored at 100
+- Verified via browser: all 10 leaderboard scores are non-round, and 4 out of 10 changed within 5 seconds
+- Crown emoji was already correctly positioned before name (previously fixed)
+
+Stage Summary:
+- File changed: src/lib/snake/bot-ai.ts (getRankedScore jitter + updateRanked drift)
+- Initial scores now organic/non-round thanks to ±12% jitter
+- Scores now drift dynamically every ~6 ticks via AI throttle
+- Browser verified: no round figures, scores changing between snapshots
+

@@ -1058,6 +1058,14 @@ function updateRanked(snake: Snake, data: BotAIData, state: GameState): void {
 
   steerToward(data, combinedAngle, 0.7); // stronger forward bias = smoother
   data.wantBoost = false;
+
+  // ── Score drift: simulate organic eating / activity ──
+  // Ranked bots are far from center where food is sparse, so they rarely
+  // eat real food. This drift makes their scores change naturally.
+  const drift = (Math.random() < 0.85)
+    ? Math.floor(Math.random() * 4) + 1   // 85%: +1 to +4 (eating)
+    : -(Math.floor(Math.random() * 3) + 1); // 15%: -1 to -3 (boost / waste)
+  snake.score = Math.max(100, snake.score + drift);
 }
 
 // ─── Guard System: Normal bots protect nearby ranked bots ─────────────────
@@ -1582,8 +1590,11 @@ function generateNormalBotScore(state: GameState): number {
 }
 
 // Ranked scores are per-arena via state.arenaConfig.rankedScores
+// Apply ±12% jitter so scores look organic (e.g. 50000 → 48234), not round figures
 function getRankedScore(rank: number, state: GameState): number {
-  return state.arenaConfig.rankedScores[(rank - 1) % state.arenaConfig.rankedScores.length] ?? 5000;
+  const base = state.arenaConfig.rankedScores[(rank - 1) % state.arenaConfig.rankedScores.length] ?? 5000;
+  const jitter = 0.88 + Math.random() * 0.24; // 88%–112%
+  return Math.floor(base * jitter);
 }
 
 export function spawnBots(
