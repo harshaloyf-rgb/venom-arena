@@ -420,6 +420,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
 
         const headWx = snake.path.headX;
         const headWy = snake.path.headY;
+        if (!Number.isFinite(headWx) || !Number.isFinite(headWy)) continue;
         const margin = snake.cachedBodyLength * SEGMENT_SPACING + 500;
         if (headWx < viewport.left - margin || headWx > viewport.right + margin ||
             headWy < viewport.top - margin || headWy > viewport.bottom + margin) continue;
@@ -436,21 +437,25 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       // ── Player snake (with full skin/atlas rendering + prediction) ──
       if (gameState.player && gameState.player.alive && gameState.player.path.length >= 2) {
         const ps = gameState.player;
-        if (playerSkinAsset) {
-          ps.skinId = playerSkinAsset.id;
-          ps.rarity = playerSkinAsset.rarity;
-          ps.color = playerSkinAsset.bodyColor;
-          ps.headColor = playerSkinAsset.headColor;
+        // Guard: skip render if coordinates are not finite (no server data yet)
+        if (!Number.isFinite(ps.path.headX) || !Number.isFinite(ps.path.headY)) {
+          // skip — will render once server sends valid data
+        } else {
+          if (playerSkinAsset) {
+            ps.skinId = playerSkinAsset.id;
+            ps.rarity = playerSkinAsset.rarity;
+            ps.color = playerSkinAsset.bodyColor;
+            ps.headColor = playerSkinAsset.headColor;
+          }
+          ps.boosting = isBoosting;
+
+          const coiledPlayer = makeCoiledPath(ps.path);
+
+          try {
+            renderSnakeAtlas(ctx, ps, camera, viewport, atlasManager, now, mx, my, undefined, alpha, coiledPlayer);
+          } catch (e: any) { console.error('[Online] player render:', e.message); }
         }
-        ps.boosting = isBoosting;
-
-        const coiledPlayer = makeCoiledPath(ps.path);
-
-        try {
-          renderSnakeAtlas(ctx, ps, camera, viewport, atlasManager, now, mx, my, undefined, alpha, coiledPlayer);
-        } catch (e: any) { console.error('[Online] player render:', e.message); }
       }
-
       // ── Killer highlight ──
       if (isDeadRef.current && killerNameRef.current) {
         const deathElapsed = now - (deathTimeRef.current || now);
