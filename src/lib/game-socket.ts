@@ -155,7 +155,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
         });
 
         socket.on('disconnect', (reason) => {
-          console.log('[GameSocket] Disconnected:', reason);
+          console.log('[GameSocket] Disconnected:', reason, '— transport:', socket.io?.engine?.transport?.name);
           currentStatus = 'disconnected';
           emit();
         });

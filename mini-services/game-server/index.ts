@@ -67,7 +67,7 @@ const DEATH_SCREEN_DELAY = 2000; // ms before disconnecting dead player
 const MAX_PLAYERS_PER_ARENA = 1000;      // Hard cap per arena instance
 const INPUT_MIN_INTERVAL_MS = 8;         // ~125Hz max input rate (server processes at 60Hz)
 const MAX_ANGLE_DELTA = Math.PI * 1.2;   // Max angle change per input (anti-teleport)
-const SNAKE_VIS_RANGE = 8000;            // Snake visibility radius
+const SNAKE_VIS_RANGE = 15000;            // Snake visibility radius
 const SNAKE_VIS_RANGE_SQ = SNAKE_VIS_RANGE * SNAKE_VIS_RANGE;
 const FOOD_VIS_RANGE = 4000;
 const FOOD_VIS_RANGE_SQ = FOOD_VIS_RANGE * FOOD_VIS_RANGE;
@@ -813,6 +813,7 @@ class ArenaInstance {
         this.tick();
       } catch (err) {
         console.error(`[Arena ${this.arenaId}] Tick error:`, err);
+        dbg(`[Arena ${this.arenaId}] Tick error: ${err}`);
       }
     }, TICK_MS);
   }
@@ -1098,7 +1099,7 @@ class ArenaInstance {
     const score = snake.score;
     const kills = player.kills;
 
-    console.log(`[Arena ${this.arenaId}] Player ${player.name} died (${reason}) — score: ${score}, kills: ${kills}, duration: ${durationSeconds}s`);
+    dbg(`[Arena ${this.arenaId}] Player ${player.name} died (${reason}) — score: ${score}, kills: ${kills}, duration: ${durationSeconds}s`);
 
     // Emit killed event (for killer name highlight) and matchEnd to client
     try {
@@ -1377,7 +1378,7 @@ io.use(async (socket, next) => {
 
     // Store player info on socket
     (socket as any).playerData = data.player;
-    console.log(`[Auth] Player verified: ${data.player.name} (${data.player.userTag})`);
+  dbg(`[Auth] Player verified: ${data.player.name} (${data.player.userTag})`);
     next();
   } catch (err) {
     console.error('[Auth] Error verifying token:', err);
@@ -1389,7 +1390,7 @@ io.use(async (socket, next) => {
 
 io.on('connection', (socket) => {
   const playerData = (socket as any).playerData;
-  console.log(`[Socket] Connected: ${playerData.name} (${playerData.userTag}) [${socket.id}]`);
+  dbg(`[Socket] Connected: ${playerData.name} (${playerData.userTag}) [${socket.id}]`);
 
   // ─── Join Arena ─────────────────────────────────────────────────────────
 
@@ -1480,7 +1481,7 @@ io.on('connection', (socket) => {
       playerInfo.lastPosCheckY = snake.path.headY;
       arena.addPlayer(socket.id, playerInfo, snake);
 
-      console.log(`[Arena ${arenaId}] Player joined: ${playerData.name} — snake: ${snake.id}, total players: ${arena.playerCount}`);
+      dbg(`[Arena ${arenaId}] Player joined: ${playerData.name} — snake: ${snake.id}, total players: ${arena.playerCount}`);
 
       // Emit joined confirmation
       socket.emit('joined', {
@@ -1501,7 +1502,7 @@ io.on('connection', (socket) => {
 
       // Clean up on disconnect
       socket.on('disconnect', () => {
-        console.log(`[Socket] Disconnected: ${playerData.name} (${playerData.userTag}) [${socket.id}]`);
+        dbg(`[Socket] Disconnected: ${playerData.name} (${playerData.userTag}) [${socket.id}]`);
         socketToArena.delete(socket.id);
         arena.removePlayer(socket.id);
         // Schedule arena cleanup when no players remain

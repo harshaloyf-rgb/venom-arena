@@ -439,10 +439,16 @@ export function renderSnakeAtlas(
   // FIX 1: Render-time interpolation offset.
   // Shifts the entire snake to match the camera's interpolated head position,
   // eliminating the camera/body desync that causes visible jitter.
-  const interpHeadX = snake.prevHeadX + (snake.path.headX - snake.prevHeadX) * alpha;
-  const interpHeadY = snake.prevHeadY + (snake.path.headY - snake.prevHeadY) * alpha;
-  const renderOffX = (interpHeadX - snake.path.headX) * zoom;
-  const renderOffY = (interpHeadY - snake.path.headY) * zoom;
+  // Guard: prevHeadX/Y can be NaN in online mode (RemoteSnakeManager adapters)
+  // — fall back to no interpolation (offset = 0) rather than propagating NaN.
+  const safePrevX = Number.isFinite(snake.prevHeadX) ? snake.prevHeadX : snake.path.headX;
+  const safePrevY = Number.isFinite(snake.prevHeadY) ? snake.prevHeadY : snake.path.headY;
+  const interpHeadX = safePrevX + (snake.path.headX - safePrevX) * alpha;
+  const interpHeadY = safePrevY + (snake.path.headY - safePrevY) * alpha;
+  const safeInterpX = Number.isFinite(interpHeadX) ? interpHeadX : snake.path.headX;
+  const safeInterpY = Number.isFinite(interpHeadY) ? interpHeadY : snake.path.headY;
+  const renderOffX = (safeInterpX - snake.path.headX) * zoom;
+  const renderOffY = (safeInterpY - snake.path.headY) * zoom;
   const w2sOff = (wx: number, wy: number) => {
     const r = worldToScreen(wx, wy, camera, cw, ch);
     r.x += renderOffX;
@@ -855,10 +861,15 @@ export function renderSnakeFallback(
   // Far bots still skip eyes, name, shield, and direction pointer for performance.
 
   // FIX 1: Render-time interpolation offset
-  const interpHeadX = snake.prevHeadX + (snake.path.headX - snake.prevHeadX) * alpha;
-  const interpHeadY = snake.prevHeadY + (snake.path.headY - snake.prevHeadY) * alpha;
-  const renderOffX = (interpHeadX - snake.path.headX) * zoom;
-  const renderOffY = (interpHeadY - snake.path.headY) * zoom;
+  // Guard: prevHeadX/Y can be NaN in online mode — fall back to no interpolation
+  const safePrevX = Number.isFinite(snake.prevHeadX) ? snake.prevHeadX : snake.path.headX;
+  const safePrevY = Number.isFinite(snake.prevHeadY) ? snake.prevHeadY : snake.path.headY;
+  const interpHeadX = safePrevX + (snake.path.headX - safePrevX) * alpha;
+  const interpHeadY = safePrevY + (snake.path.headY - safePrevY) * alpha;
+  const safeInterpX = Number.isFinite(interpHeadX) ? interpHeadX : snake.path.headX;
+  const safeInterpY = Number.isFinite(interpHeadY) ? interpHeadY : snake.path.headY;
+  const renderOffX = (safeInterpX - snake.path.headX) * zoom;
+  const renderOffY = (safeInterpY - snake.path.headY) * zoom;
   const w2sOff = (wx: number, wy: number) => {
     const r = w2s(wx, wy, camera, cw, ch);
     r.x += renderOffX;
