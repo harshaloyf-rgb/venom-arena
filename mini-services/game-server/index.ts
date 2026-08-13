@@ -96,79 +96,10 @@ const MAGNET_DEATH_DIST = SNAKE_RADIUS + FOOD_MAGNET_DEATH_RADIUS;
 const MAGNET_PULL_DIST_SQ = MAGNET_PULL_DIST * MAGNET_PULL_DIST;
 const MAGNET_DEATH_DIST_SQ = MAGNET_DEATH_DIST * MAGNET_DEATH_DIST;
 
-// ─── Online Arena Config (properly sized for 30 bots) ─────────────────────
-// Online tiers have 30 bots but were using 29000px-radius maps designed for
-// 1000 bots. With 30 bots in a 2.6B sq px map, average spacing was ~9400px
-// — exceeding the 8000px visibility range, making most bots invisible.
-// Fix: 6000px radius → 113M sq px → ~3.8M sq px per bot → all bots visible.
-
-const ONLINE_MAP_HALF = 6000;
-
-function buildOnlineArenaConfig(): ArenaConfig {
-  const mh = ONLINE_MAP_HALF;
-  return {
-    // Map
-    spawnRadius: mh,
-    foodDespawnRadius: mh + 500,
-    safeSpawnDist: 200,
-    safeSpawnAttempts: 30,
-    // Food
-    foodMaxCount: 3000,
-    foodDensityTarget: 200,
-    foodVisibleRadius: 3000,
-    foodRespawnBatch: 8,
-    initialSpawnRadius: mh,
-    initialFoodTarget: 1000,
-    mapFoodGridSize: 2000,
-    mapFoodTargetPerCell: 8,
-    mapFoodSpawnPerCell: 3,
-    // Bots (mix is overridden per-tier by resolveBotMix, these are fallback)
-    botMix: { predator: 5, coiler: 2, baiter: 3, interceptor: 3, grazer: 8, trapper: 8, ranked: 1 },
-    normalBotScoreMin: 100,
-    normalBotScoreMax: 3000,
-    normalBotScoreExp: 1.5,
-    rankedScores: [8000, 6000, 5000, 4000, 3000, 2500, 2000, 1500, 1000, 800],
-    // Bot Spawning
-    botSpawnInner: 400,
-    botSpawnOuterFactor: 0.85,
-    rankedHomeMin: 2000,
-    rankedHomeMax: 4500,
-    rankedHomeJitter: 1000,
-    // AI Performance
-    aiTickThrottle: 4,
-    aiDistanceTier: 1500,
-    rankedAiDistanceTier: 3000,
-    respawnPerTick: 2,
-    foodHashRebuildInterval: 4,
-    mapFoodInterval: 15,
-    playerFoodInterval: 8,
-    retargetInterval: 45,
-    // AI Behavior
-    sightRange: 1000,
-    foodSeekRange: 1400,
-    bodyScanDist: 200,
-    headOnRange: 250,
-    playerFleeRange: 200,
-    foodAggressionMult: 1.0,
-    hunterFraction: 0,
-    botBoostMult: 0.4,
-    // Precomputed
-    mapHalf: mh,
-    mapRadiusSq: mh * mh,
-    despawnRadiusSq: (mh + 500) * (mh + 500),
-    visibleRadiusSq: 3000 * 3000,
-    mapGridCols: Math.ceil(mh * 2 / 2000),
-    mapGridRows: Math.ceil(mh * 2 / 2000),
-    sightRangeSq: 1000 * 1000,
-    foodSeekRangeSq: 1400 * 1400,
-    aiDistanceTierSq: 1500 * 1500,
-    rankedAiDistanceTierSq: 3000 * 3000,
-    playerFleeRangeSq: 200 * 200,
-  };
-}
-
-// Cache the online config (same for all 30-bot tiers)
-const ONLINE_ARENA_CONFIG = buildOnlineArenaConfig();
+// ─── Online Arena Config — matches offline practice-easy exactly ─────────────
+// Online tiers use the SAME 29000px-radius map, 999 bots, and food density
+// as the offline practice-easy arena for full feature parity.
+const ONLINE_ARENA_CONFIG: ArenaConfig = ARENA_CONFIGS['practice-easy'];
 
 // Module-level scratch objects (avoid per-tick allocation)
 const _foodHashScratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
@@ -676,8 +607,8 @@ function createBotSnakeFactory(
 // ─── Map tier ID → ArenaConfig ───────────────────────────────────────────────
 
 function resolveArenaConfig(arenaId: string): ArenaConfig {
-  // Online competitive tiers (tier-1 through tier-30) use a smaller map
-  // properly sized for 30 bots (6000px radius vs 29000px for 1000 bots).
+  // Online competitive tiers use the SAME config as offline practice-easy
+  // (29000px radius, 999 bots) for feature parity.
   if (arenaId.startsWith('tier-')) {
     return ONLINE_ARENA_CONFIG;
   }

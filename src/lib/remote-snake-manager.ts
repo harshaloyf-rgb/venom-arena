@@ -335,12 +335,17 @@ export class RemoteSnakeManager {
     const result: FoodOrb[] = new Array(foods.length);
     for (let i = 0; i < foods.length; i++) {
       const f = foods[i];
+      // Map server radius to size: FOOD_RADII = [1.5, 2, 3]
+      // Small: 1.5, Medium: 2.0, Large: 3.0 — matches offline exactly
+      const size: 'small' | 'medium' | 'large' =
+        f.r >= 2.5 ? 'large' : f.r >= 1.75 ? 'medium' : 'small';
+      const value = f.r >= 2.5 ? 50 : f.r >= 1.75 ? 15 : 5;
       result[i] = {
         id: i,
         x: f.x,
         y: f.y,
-        size: f.r > 4 ? 'large' : f.r > 2.5 ? 'medium' : 'small',
-        value: f.r > 4 ? 5 : f.r > 2.5 ? 3 : 1,
+        size,
+        value,
         radius: f.r,
         color: f.color,
         glowColor: f.color,

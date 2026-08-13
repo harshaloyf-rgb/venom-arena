@@ -64,6 +64,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
 
   // ── Game state refs ──
   const isDeadRef = useRef(false);
+  const diagDoneRef = useRef(false);
   const deathTimeRef = useRef<number>(0);
   const killerNameRef = useRef<string | null>(null);
   const highScoreRef = useRef(0);
@@ -197,9 +198,10 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     const ac = getArenaConfig();
     const camera = createCamera(0, 0);
     cameraRef.current = camera;
-    const mapHalf = serverMapHalfRef.current ?? ac.mapHalf;
-    const manager = new RemoteSnakeManager(mapHalf);
-    managerRef.current = manager;
+    if (!managerRef.current) {
+      const mapHalf = serverMapHalfRef.current ?? ac.mapHalf;
+      managerRef.current = new RemoteSnakeManager(mapHalf);
+    }
     resetMinimapZoom();
 
     // ── High score ──
@@ -291,7 +293,30 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       // ══════════════════════════════════════════════════════════════════
       // UPDATE REMOTE SNAKE MANAGER
       // ══════════════════════════════════════════════════════════════════
-      const didUpdate = manager.updateSnapshot(snap);
+      const mgr = managerRef.current;
+      if (!mgr) return;
+      const didUpdate = mgr.updateSnapshot(snap);
+
+      // ── One-time diagnostic (fires after ~1 second of snapshots) ──
+      if (!diagDoneRef.current && snap.tick > 20) {
+        diagDoneRef.current = true;
+        const pId = mgr.getPlayerSnakeId();
+        const pSnake = pId ? (mgr as any).snakes?.get(pId) : null;
+        console.log('[Online Diag]', {
+          snapTick: snap.tick,
+          snapSnakes: snap.snakes.length,
+          snapFoods: snap.foods.length,
+          boundaryRadius: snap.boundaryRadius,
+          playerSnakeId: pId,
+          playerTracked: !!pSnake,
+          playerPathReady: pSnake?.pathReady,
+          playerHistoryLen: pSnake?.history?.length,
+          playerHeadX: pSnake?.path?.headX,
+          playerHeadY: pSnake?.path?.headY,
+          trackedCount: (mgr as any).snakes?.size,
+          mapHalf: (mgr as any).mapHalf,
+        });
+      }
 
       // ── Update cached player state from snapshot ──
       playerScoreRef.current = snap.playerScore;
@@ -316,13 +341,13 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       );
 
       // ── Build synthetic GameState for shared renderers ──
-      const gameState = manager.buildGameState(snap, ac);
+      const gameState = mgr.buildGameState(snap, ac);
 
       // ── Camera: follow player (same interpolation as offline) ──
       const playerSnake = gameState.player;
       if (playerSnake && playerSnake.alive) {
         // Use the server-based alpha (time since last snapshot)
-        const alpha = manager.getPlayerAlpha();
+        const alpha = mgr.getPlayerAlpha();
         // Set prevHeadX/Y for camera interpolation (same as offline pattern)
         if (Number.isFinite(playerSnake.path.headX) && Number.isFinite(playerSnake.path.headY)) {
           playerSnake.prevHeadX = Number.isFinite(playerSnake.prevHeadX)
