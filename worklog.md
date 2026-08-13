@@ -1413,3 +1413,38 @@ Stage Summary:
 - Body trail reconstruction works: dense paths from sparse 20Hz snapshots via interpolation
 - Player snake renders with full skin/atlas support, bots use fallback renderer with LOD
 - Food density at spawn is naturally low (same as offline) — player grows by eating nearby food
+
+---
+Task ID: 3
+Agent: main
+Task: Fix online mode rendering — snakes appearing as flickering dots, missing HUD/leaderboard/minimap
+
+Work Log:
+- Analyzed OnlineSnakeGame.tsx and found the ROOT CAUSE: useEffect dependency array included `displayHighScore` and `socketState.killerName`
+- When displayHighScore changes (first score > 0), React tears down and recreates the entire render loop useEffect
+- This destroys the RemoteSnakeManager, losing ALL accumulated body trail history
+- New RemoteSnakeManager starts with 0 history → snakes rendered as single dots
+- Before history can accumulate, another state change triggers another recreation → endless flickering
+- Confirmed game-server snapshot already includes all required fields (bodyLen, bodyRadius, boosting, skinId, rarity)
+- Confirmed RemoteSnakeManager correctly implements body trail reconstruction from head-position snapshots
+- Confirmed all shared renderers (renderSnakeFallback, renderSnakeAtlas, renderHUD, renderBackground) have correct function signatures
+
+Fix Applied:
+- Rewrote OnlineSnakeGame.tsx to use refs for ALL values the render loop reads (statusRef, errorRef, killerNameRef, highScoreRef, matchEndRef)
+- React state is ONLY used for JSX display elements and is NOT in the render loop useEffect deps
+- The render loop useEffect now only depends on [arenaId, player?.currentSkin] — both stable during gameplay
+- Separated socket connection state (refs) from display state (React state)
+- Fixed stale closure issue where socketStatus/socketError were captured from the useEffect closure but never updated
+- Fixed GameCanvas.tsx ref-during-render lint error by moving ref sync to useEffect
+
+Verification:
+- Lint passes (only pre-existing fix-bom.ts utility issue remains)
+- Main page loads without console errors
+- Matchmaker UI loads correctly
+
+Stage Summary:
+- ROOT CAUSE: useEffect deps [displayHighScore, socketState.killerName, ...] caused RemoteSnakeManager destruction
+- FIX: All render loop values moved to refs; useEffect deps reduced to [arenaId, player?.currentSkin]
+- The rendering code was ALWAYS correct — it was a React lifecycle issue
+- Files modified: src/components/game/OnlineSnakeGame.tsx, src/components/game/GameCanvas.tsx
+

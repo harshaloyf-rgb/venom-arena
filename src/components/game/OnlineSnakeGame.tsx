@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Zap } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
 import {
-  createGameSocket, type GameSocketState, type GameSnapshot,
+  createGameSocket, type GameSnapshot,
 } from '@/lib/game-socket';
 import { RemoteSnakeManager } from '@/lib/remote-snake-manager';
 import { createCamera, updateCameraInterpolated, getViewport } from '@/lib/snake/camera';
@@ -44,21 +44,31 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
   const cameraRef = useRef<Camera | null>(null);
   const atlasRef = useRef<SkinAtlasManager | null>(null);
   const deathTimeRef = useRef<number | null>(null);
-  const killedByRef = useRef<string | null>(null);
   const externalBoostRef = useRef(false);
   const controlsShownRef = useRef(true);
   const controlsTimerRef = useRef(0);
   const leaderboardTimerRef = useRef(0);
-  const leaderboardRef = useRef<LBEntry[]>([]);
 
-  const [socketState, setSocketState] = useState<GameSocketState>({
-    status: 'disconnected', snapshot: null, error: null, matchEnd: null, killerName: null,
-  });
+  // ── ALL values the render loop reads MUST be refs ──
+  // Using state in the render loop useEffect deps will DESTROY the
+  // RemoteSnakeManager (losing all body trail history) on every state change,
+  // causing snakes to appear as flickering dots.
+  const statusRef = useRef<string>('disconnected');
+  const errorRef = useRef<string | null>(null);
+  const killerNameRef = useRef<string | null>(null);
+  const highScoreRef = useRef(0);
+  const matchEndRef = useRef<{ outcome: string; score: number; kills: number } | null>(null);
+
+  // ── React state ONLY for JSX display ──
+  const [displayStatus, setDisplayStatus] = useState('disconnected');
+  const [displayError, setDisplayError] = useState<string | null>(null);
   const [leaderboard, setLeaderboard] = useState<LBEntry[]>([]);
   const [displayHighScore, setDisplayHighScore] = useState(0);
+  const [displayKiller, setDisplayKiller] = useState<string | null>(null);
+  const [matchEnd, setMatchEnd] = useState<{ outcome: string; score: number; kills: number } | null>(null);
 
-  // ── Update leaderboard from game state ──
-  const updateLeaderboard = useCallback((snakes: Map<string, Snake>, player: Snake | null) => {
+  // ── Stable callback for leaderboard updates (ref, never changes) ──
+  const updateLeaderboardRef = useRef((snakes: Map<string, Snake>, player: Snake | null) => {
     const entries: LBEntry[] = [];
     for (const [, s] of snakes) {
       if (!s.alive) continue;
@@ -66,9 +76,8 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     }
     entries.sort((a, b) => b.score - a.score);
     const top10 = entries.slice(0, 10);
-    leaderboardRef.current = top10;
     setLeaderboard(top10);
-  }, []);
+  });
 
   // ── Connect to game server ──
   useEffect(() => {
@@ -82,10 +91,22 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       if (!token || cancelled) return;
 
       const sock = createGameSocket((state) => {
-        if (!cancelled) {
-          setSocketState(state);
-          snapRef.current = state.snapshot;
+        if (cancelled) return;
+        // Update refs for the render loop (NEVER triggers effect re-run)
+        snapRef.current = state.snapshot;
+        statusRef.current = state.status;
+        errorRef.current = state.error;
+        if (state.killerName && !killerNameRef.current) {
+          killerNameRef.current = state.killerName;
+          setDisplayKiller(state.killerName);
         }
+        if (state.matchEnd) {
+          matchEndRef.current = state.matchEnd;
+          setMatchEnd(state.matchEnd);
+        }
+        // Sync display state (only changes trigger re-render for UI, NOT the render loop)
+        setDisplayStatus(state.status);
+        setDisplayError(state.error);
       });
       sockRef.current = sock;
       sock.connect(token, arenaId);
@@ -97,16 +118,9 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     };
   }, [arenaId]);
 
-  // ── Load high score ──
-  useEffect(() => {
-    try {
-      const key = `venom-high-score-online-${arenaId || 'default'}`;
-      const saved = parseInt(localStorage.getItem(key) || '0', 10);
-      setDisplayHighScore(saved);
-    } catch { /* ignore */ }
-  }, [arenaId]);
-
   // ── Canvas setup + render loop ──
+  // CRITICAL: This effect MUST NOT depend on any state that changes during gameplay.
+  // Only `arenaId` triggers a full reset (new arena = new connection).
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -117,15 +131,12 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     if (!ctx) return;
 
     // ── Sizing ──
-    let cw = 0, ch = 0;
     const resize = () => {
       const dpr = window.devicePixelRatio || 1;
-      cw = parent.clientWidth;
-      ch = parent.clientHeight;
-      canvas.width = cw * dpr;
-      canvas.height = ch * dpr;
-      canvas.style.width = cw + 'px';
-      canvas.style.height = ch + 'px';
+      canvas.width = parent.clientWidth * dpr;
+      canvas.height = parent.clientHeight * dpr;
+      canvas.style.width = parent.clientWidth + 'px';
+      canvas.style.height = parent.clientHeight + 'px';
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     resize();
@@ -136,34 +147,45 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       const rect = canvas.getBoundingClientRect();
       inputRef.current.mouseX = e.clientX - rect.left;
       inputRef.current.mouseY = e.clientY - rect.top;
-      // Dismiss controls on first mouse move
       if (controlsShownRef.current) {
         controlsShownRef.current = false;
         controlsTimerRef.current = performance.now();
       }
     };
     canvas.addEventListener('mousemove', onMouseMove);
+
     const onMouseDown = (e: MouseEvent) => {
-      if (e.button === 0) { inputRef.current.boost = true; externalBoostRef.current = true; }
-      // Dismiss controls on click
+      if (e.button === 0) {
+        inputRef.current.boost = true;
+        externalBoostRef.current = true;
+      }
       if (controlsShownRef.current) {
         controlsShownRef.current = false;
         controlsTimerRef.current = performance.now();
       }
     };
     const onMouseUp = (e: MouseEvent) => {
-      if (e.button === 0) { inputRef.current.boost = false; externalBoostRef.current = false; }
+      if (e.button === 0) {
+        inputRef.current.boost = false;
+        externalBoostRef.current = false;
+      }
     };
     canvas.addEventListener('mousedown', onMouseDown);
     window.addEventListener('mouseup', onMouseUp);
 
     // ── Keyboard ──
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space') { e.preventDefault(); inputRef.current.boost = true; externalBoostRef.current = true; }
-      if (e.code === 'KeyB') { inputRef.current.boost = true; externalBoostRef.current = true; }
+      if (e.code === 'Space' || e.code === 'KeyB') {
+        e.preventDefault();
+        inputRef.current.boost = true;
+        externalBoostRef.current = true;
+      }
     };
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space' || e.code === 'KeyB') { inputRef.current.boost = false; externalBoostRef.current = false; }
+      if (e.code === 'Space' || e.code === 'KeyB') {
+        inputRef.current.boost = false;
+        externalBoostRef.current = false;
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
@@ -171,13 +193,11 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     // ── Minimap click handler ──
     const onCanvasClick = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      handleMinimapClick(x, y);
+      handleMinimapClick(e.clientX - rect.left, e.clientY - rect.top);
     };
     canvas.addEventListener('click', onCanvasClick);
 
-    // ── Init atlas + camera ──
+    // ── Init atlas + camera + manager (once per mount) ──
     const atlasManager = new SkinAtlasManager();
     atlasRef.current = atlasManager;
     const playerSkinAsset = getPlayerSkinAsset(player?.currentSkin);
@@ -190,17 +210,6 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     managerRef.current = manager;
     resetMinimapZoom();
 
-    // ── Track death state ──
-    const checkDeath = () => {
-      const snap = snapRef.current;
-      if (snap && !snap.playerAlive && !deathTimeRef.current) {
-        deathTimeRef.current = performance.now();
-      }
-      if (socketState.killerName && !killedByRef.current) {
-        killedByRef.current = socketState.killerName;
-      }
-    };
-
     // ── Render loop ──
     const loop = () => {
       animRef.current = requestAnimationFrame(loop);
@@ -212,7 +221,13 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       const snap = snapRef.current;
-      checkDeath();
+      const status = statusRef.current;
+      const error = errorRef.current;
+
+      // ── Track death ──
+      if (snap && !snap.playerAlive && !deathTimeRef.current) {
+        deathTimeRef.current = performance.now();
+      }
 
       // ── Loading / error / disconnected screen ──
       if (!snap) {
@@ -220,13 +235,14 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         ctx.fillRect(0, 0, w, h);
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 18px sans-serif';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        if (socketState.status === 'connecting')
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        if (status === 'connecting')
           ctx.fillText('Connecting to server...', w / 2, h / 2);
-        else if (socketState.status === 'error') {
+        else if (status === 'error') {
           ctx.fillStyle = '#ef4444';
-          ctx.fillText(socketState.error || 'Connection failed', w / 2, h / 2);
-        } else if (socketState.status === 'disconnected')
+          ctx.fillText(error || 'Connection failed', w / 2, h / 2);
+        } else if (status === 'disconnected')
           ctx.fillText('Disconnected', w / 2, h / 2);
         return;
       }
@@ -240,21 +256,19 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       const targetAngle = Math.atan2(my - h / 2, mx - w / 2);
       inputRef.current.angle = targetAngle;
 
-      // ── Send input (boost from canvas click OR keyboard, OR UI button) ──
+      // ── Send input ──
       const isBoosting = inputRef.current.boost || externalBoostRef.current;
       sockRef.current?.sendInput(targetAngle, isBoosting);
 
       // ── Update camera with proper interpolation ──
       const alpha = manager.getPlayerAlpha();
-      const playerSnake = manager.getPlayerSnakeId()
-        ? manager.buildSnakeAdapter(manager.getPlayerSnakeId()!)
+      const playerSnakeId = manager.getPlayerSnakeId();
+      const playerSnake = playerSnakeId
+        ? manager.buildSnakeAdapter(playerSnakeId)
         : null;
       if (playerSnake) {
-        // DO NOT override prevHeadX/Y — the manager already set them correctly
-        // from the previous snapshot, enabling smooth interpolation.
         updateCameraInterpolated(camera, playerSnake, w, h, alpha);
       } else if (snap.playerAlive) {
-        // Player snake not tracked yet but alive — smoothly move camera to snapshot position
         camera.x += (snap.playerX - camera.x) * 0.1;
         camera.y += (snap.playerY - camera.y) * 0.1;
       }
@@ -289,7 +303,6 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         const lodFar = dx * dx + dy * dy > 1500 * 1500 ? 1 : 0;
 
         try {
-          // Bots get alpha=1 (no interpolation — path already rebuilt for current position)
           renderSnakeFallback(ctx, snake, camera, viewport, now, undefined, undefined, true, 1, undefined, lodFar);
         } catch (e: any) { console.error('[Online] bot render:', id, e.message); }
       }
@@ -307,10 +320,10 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         } catch (e: any) { console.error('[Online] player render:', e.message); }
       }
 
-      // ── HUD (minimap, score, rank, kills) ──
+      // ── HUD (minimap, score, rank, kills, leaderboard) ──
       renderHUD(ctx, gameState, camera, viewport, 60, now, snap.playerKills, 0);
 
-      // ── Controls hint (show for 3 seconds after game start or first interaction) ──
+      // ── Controls hint (show for 3 seconds after first mouse move) ──
       if (controlsTimerRef.current > 0) {
         const hintElapsed = now - controlsTimerRef.current;
         if (hintElapsed < 3000) {
@@ -341,18 +354,18 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         }
       }
 
-      // ── Update leaderboard every ~30 frames (0.5s) ──
+      // ── Update leaderboard every ~10 snapshot updates (~0.5s) ──
       if (didUpdate) {
         leaderboardTimerRef.current++;
         if (leaderboardTimerRef.current >= 10) {
           leaderboardTimerRef.current = 0;
-          updateLeaderboard(gameState.snakes, gameState.player);
-          // Track high score
+          updateLeaderboardRef.current(gameState.snakes, gameState.player);
           if (gameState.player) {
             try {
               const key = `venom-high-score-online-${arenaId || 'default'}`;
               const hs = Math.floor(gameState.player.score);
-              if (hs > displayHighScore) {
+              if (hs > highScoreRef.current) {
+                highScoreRef.current = hs;
                 setDisplayHighScore(hs);
                 localStorage.setItem(key, String(hs));
               }
@@ -374,14 +387,12 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       window.removeEventListener('keyup', onKeyUp);
       canvas.removeEventListener('click', onCanvasClick);
     };
-  }, [player, arenaId, socketState.killerName, updateLeaderboard, displayHighScore]);
+  }, [arenaId, player?.currentSkin]);
 
   // ── Respawning ──
   const handleRespawn = useCallback(() => {
     if (arenaId) window.location.reload();
   }, [arenaId]);
-
-  const isDead = !!(deathTimeRef.current && (performance.now() - deathTimeRef.current) > 5000);
 
   return (
     <div className="relative w-full h-full bg-[#0a0a0f] overflow-hidden">
@@ -437,16 +448,16 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         </button>
       </div>
 
-      {/* Death overlay (React) — shown after 5s as fallback */}
-      {socketState.matchEnd && (
+      {/* Death overlay (React) — shown as fallback */}
+      {matchEnd && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70">
           <div className="text-center space-y-4">
             <h2 className="text-3xl font-bold text-red-500">ELIMINATED</h2>
-            {socketState.killerName && (
-              <p className="text-white/60">Killed by <span className="text-white font-bold">{socketState.killerName}</span></p>
+            {displayKiller && (
+              <p className="text-white/60">Killed by <span className="text-white font-bold">{displayKiller}</span></p>
             )}
-            <p className="text-white/80">Score: {Math.floor(socketState.matchEnd.score).toLocaleString()}</p>
-            <p className="text-white/60">Kills: {socketState.matchEnd.kills}</p>
+            <p className="text-white/80">Score: {Math.floor(matchEnd.score).toLocaleString()}</p>
+            <p className="text-white/60">Kills: {matchEnd.kills}</p>
             <button
               onClick={handleRespawn}
               className="mt-4 px-8 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors"

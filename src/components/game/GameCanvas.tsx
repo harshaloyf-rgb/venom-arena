@@ -42,11 +42,13 @@ export default function GameCanvas({
   // Previously, any auth refresh during gameplay killed the game.
   const authSkinRef = useRef(authPlayer?.currentSkin ?? 'skin-default');
   const authNameRef = useRef(authPlayer?.name || 'Player');
-  if (authPlayer?.currentSkin) authSkinRef.current = authPlayer.currentSkin;
-  if (authPlayer?.name) authNameRef.current = authPlayer.name;
-
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Note: ref sync moved to useEffect to avoid lint "ref-during-render" rule
+  useEffect(() => {
+    if (authPlayer?.currentSkin) authSkinRef.current = authPlayer.currentSkin;
+    if (authPlayer?.name) authNameRef.current = authPlayer.name;
+  });
   const gameStateRef = useRef<GameState | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const cameraRef = useRef<Camera>({ x: 0, y: 0, zoom: 1.0 });
   const inputRef = useRef<InputHandler | null>(null);
   const animFrameRef = useRef<number>(0);
