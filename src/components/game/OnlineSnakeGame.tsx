@@ -73,6 +73,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
   const leaderboardTimerRef = useRef(0);
   const extractionRef = useRef(createExtractionState());
   const lastFrameTimeRef = useRef(0);
+  const matchEndRef = useRef<{ outcome: string; score: number; kills: number } | null>(null);
 
   // ── React state (ONLY for JSX) ──
   const [displayStatus, setDisplayStatus] = useState<ConnectionStatus>('disconnected');
@@ -499,7 +500,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       window.removeEventListener('resize', resize);
       canvas.removeEventListener('click', onCanvasClick);
     };
-  }, [arenaId, onExit, player?.currentSkin]);
+  }, [arenaId, onExit]);
 
   // ── Respawn handler ──
   const handleRespawn = useCallback(() => {
