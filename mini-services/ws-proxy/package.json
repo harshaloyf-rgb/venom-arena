@@ -1,0 +1,6 @@
+{
+  "name": "ws-proxy",
+  "version": "1.0.0",
+  "scripts": { "dev": "bun --hot index.ts" },
+  "dependencies": { "ws": "^8.18.0" }
+}

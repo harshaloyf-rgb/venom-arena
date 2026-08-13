@@ -1343,7 +1343,7 @@ const io = new Server(httpServer, {
     origin: '*',
     methods: ['GET', 'POST'],
   },
-  // No path — default is '/socket.io/'
+  // Default path '/socket.io/' — proxied by Caddy XTransformPort or ws-proxy
 });
 
 // ─── Auth middleware ────────────────────────────────────────────────────────

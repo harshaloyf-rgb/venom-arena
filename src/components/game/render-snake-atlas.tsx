@@ -408,6 +408,10 @@ export function renderSnakeAtlas(
   const headWx = effectivePath.headX;
   const headWy = effectivePath.headY;
 
+  // Guard against non-finite values (can happen with online mode interpolation)
+  if (!Number.isFinite(headWx) || !Number.isFinite(headWy)) return;
+  if (!Number.isFinite(camera.x) || !Number.isFinite(camera.y)) return;
+
   const zoom = camera.zoom;
 
   // ── Calculate logical body length using cached value (avoids Math.log per frame) ──
@@ -813,13 +817,16 @@ export function renderSnakeFallback(
   const pathLen = path.length;
   if (pathLen < 2) return;
 
-  // Read custom skin state once (may contain segments for presets or custom-lab-skin)
-  const customState = getCachedCustomSkinState();
-
+  // Guard against non-finite values (online mode)
   const headWorldX = path.headX;
   const headWorldY = path.headY;
+  if (!Number.isFinite(headWorldX) || !Number.isFinite(headWorldY)) return;
+  if (!Number.isFinite(camera.x) || !Number.isFinite(camera.y)) return;
 
   const zoom = camera.zoom;
+
+  // Read custom skin state once (may contain segments for presets or custom-lab-skin)
+  const customState = getCachedCustomSkinState();
 
   // ── Calculate logical body length using cached value (avoids Math.log per frame) ──
   const logicalLen = snake.cachedBodyLength;

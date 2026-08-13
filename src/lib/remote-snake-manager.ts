@@ -315,8 +315,8 @@ export class RemoteSnakeManager {
       rarity: t.rarity,
       _headX: safeHeadX,
       _headY: safeHeadY,
-      _prevHx: safeHeadX,  // for camera interpolation
-      _prevHy: safeHeadY,
+      _prevHx: typeof t.prevHeadX === 'number' && isFinite(t.prevHeadX) ? t.prevHeadX : safeHeadX,
+      _prevHy: typeof t.prevHeadY === 'number' && isFinite(t.prevHeadY) ? t.prevHeadY : safeHeadY,
     };
   }
 
