@@ -643,6 +643,8 @@ interface ConnectedPlayer {
   kills: number;
   color: string;
   secondaryColor: string;
+  skinId: string;
+  rarity: string;
   pattern?: string;
   country?: string;
   level: number;
@@ -741,7 +743,8 @@ class ArenaInstance {
       now,
       playerInfo.color,
       playerInfo.secondaryColor,
-      undefined, undefined,
+      playerInfo.skinId,
+      playerInfo.rarity as SkinRarity,
     );
 
     snake.isPlayer = true;
@@ -1239,6 +1242,8 @@ io.on('connection', (socket) => {
         kills: 0,
         color: playerData.color || '#22c55e',
         secondaryColor: playerData.secondaryColor || '#4ade80',
+        skinId: playerData.skinId || 'skin-default',
+        rarity: playerData.rarity || 'common',
         pattern: playerData.pattern,
         country: playerData.country,
         level: playerData.level || 1,

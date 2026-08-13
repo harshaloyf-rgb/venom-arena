@@ -1448,3 +1448,44 @@ Stage Summary:
 - The rendering code was ALWAYS correct — it was a React lifecycle issue
 - Files modified: src/components/game/OnlineSnakeGame.tsx, src/components/game/GameCanvas.tsx
 
+---
+Task ID: fix-green-head-online
+Agent: main
+Task: Fix green snake head in online mode + audit all online/offline differences
+
+Work Log:
+- Traced complete color data flow: verify API → game server → snapshot → RemoteSnakeManager → renderer
+- ROOT CAUSE: 3-layer color chain failure
+  1. /api/match/verify defaults to green (#22c55e) for non-cosmetic skins
+  2. Game server uses green fallback colors when creating player snake
+  3. OnlineSnakeGame.tsx only overrode skinId/rarity but NOT color/headColor from playerSkinAsset
+- Fixed OnlineSnakeGame.tsx:
+  - Added ps.color = playerSkinAsset.bodyColor and ps.headColor = playerSkinAsset.headColor
+  - Added makeCoiledPath() for visual body tightening (matching offline)
+  - Added DEFAULT_SKINS atlas building (matching offline)
+  - Added WASD/Arrow key steering support
+  - Added touch input support
+  - Added Shift key for boost
+  - Added killer highlight (red glow on killer snake, matching offline)
+  - Added isDead state + disabled boost button when dead
+  - Added cached W/H for resize (matching offline perf optimization)
+  - Fixed death overlay to pass killer name
+  - Added registerSkinAsset call for player skin
+  - Fixed high score key to match offline pattern
+- Fixed game-server/index.ts:
+  - Added skinId and rarity fields to ConnectedPlayer interface
+  - Pass skinId/rarity from playerData through to ConnectedPlayer
+  - Pass skinId/rarity to createSnake() for player snakes
+- Fixed /api/match/verify/route.ts:
+  - Added skinId and rarity to response
+  - Properly determines rarity from cosmetic cost
+  - Handles preset-* and custom-lab-skin IDs for skinId/rarity
+- Full audit completed: food, bots, growth rate, HUD, death, input differences documented
+
+Stage Summary:
+- GREEN HEAD: Fixed by overriding color/headColor from local playerSkinAsset in OnlineSnakeGame.tsx
+- Server now receives and stores skinId/rarity for player snakes
+- Verify API returns skinId/rarity for all skin types
+- Online mode now matches offline mode: coiled path, WASD, touch, killer highlight, boost disabled state
+- Food/bots/growth rate are functionally equivalent (server uses same config/formulas)
+- Remaining known differences: no extraction mechanic online, food magnetism not visualized, 20Hz body trails vs 60Hz

@@ -8,13 +8,14 @@ import {
 } from '@/lib/game-socket';
 import { RemoteSnakeManager } from '@/lib/remote-snake-manager';
 import { createCamera, updateCameraInterpolated, getViewport } from '@/lib/snake/camera';
-import { SkinAtlasManager } from '@/lib/snake/atlas';
-import { getPlayerSkinAsset } from '@/lib/snake/skin-registry';
+import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
+import { getPlayerSkinAsset, registerSkinAsset } from '@/lib/snake/skin-registry';
 import { getArenaConfig, SEGMENT_SPACING } from '@/lib/snake/config';
 import type { Snake, Camera, Viewport } from '@/lib/snake';
 import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrameWithDpr } from './render-snake-atlas';
 import { renderBackground, renderHUD, resetMinimapZoom, handleMinimapClick } from './hud';
 import { drawEliminatedBanner, drawDeathOverlay, drawControlsHint } from './renderer';
+import { makeCoiledPath } from './coil-path';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -38,7 +39,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sockRef = useRef<ReturnType<typeof createGameSocket> | null>(null);
   const snapRef = useRef<GameSnapshot | null>(null);
-  const inputRef = useRef({ angle: 0, boost: false, mouseX: 0, mouseY: 0 });
+  const inputRef = useRef({ angle: 0, boost: false, mouseX: 0, mouseY: 0, keysActive: false, keyAngle: 0 });
   const animRef = useRef(0);
   const managerRef = useRef<RemoteSnakeManager | null>(null);
   const cameraRef = useRef<Camera | null>(null);
@@ -48,6 +49,8 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
   const controlsShownRef = useRef(true);
   const controlsTimerRef = useRef(0);
   const leaderboardTimerRef = useRef(0);
+  const isDeadRef = useRef(false);
+  const killerIdRef = useRef<string | null>(null);
 
   // ── ALL values the render loop reads MUST be refs ──
   // Using state in the render loop useEffect deps will DESTROY the
@@ -66,6 +69,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
   const [displayHighScore, setDisplayHighScore] = useState(0);
   const [displayKiller, setDisplayKiller] = useState<string | null>(null);
   const [matchEnd, setMatchEnd] = useState<{ outcome: string; score: number; kills: number } | null>(null);
+  const [isDead, setIsDead] = useState(false);
 
   // ── Stable callback for leaderboard updates (ref, never changes) ──
   const updateLeaderboardRef = useRef((snakes: Map<string, Snake>, player: Snake | null) => {
@@ -120,7 +124,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
 
   // ── Canvas setup + render loop ──
   // CRITICAL: This effect MUST NOT depend on any state that changes during gameplay.
-  // Only `arenaId` triggers a full reset (new arena = new connection).
+   // Only `arenaId` triggers a full reset (new arena = new connection).
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -131,12 +135,16 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     if (!ctx) return;
 
     // ── Sizing ──
+    let _cachedW = 0;
+    let _cachedH = 0;
     const resize = () => {
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = parent.clientWidth * dpr;
-      canvas.height = parent.clientHeight * dpr;
-      canvas.style.width = parent.clientWidth + 'px';
-      canvas.style.height = parent.clientHeight + 'px';
+      _cachedW = parent.clientWidth;
+      _cachedH = parent.clientHeight;
+      canvas.width = _cachedW * dpr;
+      canvas.height = _cachedH * dpr;
+      canvas.style.width = _cachedW + 'px';
+      canvas.style.height = _cachedH + 'px';
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     resize();
@@ -147,12 +155,35 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       const rect = canvas.getBoundingClientRect();
       inputRef.current.mouseX = e.clientX - rect.left;
       inputRef.current.mouseY = e.clientY - rect.top;
+      inputRef.current.keysActive = false; // mouse overrides keyboard
       if (controlsShownRef.current) {
         controlsShownRef.current = false;
         controlsTimerRef.current = performance.now();
       }
     };
     canvas.addEventListener('mousemove', onMouseMove);
+
+    // Touch support
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      inputRef.current.mouseX = touch.clientX - rect.left;
+      inputRef.current.mouseY = touch.clientY - rect.top;
+      inputRef.current.keysActive = false;
+      if (controlsShownRef.current) {
+        controlsShownRef.current = false;
+        controlsTimerRef.current = performance.now();
+      }
+    };
+    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+    canvas.addEventListener('touchstart', (e: TouchEvent) => {
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      inputRef.current.mouseX = touch.clientX - rect.left;
+      inputRef.current.mouseY = touch.clientY - rect.top;
+      inputRef.current.keysActive = false;
+    }, { passive: true });
 
     const onMouseDown = (e: MouseEvent) => {
       if (e.button === 0) {
@@ -173,18 +204,39 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     canvas.addEventListener('mousedown', onMouseDown);
     window.addEventListener('mouseup', onMouseUp);
 
-    // ── Keyboard ──
+    // ── Keyboard (Boost + WASD/Arrow steering) ──
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' || e.code === 'KeyB') {
+      if (e.code === 'Space' || e.code === 'KeyB' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
         e.preventDefault();
         inputRef.current.boost = true;
         externalBoostRef.current = true;
       }
+      // WASD / Arrow key steering
+      if (e.code === 'KeyW' || e.code === 'ArrowUp' ||
+          e.code === 'KeyS' || e.code === 'ArrowDown' ||
+          e.code === 'KeyA' || e.code === 'ArrowLeft' ||
+          e.code === 'KeyD' || e.code === 'ArrowRight') {
+        e.preventDefault();
+        inputRef.current.keysActive = true;
+        // Compute angle from key combination
+        let dx = 0, dy = 0;
+        if (e.code === 'KeyW' || e.code === 'ArrowUp') dy -= 1;
+        if (e.code === 'KeyS' || e.code === 'ArrowDown') dy += 1;
+        if (e.code === 'KeyA' || e.code === 'ArrowLeft') dx -= 1;
+        if (e.code === 'KeyD' || e.code === 'ArrowRight') dx += 1;
+        if (dx !== 0 || dy !== 0) {
+          inputRef.current.keyAngle = Math.atan2(dy, dx);
+        }
+      }
     };
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space' || e.code === 'KeyB') {
+      if (e.code === 'Space' || e.code === 'KeyB' || e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
         inputRef.current.boost = false;
         externalBoostRef.current = false;
+      }
+      if (['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) {
+        // Check if any direction key is still held
+        // (simplified: just clear keysActive, mouse takes over)
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -200,8 +252,18 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     // ── Init atlas + camera + manager (once per mount) ──
     const atlasManager = new SkinAtlasManager();
     atlasRef.current = atlasManager;
+    // Build default skins (same as offline mode)
+    for (const skin of DEFAULT_SKINS) {
+      atlasManager.buildAtlas(skin);
+    }
+    // Build player's selected skin
     const playerSkinAsset = getPlayerSkinAsset(player?.currentSkin);
-    if (playerSkinAsset) atlasManager.buildAtlas(playerSkinAsset);
+    if (playerSkinAsset) {
+      if (!atlasManager.getAtlas(playerSkinAsset.id)) {
+        atlasManager.buildAtlas(playerSkinAsset);
+        registerSkinAsset(playerSkinAsset);
+      }
+    }
 
     const ac = getArenaConfig();
     const camera = createCamera(0, 0);
@@ -210,13 +272,17 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     managerRef.current = manager;
     resetMinimapZoom();
 
+    // Load high score
+    const highScoreKey = `venom-high-score-online-${arenaId || 'default'}`;
+    try { highScoreRef.current = parseInt(localStorage.getItem(highScoreKey) || '0', 10); setDisplayHighScore(highScoreRef.current); } catch {}
+
     // ── Render loop ──
     const loop = () => {
       animRef.current = requestAnimationFrame(loop);
 
       const dpr = window.devicePixelRatio || 1;
-      const w = parent.clientWidth;
-      const h = parent.clientHeight;
+      const w = _cachedW || parent.clientWidth;
+      const h = _cachedH || parent.clientHeight;
       if (w === 0 || h === 0) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
@@ -227,6 +293,8 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       // ── Track death ──
       if (snap && !snap.playerAlive && !deathTimeRef.current) {
         deathTimeRef.current = performance.now();
+        isDeadRef.current = true;
+        setIsDead(true);
       }
 
       // ── Loading / error / disconnected screen ──
@@ -250,10 +318,15 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       // ── Update snake manager ONLY when snapshot tick changes ──
       const didUpdate = manager.updateSnapshot(snap);
 
-      // ── Compute target angle from mouse ──
+      // ── Compute target angle (WASD/Arrow keys override mouse) ──
       const mx = inputRef.current.mouseX;
       const my = inputRef.current.mouseY;
-      const targetAngle = Math.atan2(my - h / 2, mx - w / 2);
+      let targetAngle: number;
+      if (inputRef.current.keysActive) {
+        targetAngle = inputRef.current.keyAngle;
+      } else {
+        targetAngle = Math.atan2(my - h / 2, mx - w / 2);
+      }
       inputRef.current.angle = targetAngle;
 
       // ── Send input ──
@@ -311,19 +384,84 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       if (gameState.player && gameState.player.alive && gameState.player.path.length >= 2) {
         const ps = gameState.player;
         if (playerSkinAsset) {
+          // FIX: Override ALL skin properties from local playerSkinAsset.
+          // Previously only skinId and rarity were set, leaving color/headColor
+          // as the server's green fallback. Now the player renders with the
+          // exact same colors as offline mode.
           ps.skinId = playerSkinAsset.id;
           ps.rarity = playerSkinAsset.rarity;
+          ps.color = playerSkinAsset.bodyColor;
+          ps.headColor = playerSkinAsset.headColor;
         }
         ps.boosting = isBoosting;
+
+        // Build coiled path for visual body tightening on curves (same as offline)
+        const coiledPlayer = makeCoiledPath(ps.path);
+
         try {
-          renderSnakeAtlas(ctx, ps, camera, viewport, atlasManager, now, mx, my, undefined, alpha);
+          renderSnakeAtlas(ctx, ps, camera, viewport, atlasManager, now, mx, my, undefined, alpha, coiledPlayer);
         } catch (e: any) { console.error('[Online] player render:', e.message); }
+      }
+
+      // ── Killer highlight: pulsing red glow on the bot that killed you (same as offline) ──
+      if (isDeadRef.current && killerNameRef.current) {
+        const deathElapsed = now - (deathTimeRef.current || now);
+        if (deathElapsed < 5000) {
+          // Find the killer snake by name
+          for (const [, s] of gameState.snakes) {
+            if (!s.alive || s.name !== killerNameRef.current) continue;
+            if (s.path.length < 2) continue;
+            const cam = camera;
+            const zoom = cam.zoom;
+            const pulse = 0.4 + 0.6 * Math.abs(Math.sin(deathElapsed * 0.005));
+            const glowR = (s.bodyRadius + 6) * zoom;
+            const step = Math.max(1, Math.floor(8 / (s.bodyRadius * 2 + 1)));
+            ctx.save();
+            ctx.globalAlpha = pulse;
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 3;
+            ctx.shadowColor = '#ef4444';
+            ctx.shadowBlur = 20;
+            ctx.beginPath();
+            for (let i = 0; i < s.path.length; i += step) {
+              const wx = s.path.getX(i);
+              const wy = s.path.getY(i);
+              const sx = (wx - cam.x) * zoom + w / 2;
+              const sy = (wy - cam.y) * zoom + h / 2;
+              if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+            }
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.35)';
+            ctx.shadowBlur = 15;
+            for (let i = 0; i < s.path.length; i += step * 2) {
+              const wx = s.path.getX(i);
+              const wy = s.path.getY(i);
+              const sx = (wx - cam.x) * zoom + w / 2;
+              const sy = (wy - cam.y) * zoom + h / 2;
+              ctx.beginPath();
+              ctx.arc(sx, sy, glowR, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            // Killer name label above head
+            const headSx = (s.path.headX - cam.x) * zoom + w / 2;
+            const headSy = (s.path.headY - cam.y) * zoom + h / 2;
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = Math.min(1, deathElapsed / 300);
+            ctx.fillStyle = '#ef4444';
+            ctx.font = 'bold 14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(killerNameRef.current, headSx, headSy - glowR - 8);
+            ctx.restore();
+            break; // only highlight one snake
+          }
+        }
       }
 
       // ── HUD (minimap, score, rank, kills, leaderboard) ──
       renderHUD(ctx, gameState, camera, viewport, 60, now, snap.playerKills, 0);
 
-      // ── Controls hint (show for 3 seconds after first mouse move) ──
+      // ── Controls hint (show for 3 seconds after first input) ──
       if (controlsTimerRef.current > 0) {
         const hintElapsed = now - controlsTimerRef.current;
         if (hintElapsed < 3000) {
@@ -350,7 +488,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         if (elapsed < 5) {
           drawEliminatedBanner(ctx, viewport, elapsed);
         } else {
-          drawDeathOverlay(ctx, snap.playerScore, viewport);
+          drawDeathOverlay(ctx, snap.playerScore, viewport, killerNameRef.current);
         }
       }
 
@@ -362,12 +500,11 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
           updateLeaderboardRef.current(gameState.snakes, gameState.player);
           if (gameState.player) {
             try {
-              const key = `venom-high-score-online-${arenaId || 'default'}`;
               const hs = Math.floor(gameState.player.score);
               if (hs > highScoreRef.current) {
                 highScoreRef.current = hs;
                 setDisplayHighScore(hs);
-                localStorage.setItem(key, String(hs));
+                localStorage.setItem(highScoreKey, String(hs));
               }
             } catch { /* ignore */ }
           }
@@ -381,6 +518,8 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       cancelAnimationFrame(animRef.current);
       window.removeEventListener('resize', resize);
       canvas.removeEventListener('mousemove', onMouseMove);
+      canvas.removeEventListener('touchmove', onTouchMove);
+      canvas.removeEventListener('touchstart', (e: Event) => {});
       canvas.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mouseup', onMouseUp);
       window.removeEventListener('keydown', onKeyDown);
@@ -440,7 +579,12 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
           onPointerUp={(e) => { e.stopPropagation(); externalBoostRef.current = false; inputRef.current.boost = false; }}
           onPointerLeave={() => { externalBoostRef.current = false; inputRef.current.boost = false; }}
           onPointerCancel={() => { externalBoostRef.current = false; inputRef.current.boost = false; }}
-          className="pointer-events-auto flex flex-col items-center gap-0.5 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all duration-200 select-none touch-manipulation bg-orange-500/15 border-orange-500/30 text-orange-400 hover:bg-orange-500/25 hover:border-orange-500/50 active:scale-95"
+          disabled={isDead}
+          className={`pointer-events-auto flex flex-col items-center gap-0.5 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all duration-200 select-none touch-manipulation
+            ${isDead
+              ? 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'
+              : 'bg-orange-500/15 border-orange-500/30 text-orange-400 hover:bg-orange-500/25 hover:border-orange-500/50 active:scale-95'
+            }`}
         >
           <Zap className="w-5 h-5" />
           <span>Boost</span>
@@ -460,7 +604,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
             <p className="text-white/60">Kills: {matchEnd.kills}</p>
             <button
               onClick={handleRespawn}
-              className="mt-4 px-8 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors"
+              className="mt-4 px-8 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors cursor-pointer"
             >
               Return to Arena
             </button>
