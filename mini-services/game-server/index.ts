@@ -56,6 +56,7 @@ import { getArenaById, ARENA_TIERS } from '../../src/lib/game-config';
 // ============================================================================
 
 const INTERNAL_SECRET = process.env.INTERNAL_SECRET || 'dev-secret';
+const dbg = process.env.DEBUG ? console.log : () => {};
 const MAIN_SERVER = 'http://localhost:3000';
 const PORT = 3001;
 const TICK_RATE = 60; // ticks per second
@@ -893,6 +894,8 @@ class ArenaInstance {
 
     // 2. Spawn bots on first tick
     if (state.tickCount === 1) {
+      const botTotal = this.botMix.predator + this.botMix.coiler + this.botMix.baiter + this.botMix.interceptor + this.botMix.grazer + this.botMix.trapper + this.botMix.ranked;
+      console.log(`[Arena ${this.arenaId}] Bot mix: ${JSON.stringify(this.botMix)} (total: ${botTotal}), mapHalf: ${ac.mapHalf}`);
       spawnBots(state, this.botMix as any, createBotSnakeFactory);
       console.log(`[Arena ${this.arenaId}] Spawned ${state.snakes.size - this.playerCount} bots`);
     }

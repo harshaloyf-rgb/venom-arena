@@ -343,6 +343,13 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       // ── Build synthetic GameState for shared renderers ──
       const gameState = mgr.buildGameState(snap, ac);
 
+      // ── Per-frame diagnostic (first 3 ticks, then every 60 ticks) ──
+      if (snap.tick <= 3 || snap.tick % 60 === 0) {
+        const pId = mgr.getPlayerSnakeId();
+        const pSnake = pId ? (mgr as any).snakes?.get(pId) : null;
+        console.log('[Online Frame]', snap.tick, 'gsSnakes:', gameState.snakes.size, 'gsPlayer:', !!gameState.player, 'gsFoods:', gameState.foods.length, 'playerTracked:', !!pSnake, 'pathReady:', pSnake?.pathReady, 'pathLen:', pSnake?.path?.length, 'headX:', pSnake?.path?.headX?.toFixed(0), 'headY:', pSnake?.path?.headY?.toFixed(0), 'cam:', camera.x.toFixed(0), camera.y.toFixed(0), camera.zoom.toFixed(2), 'vp:', viewport.left.toFixed(0), viewport.top.toFixed(0), viewport.right.toFixed(0), viewport.bottom.toFixed(0));
+      }
+
       // ── Camera: follow player (same interpolation as offline) ──
       const playerSnake = gameState.player;
       if (playerSnake && playerSnake.alive) {
@@ -355,6 +362,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
           playerSnake.prevHeadY = Number.isFinite(playerSnake.prevHeadY)
             ? playerSnake.prevHeadY : playerSnake.path.headY;
           updateCameraInterpolated(camera, playerSnake, w, h, alpha);
+          if (snap.tick <= 3 || snap.tick % 60 === 0) console.log('[Cam Update]', snap.tick, 'player:', !!playerSnake, 'alive:', playerSnake?.alive, 'pathLen:', playerSnake?.path?.length, 'headX:', playerSnake?.path?.headX, 'headY:', playerSnake?.path?.headY, 'prevX:', playerSnake?.prevHeadX, 'prevY:', playerSnake?.prevHeadY, 'alpha:', alpha, 'camAfter:', camera.x.toFixed(0), camera.y.toFixed(0));
         }
       }
 
@@ -372,6 +380,14 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       const fc = fpsRef.current;
       fc.frames++;
       if (now - fc.lastTime >= 1000) { fc.fps = fc.frames; fc.frames = 0; fc.lastTime = now; }
+
+      // ══ DEBUG: Expose frame state to window.__of (remove after fix) ══
+      (window as any).__of = {
+        tick: snap.tick, gsSnakes: gameState.snakes.size, gsFoods: gameState.foods.length,
+        hasPlayer: !!gameState.player,
+        camX: camera.x, camY: camera.y, camZ: camera.zoom,
+        vpL: viewport.left, vpT: viewport.top, vpR: viewport.right, vpB: viewport.bottom,
+      };
 
       beginRenderFrameWithDpr(dpr);
       renderBackground(ctx, gameState, camera, viewport, fc.fps, now);

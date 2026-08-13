@@ -604,7 +604,7 @@ export function renderSnakeAtlas(
     const headDrawSize = segRadius * 2 * 1.05;
 
     // Legendary glow underlay — only for epic/legendary (rare, acceptable cost)
-    if (isLegendary) {
+    if (isLegendary && Number.isFinite(hsx) && Number.isFinite(hsy)) {
       const glowR = headDrawSize / 2 + LEGENDARY_GLOW_SIZE * zoom;
       const intensity = 0.25 + 0.15 * Math.sin(time * 3);
       ctx.save();
@@ -688,6 +688,7 @@ export function renderSnakeAtlas(
     ctx.beginPath();
     ctx.arc(hsx, hsy, headR, 0, Math.PI * 2);
     ctx.clip();
+    if (Number.isFinite(hsx) && Number.isFinite(hsy) && Number.isFinite(headR) && headR > 0) {
     const headShade = ctx.createRadialGradient(
       hsx - headR * 0.3, hsy - headR * 0.3, headR * 0.05,
       hsx + headR * 0.1, hsy + headR * 0.1, headR * 1.05,
@@ -698,6 +699,7 @@ export function renderSnakeAtlas(
     headShade.addColorStop(1, 'rgba(0,0,0,0.28)');
     ctx.fillStyle = headShade;
     ctx.fillRect(hsx - headR, hsy - headR, headDrawSize, headDrawSize);
+    } // end finite guard
     ctx.restore();
 
     // Direction pointer — player only, shows where snake is steering (arrow replaces mouse cursor)
@@ -737,7 +739,7 @@ export function renderSnakeAtlas(
       // Head glow pulse when boosting
       ctx.save();
       ctx.globalAlpha = 0.25 + 0.15 * Math.sin(time * 0.01);
-      const hGlow = ctx.createRadialGradient(hsx, hsy, headDrawSize / 4, hsx, hsy, headDrawSize * 1.5);
+      const hGlow = ctx.createRadialGradient(hsx, hsy, Number.isFinite(headDrawSize) ? headDrawSize / 4 : 0, hsx, hsy, Number.isFinite(headDrawSize) ? headDrawSize * 1.5 : 1);
       hGlow.addColorStop(0, 'rgba(255, 200, 80, 0.4)');
       hGlow.addColorStop(1, 'rgba(255, 100, 50, 0)');
       ctx.fillStyle = hGlow;
