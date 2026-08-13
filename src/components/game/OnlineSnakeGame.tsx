@@ -357,6 +357,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
 
       // ── Update prediction state (for future client-side prediction) ──
       const now = performance.now();
+      const pred = predictedRef.current;
       if (pred) {
         const elapsed = (now - pred.lastSnapTime) / 1000;
         const speed = pred.boosting ? 6 : BASE_SPEED;
@@ -385,6 +386,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       if (pred) {
         pred.angle = targetAngle;
         pred.boosting = isBoosting;
+        pred.lastSnapTime = now;
       }
 
       // ── Update camera (use predicted position for smoothness) ──
