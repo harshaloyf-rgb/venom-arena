@@ -60,6 +60,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
   const statusRef = useRef<ConnectionStatus>('disconnected');
   const errorRef = useRef<string | null>(null);
   const managerRef = useRef<RemoteSnakeManager | null>(null);
+  const serverMapHalfRef = useRef<number | null>(null);
 
   // ── Game state refs ──
   const isDeadRef = useRef(false);
@@ -111,6 +112,14 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         snapRef.current = state.snapshot;
         statusRef.current = state.status;
         errorRef.current = state.error;
+        if (state.serverMapHalf) {
+          serverMapHalfRef.current = state.serverMapHalf;
+          // Recreate manager with correct mapHalf
+          const mh = state.serverMapHalf;
+          if (managerRef.current && managerRef.current.getMapHalf() !== mh) {
+            managerRef.current = new RemoteSnakeManager(mh);
+          }
+        }
         if (state.killerName && !killerNameRef.current) {
           killerNameRef.current = state.killerName;
           setDisplayKiller(state.killerName);
@@ -185,7 +194,8 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     const ac = getArenaConfig();
     const camera = createCamera(0, 0);
     cameraRef.current = camera;
-    const manager = new RemoteSnakeManager(ac.mapHalf);
+    const mapHalf = serverMapHalfRef.current ?? ac.mapHalf;
+    const manager = new RemoteSnakeManager(mapHalf);
     managerRef.current = manager;
     resetMinimapZoom();
 
@@ -305,7 +315,15 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       const playerSnakeId = manager.getPlayerSnakeId();
       const playerSnake = playerSnakeId ? manager.buildSnakeAdapter(playerSnakeId) : null;
       if (playerSnake) {
-        updateCameraInterpolated(camera, playerSnake, w, h, alpha);
+        // Online mode: use safe head positions (PathBuffer.headX getter can return undefined)
+        const ps = playerSnake as any;
+        const phx = ps._headX ?? 0;
+        const phy = ps._headY ?? 0;
+        const prevHx = ps._prevHx ?? phx;
+        const prevHy = ps._prevHy ?? phy;
+        // Interpolate between previous and current head position
+        camera.x = prevHx + (phx - prevHx) * alpha;
+        camera.y = prevHy + (phy - prevHy) * alpha;
       }
 
       const viewport: Viewport = getViewport(camera, w, h);
@@ -333,8 +351,8 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         if (snake.isPlayer) continue;
         if (!snake.alive) continue;
         if (snake.path.length < 2) continue;
-        const headWx = snake.path.headX;
-        const headWy = snake.path.headY;
+        const headWx = (snake as any)._headX ?? snake.path.headX ?? snake.prevHeadX ?? 0;
+        const headWy = (snake as any)._headY ?? snake.path.headY ?? snake.prevHeadY ?? 0;
         if (!Number.isFinite(headWx) || !Number.isFinite(headWy)) continue;
         const margin = snake.cachedBodyLength * SEGMENT_SPACING + baseMargin;
         if (headWx < viewport.left - margin || headWx > viewport.right + margin ||
@@ -349,8 +367,10 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
 
       // ── Render player snake (atlas renderer) ──
       if (gameState.player && gameState.player.alive && gameState.player.path.length >= 2) {
-        const ps = gameState.player;
-        if (!Number.isFinite(ps.path.headX) || !Number.isFinite(ps.path.headY)) {
+        const ps = gameState.player as any;
+        const phx = ps._headX ?? ps.path.headX ?? ps.prevHeadX ?? 0;
+        const phy = ps._headY ?? ps.path.headY ?? ps.prevHeadY ?? 0;
+        if (!Number.isFinite(phx) || !Number.isFinite(phy)) {
           // skip — waiting for valid server data
         } else {
           if (playerSkinAsset) {

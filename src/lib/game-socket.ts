@@ -50,6 +50,7 @@ export interface GameSocketState {
   error: string | null;
   matchEnd: { outcome: string; score: number; kills: number } | null;
   killerName: string | null;
+  serverMapHalf: number | null;
 }
 
 // ─── Connection Manager ────────────────────────────────────────────────────
@@ -61,6 +62,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
   let currentError: string | null = null;
   let matchEndData: { outcome: string; score: number; kills: number } | null = null;
   let killerName: string | null = null;
+  let serverMapHalf: number | null = null;
   let inputSeq = 0;
 
   function emit() {
@@ -70,6 +72,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       error: currentError,
       matchEnd: matchEndData,
       killerName,
+      serverMapHalf,
     });
   }
 
@@ -104,15 +107,17 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       matchEndData = null;
       killerName = null;
       currentSnapshot = null;
+      serverMapHalf = null;
       inputSeq = 0;
       emit();
 
       try {
-        socket = io('/?XTransformPort=3001', {
+        socket = io('/', {
           auth: { token },
           transports: ['websocket'],
           reconnection: false,
           timeout: 10000,
+          query: { XTransformPort: '3001' },
         });
 
         socket.on('connect', () => {
@@ -124,6 +129,8 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
 
         socket.on('joined', (data: { snakeId: string; arenaId: string; config: { mapHalf: number } }) => {
           console.log('[GameSocket] Joined arena:', data.arenaId, 'as', data.snakeId);
+          serverMapHalf = data.config?.mapHalf ?? null;
+          emit();
         });
 
         socket.on('snapshot', (raw: any) => {

@@ -96,6 +96,80 @@ const MAGNET_DEATH_DIST = SNAKE_RADIUS + FOOD_MAGNET_DEATH_RADIUS;
 const MAGNET_PULL_DIST_SQ = MAGNET_PULL_DIST * MAGNET_PULL_DIST;
 const MAGNET_DEATH_DIST_SQ = MAGNET_DEATH_DIST * MAGNET_DEATH_DIST;
 
+// ─── Online Arena Config (properly sized for 30 bots) ─────────────────────
+// Online tiers have 30 bots but were using 29000px-radius maps designed for
+// 1000 bots. With 30 bots in a 2.6B sq px map, average spacing was ~9400px
+// — exceeding the 8000px visibility range, making most bots invisible.
+// Fix: 6000px radius → 113M sq px → ~3.8M sq px per bot → all bots visible.
+
+const ONLINE_MAP_HALF = 6000;
+
+function buildOnlineArenaConfig(): ArenaConfig {
+  const mh = ONLINE_MAP_HALF;
+  return {
+    // Map
+    spawnRadius: mh,
+    foodDespawnRadius: mh + 500,
+    safeSpawnDist: 200,
+    safeSpawnAttempts: 30,
+    // Food
+    foodMaxCount: 3000,
+    foodDensityTarget: 200,
+    foodVisibleRadius: 3000,
+    foodRespawnBatch: 8,
+    initialSpawnRadius: mh,
+    initialFoodTarget: 1000,
+    mapFoodGridSize: 2000,
+    mapFoodTargetPerCell: 8,
+    mapFoodSpawnPerCell: 3,
+    // Bots (mix is overridden per-tier by resolveBotMix, these are fallback)
+    botMix: { predator: 5, coiler: 2, baiter: 3, interceptor: 3, grazer: 8, trapper: 8, ranked: 1 },
+    normalBotScoreMin: 100,
+    normalBotScoreMax: 3000,
+    normalBotScoreExp: 1.5,
+    rankedScores: [8000, 6000, 5000, 4000, 3000, 2500, 2000, 1500, 1000, 800],
+    // Bot Spawning
+    botSpawnInner: 400,
+    botSpawnOuterFactor: 0.85,
+    rankedHomeMin: 2000,
+    rankedHomeMax: 4500,
+    rankedHomeJitter: 1000,
+    // AI Performance
+    aiTickThrottle: 4,
+    aiDistanceTier: 1500,
+    rankedAiDistanceTier: 3000,
+    respawnPerTick: 2,
+    foodHashRebuildInterval: 4,
+    mapFoodInterval: 15,
+    playerFoodInterval: 8,
+    retargetInterval: 45,
+    // AI Behavior
+    sightRange: 1000,
+    foodSeekRange: 1400,
+    bodyScanDist: 200,
+    headOnRange: 250,
+    playerFleeRange: 200,
+    foodAggressionMult: 1.0,
+    hunterFraction: 0,
+    botBoostMult: 0.4,
+    // Precomputed
+    mapHalf: mh,
+    mapRadiusSq: mh * mh,
+    despawnRadiusSq: (mh + 500) * (mh + 500),
+    visibleRadiusSq: 3000 * 3000,
+    mapGridCols: Math.ceil(mh * 2 / 2000),
+    mapGridRows: Math.ceil(mh * 2 / 2000),
+    sightRangeSq: 1000 * 1000,
+    foodSeekRangeSq: 1400 * 1400,
+    aiDistanceTierSq: 1500 * 1500,
+    rankedAiDistanceTierSq: 3000 * 3000,
+    playerFleeRangeSq: 200 * 200,
+  };
+}
+
+// Cache the online config (same for all 30-bot tiers)
+const ONLINE_ARENA_CONFIG = buildOnlineArenaConfig();
+
 // Module-level scratch objects (avoid per-tick allocation)
 const _foodHashScratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
 const _cachedFoodById = new Map<number, FoodOrb>();
@@ -602,22 +676,15 @@ function createBotSnakeFactory(
 // ─── Map tier ID → ArenaConfig ───────────────────────────────────────────────
 
 function resolveArenaConfig(arenaId: string): ArenaConfig {
-  // Try direct lookup first (practice-easy, practice-medium, practice-hard)
+  // Online competitive tiers (tier-1 through tier-30) use a smaller map
+  // properly sized for 30 bots (6000px radius vs 29000px for 1000 bots).
+  if (arenaId.startsWith('tier-')) {
+    return ONLINE_ARENA_CONFIG;
+  }
+
+  // Practice arenas use full-size configs (1000 bots)
   const direct = ARENA_CONFIGS[arenaId];
   if (direct) return direct;
-
-  // Map tier IDs to difficulty level
-  const tier = getArenaById(arenaId);
-  if (tier) {
-    switch (tier.difficulty) {
-      case 'Beginner': return ARENA_CONFIGS['practice-easy'];
-      case 'Medium': return ARENA_CONFIGS['practice-medium'];
-      case 'High Stakes':
-      case 'Extreme':
-      case 'Legendary':
-        return ARENA_CONFIGS['practice-hard'];
-    }
-  }
 
   // Fallback
   return getArenaConfig();
@@ -845,7 +912,8 @@ class ArenaInstance {
       const dx = snake.path.headX - player.lastPosCheckX;
       const dy = snake.path.headY - player.lastPosCheckY;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const maxDist = MAX_MOVE_SPEED * dt;
+      // FIX: MAX_MOVE_SPEED is px/tick, multiply by TICK_RATE to get px/sec
+      const maxDist = MAX_MOVE_SPEED * TICK_RATE * dt;
       if (dist > maxDist * 1.2 && dist > 100) {
         // 20% tolerance for accumulated error
         player.violations++;
@@ -972,6 +1040,15 @@ class ArenaInstance {
       if (deadSnake.isBot) {
         removeBot(deadId);
         state.snakes.delete(deadId);
+        // Credit kill to the killer player (if any)
+        const killEvt = collisionResult.killEvents.find(e => e.victimId === deadId);
+        if (killEvt) {
+          const killerSocketId = this.snakeToSocket.get(killEvt.killerId);
+          if (killerSocketId) {
+            const killerPlayer = this.players.get(killerSocketId);
+            if (killerPlayer) killerPlayer.kills++;
+          }
+        }
       } else {
         // Check if already marked for boundary death
         if (!playersToKill.find(p => p.snakeId === deadId)) {
@@ -1023,8 +1100,13 @@ class ArenaInstance {
 
     console.log(`[Arena ${this.arenaId}] Player ${player.name} died (${reason}) — score: ${score}, kills: ${kills}, duration: ${durationSeconds}s`);
 
-    // Emit matchEnd to client
+    // Emit killed event (for killer name highlight) and matchEnd to client
     try {
+      // Extract killer name from reason string (format: "killed by <Name>")
+      const killerMatch = reason.match(/^killed by (.+)$/);
+      if (killerMatch) {
+        player.socket.emit('killed', { killerName: killerMatch[1] });
+      }
       player.socket.emit('matchEnd', {
         outcome: 'death',
         score,
@@ -1386,12 +1468,16 @@ io.on('connection', (socket) => {
         joinTimestamp: Date.now(),
         violations: 0,
         lastPosCheckTime: Date.now(),
-        lastPosCheckX: 0,
-        lastPosCheckY: 0,
+        lastPosCheckX: NaN,  // Set to actual spawn position after snake creation
+        lastPosCheckY: NaN,
       };
 
       // Spawn player in arena
       const snake = arena.spawnPlayer(playerInfo);
+      // FIX: Initialize anti-cheat position to actual spawn position
+      // (was 0,0 causing instant false-positive on first check)
+      playerInfo.lastPosCheckX = snake.path.headX;
+      playerInfo.lastPosCheckY = snake.path.headY;
       arena.addPlayer(socket.id, playerInfo, snake);
 
       console.log(`[Arena ${arenaId}] Player joined: ${playerData.name} — snake: ${snake.id}, total players: ${arena.playerCount}`);

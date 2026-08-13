@@ -73,6 +73,10 @@ export class RemoteSnakeManager {
     this.mapHalf = mapHalf;
   }
 
+  getMapHalf(): number {
+    return this.mapHalf;
+  }
+
   /** Update with a new server snapshot. ONLY processes if tick changed. */
   updateSnapshot(snap: GameSnapshot): boolean {
     // Only process if this is a new tick
@@ -272,6 +276,15 @@ export class RemoteSnakeManager {
     const t = this.snakes.get(id);
     if (!t || !t.pathReady) return null;
 
+    // Ensure headX/headY are valid numbers (PathBuffer getter can return undefined
+    // if headSegIdx gets corrupted or data array is out of bounds)
+    const rawHeadX = t.path.headX;
+    const rawHeadY = t.path.headY;
+    const headX = typeof rawHeadX === 'number' && isFinite(rawHeadX) ? rawHeadX : t.prevHeadX;
+    const headY = typeof rawHeadY === 'number' && isFinite(rawHeadY) ? rawHeadY : t.prevHeadY;
+    const safeHeadX = typeof headX === 'number' && isFinite(headX) ? headX : 0;
+    const safeHeadY = typeof headY === 'number' && isFinite(headY) ? headY : 0;
+
     // Build the Snake adapter object
     return {
       id: t.id,
@@ -295,11 +308,15 @@ export class RemoteSnakeManager {
       cachedBodyLength: t.bodyLen,
       cachedBodyScore: t.score,
       cachedVisualTailIdx: 0,
-      prevHeadX: t.prevHeadX,
-      prevHeadY: t.prevHeadY,
+      prevHeadX: safeHeadX,
+      prevHeadY: safeHeadY,
       smoothBrakeFactor: 1.0,
       skinId: t.skinId,
       rarity: t.rarity,
+      _headX: safeHeadX,
+      _headY: safeHeadY,
+      _prevHx: safeHeadX,  // for camera interpolation
+      _prevHy: safeHeadY,
     };
   }
 
