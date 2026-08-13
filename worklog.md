@@ -1367,3 +1367,49 @@ Stage Summary:
 - Modified: src/components/game/OnlineSnakeGame.tsx (full rewrite)
 - Modified: src/lib/game-socket.ts (added isBot, boosting, skinId, rarity to RemoteSnake)
 - Modified: mini-services/game-server/index.ts (added skinId, rarity, boosting, isBot to snapshots)
+---
+Task ID: online-rendering-fix
+Agent: main
+Task: Fix online mode rendering — replace 311-line placeholder renderer with shared offline rendering infrastructure
+
+Work Log:
+- Diagnosed root cause of "dot size flicking": updateSnapshot called every render frame (60fps) pushing duplicate head positions, destroying body trail reconstruction
+- Diagnosed camera interpolation bug: prevHeadX/Y was overridden after buildSnakeAdapter, killing all interpolation
+- Diagnosed path reconstruction issue: degenerate paths from duplicate history entries, insufficient points for new snakes
+- Diagnosed missing UI: no React leaderboard, boost button not wired, no controls hint, no minimap click, no mouse cursor, no Best Ever display
+
+- Rewrote RemoteSnakeManager (src/lib/remote-snake-manager.ts):
+  - Tick-based update: only processes new snapshots (tracks lastProcessedTick, returns boolean)
+  - Dense path generation: interpolates between 20Hz snapshot entries at ~3px spacing (matching offline per-tick density)
+  - Synthetic trail for new snakes: generates body trail behind head based on angle when only 1 history entry exists
+  - Time-based interpolation: getPlayerAlpha() returns time-based alpha for smooth movement between snapshots
+  - Proper prevHeadX/Y tracking: saved before update, used by renderer's built-in renderOffX/Y offset
+
+- Rewrote OnlineSnakeGame.tsx (src/components/game/OnlineSnakeGame.tsx):
+  - Uses shared renderers: renderBackground, renderSnakeFallback (bots), renderSnakeAtlas (player), renderHUD
+  - Fixed camera: does NOT override prevHeadX/Y after buildSnakeAdapter, enabling smooth interpolation
+  - Added React leaderboard (top-right, same as offline — shows top 10 with crown, player highlighted green)
+  - Added Best Ever display (top-right, persists high score to localStorage per arena)
+  - Wired boost button properly (onPointerDown/Up sets inputRef + externalBoostRef)
+  - Added minimap click handler (3-zoom-level cycle)
+  - Added controls hint (3 seconds after game start)
+  - Added custom mouse cursor (crosshair ring)
+  - Added death overlays (5s eliminated banner + death overlay)
+  - Used LOD for far bots (same as offline)
+  - Canvas cursor set to 'none' for custom crosshair
+
+- Verified via Agent Browser:
+  - Socket.IO connects successfully through Caddy proxy (port 81)
+  - No JS errors in console
+  - Canvas renders: background, grid (18330px), boundary ring (red tones), minimap (green player dot), HUD text (white)
+  - React UI renders: Exit button, Best Ever, Leaderboard (shows bot names/scores), Boost button
+  - Snake paths built correctly: bots 199-304 points, player 16-21 points (bodyLen=4 at start)
+  - Camera follows player correctly with interpolation
+
+Stage Summary:
+- Fixed 3 critical rendering bugs (duplicate updates, camera override, degenerate paths)
+- Online mode now uses identical rendering pipeline as offline mode
+- All HUD elements present: minimap (3-zoom), leaderboard, rank, score, kills, boost button, controls hint
+- Body trail reconstruction works: dense paths from sparse 20Hz snapshots via interpolation
+- Player snake renders with full skin/atlas support, bots use fallback renderer with LOD
+- Food density at spawn is naturally low (same as offline) — player grows by eating nearby food

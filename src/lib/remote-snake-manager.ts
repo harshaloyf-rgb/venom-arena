@@ -1,14 +1,20 @@
 // ============================================================================
 // Remote Snake Manager — Reconstructs body trails from 20Hz head snapshots
 // ============================================================================
-// The server sends head positions at 20Hz. The offline renderer needs a
-// PathBuffer with dense position history. This manager interpolates between
-// snapshots and builds PathBuffers for each remote snake.
+// The server sends head positions at 20Hz (every 3 ticks at 60Hz server).
+// Each snapshot moves ~9px (BASE_SPEED=3 * 3 ticks). The offline renderer
+// needs a PathBuffer with ~3px spacing (per-tick density).
+//
+// Strategy:
+// 1. Store head position history (only on new ticks — never duplicate)
+// 2. On new snapshot: rebuild dense PathBuffer by interpolating between entries
+// 3. Between snapshots: use time-based alpha for smooth head interpolation
+// 4. The renderer's built-in renderOffX/Y shifts the whole snake smoothly
 
 import { PathBuffer } from '@/lib/snake/pool';
 import type { Snake, FoodOrb, SkinRarity } from '@/lib/snake/types';
 import type { RemoteSnake, RemoteFood, GameSnapshot } from './game-socket';
-import { SEGMENT_SPACING, BASE_SPEED, computeBodyLength } from '@/lib/snake/config';
+import { SEGMENT_SPACING, BASE_SPEED } from '@/lib/snake/config';
 
 // ─── History entry per snapshot ──────────────────────────────────────────────
 
@@ -35,39 +41,44 @@ interface TrackedSnake {
   score: number;
   boosting: boolean;
   spawnTime: number;
-  // Head position history (newest first)
+  // Head position history (newest first). Only unique ticks.
   history: PosEntry[];
-  // Reusable PathBuffer for renderer
+  // Reusable PathBuffer for renderer (rebuilt on each new snapshot)
   path: PathBuffer;
-  // Previous head for interpolation
-  prevHX: number;
-  prevHY: number;
+  // Previous head position (for render-time interpolation)
+  prevHeadX: number;
+  prevHeadY: number;
+  // Timestamp when the last snapshot was received (for time-based alpha)
+  lastSnapTime: number;
+  // Whether the path has been initialized with at least 2 points
+  pathReady: boolean;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MAX_HISTORY = 600; // 30 seconds at 20Hz — enough for longest snakes
-const INTERP_STEPS_PER_SNAP = 3; // 60fps / 20Hz = 3 frames between snapshots
+const SNAPSHOT_INTERVAL_MS = 50; // 1000/20 = 50ms between snapshots
+const DENSE_STEP = BASE_SPEED; // ~3px between path points (matches offline per-tick density)
 
 // ─── Manager ─────────────────────────────────────────────────────────────────
 
 export class RemoteSnakeManager {
   private snakes = new Map<string, TrackedSnake>();
   private playerSnakeId: string | null = null;
-  private lastSnapTick = 0;
-  private interpFrame = 0; // 0..INTERP_STEPS_PER_SNAP-1
+  private lastProcessedTick = 0;
   private mapHalf: number;
 
   constructor(mapHalf: number) {
     this.mapHalf = mapHalf;
   }
 
-  /** Update with a new server snapshot */
-  updateSnapshot(snap: GameSnapshot): void {
-    // Advance interpolation frame
-    this.interpFrame = (this.interpFrame + 1) % INTERP_STEPS_PER_SNAP;
-    const dt = snap.tick - this.lastSnapTick;
-    this.lastSnapTick = snap.tick;
+  /** Update with a new server snapshot. ONLY processes if tick changed. */
+  updateSnapshot(snap: GameSnapshot): boolean {
+    // Only process if this is a new tick
+    if (snap.tick <= this.lastProcessedTick && this.lastProcessedTick > 0) return false;
+    this.lastProcessedTick = snap.tick;
+
+    const now = performance.now();
 
     // Mark all current snakes as unseen (for removal)
     const seen = new Set<string>();
@@ -78,7 +89,7 @@ export class RemoteSnakeManager {
 
       if (!tracked) {
         // New snake — initialize
-        const pathCap = Math.max(Math.ceil(rs.bodyLen * 2), 200);
+        const pathCap = Math.max(Math.ceil(rs.bodyLen * 3), 300);
         tracked = {
           id: rs.id,
           name: rs.name,
@@ -92,33 +103,45 @@ export class RemoteSnakeManager {
           bodyRadius: rs.bodyRadius,
           score: rs.score,
           boosting: rs.boosting,
-          spawnTime: performance.now(),
+          spawnTime: now,
           history: [],
           path: new PathBuffer(pathCap),
-          prevHX: rs.hx,
-          prevHY: rs.hy,
+          prevHeadX: rs.hx,
+          prevHeadY: rs.hy,
+          lastSnapTime: now,
+          pathReady: false,
         };
         this.snakes.set(rs.id, tracked);
         if (rs.isPlayer) this.playerSnakeId = rs.id;
       } else {
-        // Update existing
-        tracked.prevHX = tracked.history.length > 0 ? tracked.history[0].x : rs.hx;
-        tracked.prevHY = tracked.history.length > 0 ? tracked.history[0].y : rs.hy;
+        // Save previous head for interpolation BEFORE updating
+        if (tracked.history.length > 0) {
+          tracked.prevHeadX = tracked.history[0].x;
+          tracked.prevHeadY = tracked.history[0].y;
+        } else {
+          tracked.prevHeadX = rs.hx;
+          tracked.prevHeadY = rs.hy;
+        }
+        // Update metadata
         tracked.bodyLen = rs.bodyLen;
         tracked.bodyRadius = rs.bodyRadius;
         tracked.score = rs.score;
         tracked.boosting = rs.boosting;
         tracked.color = rs.color;
         tracked.headColor = rs.secondaryColor;
+        tracked.lastSnapTime = now;
         if (rs.skinId) tracked.skinId = rs.skinId;
         if (rs.rarity) tracked.rarity = rs.rarity as SkinRarity;
       }
 
-      // Push new head position
+      // Push new head position to history (only once per tick)
       tracked.history.unshift({ x: rs.hx, y: rs.hy, angle: rs.angle, tick: snap.tick });
       if (tracked.history.length > MAX_HISTORY) {
         tracked.history.length = MAX_HISTORY;
       }
+
+      // Rebuild dense path from history
+      this.rebuildPath(tracked);
     }
 
     // Remove snakes not in snapshot
@@ -127,71 +150,132 @@ export class RemoteSnakeManager {
         this.snakes.delete(id);
       }
     }
+
+    return true;
   }
 
-  /** Get interpolation alpha (0..1) for smooth movement */
-  getInterpAlpha(): number {
-    return this.interpFrame / INTERP_STEPS_PER_SNAP;
+  /** Rebuild a dense PathBuffer from a snake's history */
+  private rebuildPath(tracked: TrackedSnake): void {
+    const history = tracked.history;
+    if (history.length === 0) return;
+
+    const visualLen = tracked.bodyLen * SEGMENT_SPACING;
+    // How many history entries we need to cover the visual body length
+    // Each entry is ~9px apart (3 ticks * 3px/tick at base speed)
+    const pxPerEntry = BASE_SPEED * 3; // ~9px
+    const neededEntries = Math.ceil(visualLen / pxPerEntry) + 5;
+    const entries = history.slice(0, Math.min(neededEntries, history.length));
+
+    if (entries.length === 1) {
+      // Only one entry — create a synthetic trail behind the head based on angle
+      const head = entries[0];
+      const pathLen = Math.max(Math.ceil(visualLen / DENSE_STEP) + 5, 10);
+      if (tracked.path.capacity < pathLen) {
+        tracked.path = new PathBuffer(pathLen + 50);
+      }
+      tracked.path.resetTo(head.x, head.y);
+      // Append trail behind head
+      const backAngle = head.angle + Math.PI; // opposite of heading
+      for (let i = 1; i < pathLen; i++) {
+        tracked.path.appendTail(
+          head.x + Math.cos(backAngle) * DENSE_STEP * i,
+          head.y + Math.sin(backAngle) * DENSE_STEP * i,
+        );
+      }
+      tracked.pathReady = true;
+      return;
+    }
+
+    // Multiple entries — interpolate between consecutive entries for dense path
+    // First, compute total path length from entries
+    let totalEntryDist = 0;
+    for (let i = 0; i < entries.length - 1; i++) {
+      const dx = entries[i + 1].x - entries[i].x;
+      const dy = entries[i + 1].y - entries[i].y;
+      totalEntryDist += Math.sqrt(dx * dx + dy * dy);
+    }
+
+    // Build dense path by interpolating between entries
+    // Aim for DENSE_STEP (~3px) between consecutive path points
+    const estimatedPoints = Math.max(Math.ceil(totalEntryDist / DENSE_STEP) + 10, 20);
+    if (tracked.path.capacity < estimatedPoints) {
+      tracked.path = new PathBuffer(estimatedPoints + 50);
+    }
+
+    // Start with head position
+    tracked.path.resetTo(entries[0].x, entries[0].y);
+
+    for (let i = 0; i < entries.length - 1; i++) {
+      const from = entries[i];
+      const to = entries[i + 1];
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < 0.01) continue; // Skip zero-distance entries
+
+      // How many intermediate points to insert between these two entries
+      // Distance is ~9px at base speed, step is ~3px, so ~3 points
+      const numSteps = Math.max(1, Math.round(dist / DENSE_STEP));
+
+      for (let s = 1; s <= numSteps; s++) {
+        const t = s / numSteps;
+        tracked.path.appendTail(
+          from.x + dx * t,
+          from.y + dy * t,
+        );
+      }
+    }
+
+    // Extend trail if path is shorter than visual body length
+    const currentPathLen = (tracked.path.length - 1) * DENSE_STEP;
+    if (currentPathLen < visualLen && entries.length >= 2) {
+      const lastEntry = entries[entries.length - 1];
+      const prevEntry = entries.length >= 3 ? entries[entries.length - 2] : entries[entries.length - 1];
+      const tailDx = lastEntry.x - prevEntry.x;
+      const tailDy = lastEntry.y - prevEntry.y;
+      const tailDist = Math.sqrt(tailDx * tailDx + tailDy * tailDy);
+      const tailAngle = tailDist > 0.01 ? Math.atan2(tailDy, tailDx) : lastEntry.angle;
+
+      const neededExtra = Math.ceil((visualLen - currentPathLen) / DENSE_STEP);
+      for (let i = 0; i < neededExtra; i++) {
+        tracked.path.appendTail(
+          lastEntry.x + Math.cos(tailAngle) * DENSE_STEP * (i + 1),
+          lastEntry.y + Math.sin(tailAngle) * DENSE_STEP * (i + 1),
+        );
+      }
+    }
+
+    // Trim to not exceed visual body length by too much
+    const maxPoints = Math.ceil(visualLen / DENSE_STEP) + 10;
+    if (tracked.path.length > maxPoints) {
+      tracked.path.trimTo(maxPoints);
+    }
+
+    tracked.pathReady = tracked.path.length >= 2;
+  }
+
+  /** Get time-based interpolation alpha (0..1) for the player snake */
+  getPlayerAlpha(): number {
+    if (!this.playerSnakeId) return 1;
+    const tracked = this.snakes.get(this.playerSnakeId);
+    if (!tracked) return 1;
+    const elapsed = performance.now() - tracked.lastSnapTime;
+    return Math.min(1, elapsed / SNAPSHOT_INTERVAL_MS);
   }
 
   /** Build a Snake adapter for a remote snake (for the shared renderer) */
   buildSnakeAdapter(id: string): Snake | null {
     const t = this.snakes.get(id);
-    if (!t || t.history.length < 1) return null;
-
-    const alpha = this.getInterpAlpha();
-
-    // Interpolate head position between last two snapshots
-    const cur = t.history[0];
-    const prev = t.history.length > 1 ? t.history[1] : cur;
-    const headX = prev.x + (cur.x - prev.x) * alpha;
-    const headY = prev.y + (cur.y - prev.y) * alpha;
-    const angle = cur.angle;
-
-    // Rebuild PathBuffer from history
-    // The history is newest-first. We need to build the path head→tail.
-    // The renderer's walkPathFixedStep walks index 0 (head) → N (tail).
-    const visualLen = t.bodyLen * SEGMENT_SPACING;
-    // Estimate how many history entries we need
-    const speedPerSnap = BASE_SPEED * 3; // ~9px per snapshot (3 ticks at 3px/tick)
-    const neededEntries = Math.ceil(visualLen / speedPerSnap) + 5;
-    const entries = t.history.slice(0, Math.min(neededEntries, t.history.length));
-
-    // Build path: interpolate between entries for smooth body
-    const totalPoints = Math.max(entries.length * INTERP_STEPS_PER_SNAP, 10);
-    if (t.path.capacity < totalPoints + 10) {
-      t.path = new PathBuffer(totalPoints + 50);
-    }
-    t.path.resetTo(headX, headY);
-
-    // Walk through history entries and interpolate
-    for (let i = 0; i < entries.length - 1; i++) {
-      const from = entries[i];
-      const to = entries[i + 1];
-      const steps = INTERP_STEPS_PER_SNAP;
-      // Skip the first interpolation of the first pair (head is already set)
-      const startStep = i === 0 ? 1 : 0;
-      for (let s = startStep; s < steps; s++) {
-        const t2 = s / steps;
-        const ix = from.x + (to.x - from.x) * t2;
-        const iy = from.y + (to.y - from.y) * t2;
-        t.path.appendTail(ix, iy);
-      }
-    }
-
-    // Trim to visual body length
-    const maxPoints = Math.ceil(visualLen / Math.max(SEGMENT_SPACING * 0.5, 1)) + 5;
-    if (t.path.length > maxPoints) {
-      t.path.trimTo(maxPoints);
-    }
+    if (!t || !t.pathReady) return null;
 
     // Build the Snake adapter object
     return {
       id: t.id,
       name: t.name,
       path: t.path,
-      angle,
-      prevAngle: angle,
+      angle: t.history.length > 0 ? t.history[0].angle : 0,
+      prevAngle: t.history.length > 1 ? t.history[1].angle : 0,
       speed: BASE_SPEED,
       score: t.score,
       boosting: t.boosting,
@@ -202,14 +286,14 @@ export class RemoteSnakeManager {
       color: t.color,
       headColor: t.headColor,
       lastBoostDrop: 0,
-      targetAngle: angle,
+      targetAngle: t.history.length > 0 ? t.history[0].angle : 0,
       spiral: { active: false, consecutiveTurns: 0, ticksElapsed: 0, direction: 1 },
       bodyRadius: t.bodyRadius,
       cachedBodyLength: t.bodyLen,
       cachedBodyScore: t.score,
       cachedVisualTailIdx: 0,
-      prevHeadX: t.prevHX,
-      prevHeadY: t.prevHY,
+      prevHeadX: t.prevHeadX,
+      prevHeadY: t.prevHeadY,
       smoothBrakeFactor: 1.0,
       skinId: t.skinId,
       rarity: t.rarity,
