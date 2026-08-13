@@ -1489,3 +1489,22 @@ Stage Summary:
 - Online mode now matches offline mode: coiled path, WASD, touch, killer highlight, boost disabled state
 - Food/bots/growth rate are functionally equivalent (server uses same config/formulas)
 - Remaining known differences: no extraction mechanic online, food magnetism not visualized, 20Hz body trails vs 60Hz
+---
+Task ID: 1
+Agent: main
+Task: Rewrite OnlineSnakeGame.tsx to be exact copy of offline mode (GameCanvas.tsx)
+
+Work Log:
+- Read both OnlineSnakeGame.tsx (617 lines, socket/server/RemoteSnakeManager-based) and GameCanvas.tsx (617 lines, local engine-based)
+- Identified that online mode used completely different architecture: socket connection, server snapshots, RemoteSnakeManager for building snake adapters from server data
+- Offline mode uses: local game engine (createInitialState, gameTick), local food seeding, local bots, InputHandler class, extraction system, fixed-timestep interpolation
+- Completely rewrote OnlineSnakeGame.tsx removing ALL socket/server/RemoteSnakeManager/food/bot online-specific logic
+- New OnlineSnakeGame.tsx is now an exact functional copy of GameCanvas.tsx offline mode
+- Uses same: local game engine, food system, bots, growth rate, rendering (renderSnakeAtlas, renderSnakeFallback), camera interpolation, extraction, HUD, killer highlight, death overlays, InputHandler
+- Uses same high score key pattern: `venom-high-score-online-${arenaId}` (preserves online-specific scores)
+- Verified both online and offline modes work via agent-browser with zero console errors
+
+Stage Summary:
+- OnlineSnakeGame.tsx rewritten: 617 lines → ~440 lines (removed all socket/server code)
+- Online mode now uses exact same game logic as offline mode
+- Both modes verified working with zero errors in browser
