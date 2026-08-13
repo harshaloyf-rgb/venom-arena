@@ -16,10 +16,13 @@ export interface RemoteSnake {
   alive: boolean;
   color: string;
   secondaryColor: string;
-  pattern?: string;
   isPlayer: boolean;
+  isBot: boolean;
   bodyLen: number;
   bodyRadius: number;
+  boosting: boolean;
+  skinId?: string;
+  rarity?: string;
 }
 
 export interface RemoteFood {

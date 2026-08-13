@@ -1009,8 +1009,11 @@ class ArenaInstance {
     const snakeSnaps: Array<{
       id: string; name: string; hx: number; hy: number;
       angle: number; score: number; alive: boolean;
-      color: string; secondaryColor: string; pattern?: string;
-      isPlayer: boolean; bodyLen: number; bodyRadius: number;
+      color: string; secondaryColor: string;
+      isPlayer: boolean; isBot: boolean;
+      bodyLen: number; bodyRadius: number;
+      boosting: boolean;
+      skinId?: string; rarity?: string;
     }> = [];
     for (const [, snake] of state.snakes) {
       if (!snake.alive) continue;
@@ -1025,8 +1028,12 @@ class ArenaInstance {
         color: snake.color,
         secondaryColor: snake.headColor,
         isPlayer: snake.isPlayer,
+        isBot: snake.isBot,
         bodyLen: snake.cachedBodyLength,
         bodyRadius: snake.bodyRadius,
+        boosting: snake.boosting,
+        skinId: snake.isPlayer ? snake.skinId : undefined,
+        rarity: snake.isPlayer ? snake.rarity : undefined,
       });
     }
 
