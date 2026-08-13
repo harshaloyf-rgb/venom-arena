@@ -1336,3 +1336,34 @@ Stage Summary:
 - Files modified: .env, mini-services/game-server/index.ts, start-game-server.sh
 - Files created: game-server-supervisor.py, mini-services/game-server/start.sh
 - Online mode fully operational: Socket.IO handshake works through Caddy proxy, JWT auth validates, buy-in deducted, game renders
+---
+Task ID: online-renderer-parity
+Agent: main
+Task: Make online mode use the same snake rendering, HUD, and camera as offline mode
+
+Work Log:
+- Audited offline rendering: 2200+ lines across 7 files (render-snake-atlas, hud, renderer, camera, atlas, cosmetics-utils, minimap)
+- Identified 3-layer gap: server snapshots lack body path data, client renders placeholder lines, zero shared code reuse
+- Added skinId/rarity/boosting/isBot to server snapshots (mini-services/game-server/index.ts)
+- Updated RemoteSnake type in game-socket.ts
+- Created src/lib/remote-snake-manager.ts — reconstructs PathBuffers from 20Hz head position history with interpolation
+- Rewrote OnlineSnakeGame.tsx to use full shared pipeline:
+  - renderSnakeAtlas for player (with skin resolution via getPlayerSkinAsset)
+  - renderSnakeFallback for bots (batched circle rendering)
+  - renderBackground (grid, food, boundary)
+  - renderHUD (minimap with zoom, rank, score, kills)
+  - Camera interpolation (updateCameraInterpolated) + score-based zoom
+  - Death overlays (eliminated banner, death overlay)
+  - Keyboard support (Space/B for boost)
+  - crosshair cursor
+- Fixed SEGMENT_SPACING import error (uncaught ReferenceError)
+- Verified: grid, food, minimap, HUD, score, rank all render correctly
+- Verified: player skin (skin-default atlas) head sprite renders with correct skin
+- Verified: body segments render (tiny at score 10, grows with food — matches offline behavior)
+
+Stage Summary:
+- Online mode now uses 100% shared rendering pipeline with offline mode
+- New file: src/lib/remote-snake-manager.ts (~180 lines)
+- Modified: src/components/game/OnlineSnakeGame.tsx (full rewrite)
+- Modified: src/lib/game-socket.ts (added isBot, boosting, skinId, rarity to RemoteSnake)
+- Modified: mini-services/game-server/index.ts (added skinId, rarity, boosting, isBot to snapshots)
