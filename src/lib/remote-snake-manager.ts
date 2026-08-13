@@ -41,6 +41,7 @@ interface TrackedSnake {
   score: number;
   boosting: boolean;
   spawnTime: number;
+  alive: boolean;
   // Head position history (newest first). Only unique ticks.
   history: PosEntry[];
   // Reusable PathBuffer for renderer (rebuilt on each new snapshot)
@@ -94,16 +95,17 @@ export class RemoteSnakeManager {
           id: rs.id,
           name: rs.name,
           color: rs.color,
-          headColor: rs.secondaryColor,
-          isBot: rs.isBot,
-          isPlayer: rs.isPlayer,
-          skinId: rs.skinId || 'skin-default',
-          rarity: (rs.rarity as SkinRarity) || 'common',
-          bodyLen: rs.bodyLen,
-          bodyRadius: rs.bodyRadius,
+          headColor: rs.sc,  // compact: secondaryColor → sc
+          isBot: rs.ib,       // compact: isBot → ib
+          isPlayer: rs.ip,    // compact: isPlayer → ip
+          skinId: rs.si || 'skin-default',
+          rarity: (rs.ra as SkinRarity) || 'common',
+          bodyLen: rs.bl,      // compact: bodyLen → bl
+          bodyRadius: rs.br,  // compact: bodyRadius → br
           score: rs.score,
-          boosting: rs.boosting,
+          boosting: rs.bo,     // compact: boosting → bo
           spawnTime: now,
+          alive: true,
           history: [],
           path: new PathBuffer(pathCap),
           prevHeadX: rs.hx,
@@ -112,7 +114,7 @@ export class RemoteSnakeManager {
           pathReady: false,
         };
         this.snakes.set(rs.id, tracked);
-        if (rs.isPlayer) this.playerSnakeId = rs.id;
+        if (rs.ip) this.playerSnakeId = rs.id;
       } else {
         // Save previous head for interpolation BEFORE updating
         if (tracked.history.length > 0) {
@@ -123,15 +125,16 @@ export class RemoteSnakeManager {
           tracked.prevHeadY = rs.hy;
         }
         // Update metadata
-        tracked.bodyLen = rs.bodyLen;
-        tracked.bodyRadius = rs.bodyRadius;
+        tracked.bodyLen = rs.bl;
+        tracked.bodyRadius = rs.br;
         tracked.score = rs.score;
-        tracked.boosting = rs.boosting;
+        tracked.boosting = rs.bo;
         tracked.color = rs.color;
-        tracked.headColor = rs.secondaryColor;
+        tracked.headColor = rs.sc;
+        tracked.alive = true;
         tracked.lastSnapTime = now;
-        if (rs.skinId) tracked.skinId = rs.skinId;
-        if (rs.rarity) tracked.rarity = rs.rarity as SkinRarity;
+        if (rs.si) tracked.skinId = rs.si;
+        if (rs.ra) tracked.rarity = rs.ra as SkinRarity;
       }
 
       // Push new head position to history (only once per tick)

@@ -63,6 +63,19 @@ const TICK_MS = 1000 / TICK_RATE;
 const SNAPSHOT_INTERVAL = 3; // broadcast every N ticks (20Hz)
 const DEATH_SCREEN_DELAY = 2000; // ms before disconnecting dead player
 
+// ─── Scalability & Validation Constants ─────────────────────────────────
+const MAX_PLAYERS_PER_ARENA = 1000;      // Hard cap per arena instance
+const INPUT_MIN_INTERVAL_MS = 8;         // ~125Hz max input rate (server processes at 60Hz)
+const MAX_ANGLE_DELTA = Math.PI * 1.2;   // Max angle change per input (anti-teleport)
+const SNAKE_VIS_RANGE = 8000;            // Snake visibility radius
+const SNAKE_VIS_RANGE_SQ = SNAKE_VIS_RANGE * SNAKE_VIS_RANGE;
+const FOOD_VIS_RANGE = 4000;
+const FOOD_VIS_RANGE_SQ = FOOD_VIS_RANGE * FOOD_VIS_RANGE;
+const ARENA_EMPTY_TIMEOUT_MS = 60_000;    // Cleanup arena 60s after last player leaves
+
+// ─── O(1) Socket → Arena lookup ────────────────────────────────────────
+const socketToArena: Map<string, string> = new Map(); // socketId → arenaId
+
 // Path buffer stores one head position per tick at BASE_SPEED spacing.
 const SPACING_RATIO = SEGMENT_SPACING / BASE_SPEED;
 
@@ -649,6 +662,19 @@ interface ConnectedPlayer {
   country?: string;
   level: number;
   clanTag?: string;
+  // ── Input validation state ──
+  lastInputTime: number;
+  lastAngle: number;
+  lastInputSeq: number;   // monotonically increasing, detects replay attacks
+  // ── Anti-cheat tracking ──
+  scoreAtJoin: number;
+  foodEatenCount: number;
+  killCount: number;
+  joinTimestamp: number;
+  violations: number;
+  lastPosCheckTime: number;
+  lastPosCheckX: number;
+  lastPosCheckY: number;
 }
 
 class ArenaInstance {
@@ -665,6 +691,8 @@ class ArenaInstance {
   tickInterval: ReturnType<typeof setInterval> | null = null;
   playerCount = 0;
   lastSeed = false;
+  lastPlayerLeaveTime = 0;  // For arena cleanup timeout
+  emptyTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(arenaId: string) {
     this.arenaId = arenaId;
@@ -782,6 +810,58 @@ class ArenaInstance {
     }
 
     return player;
+  }
+
+  // ─── Anti-Cheat: Statistical anomaly detection ───────────────────────
+  // Runs every 5 seconds (300 ticks at 60Hz) per player.
+  // Detects: impossible score acceleration, teleport, speed hacks.
+  private runAntiCheat(): void {
+    const now = Date.now();
+    const CHECK_INTERVAL_MS = 5000;
+    const MAX_SCORE_ACCEL_PER_SEC = 500; // reasonable max score gain rate
+    const MAX_MOVE_SPEED = BOOST_SPEED * 1.5; // 50% tolerance above max speed
+
+    for (const [socketId, player] of this.players) {
+      if (now - player.lastPosCheckTime < CHECK_INTERVAL_MS) continue;
+
+      const snake = this.state.snakes.get(player.snakeId);
+      if (!snake || !snake.alive) continue;
+
+      const dt = (now - player.lastPosCheckTime) / 1000;
+      player.lastPosCheckTime = now;
+
+      // Check 1: Score acceleration
+      // Max possible food value per second ≈ 15 (eating large food constantly)
+      // With kills, could be higher, so 500/s is generous
+      const scoreGained = snake.score - player.scoreAtJoin;
+      const scoreRate = scoreGained / Math.max(dt, 1);
+      if (scoreRate > MAX_SCORE_ACCEL_PER_SEC && scoreGained > 100) {
+        player.violations++;
+        console.warn(`[AntiCheat] ${player.name}: Suspicious score rate ${scoreRate.toFixed(0)}/s (${player.violations} violations)`);
+      }
+      player.scoreAtJoin = snake.score; // Reset baseline
+
+      // Check 2: Position/teleport detection
+      const dx = snake.path.headX - player.lastPosCheckX;
+      const dy = snake.path.headY - player.lastPosCheckY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const maxDist = MAX_MOVE_SPEED * dt;
+      if (dist > maxDist * 1.2 && dist > 100) {
+        // 20% tolerance for accumulated error
+        player.violations++;
+        console.warn(`[AntiCheat] ${player.name}: Moved ${dist.toFixed(0)}px in ${dt.toFixed(1)}s (max: ${(maxDist * 1.2).toFixed(0)}px) (${player.violations} violations)`);
+      }
+      player.lastPosCheckX = snake.path.headX;
+      player.lastPosCheckY = snake.path.headY;
+
+      // Check 3: Auto-kick on 10+ violations
+      if (player.violations >= 10) {
+        console.warn(`[AntiCheat] KICKING ${player.name} — ${player.violations} violations`);
+        try { player.socket.emit('error', { message: 'Kicked: suspicious activity detected' }); } catch {}
+        try { player.socket.disconnect(true); } catch {}
+        this.removePlayer(socketId);
+      }
+    }
   }
 
   private tick(): void {
@@ -925,6 +1005,11 @@ class ArenaInstance {
     if (state.tickCount % SNAPSHOT_INTERVAL === 0) {
       this.broadcastSnapshots();
     }
+
+    // 12. Anti-cheat check every 5 seconds (300 ticks)
+    if (state.tickCount % 300 === 0) {
+      this.runAntiCheat();
+    }
   }
 
   private handlePlayerDeath(snakeId: string, socketId: string, reason: string): void {
@@ -999,51 +1084,85 @@ class ArenaInstance {
     }
   }
 
-  // ─── Snapshot Broadcasting ───────────────────────────────────────────────
+  // ─── Snapshot Broadcasting (spatial-hash-accelerated) ──────────────────
+
+  // Pre-allocated scratch for head hash inserts (avoids per-tick allocation)
+  private _headScratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: '' };
+
+  // Reusable snapshot buffer (avoids per-player allocation)
+  private _snapBuf: {
+    tick: number;
+    boundaryRadius: number;
+    snakes: any[];
+    foods: any[];
+    ps: number;  // playerScore
+    pk: number;  // playerKills
+  } = { tick: 0, boundaryRadius: 0, snakes: [], foods: [], ps: 0, pk: 0 };
 
   private broadcastSnapshots(): void {
     const state = this.state;
-    const boundaryRadius = state.boundaryRadius;
     const tick = state.tickCount;
-    const SNAKE_VIS_RANGE_SQ = 8000 * 8000;
-    const FOOD_VIS_RANGE_SQ = 4000 * 4000;
+    const boundaryRadius = state.boundaryRadius;
 
-    // Pre-collect all alive snakes as snapshot data
-    const snakeSnaps: Array<{
-      id: string; name: string; hx: number; hy: number;
-      angle: number; score: number; alive: boolean;
-      color: string; secondaryColor: string;
-      isPlayer: boolean; isBot: boolean;
-      bodyLen: number; bodyRadius: number;
-      boosting: boolean;
-      skinId?: string; rarity?: string;
-    }> = [];
+    // ── Step 1: Build head spatial hash for O(K) visibility queries ──
+    // (K = nearby snakes, typically 20-60 vs S = 1000 total)
+    const hh = this.headHash;
+    hh.clear();
+    const scratch = this._headScratch;
     for (const [, snake] of state.snakes) {
       if (!snake.alive) continue;
-      snakeSnaps.push({
+      scratch.x = snake.path.headX;
+      scratch.y = snake.path.headY;
+      scratch.radius = 0;
+      scratch.id = snake.id;
+      hh.insert(scratch);
+    }
+
+    // ── Step 2: Pre-build snake snapshot lookup map ──
+    // Keyed by snake.id for O(1) lookup from spatial hash results
+    const snakeLookup = new Map<string, {
+      id: string; name: string; hx: number; hy: number;
+      angle: number; score: number;
+      color: string; sc: string;  // secondaryColor (shortened key)
+      ip: boolean; ib: boolean;   // isPlayer, isBot
+      bl: number; br: number;     // bodyLen, bodyRadius
+      bo: boolean;                // boosting
+      si?: string; ra?: string;   // skinId, rarity (player only)
+    }>();
+    for (const [, snake] of state.snakes) {
+      if (!snake.alive) continue;
+      snakeLookup.set(snake.id, {
         id: snake.id,
         name: snake.name,
         hx: snake.path.headX,
         hy: snake.path.headY,
         angle: snake.angle,
         score: snake.score,
-        alive: true,
         color: snake.color,
-        secondaryColor: snake.headColor,
-        isPlayer: snake.isPlayer,
-        isBot: snake.isBot,
-        bodyLen: snake.cachedBodyLength,
-        bodyRadius: snake.bodyRadius,
-        boosting: snake.boosting,
-        skinId: snake.isPlayer ? snake.skinId : undefined,
-        rarity: snake.isPlayer ? snake.rarity : undefined,
+        sc: snake.headColor,
+        ip: snake.isPlayer,
+        ib: snake.isBot,
+        bl: snake.cachedBodyLength,
+        br: snake.bodyRadius,
+        bo: snake.boosting,
+        si: snake.isPlayer ? snake.skinId : undefined,
+        ra: snake.isPlayer ? snake.rarity : undefined,
       });
     }
 
-    // Build food spatial hash for efficient queries (reuse the existing one)
-    const fh = this.foodHash;
+    // ── Step 3: Build food color lookup (food hash only stores x,y,r,id) ──
+    const foodColorMap = new Map<number, string>();
+    const stateFoods = state.foods;
+    for (let fi = 0; fi < stateFoods.length; fi++) {
+      foodColorMap.set(stateFoods[fi].id, stateFoods[fi].color);
+    }
 
-    // Send personalized snapshot to each player
+    // ── Step 4: Send personalized snapshot to each player ──
+    const fh = this.foodHash;
+    const buf = this._snapBuf;
+    buf.tick = tick;
+    buf.boundaryRadius = boundaryRadius;
+
     for (const [socketId, player] of this.players) {
       const playerSnake = state.snakes.get(player.snakeId);
       if (!playerSnake || !playerSnake.alive) continue;
@@ -1051,43 +1170,43 @@ class ArenaInstance {
       const phx = playerSnake.path.headX;
       const phy = playerSnake.path.headY;
 
-      // Filter visible snakes
-      const visibleSnakes: typeof snakeSnaps = [];
-      for (let i = 0; i < snakeSnaps.length; i++) {
-        const s = snakeSnaps[i];
-        const dx = s.hx - phx;
-        const dy = s.hy - phy;
+      // O(K) spatial hash query for visible snakes (K << S)
+      const nearbyHeads = hh.query(phx, phy, SNAKE_VIS_RANGE);
+      const visibleSnakes: any[] = [];
+      for (let i = 0; i < nearbyHeads.length; i++) {
+        const sid = nearbyHeads[i].id as string;
+        const snap = snakeLookup.get(sid);
+        if (!snap) continue;
+        // Distance check (spatial hash is approximate)
+        const dx = snap.hx - phx;
+        const dy = snap.hy - phy;
         if (dx * dx + dy * dy < SNAKE_VIS_RANGE_SQ) {
-          visibleSnakes.push(s);
+          visibleSnakes.push(snap);
         }
       }
 
-      // Query nearby food
-      const nearbyFood = fh.query(phx, phy, 4000);
-      const foodSnaps: Array<{ x: number; y: number; r: number; color: string }> = [];
+      // O(K) spatial hash query for nearby food
+      const nearbyFood = fh.query(phx, phy, FOOD_VIS_RANGE);
+      const foodSnaps: any[] = [];
       for (let i = 0; i < nearbyFood.length; i++) {
         const f = nearbyFood[i];
         const dx = f.x - phx;
         const dy = f.y - phy;
         if (dx * dx + dy * dy < FOOD_VIS_RANGE_SQ) {
-          foodSnaps.push({ x: f.x, y: f.y, r: f.radius, color: f.color });
+          const fcolor = foodColorMap.get(f.id as number) || '#ffffff';
+          foodSnaps.push(f.x, f.y, f.radius, fcolor);
         }
       }
 
-      // Emit snapshot
+      // Emit snapshot (compact format)
       try {
         player.socket.emit('snapshot', {
-          tick,
-          boundaryRadius,
-          snakes: visibleSnakes,
-          foods: foodSnaps,
-          playerScore: playerSnake.score,
-          playerKills: player.kills,
-          playerX: phx,
-          playerY: phy,
-          playerAngle: playerSnake.angle,
-          playerBoosting: playerSnake.boosting,
-          playerAlive: playerSnake.alive,
+          t: tick,                        // tick (shortened)
+          br: boundaryRadius,             // boundaryRadius (shortened)
+          s: visibleSnakes,               // snakes (shortened)
+          f: foodSnaps,                   // foods as flat array [x,y,r,color,...]
+          ps: playerSnake.score,          // playerScore (shortened)
+          pk: player.kills,               // playerKills (shortened)
         });
       } catch {}
     }
@@ -1100,13 +1219,17 @@ class ArenaInstance {
 
 const arenas: Map<string, ArenaInstance> = new Map();
 
-function getOrCreateArena(arenaId: string): ArenaInstance {
+function getOrCreateArena(arenaId: string): ArenaInstance | null {
   let arena = arenas.get(arenaId);
   if (!arena) {
     arena = new ArenaInstance(arenaId);
     arena.start();
     arenas.set(arenaId, arena);
     console.log(`[GameManager] Created new arena: ${arenaId}`);
+  }
+  // Enforce player cap
+  if (arena.playerCount >= MAX_PLAYERS_PER_ARENA) {
+    return null; // caller must emit 'arena-full' error
   }
   return arena;
 }
@@ -1228,8 +1351,12 @@ io.on('connection', (socket) => {
         return;
       }
 
-      // Get or create arena
+      // Get or create arena (with player cap check)
       const arena = getOrCreateArena(arenaId);
+      if (!arena) {
+        socket.emit('error', { message: 'Arena is full' });
+        return;
+      }
 
       // Create player info
       const playerInfo: ConnectedPlayer = {
@@ -1248,6 +1375,19 @@ io.on('connection', (socket) => {
         country: playerData.country,
         level: playerData.level || 1,
         clanTag: playerData.clanTag,
+        // Validation state
+        lastInputTime: 0,
+        lastAngle: 0,
+        lastInputSeq: 0,
+        // Anti-cheat state
+        scoreAtJoin: 0,
+        foodEatenCount: 0,
+        killCount: 0,
+        joinTimestamp: Date.now(),
+        violations: 0,
+        lastPosCheckTime: Date.now(),
+        lastPosCheckX: 0,
+        lastPosCheckY: 0,
       };
 
       // Spawn player in arena
@@ -1265,15 +1405,29 @@ io.on('connection', (socket) => {
         },
       });
 
+      // Register O(1) socket→arena lookup
+      socketToArena.set(socket.id, arenaId);
+      // Cancel any pending empty timeout (player rejoining)
+      if (arena.emptyTimeout) {
+        clearTimeout(arena.emptyTimeout);
+        arena.emptyTimeout = null;
+      }
+
       // Clean up on disconnect
       socket.on('disconnect', () => {
         console.log(`[Socket] Disconnected: ${playerData.name} (${playerData.userTag}) [${socket.id}]`);
+        socketToArena.delete(socket.id);
         arena.removePlayer(socket.id);
-        // Clean up empty arena
-        if (arena.playerCount === 0 && arena.state.snakes.size === 0) {
-          arena.stop();
-          arenas.delete(arenaId);
-          console.log(`[GameManager] Cleaned up empty arena: ${arenaId}`);
+        // Schedule arena cleanup when no players remain
+        if (arena.playerCount === 0) {
+          arena.lastPlayerLeaveTime = Date.now();
+          arena.emptyTimeout = setTimeout(() => {
+            if (arena.playerCount === 0) {
+              arena.stop();
+              arenas.delete(arenaId);
+              console.log(`[GameManager] Cleaned up empty arena: ${arenaId}`);
+            }
+          }, ARENA_EMPTY_TIMEOUT_MS);
         }
       });
     } catch (err) {
@@ -1282,22 +1436,44 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ─── Input Handling ────────────────────────────────────────────────────
+  // ─── Input Handling (with validation + O(1) arena lookup) ────────────────
 
-  socket.on('input', (data: { angle: number; boost: boolean }) => {
-    // Find which arena this player is in
-    for (const [, arena] of arenas) {
-      const player = arena.players.get(socket.id);
-      if (player) {
-        if (typeof data.angle === 'number') {
-          player.input.angle = data.angle;
-        }
-        if (typeof data.boost === 'boolean') {
-          player.input.boost = data.boost;
-        }
-        break;
-      }
+  socket.on('input', (data: { angle: number; boost: boolean; seq?: number }) => {
+    // O(1) arena lookup instead of scanning all arenas
+    const arenaId = socketToArena.get(socket.id);
+    if (!arenaId) return;
+    const arena = arenas.get(arenaId);
+    if (!arena) return;
+    const player = arena.players.get(socket.id);
+    if (!player) return;
+
+    const now = performance.now();
+
+    // ── Rate limiting: reject inputs faster than INPUT_MIN_INTERVAL_MS ──
+    if (now - player.lastInputTime < INPUT_MIN_INTERVAL_MS) return;
+    player.lastInputTime = now;
+
+    // ── Sequence number validation (anti-replay) ──
+    if (typeof data.seq === 'number') {
+      if (data.seq <= player.lastInputSeq) return; // stale or replayed
+      player.lastInputSeq = data.seq;
     }
+
+    // ── Angle validation ──
+    if (typeof data.angle !== 'number' || !isFinite(data.angle)) return;
+
+    // Angle rate-of-change check (anti-teleport / impossible turns)
+    let angleDelta = Math.abs(data.angle - player.lastAngle);
+    if (angleDelta > Math.PI) angleDelta = 2 * Math.PI - angleDelta; // wrap-around
+    if (angleDelta > MAX_ANGLE_DELTA && player.lastInputSeq > 5) {
+      // Skip first 5 inputs (player may join facing any direction)
+      return;
+    }
+    player.lastAngle = data.angle;
+
+    // ── Boost validation ──
+    player.input.angle = data.angle;
+    player.input.boost = typeof data.boost === 'boolean' ? data.boost : false;
   });
 
   // ─── Stats ───────────────────────────────────────────────────────────

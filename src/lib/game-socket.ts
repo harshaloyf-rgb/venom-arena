@@ -4,7 +4,7 @@
 
 import { io, Socket } from 'socket.io-client';
 
-// ─── Snapshot Types (matching server protocol) ─────────────────────────────
+// ─── Snapshot Types (compact format — shortened keys for bandwidth) ────────
 
 export interface RemoteSnake {
   id: string;
@@ -13,16 +13,15 @@ export interface RemoteSnake {
   hy: number;
   angle: number;
   score: number;
-  alive: boolean;
   color: string;
-  secondaryColor: string;
-  isPlayer: boolean;
-  isBot: boolean;
-  bodyLen: number;
-  bodyRadius: number;
-  boosting: boolean;
-  skinId?: string;
-  rarity?: string;
+  sc: string;        // secondaryColor (shortened)
+  ip: boolean;       // isPlayer
+  ib: boolean;       // isBot
+  bl: number;        // bodyLen
+  br: number;        // bodyRadius
+  bo: boolean;       // boosting
+  si?: string;       // skinId (player only)
+  ra?: string;       // rarity (player only)
 }
 
 export interface RemoteFood {
@@ -39,11 +38,6 @@ export interface GameSnapshot {
   foods: RemoteFood[];
   playerScore: number;
   playerKills: number;
-  playerX: number;
-  playerY: number;
-  playerAngle: number;
-  playerBoosting: boolean;
-  playerAlive: boolean;
 }
 
 // ─── Hook State ─────────────────────────────────────────────────────────────
@@ -67,6 +61,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
   let currentError: string | null = null;
   let matchEndData: { outcome: string; score: number; kills: number } | null = null;
   let killerName: string | null = null;
+  let inputSeq = 0;
 
   function emit() {
     onStateChange({
@@ -76,6 +71,27 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       matchEnd: matchEndData,
       killerName,
     });
+  }
+
+  function parseCompactSnapshot(raw: any): GameSnapshot {
+    // Handle compact format: { t, br, s, f, ps, pk }
+    // where f is a flat array [x, y, r, color, x, y, r, color, ...]
+    const foods: RemoteFood[] = [];
+    const fArr = raw.f;
+    if (Array.isArray(fArr)) {
+      for (let i = 0; i < fArr.length; i += 4) {
+        foods.push({ x: fArr[i], y: fArr[i + 1], r: fArr[i + 2], color: fArr[i + 3] });
+      }
+    }
+
+    return {
+      tick: raw.t,
+      boundaryRadius: raw.br,
+      snakes: raw.s || [],
+      foods,
+      playerScore: raw.ps,
+      playerKills: raw.pk,
+    };
   }
 
   return {
@@ -88,12 +104,13 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       matchEndData = null;
       killerName = null;
       currentSnapshot = null;
+      inputSeq = 0;
       emit();
 
       try {
         socket = io('/?XTransformPort=3001', {
           auth: { token },
-          transports: ['websocket', 'polling'],
+          transports: ['websocket'],
           reconnection: false,
           timeout: 10000,
         });
@@ -109,8 +126,8 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
           console.log('[GameSocket] Joined arena:', data.arenaId, 'as', data.snakeId);
         });
 
-        socket.on('snapshot', (snap: GameSnapshot) => {
-          currentSnapshot = snap;
+        socket.on('snapshot', (raw: any) => {
+          currentSnapshot = parseCompactSnapshot(raw);
           emit();
         });
 
@@ -151,7 +168,8 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
 
     sendInput(angle: number, boost: boolean) {
       if (socket?.connected) {
-        socket.emit('input', { angle, boost });
+        inputSeq++;
+        socket.emit('input', { angle, boost, seq: inputSeq });
       }
     },
 
