@@ -408,7 +408,6 @@ function killSnake(snake: Snake, nextFoodId: { value: number }, foods: FoodOrb[]
 function checkFoodEating(
   snakes: Iterable<Snake>, foods: FoodOrb[],
   fh: SpatialHash, fvc: Map<number, number>, now: number,
-  useCachedHash: boolean,
 ): Set<number> {
   // Reset only magnetized food flags
   for (let i = 0; i < _magnetizedIds.length; i++) {
@@ -417,20 +416,18 @@ function checkFoodEating(
   }
   _magnetizedIds.length = 0;
 
-  // Rebuild hash from scratch when requested
-  if (!useCachedHash) {
-    fh.clear();
-    fvc.clear();
-    _cachedFoodById.clear();
-    _magnetizedIds.length = 0;
-    const scratch = _foodHashScratch;
-    for (let i = 0; i < foods.length; i++) {
-      const f = foods[i];
-      scratch.x = f.x; scratch.y = f.y; scratch.radius = f.radius; scratch.id = f.id;
-      fh.insert(scratch);
-      fvc.set(f.id, f.value);
-      _cachedFoodById.set(f.id, f);
-    }
+  // ALWAYS rebuild hash from scratch every tick.
+  // This ensures: fresh positions after magnet pull, no ghost food (eaten), no missing food (new spawns).
+  fh.clear();
+  fvc.clear();
+  _cachedFoodById.clear();
+  const scratch = _foodHashScratch;
+  for (let i = 0; i < foods.length; i++) {
+    const f = foods[i];
+    scratch.x = f.x; scratch.y = f.y; scratch.radius = f.radius; scratch.id = f.id;
+    fh.insert(scratch);
+    fvc.set(f.id, f.value);
+    _cachedFoodById.set(f.id, f);
   }
 
   const foodById = _cachedFoodById;
@@ -967,14 +964,10 @@ class ArenaInstance {
       }
     }
 
-    // 5. Check food eating — ALWAYS rebuild food hash every tick to prevent:
-    //   - Stale positions (magnet-pulled food at wrong position in hash)
-    //   - Ghost food (eaten food still in hash)
-    //   - Invisible food (newly spawned food not in hash)
-    const rebuildHash = true;
+    // 5. Check food eating — hash is rebuilt every tick inside checkFoodEating
     const eatenIds = checkFoodEating(
       state.snakes.values(), state.foods,
-      this.foodHash, this.foodValueCache, now, rebuildHash,
+      this.foodHash, this.foodValueCache, now,
     );
     if (eatenIds.size > 0) {
       let writeIdx = 0;
@@ -1625,6 +1618,15 @@ httpServer.listen(PORT, () => {
 });
 
 // Graceful shutdown
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught exception:', err);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] Unhandled rejection:', reason);
+  process.exit(1);
+});
+
 process.on('SIGINT', () => {
   console.log('\n[Venom Game Server] Shutting down...');
   for (const [, arena] of arenas) {
