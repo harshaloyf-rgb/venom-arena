@@ -67,3 +67,23 @@ Stage Summary:
 - No stale code found in OnlineSnakeGame.tsx (already cleaned in previous session)
 - All 6 reported bugs resolved
 ---
+---
+Task ID: 4
+Agent: Main Agent
+Task: Implement 5 approved fixes for online/offline parity
+
+Work Log:
+- Read and analyzed all 5 files needing changes
+- Fix 1 (Bot skins online): Imported BOT_SKIN_PALETTES + getRandomBotPalette in game-server. Modified createBotSnakeFactory to use random palette colors. Removed isPlayer guard on si/ra snapshot fields.
+- Fix 2 (Food glowColor): Added FOOD_COLORS/FOOD_GLOW_COLORS import to remote-snake-manager.ts. Built static reverse lookup map (color → glowColor). Changed buildFoodArray to use correct glowColor.
+- Fix 3 (Food magnetized): Server now tracks magnetized food IDs via Set, pushes 5th element (0|1) per food in snapshot. Client RemoteFood type now has 'm: boolean'. Parser reads 5 elements per food. buildFoodArray uses f.m for magnetized flag.
+- Fix 4 (Death timing): Changed both deathElapsed < 5000 checks to < 3000 in OnlineSnakeGame.tsx (killer highlight + death overlay).
+- Fix 5 (Radial gradient): Added headDrawSize > 0 guard to legendary glow condition, and glowR <= 0 early return inside the block.
+- All changes pass ESLint (only pre-existing fix-bom.ts error remains).
+- Game server restarted successfully on port 3001.
+
+Stage Summary:
+- 5 fixes implemented across 5 files: game-server/index.ts, game-socket.ts, remote-snake-manager.ts, OnlineSnakeGame.tsx, render-snake-atlas.tsx
+- Food snapshot format changed from 4-element to 5-element per food (breaking change for any old clients)
+- Bot color diversity now matches offline: uses BOT_SKIN_PALETTES (19 entries) instead of BOT_TYPE_COLORS (7 type-specific entries)
+- All snakes now send si/ra in snapshots (not just players)

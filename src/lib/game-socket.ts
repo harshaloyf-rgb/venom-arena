@@ -20,8 +20,8 @@ export interface RemoteSnake {
   bl: number;        // bodyLen
   br: number;        // bodyRadius
   bo: boolean;       // boosting
-  si?: string;       // skinId (player only)
-  ra?: string;       // rarity (player only)
+  si?: string;       // skinId
+  ra?: string;       // rarity
 }
 
 export interface RemoteFood {
@@ -29,6 +29,7 @@ export interface RemoteFood {
   y: number;
   r: number;
   color: string;
+  m: boolean;  // magnetized
 }
 
 export interface GameSnapshot {
@@ -78,12 +79,12 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
 
   function parseCompactSnapshot(raw: any): GameSnapshot {
     // Handle compact format: { t, br, s, f, ps, pk }
-    // where f is a flat array [x, y, r, color, x, y, r, color, ...]
+    // where f is a flat array [x, y, r, color, mag, x, y, r, color, mag, ...]
     const foods: RemoteFood[] = [];
     const fArr = raw.f;
     if (Array.isArray(fArr)) {
-      for (let i = 0; i < fArr.length; i += 4) {
-        foods.push({ x: fArr[i], y: fArr[i + 1], r: fArr[i + 2], color: fArr[i + 3] });
+      for (let i = 0; i < fArr.length; i += 5) {
+        foods.push({ x: fArr[i], y: fArr[i + 1], r: fArr[i + 2], color: fArr[i + 3], m: fArr[i + 4] === 1 });
       }
     }
 

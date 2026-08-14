@@ -607,8 +607,9 @@ export function renderSnakeAtlas(
     const headDrawSize = segRadius * 2 * 1.05;
 
     // Legendary glow underlay — only for epic/legendary (rare, acceptable cost)
-    if (isLegendary && Number.isFinite(hsx) && Number.isFinite(hsy)) {
+    if (isLegendary && Number.isFinite(hsx) && Number.isFinite(hsy) && headDrawSize > 0) {
       const glowR = headDrawSize / 2 + LEGENDARY_GLOW_SIZE * zoom;
+      if (glowR <= 0) return;
       const intensity = 0.25 + 0.15 * Math.sin(time * 3);
       ctx.save();
       ctx.globalAlpha = intensity;

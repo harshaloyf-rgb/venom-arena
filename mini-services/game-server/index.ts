@@ -46,6 +46,8 @@ import {
   getArenaConfig, ARENA_CONFIGS,
   // ARENA GRID
   ARENA_GRID_SIZE,
+  // BOT SKINS
+  BOT_SKIN_PALETTES, getRandomBotPalette,
 } from '../../src/lib/snake/config';
 
 // game-config.ts has NO imports — pure data file
@@ -602,7 +604,9 @@ function seedInitialFood(
 function createBotSnakeFactory(
   id: string, name: string, score: number, x: number, y: number, now: number, botType: BotType,
 ): Snake {
-  return createSnake(id, name, score, x, y, now, undefined, undefined, undefined, undefined, botType);
+  // Use BOT_SKIN_PALETTES for color diversity (matches offline engine behavior)
+  const palette = getRandomBotPalette();
+  return createSnake(id, name, score, x, y, now, palette[0], palette[1], undefined, undefined, botType);
 }
 
 // ─── Map tier ID → ArenaConfig ───────────────────────────────────────────────
@@ -1178,16 +1182,19 @@ class ArenaInstance {
         bl: snake.cachedBodyLength,
         br: snake.bodyRadius,
         bo: snake.boosting,
-        si: snake.isPlayer ? snake.skinId : undefined,
-        ra: snake.isPlayer ? snake.rarity : undefined,
+        si: snake.skinId,
+        ra: snake.rarity,
       });
     }
 
-    // ── Step 3: Build food color lookup (food hash only stores x,y,r,id) ──
+    // ── Step 3: Build food color + magnetized lookup (food hash only stores x,y,r,id) ──
     const foodColorMap = new Map<number, string>();
+    const foodMagnetized = new Set<number>();
     const stateFoods = state.foods;
     for (let fi = 0; fi < stateFoods.length; fi++) {
-      foodColorMap.set(stateFoods[fi].id, stateFoods[fi].color);
+      const f = stateFoods[fi];
+      foodColorMap.set(f.id, f.color);
+      if (f.magnetized) foodMagnetized.add(f.id);
     }
 
     // ── Step 4: Send personalized snapshot to each player ──
@@ -1227,7 +1234,8 @@ class ArenaInstance {
         const dy = f.y - phy;
         if (dx * dx + dy * dy < FOOD_VIS_RANGE_SQ) {
           const fcolor = foodColorMap.get(f.id as number) || '#ffffff';
-          foodSnaps.push(f.x, f.y, f.radius, fcolor);
+          const mag = foodMagnetized.has(f.id as number) ? 1 : 0;
+          foodSnaps.push(f.x, f.y, f.radius, fcolor, mag);
         }
       }
 
@@ -1237,7 +1245,7 @@ class ArenaInstance {
           t: tick,                        // tick (shortened)
           br: boundaryRadius,             // boundaryRadius (shortened)
           s: visibleSnakes,               // snakes (shortened)
-          f: foodSnaps,                   // foods as flat array [x,y,r,color,...]
+          f: foodSnaps,                   // foods as flat array [x,y,r,color,mag,...]
           ps: playerSnake.score,          // playerScore (shortened)
           pk: player.kills,               // playerKills (shortened)
         });

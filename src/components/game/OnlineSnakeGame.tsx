@@ -415,7 +415,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       // ── Killer highlight: pulsing red glow (same as offline) ──
       if (isDeadRef.current && killerNameRef.current) {
         const deathElapsed = now - deathTimeRef.current;
-        if (deathElapsed < 5000) {
+        if (deathElapsed < 3000) {
           for (const [, s] of gameState.snakes) {
             if (!s.alive || s.name !== killerNameRef.current) continue;
             if (s.path.length < 2) continue;
@@ -468,7 +468,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       // ── Death overlay (canvas-based, same as offline) ──
       if (isDeadRef.current) {
         const deathElapsed = now - deathTimeRef.current;
-        if (deathElapsed < 5000) {
+        if (deathElapsed < 3000) {
           drawEliminatedBanner(ctx, viewport, deathElapsed);
         } else {
           drawDeathOverlay(ctx, playerScoreRef.current, viewport);

@@ -14,7 +14,7 @@
 import { PathBuffer } from '@/lib/snake/pool';
 import type { Snake, FoodOrb, SkinRarity } from '@/lib/snake/types';
 import type { RemoteSnake, RemoteFood, GameSnapshot } from './game-socket';
-import { SEGMENT_SPACING, BASE_SPEED } from '@/lib/snake/config';
+import { SEGMENT_SPACING, BASE_SPEED, FOOD_COLORS, FOOD_GLOW_COLORS } from '@/lib/snake/config';
 
 // ─── History entry per snapshot ──────────────────────────────────────────────
 
@@ -344,8 +344,22 @@ export class RemoteSnakeManager {
     return this.playerSnakeId;
   }
 
+  // Color → glowColor reverse lookup (built once)
+  private static _glowMap: Map<string, string> | null = null;
+  private static getGlowMap(): Map<string, string> {
+    if (!RemoteSnakeManager._glowMap) {
+      const m = new Map<string, string>();
+      for (let i = 0; i < FOOD_COLORS.length; i++) {
+        m.set(FOOD_COLORS[i], FOOD_GLOW_COLORS[i]);
+      }
+      RemoteSnakeManager._glowMap = m;
+    }
+    return RemoteSnakeManager._glowMap;
+  }
+
   /** Convert remote foods to FoodOrb[] for the shared renderer */
   buildFoodArray(foods: RemoteFood[]): FoodOrb[] {
+    const glowMap = RemoteSnakeManager.getGlowMap();
     const result: FoodOrb[] = new Array(foods.length);
     for (let i = 0; i < foods.length; i++) {
       const f = foods[i];
@@ -362,8 +376,8 @@ export class RemoteSnakeManager {
         value,
         radius: f.r,
         color: f.color,
-        glowColor: f.color,
-        magnetized: false,
+        glowColor: glowMap.get(f.color) || f.color,
+        magnetized: f.m,
       };
     }
     return result;
