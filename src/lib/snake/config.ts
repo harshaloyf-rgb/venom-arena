@@ -516,3 +516,40 @@ export function getArenaConfig(arenaId?: string): ArenaConfig {
   return ARENA_CONFIGS[arenaId ?? ''] ?? DEFAULT_ARENA_CONFIG;
 }
 
+// ============================================================================
+// 14. BOT SKIN PALETTE — shared color pairs for bot snake appearance
+// ============================================================================
+// Used by both offline (engine.ts) and online (game-server) to assign
+// visually diverse colors to bots. Each entry: [bodyColor, headColor].
+// Extracted from SLITHER_PRESETS so the server (no client deps) can use them.
+// ============================================================================
+
+export const BOT_SKIN_PALETTES: [string, string][] = [
+  // Classic / Nature
+  ['#06b6d4', '#0ea5e9'],   // Fish — cyan/blue
+  ['#f59e0b', '#fbbf24'],   // Lion — gold
+  ['#3b82f6', '#64748b'],   // Motorbike — blue/slate
+  ['#fbbf24', '#d97706'],   // Coin — gold/amber
+  ['#f59e0b', '#090d16'],   // Bumblebee — yellow/black
+  ['#ef4444', '#ffffff'],   // Patriot — red/white
+  ['#22c55e', '#ec4899'],   // Watermelon — green/pink
+  ['#f97316', '#090d16'],   // Tiger — orange/black
+  ['#10b981', '#ffffff'],   // Mint — emerald/white
+  ['#ef4444', '#f59e0b'],   // Solar — red/gold
+  ['#6366f1', '#a855f7'],   // Cosmic — indigo/purple
+  ['#ef4444', '#1e293b'],   // Lava — red/dark
+  ['#06b6d4', '#090d16'],   // Tron — cyan/black
+  ['#64748b', '#3b82f6'],   // Mech — slate/blue
+  ['#f59e0b', '#dc2626'],   // Gold Dragon — gold/red
+  // Extra variety
+  ['#a855f7', '#ec4899'],   // Orchid — purple/pink
+  ['#14b8a6', '#2dd4bf'],   // Teal duo
+  ['#84cc16', '#22c55e'],   // Lime duo
+  ['#f43f5e', '#fb7185'],   // Rose duo
+];
+
+/** Get a random bot skin palette entry */
+export function getRandomBotPalette(): [string, string] {
+  return BOT_SKIN_PALETTES[Math.floor(Math.random() * BOT_SKIN_PALETTES.length)];
+}
+
