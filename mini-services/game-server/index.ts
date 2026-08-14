@@ -966,8 +966,11 @@ class ArenaInstance {
       }
     }
 
-    // 5. Check food eating
-    const rebuildHash = state.tickCount % ac.foodHashRebuildInterval === 0;
+    // 5. Check food eating — ALWAYS rebuild food hash every tick to prevent:
+    //   - Stale positions (magnet-pulled food at wrong position in hash)
+    //   - Ghost food (eaten food still in hash)
+    //   - Invisible food (newly spawned food not in hash)
+    const rebuildHash = true;
     const eatenIds = checkFoodEating(
       state.snakes.values(), state.foods,
       this.foodHash, this.foodValueCache, now, rebuildHash,
@@ -1040,23 +1043,8 @@ class ArenaInstance {
       }
     }
 
-    // 8b. Force food hash rebuild if deaths occurred (death food must be visible immediately)
-    if (deathCount > 0) {
-      const fvc = this.foodValueCache;
-      const fh = this.foodHash;
-      const scratch = _foodHashScratch;
-      fh.clear();
-      fvc.clear();
-      _cachedFoodById.clear();
-      _magnetizedIds.length = 0;
-      for (let i = 0; i < state.foods.length; i++) {
-        const f = state.foods[i];
-        scratch.x = f.x; scratch.y = f.y; scratch.radius = f.radius; scratch.id = f.id;
-        fh.insert(scratch);
-        fvc.set(f.id, f.value);
-        _cachedFoodById.set(f.id, f);
-      }
-    }
+    // 8b. (Removed) Food hash is now rebuilt every tick (step 5), so death food
+    //     is automatically visible on the very next tick. No force-rebuild needed.
 
     // 9. Respawn dead bots
     for (let r = 0; r < ac.respawnPerTick; r++) {
@@ -1241,14 +1229,18 @@ class ArenaInstance {
       });
     }
 
-    // ── Step 3: Build food color + magnetized lookup (food hash only stores x,y,r,id) ──
+    // ── Step 3: Build food lookups from REAL food positions (not stale hash positions)
+    // The spatial hash may have stale x,y from before magnet pulls.
+    // We build lookup maps from state.foods[] so snapshots use actual positions.
     const foodColorMap = new Map<number, string>();
     const foodMagnetized = new Set<number>();
+    const foodPosMap = new Map<number, number[]>(); // id → [x, y]
     const stateFoods = state.foods;
     for (let fi = 0; fi < stateFoods.length; fi++) {
       const f = stateFoods[fi];
       foodColorMap.set(f.id, f.color);
       if (f.magnetized) foodMagnetized.add(f.id);
+      foodPosMap.set(f.id, [f.x, f.y]);
     }
 
     // ── Step 4: Send personalized snapshot to each player (including spectators) ──
@@ -1293,17 +1285,22 @@ class ArenaInstance {
         }
       }
 
-      // O(K) spatial hash query for nearby food
+      // O(K) spatial hash query for nearby food — use REAL positions from state.foods[]
+      // (hash positions may be stale from magnet pulls between rebuilds)
       const nearbyFood = fh.query(phx, phy, FOOD_VIS_RANGE);
       const foodSnaps: any[] = [];
       for (let i = 0; i < nearbyFood.length; i++) {
         const f = nearbyFood[i];
-        const dx = f.x - phx;
-        const dy = f.y - phy;
+        const fid = f.id as number;
+        // Use real position from state.foods[] instead of stale hash position
+        const realPos = foodPosMap.get(fid);
+        if (!realPos) continue; // food was eaten or removed between hash query and now
+        const dx = realPos[0] - phx;
+        const dy = realPos[1] - phy;
         if (dx * dx + dy * dy < FOOD_VIS_RANGE_SQ) {
-          const fcolor = foodColorMap.get(f.id as number) || '#ffffff';
-          const mag = foodMagnetized.has(f.id as number) ? 1 : 0;
-          foodSnaps.push(f.x, f.y, f.radius, fcolor, mag);
+          const fcolor = foodColorMap.get(fid) || '#ffffff';
+          const mag = foodMagnetized.has(fid) ? 1 : 0;
+          foodSnaps.push(realPos[0], realPos[1], f.radius, fcolor, mag);
         }
       }
 
