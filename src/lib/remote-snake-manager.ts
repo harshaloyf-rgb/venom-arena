@@ -173,6 +173,12 @@ export class RemoteSnakeManager {
     const neededEntries = Math.ceil(visualLen / pxPerEntry) + 5;
     const entries = history.slice(0, Math.min(neededEntries, history.length));
 
+    // Sanity check: ensure PathBuffer has valid data before writing
+    if (!tracked.path.data || tracked.path.data.length === 0 || tracked.path.capacity === 0) {
+      const safeCap = Math.max(Math.ceil(tracked.bodyLen * 3), 300);
+      tracked.path = new PathBuffer(safeCap);
+    }
+
     if (entries.length === 1) {
       // Only one entry — create a synthetic trail behind the head based on angle
       const head = entries[0];
@@ -275,6 +281,14 @@ export class RemoteSnakeManager {
   buildSnakeAdapter(id: string): Snake | null {
     const t = this.snakes.get(id);
     if (!t || !t.pathReady) return null;
+
+    // Safety: if PathBuffer data is empty or corrupted, replace it
+    if (!t.path.data || t.path.data.length === 0 || t.path.length === 0) {
+      const newCap = Math.max(Math.ceil(t.bodyLen * 3), 300);
+      t.path = new PathBuffer(newCap);
+      this.rebuildPath(t);
+      if (!t.path.data || t.path.data.length === 0 || t.path.length < 2) return null;
+    }
 
     // Ensure headX/headY are valid numbers (PathBuffer getter can return undefined
     // if headSegIdx gets corrupted or data array is out of bounds)

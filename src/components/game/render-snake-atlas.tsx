@@ -736,10 +736,11 @@ export function renderSnakeAtlas(
         ctx.lineTo(lx + Math.cos(a) * len, ly + Math.sin(a) * len);
         ctx.stroke();
       }
-      // Head glow pulse when boosting
+      // Head glow pulse when boosting — guard all values for createRadialGradient
+      if (Number.isFinite(hsx) && Number.isFinite(hsy) && Number.isFinite(headDrawSize) && headDrawSize > 0) {
       ctx.save();
       ctx.globalAlpha = 0.25 + 0.15 * Math.sin(time * 0.01);
-      const hGlow = ctx.createRadialGradient(hsx, hsy, Number.isFinite(headDrawSize) ? headDrawSize / 4 : 0, hsx, hsy, Number.isFinite(headDrawSize) ? headDrawSize * 1.5 : 1);
+      const hGlow = ctx.createRadialGradient(hsx, hsy, headDrawSize / 4, hsx, hsy, headDrawSize * 1.5);
       hGlow.addColorStop(0, 'rgba(255, 200, 80, 0.4)');
       hGlow.addColorStop(1, 'rgba(255, 100, 50, 0)');
       ctx.fillStyle = hGlow;
@@ -747,6 +748,7 @@ export function renderSnakeAtlas(
       ctx.arc(hsx, hsy, headDrawSize * 1.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
+      }
     }
 
     // Name label — round to integer pixels to prevent sub-pixel text jitter.

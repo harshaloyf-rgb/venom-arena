@@ -64,7 +64,6 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
 
   // ── Game state refs ──
   const isDeadRef = useRef(false);
-  const diagDoneRef = useRef(false);
   const deathTimeRef = useRef<number>(0);
   const killerNameRef = useRef<string | null>(null);
   const highScoreRef = useRef(0);
@@ -297,27 +296,6 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       if (!mgr) return;
       const didUpdate = mgr.updateSnapshot(snap);
 
-      // ── One-time diagnostic (fires after ~1 second of snapshots) ──
-      if (!diagDoneRef.current && snap.tick > 20) {
-        diagDoneRef.current = true;
-        const pId = mgr.getPlayerSnakeId();
-        const pSnake = pId ? (mgr as any).snakes?.get(pId) : null;
-        console.log('[Online Diag]', {
-          snapTick: snap.tick,
-          snapSnakes: snap.snakes.length,
-          snapFoods: snap.foods.length,
-          boundaryRadius: snap.boundaryRadius,
-          playerSnakeId: pId,
-          playerTracked: !!pSnake,
-          playerPathReady: pSnake?.pathReady,
-          playerHistoryLen: pSnake?.history?.length,
-          playerHeadX: pSnake?.path?.headX,
-          playerHeadY: pSnake?.path?.headY,
-          trackedCount: (mgr as any).snakes?.size,
-          mapHalf: (mgr as any).mapHalf,
-        });
-      }
-
       // ── Update cached player state from snapshot ──
       playerScoreRef.current = snap.playerScore;
       playerKillsRef.current = snap.playerKills;
@@ -343,12 +321,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       // ── Build synthetic GameState for shared renderers ──
       const gameState = mgr.buildGameState(snap, ac);
 
-      // ── Per-frame diagnostic (first 3 ticks, then every 60 ticks) ──
-      if (snap.tick <= 3 || snap.tick % 60 === 0) {
-        const pId = mgr.getPlayerSnakeId();
-        const pSnake = pId ? (mgr as any).snakes?.get(pId) : null;
-        console.log('[Online Frame]', snap.tick, 'gsSnakes:', gameState.snakes.size, 'gsPlayer:', !!gameState.player, 'gsFoods:', gameState.foods.length, 'playerTracked:', !!pSnake, 'pathReady:', pSnake?.pathReady, 'pathLen:', pSnake?.path?.length, 'headX:', pSnake?.path?.headX?.toFixed(0), 'headY:', pSnake?.path?.headY?.toFixed(0), 'cam:', camera.x.toFixed(0), camera.y.toFixed(0), camera.zoom.toFixed(2), 'vp:', viewport.left.toFixed(0), viewport.top.toFixed(0), viewport.right.toFixed(0), viewport.bottom.toFixed(0));
-      }
+
 
       // ── Camera: follow player (same interpolation as offline) ──
       const playerSnake = gameState.player;
@@ -362,7 +335,6 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
           playerSnake.prevHeadY = Number.isFinite(playerSnake.prevHeadY)
             ? playerSnake.prevHeadY : playerSnake.path.headY;
           updateCameraInterpolated(camera, playerSnake, w, h, alpha);
-          if (snap.tick <= 3 || snap.tick % 60 === 0) console.log('[Cam Update]', snap.tick, 'player:', !!playerSnake, 'alive:', playerSnake?.alive, 'pathLen:', playerSnake?.path?.length, 'headX:', playerSnake?.path?.headX, 'headY:', playerSnake?.path?.headY, 'prevX:', playerSnake?.prevHeadX, 'prevY:', playerSnake?.prevHeadY, 'alpha:', alpha, 'camAfter:', camera.x.toFixed(0), camera.y.toFixed(0));
         }
       }
 
@@ -381,14 +353,6 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       fc.frames++;
       if (now - fc.lastTime >= 1000) { fc.fps = fc.frames; fc.frames = 0; fc.lastTime = now; }
 
-      // ══ DEBUG: Expose frame state to window.__of (remove after fix) ══
-      (window as any).__of = {
-        tick: snap.tick, gsSnakes: gameState.snakes.size, gsFoods: gameState.foods.length,
-        hasPlayer: !!gameState.player,
-        camX: camera.x, camY: camera.y, camZ: camera.zoom,
-        vpL: viewport.left, vpT: viewport.top, vpR: viewport.right, vpB: viewport.bottom,
-      };
-
       beginRenderFrameWithDpr(dpr);
       renderBackground(ctx, gameState, camera, viewport, fc.fps, now);
 
@@ -405,7 +369,6 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         const margin = snake.cachedBodyLength * SEGMENT_SPACING + baseMargin;
         if (headWx < viewport.left - margin || headWx > viewport.right + margin ||
             headWy < viewport.top - margin || headWy > viewport.bottom + margin) continue;
-
         if (snake.isPlayer) {
           // Player: atlas renderer with skin
           if (playerSkinAsset) {
@@ -417,7 +380,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
           (snake as any).boosting = isBoosting;
           const coiledPlayer = makeCoiledPath(snake.path);
           const mousePos = input.getMousePos();
-          const alpha = manager.getPlayerAlpha();
+          const alpha = mgr.getPlayerAlpha();
           try {
             renderSnakeAtlas(ctx, snake, camera, viewport, atlasManager, now, mousePos?.x, mousePos?.y, undefined, alpha, coiledPlayer);
           } catch (e: any) { console.error('[Online] player render:', e.message); }
