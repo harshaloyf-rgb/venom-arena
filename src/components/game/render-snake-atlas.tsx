@@ -65,6 +65,9 @@ const _circleCache = new Map<string, OffscreenCanvas | HTMLCanvasElement>();
 const _CIRCLE_CACHE_MAX = 64;
 
 function getCachedGradientCircle(color: string, r: number, dpr: number): OffscreenCanvas | HTMLCanvasElement {
+  // Guard: r must be finite and positive for createRadialGradient
+  if (!Number.isFinite(r) || r <= 0) r = 3;
+  if (!Number.isFinite(dpr) || dpr <= 0) dpr = 1;
   const key = `${color}|${Math.round(r)}|${dpr}`;
   let cached = _circleCache.get(key);
   if (cached) return cached;

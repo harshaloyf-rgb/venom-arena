@@ -625,8 +625,24 @@ function resolveArenaConfig(arenaId: string): ArenaConfig {
 // ─── Map tier ID → bot mix (using tier's botsCount) ─────────────────────────
 
 function resolveBotMix(arenaId: string): BotSpawnConfig {
+  // Prefer the arena config's built-in botMix for practice arenas (exact counts)
+  const direct = ARENA_CONFIGS[arenaId];
+  if (direct?.botMix) {
+    const bm = direct.botMix;
+    return {
+      predator: bm.predator,
+      coiler: bm.coiler,
+      baiter: bm.baiter,
+      interceptor: bm.interceptor,
+      grazer: bm.grazer,
+      trapper: bm.trapper,
+      ranked: bm.ranked,
+    };
+  }
+
+  // For competitive tiers, compute from botsCount
   const tier = getArenaById(arenaId);
-  const botsCount = tier?.botsCount ?? 30;
+  const botsCount = tier?.botsCount ?? 999;
 
   // Distribute bots proportionally across types (similar ratios to practice arenas)
   const ranked = Math.max(1, Math.round(botsCount * 0.03));

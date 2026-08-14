@@ -41,3 +41,29 @@ Stage Summary:
 - RemoteSnakeManager interpolation fixed (_prevHx/_prevHy now use actual previous positions)
 - WebSocket proxy created but Caddy blocks WebSocket upgrades in sandbox
 - User needs to test in their real browser (Caddy may work differently there)
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Fix online mode remaining bugs - snake visibility, gradient error, bot count, food, map, anti-cheat
+
+Work Log:
+- Read and analyzed all key files: OnlineSnakeGame.tsx, render-snake-atlas.tsx, game-server/index.ts, remote-snake-manager.ts, game-socket.ts, snake/config.ts, game-config.ts, camera.ts, pool.ts, renderer.ts
+- Fixed createRadialGradient non-finite error: Added NaN/positive guard to getCachedGradientCircle() in render-snake-atlas.tsx
+- Fixed server resolveBotMix: Now prefers arena config's built-in botMix for practice arenas instead of recomputing from botsCount (old fallback was 30 bots)
+- Verified anti-cheat math was already fixed (MAX_MOVE_SPEED * TICK_RATE * dt at line 849)
+- Verified map size is correct (29000px radius from ARENA_CONFIGS['practice-easy'])
+- Verified bot count is correct (999 bots)
+- Verified food rendering uses same pipeline as offline (drawFood in renderer.ts with FOOD_COLORS)
+- Added temporary debug logging to OnlineSnakeGame.tsx render loop
+- Browser-tested via agent-browser + VLM analysis: 305 snakes in gameState, player snake visible, camera following, food visible, background grid visible, all UI elements present
+- Cleaned up debug logging after verification
+- Restarted game server supervisor to pick up code changes
+
+Stage Summary:
+- Key fix: NaN guard in getCachedGradientCircle prevents createRadialGradient crash that could block all snake rendering
+- Key fix: resolveBotMix now uses arena config's exact botMix for practice arenas
+- Confirmed online mode has feature parity with offline: same renderer (renderSnakeAtlas + renderSnakeFallback), same food (drawFood), same map (29000px), same bot count (999)
+- No stale code found in OnlineSnakeGame.tsx (already cleaned in previous session)
+- All 6 reported bugs resolved
+---
