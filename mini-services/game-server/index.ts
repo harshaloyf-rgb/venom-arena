@@ -979,18 +979,28 @@ class ArenaInstance {
       maintainMapFood(state.foods, ac, foodIdRef);
     }
 
-    // 7. Check collisions
+    // 7. Check collisions — pass player position for viewport culling (same as offline)
+    // Without this, ALL 999 bots' body segments go into the hash (~100K inserts)
+    // and ALL bot-vs-bot pairs are checked, starving the game loop.
+    let playerHx: number | undefined;
+    let playerHy: number | undefined;
+    for (const [, player] of this.players) {
+      const ps = state.snakes.get(player.snakeId);
+      if (ps && ps.alive) { playerHx = ps.path.headX; playerHy = ps.path.headY; break; }
+    }
     const collisionResult = checkCollisions(
       state.snakes, this.bodyHash, this.headHash, now,
-      undefined, undefined, // No player viewport culling on server (bots fight everywhere)
+      playerHx, playerHy,
     );
 
     // 8. Process collision deaths — drop food for collision kills
+    let deathCount = 0;
     for (const deadId of collisionResult.deadIds) {
       const deadSnake = state.snakes.get(deadId);
       if (!deadSnake) continue;
 
       killSnake(deadSnake, foodIdRef, state.foods);
+      deathCount++;
 
       if (deadSnake.isBot) {
         removeBot(deadId);
@@ -1018,6 +1028,24 @@ class ArenaInstance {
             });
           }
         }
+      }
+    }
+
+    // 8b. Force food hash rebuild if deaths occurred (death food must be visible immediately)
+    if (deathCount > 0) {
+      const fvc = this.foodValueCache;
+      const fh = this.foodHash;
+      const scratch = _foodHashScratch;
+      fh.clear();
+      fvc.clear();
+      _cachedFoodById.clear();
+      _magnetizedIds.length = 0;
+      for (let i = 0; i < state.foods.length; i++) {
+        const f = state.foods[i];
+        scratch.x = f.x; scratch.y = f.y; scratch.radius = f.radius; scratch.id = f.id;
+        fh.insert(scratch);
+        fvc.set(f.id, f.value);
+        _cachedFoodById.set(f.id, f);
       }
     }
 
