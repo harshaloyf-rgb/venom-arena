@@ -150,3 +150,29 @@ Stage Summary:
 - Full 5-second elimination banner + killer highlight + death overlay sequence matching offline
 - Game stays LIVE during death screen (bots keep moving, food being eaten) via spectator mode
 - Server disconnects after 6s total (was 2s)
+
+
+---
+Task ID: 7
+Agent: Main Agent
+Task: Fix food collection issue — rebuild food hash before snapshot broadcast + deduplication
+
+Work Log:
+- Deep analysis of food collection pipeline: server tick loop → checkFoodEating → food management → collision deaths → broadcastSnapshots
+- Identified ROOT CAUSE: The food spatial hash was rebuilt in checkFoodEating (step 5) BEFORE food management (steps 7-8) and collision deaths (step 10)
+- This meant new food, boost drops, and death food were INVISIBLE for 1-3 ticks (up to 50ms)
+- Additionally, hash query returned DUPLICATE entries for food spanning multiple cells, causing visual noise
+- Fix: Rebuild food hash INSIDE broadcastSnapshots() BEFORE querying
+  - Now ALL food (including new spawns, boost drops, death food) is in the hash at CURRENT positions
+- Build foodColorMap + foodMagMap alongside hash rebuild for O(1) lookups
+- Added _snapshotDedupSet for O(1) deduplication of food spanning multiple hash cells
+- Simplified snapshot food loop: no more foodPosMap/foodColorMap from separate iteration
+- Since hash is rebuilt with current positions, hash positions == real positions (no stale data)
+
+Stage Summary:
+- Key fix: Food hash rebuilt RIGHT BEFORE broadcastSnapshots (every 3 ticks)
+- All food now visible immediately: new spawns, boost drops, killSnake death food
+- Food positions in snapshot now match their ACTUAL positions (post-magnet-pull)
+- Deduplication prevents duplicate food entries in snapshots
+- Cost: ~20K inserts per snapshot (every 50ms) = negligible
+WORKLOG_EOF

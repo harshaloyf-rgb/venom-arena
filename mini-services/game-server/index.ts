@@ -110,6 +110,7 @@ const _foodHashScratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
 const _cachedFoodById = new Map<number, FoodOrb>();
 const _magnetizedIds: number[] = [];
 const _eatenIdsSet = new Set<number>();
+const _snapshotDedupSet = new Set<number>();
 const _gridCounts = new Int32Array(144); // For largest possible grid
 
 // ============================================================================
@@ -1183,30 +1184,55 @@ class ArenaInstance {
     const tick = state.tickCount;
     const boundaryRadius = state.boundaryRadius;
 
-    // ── Step 1: Build head spatial hash for O(K) visibility queries ──
-    // (K = nearby snakes, typically 20-60 vs S = 1000 total)
-    const hh = this.headHash;
-    hh.clear();
-    const scratch = this._headScratch;
-    for (const [, snake] of state.snakes) {
-      if (!snake.alive) continue;
-      scratch.x = snake.path.headX;
-      scratch.y = snake.path.headY;
-      scratch.radius = 0;
-      scratch.id = snake.id;
-      hh.insert(scratch);
+    // ── Step 1: REBUILD food hash from CURRENT state.foods[] ──
+    // This is critical: the hash used by checkFoodEating (step 5) was built
+    // BEFORE food management (steps 7-8) and collision deaths (step 10).
+    // Rebuilding here ensures the snapshot includes ALL food:
+    //   - New food from maintainFoodAroundPlayer
+    //   - New food from maintainMapFood
+    //   - Death food from killSnake
+    //   - Food at post-magnet-pull positions
+    // Cost: ~20K inserts every 3 ticks (snapshot interval) = negligible.
+    const fh = this.foodHash;
+    fh.clear();
+    const foodScratch = this._headScratch; // reuse scratch object
+    const stateFoods = state.foods;
+    // Build color+magnetized map for snapshot lookups
+    const foodColorMap = new Map<number, string>();
+    const foodMagMap = new Set<number>();
+    for (let fi = 0; fi < stateFoods.length; fi++) {
+      const f = stateFoods[fi];
+      foodScratch.x = f.x;
+      foodScratch.y = f.y;
+      foodScratch.radius = f.radius;
+      foodScratch.id = f.id;
+      fh.insert(foodScratch);
+      foodColorMap.set(f.id, f.color);
+      if (f.magnetized) foodMagMap.add(f.id);
     }
 
-    // ── Step 2: Pre-build snake snapshot lookup map ──
-    // Keyed by snake.id for O(1) lookup from spatial hash results
+    // ── Step 2: Build head spatial hash for O(K) visibility queries ──
+    const hh = this.headHash;
+    hh.clear();
+    const headScratch = this._headScratch; // reuse (food hash is done)
+    for (const [, snake] of state.snakes) {
+      if (!snake.alive) continue;
+      headScratch.x = snake.path.headX;
+      headScratch.y = snake.path.headY;
+      headScratch.radius = 0;
+      headScratch.id = snake.id;
+      hh.insert(headScratch);
+    }
+
+    // ── Step 3: Pre-build snake snapshot lookup map ──
     const snakeLookup = new Map<string, {
       id: string; name: string; hx: number; hy: number;
       angle: number; score: number;
-      color: string; sc: string;  // secondaryColor (shortened key)
-      ip: boolean; ib: boolean;   // isPlayer, isBot
-      bl: number; br: number;     // bodyLen, bodyRadius
-      bo: boolean;                // boosting
-      si?: string; ra?: string;   // skinId, rarity (player only)
+      color: string; sc: string;
+      ip: boolean; ib: boolean;
+      bl: number; br: number;
+      bo: boolean;
+      si?: string; ra?: string;
     }>();
     for (const [, snake] of state.snakes) {
       if (!snake.alive) continue;
@@ -1229,22 +1255,7 @@ class ArenaInstance {
       });
     }
 
-    // ── Step 3: Build food lookups from REAL food positions (not stale hash positions)
-    // The spatial hash may have stale x,y from before magnet pulls.
-    // We build lookup maps from state.foods[] so snapshots use actual positions.
-    const foodColorMap = new Map<number, string>();
-    const foodMagnetized = new Set<number>();
-    const foodPosMap = new Map<number, number[]>(); // id → [x, y]
-    const stateFoods = state.foods;
-    for (let fi = 0; fi < stateFoods.length; fi++) {
-      const f = stateFoods[fi];
-      foodColorMap.set(f.id, f.color);
-      if (f.magnetized) foodMagnetized.add(f.id);
-      foodPosMap.set(f.id, [f.x, f.y]);
-    }
-
     // ── Step 4: Send personalized snapshot to each player (including spectators) ──
-    const fh = this.foodHash;
     const buf = this._snapBuf;
     buf.tick = tick;
     buf.boundaryRadius = boundaryRadius;
@@ -1253,14 +1264,13 @@ class ArenaInstance {
       const isSpectator = player.deadAt > 0;
       const playerSnake = isSpectator ? null : state.snakes.get(player.snakeId);
 
-      // Determine camera center: alive player's head, or spectator's death position
       let phx: number, phy: number;
       let playerScore: number, playerKills: number;
 
       if (isSpectator) {
         phx = player.spectatorHx;
         phy = player.spectatorHy;
-        playerScore = 0;  // Already sent in matchEnd
+        playerScore = 0;
         playerKills = player.kills;
       } else {
         if (!playerSnake || !playerSnake.alive) continue;
@@ -1270,14 +1280,13 @@ class ArenaInstance {
         playerKills = player.kills;
       }
 
-      // O(K) spatial hash query for visible snakes (K << S)
+      // O(K) spatial hash query for visible snakes
       const nearbyHeads = hh.query(phx, phy, SNAKE_VIS_RANGE);
       const visibleSnakes: any[] = [];
       for (let i = 0; i < nearbyHeads.length; i++) {
         const sid = nearbyHeads[i].id as string;
         const snap = snakeLookup.get(sid);
         if (!snap) continue;
-        // Distance check (spatial hash is approximate)
         const dx = snap.hx - phx;
         const dy = snap.hy - phy;
         if (dx * dx + dy * dy < SNAKE_VIS_RANGE_SQ) {
@@ -1285,34 +1294,37 @@ class ArenaInstance {
         }
       }
 
-      // O(K) spatial hash query for nearby food — use REAL positions from state.foods[]
-      // (hash positions may be stale from magnet pulls between rebuilds)
+      // O(K) spatial hash query for nearby food + DEDUPLICATION
+      // The hash was JUST rebuilt with current positions, so hash positions
+      // match state.foods[] exactly. No need for foodPosMap/foodColorMap lookups.
       const nearbyFood = fh.query(phx, phy, FOOD_VIS_RANGE);
       const foodSnaps: any[] = [];
+      const seenFoodIds = _snapshotDedupSet;
+      seenFoodIds.clear();
       for (let i = 0; i < nearbyFood.length; i++) {
         const f = nearbyFood[i];
         const fid = f.id as number;
-        // Use real position from state.foods[] instead of stale hash position
-        const realPos = foodPosMap.get(fid);
-        if (!realPos) continue; // food was eaten or removed between hash query and now
-        const dx = realPos[0] - phx;
-        const dy = realPos[1] - phy;
+        if (seenFoodIds.has(fid)) continue; // dedup: food spanning multiple cells
+        seenFoodIds.add(fid);
+        const dx = f.x - phx;
+        const dy = f.y - phy;
         if (dx * dx + dy * dy < FOOD_VIS_RANGE_SQ) {
+          // Look up color and magnetized flag from current food map
           const fcolor = foodColorMap.get(fid) || '#ffffff';
-          const mag = foodMagnetized.has(fid) ? 1 : 0;
-          foodSnaps.push(realPos[0], realPos[1], f.radius, fcolor, mag);
+          const mag = foodMagMap.has(fid) ? 1 : 0;
+          foodSnaps.push(f.x, f.y, f.radius, fcolor, mag);
         }
       }
 
       // Emit snapshot (compact format)
       try {
         player.socket.emit('snapshot', {
-          t: tick,                        // tick (shortened)
-          br: boundaryRadius,             // boundaryRadius (shortened)
-          s: visibleSnakes,               // snakes (shortened)
-          f: foodSnaps,                   // foods as flat array [x,y,r,color,mag,...]
-          ps: playerScore,                // playerScore (shortened)
-          pk: playerKills,                // playerKills (shortened)
+          t: tick,
+          br: boundaryRadius,
+          s: visibleSnakes,
+          f: foodSnaps,
+          ps: playerScore,
+          pk: playerKills,
         });
       } catch {}
     }
