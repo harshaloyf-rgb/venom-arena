@@ -56,10 +56,12 @@ export class SpatialHash {
   insert(entity: SpatialEntity): void {
     const inv = this.invCellSize;
     const r = entity.radius;
-    const minCx = ((entity.x - r) * inv) | 0;
-    const maxCx = ((entity.x + r) * inv) | 0;
-    const minCy = ((entity.y - r) * inv) | 0;
-    const maxCy = ((entity.y + r) * inv) | 0;
+    // Use Math.floor instead of |0 — |0 truncates toward zero, which maps
+    // (-0.5, 0) to cell 0 instead of cell -1, doubling cell-0 width.
+    const minCx = Math.floor((entity.x - r) * inv);
+    const maxCx = Math.floor((entity.x + r) * inv);
+    const minCy = Math.floor((entity.y - r) * inv);
+    const maxCy = Math.floor((entity.y + r) * inv);
 
     const map = this.cellMap;
 
@@ -104,10 +106,11 @@ export class SpatialHash {
    *  Results are valid only until the next query() call on this instance. */
   query(x: number, y: number, radius: number): SpatialEntity[] {
     const inv = this.invCellSize;
-    const minCx = ((x - radius) * inv) | 0;
-    const maxCx = ((x + radius) * inv) | 0;
-    const minCy = ((y - radius) * inv) | 0;
-    const maxCy = ((y + radius) * inv) | 0;
+    // Use Math.floor for consistency with insert() — see insert comment.
+    const minCx = Math.floor((x - radius) * inv);
+    const maxCx = Math.floor((x + radius) * inv);
+    const minCy = Math.floor((y - radius) * inv);
+    const maxCy = Math.floor((y + radius) * inv);
 
     let count = 0;
     const buf = this._queryBuf;

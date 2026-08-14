@@ -244,3 +244,31 @@ Stage Summary:
 - Server is stable (35+ second tests pass), timeouts are Caddy WebSocket proxy issue
 - Added uncaughtException/unhandledRejection handlers for crash visibility
 WORKLOG_EOF
+---
+Task ID: 1
+Agent: main
+Task: Find and fix the true root cause of ~20% food not being collected in online game
+
+Work Log:
+- Deep-analyzed checkFoodEating() in game-server/index.ts (~line 408-476)
+- Deep-analyzed SpatialHash class (insert, query, clear methods)
+- Read all config values: MAGNET_PULL_DIST=38, MAGNET_DEATH_DIST=5, SPATIAL_CELL_SIZE=100
+- Traced the full game loop order: move snakes → eat food → manage food → collisions → broadcast
+- Analyzed client-side food rendering pipeline (game-socket.ts → remote-snake-manager.ts → hud.ts → renderer.ts)
+- Identified the TRUE root cause: hash-vs-actual position mismatch
+
+Root Cause Analysis:
+1. checkFoodEating() rebuilds the spatial hash ONCE at the top from current food positions
+2. The hash query returns food based on those HASH positions (threshold: 38 + food.radius)
+3. 999 bots are processed BEFORE the player, each modifying food.x/food.y via magnet pull (up to 10px/tick)
+4. The distance check used food.x/food.y (ACTUAL position, post-bot-pull), not entity.x/y (HASH position)
+5. Food found by query at hash-distance 38 could be at actual-distance 43-48 after bot pulls → FAILS the pull check → food escapes the magnet zone permanently
+
+Fix Applied:
+1. PRIMARY FIX (game-server/index.ts + engine.ts): Changed distance/eating checks to use entity.x/entity.y (hash position, consistent with query) instead of food.x/food.y (actual position, diverged by bot pulls). Pull direction still uses actual position for accurate physics.
+2. SECONDARY FIX (spatial-hash.ts): Replaced |0 truncation with Math.floor for correct cell mapping of negative coordinates. |0 truncates toward zero, mapping (-0.5, 0) to cell 0 instead of cell -1.
+
+Stage Summary:
+- Root cause: stale hash positions vs actual food positions after multi-snake magnet pulls
+- Fixed in: mini-services/game-server/index.ts (checkFoodEating), src/lib/snake/engine.ts (checkFoodEating), src/lib/snake/spatial-hash.ts (insert/query cell mapping)
+- Game server restarted and running cleanly on port 3001

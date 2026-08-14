@@ -450,25 +450,35 @@ function checkFoodEating(
       const food = foodById.get(fid);
       if (!food) continue;
 
-      const dx = hx - food.x;
-      const dy = hy - food.y;
-      const dSq = dx * dx + dy * dy;
+      // FIX: Use entity hash position for distance/eating checks.
+      // Earlier snakes modify food.x/food.y via magnet pull, causing
+      // a mismatch between the query (hash pos) and this check (actual pos).
+      const ex = entity.x;
+      const ey = entity.y;
+      const edx = hx - ex;
+      const edy = hy - ey;
+      const eDistSq = edx * edx + edy * edy;
 
-      if (dSq <= MAGNET_DEATH_DIST_SQ) {
+      if (eDistSq <= MAGNET_DEATH_DIST_SQ) {
         eatenIds.add(fid);
         snake.score += fvc.get(fid) ?? 1;
         continue;
       }
 
-      if (dSq <= MAGNET_PULL_DIST_SQ) {
+      if (eDistSq <= MAGNET_PULL_DIST_SQ) {
         food.magnetized = true;
         _magnetizedIds.push(fid);
-        const dist = Math.sqrt(dSq);
-        const closeness = Math.min(1, Math.max(0, 1 - (dist - MAGNET_DEATH_DIST) / zoneWidth));
+        const eDist = Math.sqrt(eDistSq);
+        const closeness = Math.min(1, Math.max(0, 1 - (eDist - MAGNET_DEATH_DIST) / zoneWidth));
         const pullSpeed = FOOD_MAGNET_MIN_SPEED + speedRange * closeness * closeness;
-        const invDist = 1 / dist;
-        food.x += dx * invDist * pullSpeed;
-        food.y += dy * invDist * pullSpeed;
+        // Use actual food position for pull direction (accurate physics)
+        const adx = hx - food.x;
+        const ady = hy - food.y;
+        const aDist = Math.sqrt(adx * adx + ady * ady);
+        if (aDist > 0.01) {
+          food.x += (adx / aDist) * pullSpeed;
+          food.y += (ady / aDist) * pullSpeed;
+        }
       }
     }
   }
