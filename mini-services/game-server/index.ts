@@ -48,6 +48,7 @@ import {
   ARENA_GRID_SIZE,
   // BOT SKINS
   BOT_SKIN_PALETTES, getRandomBotPalette,
+  getRandomBotSkinOverride,
 } from '../../src/lib/snake/config';
 
 // game-config.ts has NO imports — pure data file
@@ -64,7 +65,7 @@ const PORT = 3001;
 const TICK_RATE = 60; // ticks per second
 const TICK_MS = 1000 / TICK_RATE;
 const SNAPSHOT_INTERVAL = 3; // broadcast every N ticks (20Hz)
-const DEATH_SCREEN_DELAY = 2000; // ms before disconnecting dead player
+const DEATH_SCREEN_DELAY = 6000; // ms before disconnecting dead player (5s elimination + 1s overlay)
 
 // ─── Scalability & Validation Constants ─────────────────────────────────
 const MAX_PLAYERS_PER_ARENA = 1000;      // Hard cap per arena instance
@@ -604,9 +605,9 @@ function seedInitialFood(
 function createBotSnakeFactory(
   id: string, name: string, score: number, x: number, y: number, now: number, botType: BotType,
 ): Snake {
-  // Use BOT_SKIN_PALETTES for color diversity (matches offline engine behavior)
-  const palette = getRandomBotPalette();
-  return createSnake(id, name, score, x, y, now, palette[0], palette[1], undefined, undefined, botType);
+  // Use real preset skin overrides (matches offline engine's BOT_SKIN_POOL)
+  const skin = getRandomBotSkinOverride();
+  return createSnake(id, name, score, x, y, now, skin.bodyColor, skin.headColor, skin.skinId, 'common', botType);
 }
 
 // ─── Map tier ID → ArenaConfig ───────────────────────────────────────────────
@@ -694,6 +695,10 @@ interface ConnectedPlayer {
   lastPosCheckTime: number;
   lastPosCheckX: number;
   lastPosCheckY: number;
+  // ── Spectator mode (after death) ──
+  deadAt: number;           // 0 = alive, >0 = Date.now() of death
+  spectatorHx: number;      // last head X before death (for snapshot camera)
+  spectatorHy: number;      // last head Y before death (for snapshot camera)
 }
 
 class ArenaInstance {
@@ -923,11 +928,15 @@ class ArenaInstance {
     // 3. Move all snakes
     const boundaryDead: string[] = [];
 
-    // Move connected players
+    // Move connected players (skip spectators)
     for (const [socketId, player] of this.players) {
+      if (player.deadAt > 0) continue; // spectator — no movement
       const snake = state.snakes.get(player.snakeId);
       if (!snake || !snake.alive) continue;
       const hitWall = moveSnake(snake, player.input.angle, player.input.boost, now, moveCtx);
+      // Save head position for potential spectator mode
+      player.spectatorHx = snake.path.headX;
+      player.spectatorHy = snake.path.headY;
       if (hitWall) boundaryDead.push(snake.id);
     }
 
@@ -1056,7 +1065,7 @@ class ArenaInstance {
 
     state.nextFoodId = foodIdRef.value;
 
-    // 10. Handle player deaths — emit events, call API, schedule disconnect
+    // 10. Handle player deaths — emit events, call API, enter spectator mode
     for (const toKill of playersToKill) {
       this.handlePlayerDeath(toKill.snakeId, toKill.socketId, toKill.reason);
     }
@@ -1083,6 +1092,22 @@ class ArenaInstance {
 
     dbg(`[Arena ${this.arenaId}] Player ${player.name} died (${reason}) — score: ${score}, kills: ${kills}, duration: ${durationSeconds}s`);
 
+    // Save spectator camera position (before snake is deleted)
+    player.spectatorHx = snake.path.headX;
+    player.spectatorHy = snake.path.headY;
+
+    // Enter spectator mode — keep in this.players so snapshots continue
+    player.deadAt = Date.now();
+
+    // Delete the dead snake from game state (but keep player connected)
+    this.state.snakes.delete(snakeId);
+    this.snakeToSocket.delete(snakeId);
+
+    // If this was the reference player, pick another
+    if (this.state.player === snake) {
+      this.state.player = [...this.state.snakes.values()].find(s => s.isPlayer && s.alive) || null;
+    }
+
     // Emit killed event (for killer name highlight) and matchEnd to client
     try {
       // Extract killer name from reason string (format: "killed by <Name>")
@@ -1103,12 +1128,13 @@ class ArenaInstance {
     this.reportMatchResult(player, 'death', 0, kills, durationSeconds, score)
       .catch(err => console.error(`[Arena ${this.arenaId}] Failed to report match result:`, err));
 
-    // Remove from arena
-    this.removePlayer(socketId);
-
-    // Disconnect after delay (client shows death screen)
+    // Schedule disconnect AFTER death screen period
+    // During this time, the player stays in this.players as a spectator,
+    // receiving snapshots so they can see death food + elimination effects.
     try {
       setTimeout(() => {
+        // Remove player and disconnect
+        this.removePlayer(socketId);
         try { player.socket.disconnect(true); } catch {}
       }, DEATH_SCREEN_DELAY);
     } catch {}
@@ -1225,18 +1251,32 @@ class ArenaInstance {
       if (f.magnetized) foodMagnetized.add(f.id);
     }
 
-    // ── Step 4: Send personalized snapshot to each player ──
+    // ── Step 4: Send personalized snapshot to each player (including spectators) ──
     const fh = this.foodHash;
     const buf = this._snapBuf;
     buf.tick = tick;
     buf.boundaryRadius = boundaryRadius;
 
     for (const [socketId, player] of this.players) {
-      const playerSnake = state.snakes.get(player.snakeId);
-      if (!playerSnake || !playerSnake.alive) continue;
+      const isSpectator = player.deadAt > 0;
+      const playerSnake = isSpectator ? null : state.snakes.get(player.snakeId);
 
-      const phx = playerSnake.path.headX;
-      const phy = playerSnake.path.headY;
+      // Determine camera center: alive player's head, or spectator's death position
+      let phx: number, phy: number;
+      let playerScore: number, playerKills: number;
+
+      if (isSpectator) {
+        phx = player.spectatorHx;
+        phy = player.spectatorHy;
+        playerScore = 0;  // Already sent in matchEnd
+        playerKills = player.kills;
+      } else {
+        if (!playerSnake || !playerSnake.alive) continue;
+        phx = playerSnake.path.headX;
+        phy = playerSnake.path.headY;
+        playerScore = playerSnake.score;
+        playerKills = player.kills;
+      }
 
       // O(K) spatial hash query for visible snakes (K << S)
       const nearbyHeads = hh.query(phx, phy, SNAKE_VIS_RANGE);
@@ -1274,8 +1314,8 @@ class ArenaInstance {
           br: boundaryRadius,             // boundaryRadius (shortened)
           s: visibleSnakes,               // snakes (shortened)
           f: foodSnaps,                   // foods as flat array [x,y,r,color,mag,...]
-          ps: playerSnake.score,          // playerScore (shortened)
-          pk: player.kills,               // playerKills (shortened)
+          ps: playerScore,                // playerScore (shortened)
+          pk: playerKills,                // playerKills (shortened)
         });
       } catch {}
     }
@@ -1457,6 +1497,10 @@ io.on('connection', (socket) => {
         lastPosCheckTime: Date.now(),
         lastPosCheckX: NaN,  // Set to actual spawn position after snake creation
         lastPosCheckY: NaN,
+        // Spectator mode
+        deadAt: 0,
+        spectatorHx: 0,
+        spectatorHy: 0,
       };
 
       // Spawn player in arena
@@ -1519,6 +1563,7 @@ io.on('connection', (socket) => {
     if (!arena) return;
     const player = arena.players.get(socket.id);
     if (!player) return;
+    if (player.deadAt > 0) return; // spectator — ignore input
 
     const now = performance.now();
 

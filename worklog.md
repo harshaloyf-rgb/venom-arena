@@ -112,3 +112,41 @@ Stage Summary:
 - This caused: food not eaten (tick starvation), collisions missed (hash stale), bots clustered (AI tick starvation)
 - With the fix, collision work drops from ~100K to ~10K segment inserts (10x reduction)
 - Death food now visible immediately instead of 0-100ms delay
+
+---
+Task ID: 6
+Agent: Main Agent
+Task: Fix 5 deep online/offline parity bugs — bot skins, death food, elimination screen, spectator mode
+
+Work Log:
+- Deep audit of all 5 user-reported issues (bots in half map, bot skins wrong, death→food missing, elimination screen wrong, death timing)
+- Read and compared: game-server/index.ts (1600 lines), engine.ts (834 lines), bot-ai.ts (1703 lines), collision.ts, config.ts, OnlineSnakeGame.tsx, game-socket.ts, remote-snake-manager.ts, renderer.ts, cosmetics-types.ts
+
+**Bug 1 (Bots only in half map)**: Determined to be perception issue — bots spawn in 1000-26100px ring (full 360°) but player viewport is only ~4000px radius
+
+**Bug 2+3 (Bot skins wrong, no custom patterns)**: ROOT CAUSE — server used BOT_SKIN_PALETTES (just [bodyColor, headColor] pairs) with skinId='skin-default'. Offline uses SLITHER_PRESETS (full multi-color patterns with real skinIds like 'preset-fish', 'preset-tiger'). Server can't import client-side cosmetics-types.ts.
+  - Fix: Added BOT_SKIN_OVERRIDES to config.ts — 19 entries mirroring SLITHER_PRESETS with real skinIds + matching colors
+  - Added getRandomBotSkinOverride() function
+  - Changed server createBotSnakeFactory to use getRandomBotSkinOverride() → assigns real skinId + correct body/head colors
+  - Client renderSnakeFallback now finds getPresetVisualProps(skinId) → renders multi-color stripes, patterns, body styles
+
+**Bug 4 (Death→food not visible)**: Server DID call killSnake() to create food, but immediately removed player from this.players → no more snapshots sent → client never saw death food
+  - Fix: Implemented SPECTATOR MODE — after death, player stays in this.players for 6 seconds receiving snapshots centered on death position
+  - Added deadAt, spectatorHx, spectatorHy fields to ConnectedPlayer
+  - Modified handlePlayerDeath to enter spectator mode instead of immediately calling removePlayer
+  - Modified broadcastSnapshots to send snapshots to spectators using their death position as camera center
+  - removePlayer + disconnect now scheduled in setTimeout(DEATH_SCREEN_DELAY=6000)
+
+**Bug 5 (Elimination screen wrong)**: Three sub-issues
+  - 5a: Online client used < 3000ms for elimination banner (offline uses < 5000ms) → Fixed to < 5000ms
+  - 5b: Killer highlight also 3000ms → Fixed to 5000ms
+  - 5c: Server DEATH_SCREEN_DELAY was 2000ms → Increased to 6000ms (5s elimination + 1s death overlay viewing)
+  - 5d: Game appeared frozen after death → Fixed by spectator mode (snapshots continue for 6s with live game)
+
+Stage Summary:
+- 3 files modified: config.ts, game-server/index.ts, OnlineSnakeGame.tsx
+- Bots now have 19 different visual skins with multi-color patterns (fish, lion, tiger, tron, etc.) matching offline exactly
+- Death now converts snake body to visible food drops (was invisible due to immediate snapshot cutoff)
+- Full 5-second elimination banner + killer highlight + death overlay sequence matching offline
+- Game stays LIVE during death screen (bots keep moving, food being eaten) via spectator mode
+- Server disconnects after 6s total (was 2s)

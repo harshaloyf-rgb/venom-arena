@@ -553,3 +553,44 @@ export function getRandomBotPalette(): [string, string] {
   return BOT_SKIN_PALETTES[Math.floor(Math.random() * BOT_SKIN_PALETTES.length)];
 }
 
+// ============================================================================
+// 15. BOT SKIN OVERRIDES — real skinId assignments for bots (server-safe)
+// ============================================================================
+// Mirrors SLITHER_PRESETS from cosmetics-types.ts so the server (which cannot
+// import client-only modules) can assign real preset skins to bots.
+// Each entry: { skinId, bodyColor, headColor }. The client's renderSnakeFallback
+// will look up getPresetVisualProps(skinId) to get the full multi-color pattern.
+// ============================================================================
+
+export interface BotSkinOverride {
+  skinId: string;
+  bodyColor: string;
+  headColor: string;
+}
+
+export const BOT_SKIN_OVERRIDES: BotSkinOverride[] = [
+  { skinId: 'preset-fish',          bodyColor: '#06b6d4', headColor: '#06b6d4' },
+  { skinId: 'preset-lion',          bodyColor: '#f59e0b', headColor: '#f59e0b' },
+  { skinId: 'preset-motorbike',     bodyColor: '#3b82f6', headColor: '#3b82f6' },
+  { skinId: 'preset-coin',          bodyColor: '#fbbf24', headColor: '#fbbf24' },
+  { skinId: 'preset-bumblebee',     bodyColor: '#f59e0b', headColor: '#f59e0b' },
+  { skinId: 'preset-patriot',       bodyColor: '#ef4444', headColor: '#ef4444' },
+  { skinId: 'preset-watermelon',    bodyColor: '#22c55e', headColor: '#22c55e' },
+  { skinId: 'preset-tiger',         bodyColor: '#f97316', headColor: '#f97316' },
+  { skinId: 'preset-mint',          bodyColor: '#10b981', headColor: '#10b981' },
+  { skinId: 'preset-rainbow-unicorn', bodyColor: '#ef4444', headColor: '#ef4444' },
+  { skinId: 'preset-brazil',        bodyColor: '#22c55e', headColor: '#22c55e' },
+  { skinId: 'preset-france',        bodyColor: '#3b82f6', headColor: '#3b82f6' },
+  { skinId: 'preset-pride',         bodyColor: '#ef4444', headColor: '#ef4444' },
+  { skinId: 'preset-solar',         bodyColor: '#f59e0b', headColor: '#f59e0b' },
+  { skinId: 'preset-cosmic',        bodyColor: '#6366f1', headColor: '#6366f1' },
+  { skinId: 'preset-lava',          bodyColor: '#ef4444', headColor: '#ef4444' },
+  { skinId: 'preset-tron',          bodyColor: '#06b6d4', headColor: '#06b6d4' },
+  { skinId: 'preset-mech',          bodyColor: '#64748b', headColor: '#64748b' },
+  { skinId: 'preset-gold-dragon',   bodyColor: '#f59e0b', headColor: '#f59e0b' },
+];
+
+/** Get a random bot skin override (real skinId + matching colors) */
+export function getRandomBotSkinOverride(): BotSkinOverride {
+  return BOT_SKIN_OVERRIDES[Math.floor(Math.random() * BOT_SKIN_OVERRIDES.length)];
+}
