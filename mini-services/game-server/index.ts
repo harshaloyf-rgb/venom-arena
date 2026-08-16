@@ -383,9 +383,9 @@ function killSnake(snake: Snake, nextFoodId: { value: number }, foods: FoodOrb[]
   const segLen = snake.path.length;
   const maxFood = segLen;
 
-  const largeCount = Math.min(maxFood, Math.max(1, Math.floor(dropValue * 0.4 / 5)));
-  const medCount = Math.min(maxFood - largeCount, Math.max(1, Math.floor(dropValue * 0.3 / 2)));
-  let remaining = dropValue - largeCount * 5 - medCount * 2;
+  const largeCount = Math.min(maxFood, Math.max(1, Math.floor(dropValue * 0.4 / FOOD_VALUES[2])));
+  const medCount = Math.min(maxFood - largeCount, Math.max(1, Math.floor(dropValue * 0.3 / FOOD_VALUES[1])));
+  let remaining = dropValue - largeCount * FOOD_VALUES[2] - medCount * FOOD_VALUES[1];
   const smallCount = Math.min(maxFood - largeCount - medCount, Math.max(1, remaining));
   remaining -= smallCount;
   const totalFood = largeCount + medCount + smallCount;

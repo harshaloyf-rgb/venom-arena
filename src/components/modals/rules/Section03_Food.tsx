@@ -24,7 +24,7 @@ export function Section03_Food() {
             <li><strong>Large (5pts, pink):</strong> score ÷ 5. <strong>Medium (3pts, blue):</strong> remainder ÷ 3. <strong>Small (1pt, green):</strong> whatever&apos;s left.</li>
             <li><strong>Example:</strong> A snake with score 23 dies → 4 large (4×5=20), 1 medium (1×3=3), 0 small. Total = 23 ✓</li>
             <li><strong>ALL snakes</strong> (players + bots) can eat death food → increases score/size only.</li>
-            <li><strong>Wall death:</strong> NO food orbs drop at all (score is destroyed to prevent edge farming).</li>
+            <li><strong>Wall death:</strong> NO food orbs drop (score is destroyed to prevent edge farming), but carried chips <strong>DO</strong> drop as stars along the body trail.</li>
             <li>Death food orbs are <strong>completely separate from stars</strong> — food affects score/size, stars affect carried chips.</li>
           </ul>
         </InfoCard>

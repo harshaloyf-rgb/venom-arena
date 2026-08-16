@@ -486,3 +486,21 @@ Stage Summary:
 - Set-based star collection prevents double-collection by multiple players
 - All changes compile cleanly (only pre-existing lint error in fix-bom.ts)
 - Game server restarted and running on port 3001
+---
+Task ID: 2
+Agent: Main
+Task: Fix FOOD_VALUES in online mode, fix killSnake hardcoded values, verify border death star drops
+
+Work Log:
+- Verified `src/lib/snake/config.ts` already has FOOD_VALUES = [1, 3, 5]
+- Found game server (mini-service) wasn't restarted to pick up the config change — `bun --hot` doesn't watch files outside the mini-service directory
+- Fixed `killSnake` in game server: replaced hardcoded `/5` and `/2` with `FOOD_VALUES[2]` and `FOOD_VALUES[1]` for correct food value distribution on death
+- Verified border death behavior: boundary deaths do NOT call `killSnake()` (no food dropped), but DO call `handlePlayerDeath()` which spawns star chips from carriedChips along body trail
+- Restarted game server — now running with correct FOOD_VALUES [1, 3, 5]
+- Updated rules Section 3: wall death line now mentions stars still drop on wall death
+
+Stage Summary:
+- FOOD_VALUES [1, 3, 5] now active in online mode (game server restarted)
+- killSnake death food distribution uses FOOD_VALUES constants (not hardcoded)
+- Border/wall deaths: no food dropped, but carried chips → stars still spawned
+- Rules Section 3 updated to reflect wall death star drop behavior
