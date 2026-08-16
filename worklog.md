@@ -379,3 +379,33 @@ Stage Summary:
 - Changed: spawnFoodBatch() distance from linear to area-uniform (sqrt) in both online and offline engines
 - Bots will now spread across the map because food is evenly distributed
 - The grid food maintenance system (maintainMapFood) was already correct, it just needed proper initial seed
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: Fix minimap not showing bots across full map in online mode
+
+Work Log:
+- User reported: minimap in online mode only shows bots in part of the map, rest is blank
+- Investigated spawn code (bot-ai.ts): sector-based spawnBots() correctly distributes bots in 36 sectors (200-27840px)
+- Investigated minimap renderer (hud.ts): correctly iterates over state.snakes and draws dots
+- Found ROOT CAUSE: Server culls snakes to SNAKE_VIS_RANGE=15000px in broadcastSnapshots()
+  - Map radius: 29000px, visibility: 15000px → only ~27% of map area sent to client
+  - The minimap can only show snakes the client knows about
+- Fix: Added separate minimap data stream with ALL snake positions
+  - Server (game-server/index.ts): Added `m` field to snapshot — flat array [x, y, score, isBot, ...] for ALL alive snakes
+    - Built once per broadcast tick (not per-player), reused via _snapBuf.m
+    - ~16 bytes/snake × 999 = ~16KB per 20Hz snapshot = 320KB/s — acceptable
+  - Client (game-socket.ts): Added MinimapDot type, parse `m` field from snapshot into minimapDots array
+  - Client (hud.ts): drawMinimapTopLeft now accepts optional minimapDots parameter
+    - When provided (online mode): renders ALL bots as dots across full map using batch fillRect
+    - When not provided (offline mode): falls back to original state.snakes iteration
+    - Also fixed rank calculation to use minimapDots for accurate total count in online mode
+  - Client (OnlineSnakeGame.tsx): Passes snap.minimapDots to renderHUD()
+
+Stage Summary:
+- Root cause: Server only sent snakes within 15000px (SNAKE_VIS_RANGE), leaving ~73% of map blank on minimap
+- Fix: Added minimap data stream (`m` field) to server snapshots containing ALL snake head positions
+- Minimap now shows dots across the entire map in online mode
+- Rank display also fixed to show accurate count (was showing only visible snake count)
+- Files modified: mini-services/game-server/index.ts, src/lib/game-socket.ts, src/components/game/hud.ts, src/components/game/OnlineSnakeGame.tsx

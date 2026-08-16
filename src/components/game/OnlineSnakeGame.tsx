@@ -405,7 +405,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         ...gameState,
         player: gameState.player ? { ...gameState.player, score: playerScoreRef.current } : null,
       };
-      renderHUD(ctx, hudState, camera, viewport, fc.fps, now, playerKillsRef.current, highScoreRef.current);
+      renderHUD(ctx, hudState, camera, viewport, fc.fps, now, playerKillsRef.current, highScoreRef.current, snap.minimapDots);
 
       // ── Controls hint (same as offline) ──
       if (showControlsRef.current && gameState.player && gameState.player.alive) {

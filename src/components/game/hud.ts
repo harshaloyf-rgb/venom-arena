@@ -1,4 +1,5 @@
 import type { GameState, Camera, Viewport } from '@/lib/snake/types';
+import type { MinimapDot } from '@/lib/game-socket';
 import { drawGrid, drawFood } from './renderer';
 import { cleanupSnakeParticles, clearSmoothedSegs } from './render-snake-atlas';
 import { InputHandler } from './input';
@@ -99,19 +100,28 @@ export function renderHUD(
   _now: number,
   kills: number,
   _highScore: number,
+  minimapDots?: MinimapDot[],
 ): void {
   if (!state.player) return;
   const cw = viewport.width;
   const ch = viewport.height;
 
-  // ── Minimap: top-left ──
-  drawMinimapTopLeft(ctx, state, cw, ch);
+  // ── Minimap: top-left (use minimapDots for online, state.snakes for offline) ──
+  drawMinimapTopLeft(ctx, state, cw, ch, minimapDots);
 
   // ── Rank below minimap ──
-  const aliveSnakes = state.snakes.size;
+  // In online mode, use minimapDots for total count (state.snakes only has visible ones)
+  const aliveSnakes = minimapDots ? minimapDots.length + 1 : state.snakes.size;
   let rank = 1;
-  for (const [, s] of state.snakes) {
-    if (s.alive && s.score > state.player.score) rank++;
+  if (minimapDots) {
+    // Online: count from minimap dots (excludes player)
+    for (let i = 0; i < minimapDots.length; i++) {
+      if (minimapDots[i].score > state.player.score) rank++;
+    }
+  } else {
+    for (const [, s] of state.snakes) {
+      if (s.alive && s.score > state.player.score) rank++;
+    }
   }
   const rankY = MAP_PAD + MAP_SIZE + 6;
   ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
@@ -164,6 +174,7 @@ function drawMinimapTopLeft(
   state: GameState,
   _cw: number,
   _ch: number,
+  minimapDots?: MinimapDot[],
 ): void {
   const size = MAP_SIZE;
   const pad = MAP_PAD;
@@ -249,32 +260,57 @@ function drawMinimapTopLeft(
   const playerY = player.path.headY;
   const playerScore = player.score;
 
-  // ── Draw snakes ──
-  for (const [, snake] of state.snakes) {
-    if (!snake.alive || snake.isPlayer || snake.path.length === 0) continue;
-    const sx = snake.path.headX;
-    const sy = snake.path.headY;
-
-    const miniSx = toMiniX(sx);
-    const miniSy = toMiniY(sy);
-
-    // Skip if outside minimap bounds (can happen when player-centered)
-    if (miniSx < mx - 5 || miniSx > mx + size + 5 || miniSy < my - 5 || miniSy > my + size + 5) continue;
-
-    // Danger: bigger snake within 2000px
-    const dx = sx - playerX;
-    const dy = sy - playerY;
-    const isDanger = snake.score > playerScore && (dx * dx + dy * dy) < DANGER_RANGE_SQ;
-
-    if (isDanger) {
-      ctx.fillStyle = 'rgba(239, 68, 68, 0.4)';
-      ctx.beginPath();
-      ctx.arc(miniSx, miniSy, 3, 0, Math.PI * 2);
-      ctx.fill();
+  // ── Draw snakes (prefer minimapDots for full-map coverage in online mode) ──
+  if (minimapDots && minimapDots.length > 0) {
+    // Online mode: minimapDots contains ALL snakes across the full map
+    for (let i = 0; i < minimapDots.length; i++) {
+      const dot = minimapDots[i];
+      if (dot.isBot) continue; // skip drawing bots here, draw them below in batch
+      // Other players (non-bot)
+      const miniSx = toMiniX(dot.x);
+      const miniSy = toMiniY(dot.y);
+      if (miniSx < mx - 5 || miniSx > mx + size + 5 || miniSy < my - 5 || miniSy > my + size + 5) continue;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.fillRect(miniSx - 1, miniSy - 1, 2, 2);
     }
+    // Batch-draw all bots as small white dots
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+    for (let i = 0; i < minimapDots.length; i++) {
+      const dot = minimapDots[i];
+      if (!dot.isBot) continue;
+      const miniSx = toMiniX(dot.x);
+      const miniSy = toMiniY(dot.y);
+      if (miniSx < mx - 5 || miniSx > mx + size + 5 || miniSy < my - 5 || miniSy > my + size + 5) continue;
+      ctx.fillRect(miniSx - 1, miniSy - 1, 2, 2);
+    }
+  } else {
+    // Offline mode: use state.snakes (all snakes available locally)
+    for (const [, snake] of state.snakes) {
+      if (!snake.alive || snake.isPlayer || snake.path.length === 0) continue;
+      const sx = snake.path.headX;
+      const sy = snake.path.headY;
 
-    ctx.fillStyle = isDanger ? '#ef4444' : 'rgba(255, 255, 255, 0.5)';
-    ctx.fillRect(miniSx - 1, miniSy - 1, 2, 2);
+      const miniSx = toMiniX(sx);
+      const miniSy = toMiniY(sy);
+
+      // Skip if outside minimap bounds (can happen when player-centered)
+      if (miniSx < mx - 5 || miniSx > mx + size + 5 || miniSy < my - 5 || miniSy > my + size + 5) continue;
+
+      // Danger: bigger snake within 2000px
+      const dx = sx - playerX;
+      const dy = sy - playerY;
+      const isDanger = snake.score > playerScore && (dx * dx + dy * dy) < DANGER_RANGE_SQ;
+
+      if (isDanger) {
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.4)';
+        ctx.beginPath();
+        ctx.arc(miniSx, miniSy, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = isDanger ? '#ef4444' : 'rgba(255, 255, 255, 0.5)';
+      ctx.fillRect(miniSx - 1, miniSy - 1, 2, 2);
+    }
   }
 
   // ── Player dot (green, larger) ──

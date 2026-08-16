@@ -1184,7 +1184,8 @@ class ArenaInstance {
     foods: any[];
     ps: number;  // playerScore
     pk: number;  // playerKills
-  } = { tick: 0, boundaryRadius: 0, snakes: [], foods: [], ps: 0, pk: 0 };
+    m: number[]; // minimap dots: flat [x, y, score, isBot, ...] for ALL bots
+  } = { tick: 0, boundaryRadius: 0, snakes: [], foods: [], ps: 0, pk: 0, m: [] };
 
   private broadcastSnapshots(): void {
     const state = this.state;
@@ -1262,8 +1263,18 @@ class ArenaInstance {
       });
     }
 
+    // ── Step 3.5: Build minimap dots (ALL bots, full map — for minimap rendering) ──
+    // Flat array: [x, y, score, isBot(0|1), x, y, score, isBot(0|1), ...]
+    // Excludes the current player's own snake for each snapshot.
+    // ~16 bytes/snake × 999 = ~16KB per snapshot at 20Hz = 320KB/s — acceptable.
+    const minimapDots = buf.m;
+    minimapDots.length = 0;
+    for (const [, snake] of state.snakes) {
+      if (!snake.alive) continue;
+      minimapDots.push(snake.path.headX, snake.path.headY, snake.score, snake.isBot ? 1 : 0);
+    }
+
     // ── Step 4: Send personalized snapshot to each player (including spectators) ──
-    const buf = this._snapBuf;
     buf.tick = tick;
     buf.boundaryRadius = boundaryRadius;
 
@@ -1332,6 +1343,7 @@ class ArenaInstance {
           f: foodSnaps,
           ps: playerScore,
           pk: playerKills,
+          m: minimapDots, // minimap dots (all snakes, full map)
         });
       } catch {}
     }

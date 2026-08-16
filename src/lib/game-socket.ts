@@ -32,6 +32,13 @@ export interface RemoteFood {
   m: boolean;  // magnetized
 }
 
+export interface MinimapDot {
+  x: number;
+  y: number;
+  score: number;
+  isBot: boolean;
+}
+
 export interface GameSnapshot {
   tick: number;
   boundaryRadius: number;
@@ -39,6 +46,7 @@ export interface GameSnapshot {
   foods: RemoteFood[];
   playerScore: number;
   playerKills: number;
+  minimapDots: MinimapDot[];
 }
 
 // ─── Hook State ─────────────────────────────────────────────────────────────
@@ -88,6 +96,15 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       }
     }
 
+    // Parse minimap dots: flat [x, y, score, isBot, ...]
+    const minimapDots: MinimapDot[] = [];
+    const mArr = raw.m;
+    if (Array.isArray(mArr)) {
+      for (let i = 0; i < mArr.length; i += 4) {
+        minimapDots.push({ x: mArr[i], y: mArr[i + 1], score: mArr[i + 2], isBot: mArr[i + 3] === 1 });
+      }
+    }
+
     return {
       tick: raw.t,
       boundaryRadius: raw.br,
@@ -95,6 +112,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       foods,
       playerScore: raw.ps,
       playerKills: raw.pk,
+      minimapDots,
     };
   }
 
