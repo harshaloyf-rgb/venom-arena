@@ -1003,25 +1003,35 @@ class ArenaInstance {
     }
 
     // 5b. Star collection (players only — bots cannot collect stars)
-    for (const [socketId, player] of this.players) {
+    // Use Set-based dedup: collect all IDs first, then filter once.
+    // This guarantees no star is shared between two players.
+    const _collectedStarIds = new Set<number>();
+    for (const [, player] of this.players) {
       if (player.deadAt > 0) continue; // spectator
       const snake = state.snakes.get(player.snakeId);
       if (!snake || !snake.alive) continue;
 
       const hx = snake.path.headX;
       const hy = snake.path.headY;
-      let writeIdx = 0;
       for (let i = 0; i < state.stars.length; i++) {
         const star = state.stars[i];
+        if (_collectedStarIds.has(star.id)) continue;
         const dx = star.x - hx;
         const dy = star.y - hy;
         if (dx * dx + dy * dy < STAR_COLLECT_RADIUS_SQ) {
           // Collect!
           snake.carriedChips += star.value;
           player.carriedChips = snake.carriedChips;
-          // don't copy to writeIdx — star is consumed
-        } else {
-          state.stars[writeIdx++] = star;
+          _collectedStarIds.add(star.id);
+        }
+      }
+    }
+    // Remove collected stars in one pass
+    if (_collectedStarIds.size > 0) {
+      let writeIdx = 0;
+      for (let i = 0; i < state.stars.length; i++) {
+        if (!_collectedStarIds.has(state.stars[i].id)) {
+          state.stars[writeIdx++] = state.stars[i];
         }
       }
       state.stars.length = writeIdx;
@@ -1128,24 +1138,31 @@ class ArenaInstance {
     player.spectatorHx = snake.path.headX;
     player.spectatorHy = snake.path.headY;
 
-    // Spawn star chips at death position (before snake is deleted)
+    // Spawn star chips along dead snake's body trail (before snake is deleted)
     const chips = snake.carriedChips;
     if (chips > 0) {
-      const headX = snake.path.headX;
-      const headY = snake.path.headY;
+      const segLen = snake.path.length;
+      const starRadius = snake.bodyRadius;
       const baseValue = Math.floor(chips / STARS_PER_DEATH);
-      const remainder = chips - baseValue * STARS_PER_DEATH;
+      const remainder = chips - baseValue * (STARS_PER_DEATH - 1);
+      // Stars 1-9: baseValue each. Star 10: remainder (guarantees integer total)
       const now = Date.now();
+      const step = segLen > 1 ? Math.max(1, Math.floor((segLen - 1) / (STARS_PER_DEATH - 1))) : 0;
       for (let i = 0; i < STARS_PER_DEATH; i++) {
-        const angle = (i / STARS_PER_DEATH) * Math.PI * 2;
+        // Sample position along body trail (head=0, tail=segLen-1)
+        const si = Math.min(i * step, segLen - 1);
         const star: StarOrb = {
           id: this.state.nextStarId++,
-          x: headX + Math.cos(angle) * 60,
-          y: headY + Math.sin(angle) * 60,
-          value: baseValue + (i < remainder ? 1 : 0),
+          x: snake.path.getX(si),
+          y: snake.path.getY(si),
+          value: i < STARS_PER_DEATH - 1 ? baseValue : remainder,
+          radius: starRadius,
           spawnTime: now,
         };
-        this.state.stars.push(star);
+        // Only push stars with value > 0 (e.g., 7 chips: 9 stars of 0 + 1 star of 7)
+        if (star.value > 0) {
+          this.state.stars.push(star);
+        }
       }
     }
 
@@ -1241,7 +1258,7 @@ class ArenaInstance {
     foods: any[];
     ps: number;  // playerScore
     pk: number;  // playerKills
-    st: number[]; // nearby stars: flat [x, y, value, id, ...]
+    st: number[]; // nearby stars: flat [x, y, value, id, radius, ...]
     pc: number;  // playerCarriedChips
     m: number[]; // minimap dots: flat [x, y, score, isBot, ...] for ALL bots
   } = { tick: 0, boundaryRadius: 0, snakes: [], foods: [], ps: 0, pk: 0, st: [], pc: 0, m: [] };
@@ -1299,6 +1316,7 @@ class ArenaInstance {
       ip: boolean; ib: boolean;
       bl: number; br: number;
       bo: boolean;
+      cc: number;  // carriedChips (only > 0 for real players)
       si?: string; ra?: string;
     }>();
     for (const [, snake] of state.snakes) {
@@ -1317,6 +1335,7 @@ class ArenaInstance {
         bl: snake.cachedBodyLength,
         br: snake.bodyRadius,
         bo: snake.boosting,
+        cc: snake.carriedChips || 0,
         si: snake.skinId,
         ra: snake.rarity,
       });
@@ -1393,14 +1412,14 @@ class ArenaInstance {
         }
       }
 
-      // Build nearby star snaps (flat: x, y, value, id, ...)
+      // Build nearby star snaps (flat: x, y, value, id, radius, ...)
       const starSnaps: number[] = [];
       for (let i = 0; i < state.stars.length; i++) {
         const star = state.stars[i];
         const dx = star.x - phx;
         const dy = star.y - phy;
         if (dx * dx + dy * dy < STAR_VIS_RANGE_SQ) {
-          starSnaps.push(star.x, star.y, star.value, star.id);
+          starSnaps.push(star.x, star.y, star.value, star.id, star.radius);
         }
       }
 

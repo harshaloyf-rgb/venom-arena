@@ -20,6 +20,7 @@ export interface RemoteSnake {
   bl: number;        // bodyLen
   br: number;        // bodyRadius
   bo: boolean;       // boosting
+  cc: number;        // carriedChips (only > 0 for real players)
   si?: string;       // skinId
   ra?: string;       // rarity
 }
@@ -44,6 +45,7 @@ export interface RemoteStar {
   y: number;
   value: number;
   id: number;
+  radius: number;   // visual radius (matches dead player's body width)
 }
 
 export interface GameSnapshot {
@@ -114,12 +116,12 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       }
     }
 
-    // Parse stars: flat [x, y, value, id, ...]
+    // Parse stars: flat [x, y, value, id, radius, ...]
     const stars: RemoteStar[] = [];
     const stArr = raw.st;
     if (Array.isArray(stArr)) {
-      for (let i = 0; i < stArr.length; i += 4) {
-        stars.push({ x: stArr[i], y: stArr[i + 1], value: stArr[i + 2], id: stArr[i + 3] });
+      for (let i = 0; i < stArr.length; i += 5) {
+        stars.push({ x: stArr[i], y: stArr[i + 1], value: stArr[i + 2], id: stArr[i + 3], radius: stArr[i + 4] });
       }
     }
 

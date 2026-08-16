@@ -460,3 +460,29 @@ Stage Summary:
 - Full star chip lifecycle implemented in game server: buy-in on join → carried chips tracked on snake/player → 10 stars spawned on death (evenly distributed value) → stars collected by alive players (not bots) → stars + carriedChips sent in every snapshot → final carriedChips reported to match result API
 - No new TypeScript errors introduced (only pre-existing downlevelIteration warnings)
 - File modified: `mini-services/game-server/index.ts` only (10 edit operations)
+---
+Task ID: 1
+Agent: Main
+Task: Implement full star chip system (trail drop, body-size stars, no decimals, carried chips above heads, star dedup)
+
+Work Log:
+- Added `radius` field to `StarOrb` type in `src/lib/snake/types.ts`
+- Server: Changed star spawn from circular pattern to body trail sampling (10 evenly-spaced positions from dead snake's PathBuffer)
+- Server: Star `radius` now matches dead player's `bodyRadius` (thicker snake = bigger stars)
+- Server: Fixed decimal star values — stars 1-9 get `floor(chips/10)`, star 10 gets remainder. Stars with value 0 are not spawned.
+- Server: Added `cc` (carriedChips) to snake snapshot lookup and per-player broadcast
+- Server: Added `radius` to star snapshot flat array format (now 5 values per star: x, y, value, id, radius)
+- Server: Replaced per-player star array mutation with Set-based dedup collection (one pass for all players, one filter)
+- Client: Added `cc` to `RemoteSnake` interface, `radius` to `RemoteStar` interface
+- Client: Updated `parseCompactSnapshot` to parse 5-value star format
+- Client: Added `carriedChips` to `TrackedSnake` interface and `Snake` adapter in `RemoteSnakeManager`
+- Client: Updated `drawStarChip` to use `radius` parameter (size = `radius * zoom * 1.2`) and skip value<=0
+- Client: Added `formatChips()` function (50c, 750kc, 1.5Mc)
+- Client: Added carried chips label above real player heads (dark pill + gold text, formatted)
+- Fixed pre-existing `rs.bodyLen` → `rs.bl` bug in `remote-snake-manager.ts`
+
+Stage Summary:
+- Full star chip system implemented: trail-based spawning, body-sized stars, integer-only values, carried chips display
+- Set-based star collection prevents double-collection by multiple players
+- All changes compile cleanly (only pre-existing lint error in fix-bom.ts)
+- Game server restarted and running on port 3001

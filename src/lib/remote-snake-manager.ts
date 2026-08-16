@@ -39,6 +39,7 @@ interface TrackedSnake {
   bodyLen: number;
   bodyRadius: number;
   score: number;
+  carriedChips: number;
   boosting: boolean;
   spawnTime: number;
   alive: boolean;
@@ -94,7 +95,7 @@ export class RemoteSnakeManager {
 
       if (!tracked) {
         // New snake — initialize
-        const pathCap = Math.max(Math.ceil(rs.bodyLen * 3), 300);
+        const pathCap = Math.max(Math.ceil(rs.bl * 3), 300);
         tracked = {
           id: rs.id,
           name: rs.name,
@@ -107,6 +108,7 @@ export class RemoteSnakeManager {
           bodyLen: rs.bl,      // compact: bodyLen → bl
           bodyRadius: rs.br,  // compact: bodyRadius → br
           score: rs.score,
+          carriedChips: rs.cc || 0,
           boosting: rs.bo,     // compact: boosting → bo
           spawnTime: now,
           alive: true,
@@ -132,6 +134,7 @@ export class RemoteSnakeManager {
         tracked.bodyLen = rs.bl;
         tracked.bodyRadius = rs.br;
         tracked.score = rs.score;
+        tracked.carriedChips = rs.cc || 0;
         tracked.boosting = rs.bo;
         tracked.color = rs.color;
         tracked.headColor = rs.sc;
@@ -308,6 +311,7 @@ export class RemoteSnakeManager {
       prevAngle: t.history.length > 1 ? t.history[1].angle : 0,
       speed: BASE_SPEED,
       score: t.score,
+      carriedChips: t.carriedChips,
       boosting: t.boosting,
       alive: true,
       isBot: t.isBot,

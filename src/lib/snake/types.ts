@@ -48,8 +48,10 @@ export interface StarOrb {
   id: number;
   x: number;
   y: number;
-  /** Chip value of this star (carriedChips / 10) */
+  /** Chip value of this star */
   value: number;
+  /** Visual radius — matches dead player's bodyRadius */
+  radius: number;
   /** Timestamp (ms) when spawned */
   spawnTime: number;
 }

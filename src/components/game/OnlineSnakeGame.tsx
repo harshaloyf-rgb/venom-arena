@@ -20,14 +20,18 @@ import { InputHandler } from './input';
 
 // ─── Star Chip Renderer ─────────────────────────────────────────────────
 // Draws a golden 5-pointed star that rotates and pulses.
+// Size is based on the dead player's bodyRadius.
 function drawStarChip(
   ctx: CanvasRenderingContext2D,
   sx: number, sy: number,
   zoom: number,
   now: number,
   value: number,
+  radius: number,
 ): void {
-  const size = Math.max(8, 10 * zoom);
+  if (value <= 0) return;
+  // Star size based on body radius of dead player, clamped to min 8
+  const size = Math.max(8, radius * zoom * 1.2);
   const pulse = 0.85 + 0.15 * Math.sin(now * 0.004);
   const rot = (now * 0.001) % (Math.PI * 2);
 
@@ -68,13 +72,27 @@ function drawStarChip(
   ctx.restore();
 
   // Value label below star (only if zoom is high enough)
-  if (zoom >= 0.4) {
+  if (zoom >= 0.3) {
     ctx.fillStyle = 'rgba(251, 191, 36, 0.8)';
     ctx.font = `bold ${Math.max(7, Math.floor(8 * zoom))}px monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText(Math.floor(value) + 'c', sx, sy + size + 3);
+    ctx.fillText(formatChips(value) , sx, sy + size + 3);
   }
+}
+
+// ─── Chip Amount Formatter ───────────────────────────────────────────────
+// 50 → "50c", 750000 → "750kc", 1500000 → "1.5Mc"
+function formatChips(chips: number): string {
+  if (chips >= 1_000_000) {
+    const m = chips / 1_000_000;
+    return (m === Math.floor(m) ? m : m.toFixed(1)) + 'Mc';
+  }
+  if (chips >= 1_000) {
+    const k = chips / 1_000;
+    return (k === Math.floor(k) ? k : k.toFixed(1)) + 'kc';
+  }
+  return chips + 'c';
 }
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -420,18 +438,21 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       if (snap.stars?.length) {
         const zoom = camera.zoom;
         for (const star of snap.stars) {
+          if (star.value <= 0) continue;
           const sx = (star.x - camera.x) * zoom + w / 2;
           const sy = (star.y - camera.y) * zoom + h / 2;
           // Cull off-screen
           if (sx < -30 || sx > w + 30 || sy < -30 || sy > h + 30) continue;
-          drawStarChip(ctx, sx, sy, zoom, now, star.value);
+          drawStarChip(ctx, sx, sy, zoom, now, star.value, star.radius || 6);
         }
       }
 
       // ── Render snakes: bots use fallback, player uses atlas (same as offline) ──
+      // Also renders carried chips label above real players' heads.
       const baseMargin = 500;
       const camX = camera.x;
       const camY = camera.y;
+      const zoom = camera.zoom;
       for (const [id, snake] of gameState.snakes) {
         if (!snake.alive) continue;
         if (snake.path.length < 2) continue;
@@ -464,6 +485,37 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
           try {
             renderSnakeFallback(ctx, snake, camera, viewport, now, undefined, undefined, true, 1, undefined, lodFar);
           } catch (e: any) { console.error('[Online] bot render:', id, e.message); }
+        }
+
+        // ── Carried chips label above player head (real players only) ──
+        const cc = (snake as any).carriedChips as number | undefined;
+        if (cc && cc > 0 && !snake.isBot) {
+          const headSx = (headWx - camX) * zoom + w / 2;
+          const headSy = (headWy - camY) * zoom + h / 2;
+          const fontSize = Math.max(9, Math.min(13, Math.floor(11 * zoom)));
+          const label = formatChips(cc);
+          ctx.save();
+          ctx.font = `bold ${fontSize}px monospace`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          // Dark background pill
+          const tw = ctx.measureText(label).width;
+          const px = 4;
+          const py = 2;
+          const pillY = headSy - snake.bodyRadius * zoom - 12;
+          ctx.fillStyle = 'rgba(0,0,0,0.65)';
+          ctx.beginPath();
+          const pillR = 4;
+          const pillL = headSx - tw / 2 - px;
+          const pillT = pillY - fontSize - py;
+          const pillW = tw + px * 2;
+          const pillH = fontSize + py * 2;
+          ctx.roundRect(pillL, pillT, pillW, pillH, pillR);
+          ctx.fill();
+          // Gold text
+          ctx.fillStyle = '#fbbf24';
+          ctx.fillText(label, headSx, pillY);
+          ctx.restore();
         }
       }
 
