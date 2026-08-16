@@ -272,3 +272,6 @@ Stage Summary:
 - Root cause: stale hash positions vs actual food positions after multi-snake magnet pulls
 - Fixed in: mini-services/game-server/index.ts (checkFoodEating), src/lib/snake/engine.ts (checkFoodEating), src/lib/snake/spatial-hash.ts (insert/query cell mapping)
 - Game server restarted and running cleanly on port 3001
+
+---
+Session start: 2026-08-16T01:30:00+05:30, git: 9ee2c5b (2026-08-14_09-41-25 fix-food-collection-root-cause)
