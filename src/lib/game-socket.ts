@@ -113,6 +113,16 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       emit();
 
       try {
+        // Ensure game server is running before connecting
+        try {
+          const ensureRes = await fetch('/api/game-server/ensure');
+          if (!ensureRes.ok) {
+            console.warn('[GameSocket] Game server ensure check failed:', ensureRes.status);
+          }
+        } catch {
+          console.warn('[GameSocket] Game server ensure check failed — will attempt connection anyway');
+        }
+
         socket = io('/?XTransformPort=3001', {
           auth: { token },
           transports: ['websocket', 'polling'],

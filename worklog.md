@@ -339,3 +339,22 @@ Stage Summary:
 - Verified: Caddy XTransformPort proxy works for both polling and WebSocket
 - Verified: full online join flow works end-to-end
 - Known limitation: 999-bot arenas may OOM in sandbox (4GB cgroup limit), works in production
+---
+Task ID: 3
+Agent: Main Agent
+Task: Permanent fix for game-server timeout — auto-start on demand
+
+Work Log:
+- Root cause: game-server mini-service keeps dying in sandbox (OOM, process cleanup) and wasn't auto-started
+- Created `/api/game-server/ensure` route that:
+  - Checks if port 3001 is already listening (via net.createConnection)
+  - If not running, spawns `bun index.ts` via nohup in background
+  - Waits up to 8 seconds for the port to become available
+  - Returns JSON with ok/running/started status
+- Updated `game-socket.ts` connect() to call `/api/game-server/ensure` before socket.io connect
+- Tested kill → auto-start → join flow: killed server, clicked BUY IN, server auto-started, game connected as player-VENOM-4643
+
+Stage Summary:
+- New file: src/app/api/game-server/ensure/route.ts (auto-start game server API)
+- Modified: src/lib/game-socket.ts (added ensure check before socket.io connect)
+- Game server now auto-starts on first online connection attempt — no more timeout errors
