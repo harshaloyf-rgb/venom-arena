@@ -9,6 +9,7 @@ import { createCamera, updateCameraInterpolated, getViewport } from '@/lib/snake
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, registerSkinAsset } from '@/lib/snake/skin-registry';
 import { getArenaConfig, SEGMENT_SPACING, BASE_SPEED } from '@/lib/snake/config';
+import { getArenaById } from '@/lib/game-config';
 import type { Snake, Camera, Viewport } from '@/lib/snake';
 import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrameWithDpr } from './render-snake-atlas';
 import { renderBackground, renderHUD, resetMinimapZoom, handleMinimapClick } from './hud';
@@ -405,7 +406,8 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         ...gameState,
         player: gameState.player ? { ...gameState.player, score: playerScoreRef.current } : null,
       };
-      renderHUD(ctx, hudState, camera, viewport, fc.fps, now, playerKillsRef.current, highScoreRef.current, snap.minimapDots);
+      const buyIn = arenaId ? (getArenaById(arenaId)?.buyIn) : undefined;
+      renderHUD(ctx, hudState, camera, viewport, fc.fps, now, playerKillsRef.current, highScoreRef.current, snap.minimapDots, buyIn);
 
       // ── Controls hint (same as offline) ──
       if (showControlsRef.current && gameState.player && gameState.player.alive) {
