@@ -231,7 +231,7 @@ function makeFood(nextId: { value: number }, x: number, y: number, forceSize?: n
 function spawnFoodBatch(nextId: { value: number }, foods: FoodOrb[], count: number, cx: number, cy: number, radius: number): void {
   for (let i = 0; i < count; i++) {
     const a = Math.random() * Math.PI * 2;
-    const d = Math.random() * radius;
+    const d = Math.sqrt(Math.random()) * radius; // area-uniform distribution
     foods.push(makeFood(nextId, cx + Math.cos(a) * d, cy + Math.sin(a) * d));
   }
 }

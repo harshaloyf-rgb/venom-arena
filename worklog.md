@@ -358,3 +358,24 @@ Stage Summary:
 - New file: src/app/api/game-server/ensure/route.ts (auto-start game server API)
 - Modified: src/lib/game-socket.ts (added ensure check before socket.io connect)
 - Game server now auto-starts on first online connection attempt — no more timeout errors
+---
+Task ID: 4
+Agent: Main Agent
+Task: Fix bots not spread across map in online mode
+
+Work Log:
+- Investigated bot spawn: sector-based spawnBots() correctly places bots in 36 sectors (200-27840px)
+- Found root cause: food distribution was center-concentrated, causing bots to drift inward
+  - spawnFoodBatch() used Math.random() * radius (linear) for distance
+  - This puts 50% of food in inner 25% of area (center-heavy)
+  - Bot AI food-seeking behavior pulls all bots toward food-dense center
+- Fixed spawnFoodBatch() in both files: Math.random() → Math.sqrt(Math.random())
+  - mini-services/game-server/index.ts (online)
+  - src/lib/snake/engine.ts (offline)
+- The grid-based maintainMapFood() already maintains food across the map (40/cell), but initial distribution was wrong
+- Verified: game connected successfully, food now distributes uniformly across the entire map area
+
+Stage Summary:
+- Changed: spawnFoodBatch() distance from linear to area-uniform (sqrt) in both online and offline engines
+- Bots will now spread across the map because food is evenly distributed
+- The grid food maintenance system (maintainMapFood) was already correct, it just needed proper initial seed
