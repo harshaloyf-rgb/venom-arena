@@ -40,6 +40,20 @@ export interface FoodOrb {
   magnetized: boolean;
 }
 
+// ─── Star Chip (Online Mode) ─────────────────────────────────────────────
+// Dropped when a real player dies. Each star = carriedChips ÷ 10.
+// Only real players can collect stars. Bots cannot see or collect them.
+
+export interface StarOrb {
+  id: number;
+  x: number;
+  y: number;
+  /** Chip value of this star (carriedChips / 10) */
+  value: number;
+  /** Timestamp (ms) when spawned */
+  spawnTime: number;
+}
+
 
 // ─── Skin & Rarity (Phase A types, used by Phases C/D) ─────────────────────
 
@@ -120,6 +134,8 @@ export interface Snake {
   speed: number;
   /** Accumulated score from eating food */
   score: number;
+  /** Carried chips (online only): buy-in + star values collected. Independent of score. */
+  carriedChips: number;
   /** Whether the snake is currently boosting */
   boosting: boolean;
   /** Whether the snake is alive */
@@ -281,6 +297,10 @@ export interface ArenaConfig {
 export interface GameState {
   snakes: Map<string, Snake>;
   foods: FoodOrb[];
+  /** Star chips dropped by dead real players (online only) */
+  stars: StarOrb[];
+  /** Monotonic star ID counter */
+  nextStarId: number;
   player: Snake | null;
   /** Monotonic food ID counter */
   nextFoodId: number;

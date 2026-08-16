@@ -39,13 +39,22 @@ export interface MinimapDot {
   isBot: boolean;
 }
 
+export interface RemoteStar {
+  x: number;
+  y: number;
+  value: number;
+  id: number;
+}
+
 export interface GameSnapshot {
   tick: number;
   boundaryRadius: number;
   snakes: RemoteSnake[];
   foods: RemoteFood[];
+  stars: RemoteStar[];
   playerScore: number;
   playerKills: number;
+  playerCarriedChips: number;
   minimapDots: MinimapDot[];
 }
 
@@ -105,13 +114,24 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       }
     }
 
+    // Parse stars: flat [x, y, value, id, ...]
+    const stars: RemoteStar[] = [];
+    const stArr = raw.st;
+    if (Array.isArray(stArr)) {
+      for (let i = 0; i < stArr.length; i += 4) {
+        stars.push({ x: stArr[i], y: stArr[i + 1], value: stArr[i + 2], id: stArr[i + 3] });
+      }
+    }
+
     return {
       tick: raw.t,
       boundaryRadius: raw.br,
       snakes: raw.s || [],
       foods,
+      stars,
       playerScore: raw.ps,
       playerKills: raw.pk,
+      playerCarriedChips: raw.pc || 0,
       minimapDots,
     };
   }

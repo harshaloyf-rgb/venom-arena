@@ -18,6 +18,65 @@ import { makeCoiledPath } from './coil-path';
 import { createExtractionState, updateExtractionProgress, drawExtractRing } from '@/lib/snake/extraction';
 import { InputHandler } from './input';
 
+// ─── Star Chip Renderer ─────────────────────────────────────────────────
+// Draws a golden 5-pointed star that rotates and pulses.
+function drawStarChip(
+  ctx: CanvasRenderingContext2D,
+  sx: number, sy: number,
+  zoom: number,
+  now: number,
+  value: number,
+): void {
+  const size = Math.max(8, 10 * zoom);
+  const pulse = 0.85 + 0.15 * Math.sin(now * 0.004);
+  const rot = (now * 0.001) % (Math.PI * 2);
+
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.rotate(rot);
+  ctx.scale(pulse, pulse);
+
+  // Outer glow
+  ctx.shadowColor = '#fbbf24';
+  ctx.shadowBlur = 18 * zoom;
+
+  // Star shape
+  ctx.fillStyle = '#fbbf24';
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 === 0 ? size : size * 0.45;
+    const a = (Math.PI * 2 * i) / 10 - Math.PI / 2;
+    if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  // Inner highlight
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 === 0 ? size * 0.5 : size * 0.22;
+    const a = (Math.PI * 2 * i) / 10 - Math.PI / 2;
+    if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+
+  // Value label below star (only if zoom is high enough)
+  if (zoom >= 0.4) {
+    ctx.fillStyle = 'rgba(251, 191, 36, 0.8)';
+    ctx.font = `bold ${Math.max(7, Math.floor(8 * zoom))}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(Math.floor(value) + 'c', sx, sy + size + 3);
+  }
+}
+
 // ─── Props ───────────────────────────────────────────────────────────────────
 
 interface OnlineSnakeGameProps {
@@ -357,6 +416,18 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       beginRenderFrameWithDpr(dpr);
       renderBackground(ctx, gameState, camera, viewport, fc.fps, now);
 
+      // ── Render star chips (golden stars from dead players) ──
+      if (snap.stars.length > 0) {
+        const zoom = camera.zoom;
+        for (const star of snap.stars) {
+          const sx = (star.x - camera.x) * zoom + w / 2;
+          const sy = (star.y - camera.y) * zoom + h / 2;
+          // Cull off-screen
+          if (sx < -30 || sx > w + 30 || sy < -30 || sy > h + 30) continue;
+          drawStarChip(ctx, sx, sy, zoom, now, star.value);
+        }
+      }
+
       // ── Render snakes: bots use fallback, player uses atlas (same as offline) ──
       const baseMargin = 500;
       const camX = camera.x;
@@ -407,7 +478,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         player: gameState.player ? { ...gameState.player, score: playerScoreRef.current } : null,
       };
       const buyIn = arenaId ? (getArenaById(arenaId)?.buyIn) : undefined;
-      renderHUD(ctx, hudState, camera, viewport, fc.fps, now, playerKillsRef.current, highScoreRef.current, snap.minimapDots, buyIn);
+      renderHUD(ctx, hudState, camera, viewport, fc.fps, now, playerKillsRef.current, highScoreRef.current, snap.minimapDots, buyIn, snap.playerCarriedChips);
 
       // ── Controls hint (same as offline) ──
       if (showControlsRef.current && gameState.player && gameState.player.alive) {

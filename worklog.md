@@ -437,3 +437,26 @@ Stage Summary:
 - ROOT CAUSE: `buf` undefined variable in broadcastSnapshots() — introduced when minimap stream was added in previous session
 - Fix: 2-line change in mini-services/game-server/index.ts (lines 1270, 1278-1279)
 - Game server now runs stably without crash — online mode should work through Caddy proxy
+
+---
+Task ID: 7
+Agent: Star System Server Agent
+Task: Implement star chip system in game server
+
+Work Log:
+- Added `StarOrb` to type imports from `../../src/lib/snake/types` (line 15)
+- Added star chip constants: STAR_COLLECT_RADIUS (40px), STAR_VIS_RANGE (6000px), STARS_PER_DEATH (10) with squared variants (after line 101)
+- Added `carriedChips: 0` to `createSnake` return object (default for bots, line 185)
+- Added `carriedChips: number` field to `ConnectedPlayer` interface (line 722)
+- Initialized `stars: []` and `nextStarId: 0` in ArenaInstance constructor's `this.state` object (lines 760-761)
+- Added buy-in assignment in join handler: reads `getArenaById(arenaId)?.buyIn ?? 0`, sets `playerInfo.carriedChips` and `snake.carriedChips` (lines 1547-1552)
+- In `handlePlayerDeath`: spawns 10 StarOrb entities in a circle (radius 60px) around death head when `carriedChips > 0`, with value distributed evenly (remainder to first stars) (lines 1106-1125)
+- In `handlePlayerDeath`: changed `reportMatchResult` call from `carriedChips: 0` to `carriedChips: snake.carriedChips` (line 1156)
+- Added step 5b in tick loop: star collection for alive players only (bots excluded), uses write-idx compaction pattern, updates `snake.carriedChips` and `player.carriedChips` (lines 1005-1028)
+- Updated `_snapBuf` type: added `st: number[]` and `pc: number` fields (lines 1244-1245)
+- In `broadcastSnapshots`: builds `starSnaps` flat array for stars within STAR_VIS_RANGE of each player, adds `st` and `pc` to emitted snapshot object (lines 1396-1421)
+
+Stage Summary:
+- Full star chip lifecycle implemented in game server: buy-in on join → carried chips tracked on snake/player → 10 stars spawned on death (evenly distributed value) → stars collected by alive players (not bots) → stars + carriedChips sent in every snapshot → final carriedChips reported to match result API
+- No new TypeScript errors introduced (only pre-existing downlevelIteration warnings)
+- File modified: `mini-services/game-server/index.ts` only (10 edit operations)

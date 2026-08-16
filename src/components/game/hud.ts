@@ -102,6 +102,7 @@ export function renderHUD(
   _highScore: number,
   minimapDots?: MinimapDot[],
   buyIn?: number,
+  carriedChips?: number,
 ): void {
   if (!state.player) return;
   const cw = viewport.width;
@@ -136,9 +137,8 @@ export function renderHUD(
   ctx.fillText(`Rank ${rank} / ${aliveSnakes}`, MAP_PAD + MAP_SIZE / 2, rankY + 12);
 
   // ── Carried Chips: below rank (online mode only) ──
-  if (buyIn !== undefined) {
-    const collected = Math.floor(state.player.score);
-    const carried = buyIn + collected;
+  if (buyIn !== undefined && carriedChips !== undefined) {
+    const starsCollected = Math.max(0, carriedChips - buyIn);
     const chipY = rankY + 24 + 4;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
     ctx.beginPath();
@@ -153,12 +153,12 @@ export function renderHUD(
 
     ctx.font = 'bold 11px monospace';
     ctx.fillStyle = '#fbbf24';
-    ctx.fillText(carried.toLocaleString() + 'c', MAP_PAD + MAP_SIZE / 2, chipY + 16);
+    ctx.fillText(carriedChips.toLocaleString() + 'c', MAP_PAD + MAP_SIZE / 2, chipY + 16);
 
     ctx.font = '7px monospace';
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ctx.textBaseline = 'bottom';
-    ctx.fillText(`${buyIn} buy-in + ${collected.toLocaleString()} collected`, MAP_PAD + MAP_SIZE / 2, chipY + 34);
+    ctx.fillText(`${buyIn} buy-in + ${starsCollected.toLocaleString()} stars`, MAP_PAD + MAP_SIZE / 2, chipY + 34);
   }
 
   // ── Score: bottom-center ──

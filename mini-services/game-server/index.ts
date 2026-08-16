@@ -12,7 +12,7 @@ import { createServer } from 'http';
 
 // ─── Shared imports from parent project (pure modules, no browser deps) ──────
 import type {
-  GameState, Snake, FoodOrb, ArenaConfig, SkinRarity, FoodSize, InputState,
+  GameState, Snake, FoodOrb, StarOrb, ArenaConfig, SkinRarity, FoodSize, InputState,
 } from '../../src/lib/snake/types';
 import { PathBuffer } from '../../src/lib/snake/pool';
 import { SpatialHash, type SpatialEntity } from '../../src/lib/snake/spatial-hash';
@@ -100,6 +100,13 @@ const MAGNET_DEATH_DIST = SNAKE_RADIUS + FOOD_MAGNET_DEATH_RADIUS;
 const MAGNET_PULL_DIST_SQ = MAGNET_PULL_DIST * MAGNET_PULL_DIST;
 const MAGNET_DEATH_DIST_SQ = MAGNET_DEATH_DIST * MAGNET_DEATH_DIST;
 
+// ─── Star Chip Constants ───────────────────────────────────────────────
+const STAR_COLLECT_RADIUS = 40;  // px — player must be within this to collect
+const STAR_COLLECT_RADIUS_SQ = STAR_COLLECT_RADIUS * STAR_COLLECT_RADIUS;
+const STAR_VIS_RANGE = 6000;  // px — stars visible to players within this range
+const STAR_VIS_RANGE_SQ = STAR_VIS_RANGE * STAR_VIS_RANGE;
+const STARS_PER_DEATH = 10;  // always 10 stars when a real player dies
+
 // ─── Online Arena Config — matches offline practice-easy exactly ─────────────
 // Online tiers use the SAME 29000px-radius map, 999 bots, and food density
 // as the offline practice-easy arena for full feature parity.
@@ -175,6 +182,7 @@ function createSnake(
     skinId: skinId || 'skin-default',
     rarity: rarity || 'common',
     prevHeadX: posX, prevHeadY: posY, smoothBrakeFactor: 1.0,
+    carriedChips: 0,
   };
 }
 
@@ -711,6 +719,7 @@ interface ConnectedPlayer {
   deadAt: number;           // 0 = alive, >0 = Date.now() of death
   spectatorHx: number;      // last head X before death (for snapshot camera)
   spectatorHy: number;      // last head Y before death (for snapshot camera)
+  carriedChips: number;     // player's carried star chips
 }
 
 class ArenaInstance {
@@ -748,6 +757,8 @@ class ArenaInstance {
       botsEnabled: true, // Server always has bots enabled
       arenaConfig: ac,
       boundaryRadius: ac.mapHalf,
+      stars: [],
+      nextStarId: 0,
     };
 
     this.players = new Map();
@@ -991,6 +1002,31 @@ class ArenaInstance {
       state.foods.length = writeIdx;
     }
 
+    // 5b. Star collection (players only — bots cannot collect stars)
+    for (const [socketId, player] of this.players) {
+      if (player.deadAt > 0) continue; // spectator
+      const snake = state.snakes.get(player.snakeId);
+      if (!snake || !snake.alive) continue;
+
+      const hx = snake.path.headX;
+      const hy = snake.path.headY;
+      let writeIdx = 0;
+      for (let i = 0; i < state.stars.length; i++) {
+        const star = state.stars[i];
+        const dx = star.x - hx;
+        const dy = star.y - hy;
+        if (dx * dx + dy * dy < STAR_COLLECT_RADIUS_SQ) {
+          // Collect!
+          snake.carriedChips += star.value;
+          player.carriedChips = snake.carriedChips;
+          // don't copy to writeIdx — star is consumed
+        } else {
+          state.stars[writeIdx++] = star;
+        }
+      }
+      state.stars.length = writeIdx;
+    }
+
     // 6. Food management
     if (state.tickCount % ac.playerFoodInterval === 0) {
       maintainFoodAroundPlayer(state.snakes, state.foods, ac, foodIdRef, this.foodHash);
@@ -1092,6 +1128,27 @@ class ArenaInstance {
     player.spectatorHx = snake.path.headX;
     player.spectatorHy = snake.path.headY;
 
+    // Spawn star chips at death position (before snake is deleted)
+    const chips = snake.carriedChips;
+    if (chips > 0) {
+      const headX = snake.path.headX;
+      const headY = snake.path.headY;
+      const baseValue = Math.floor(chips / STARS_PER_DEATH);
+      const remainder = chips - baseValue * STARS_PER_DEATH;
+      const now = Date.now();
+      for (let i = 0; i < STARS_PER_DEATH; i++) {
+        const angle = (i / STARS_PER_DEATH) * Math.PI * 2;
+        const star: StarOrb = {
+          id: this.state.nextStarId++,
+          x: headX + Math.cos(angle) * 60,
+          y: headY + Math.sin(angle) * 60,
+          value: baseValue + (i < remainder ? 1 : 0),
+          spawnTime: now,
+        };
+        this.state.stars.push(star);
+      }
+    }
+
     // Enter spectator mode — keep in this.players so snapshots continue
     player.deadAt = Date.now();
 
@@ -1121,7 +1178,7 @@ class ArenaInstance {
     } catch {}
 
     // Report result to main server (fire and forget)
-    this.reportMatchResult(player, 'death', 0, kills, durationSeconds, score)
+    this.reportMatchResult(player, 'death', snake.carriedChips, kills, durationSeconds, score)
       .catch(err => console.error(`[Arena ${this.arenaId}] Failed to report match result:`, err));
 
     // Schedule disconnect AFTER death screen period
@@ -1184,8 +1241,10 @@ class ArenaInstance {
     foods: any[];
     ps: number;  // playerScore
     pk: number;  // playerKills
+    st: number[]; // nearby stars: flat [x, y, value, id, ...]
+    pc: number;  // playerCarriedChips
     m: number[]; // minimap dots: flat [x, y, score, isBot, ...] for ALL bots
-  } = { tick: 0, boundaryRadius: 0, snakes: [], foods: [], ps: 0, pk: 0, m: [] };
+  } = { tick: 0, boundaryRadius: 0, snakes: [], foods: [], ps: 0, pk: 0, st: [], pc: 0, m: [] };
 
   private broadcastSnapshots(): void {
     const state = this.state;
@@ -1334,6 +1393,19 @@ class ArenaInstance {
         }
       }
 
+      // Build nearby star snaps (flat: x, y, value, id, ...)
+      const starSnaps: number[] = [];
+      for (let i = 0; i < state.stars.length; i++) {
+        const star = state.stars[i];
+        const dx = star.x - phx;
+        const dy = star.y - phy;
+        if (dx * dx + dy * dy < STAR_VIS_RANGE_SQ) {
+          starSnaps.push(star.x, star.y, star.value, star.id);
+        }
+      }
+
+      const playerCarriedChips = isSpectator ? 0 : player.carriedChips;
+
       // Emit snapshot (compact format)
       try {
         player.socket.emit('snapshot', {
@@ -1343,6 +1415,8 @@ class ArenaInstance {
           f: foodSnaps,
           ps: playerScore,
           pk: playerKills,
+          st: starSnaps,
+          pc: playerCarriedChips,
           m: minimapDots, // minimap dots (all snakes, full map)
         });
       } catch {}
@@ -1529,10 +1603,16 @@ io.on('connection', (socket) => {
         deadAt: 0,
         spectatorHx: 0,
         spectatorHy: 0,
+        carriedChips: 0,
       };
+
+      // Set buy-in as carried chips
+      const buyIn = getArenaById(arenaId)?.buyIn ?? 0;
+      playerInfo.carriedChips = buyIn;
 
       // Spawn player in arena
       const snake = arena.spawnPlayer(playerInfo);
+      snake.carriedChips = playerInfo.carriedChips;
       // FIX: Initialize anti-cheat position to actual spawn position
       // (was 0,0 causing instant false-positive on first check)
       playerInfo.lastPosCheckX = snake.path.headX;
