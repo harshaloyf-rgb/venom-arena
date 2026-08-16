@@ -417,7 +417,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       renderBackground(ctx, gameState, camera, viewport, fc.fps, now);
 
       // ── Render star chips (golden stars from dead players) ──
-      if (snap.stars.length > 0) {
+      if (snap.stars?.length) {
         const zoom = camera.zoom;
         for (const star of snap.stars) {
           const sx = (star.x - camera.x) * zoom + w / 2;
