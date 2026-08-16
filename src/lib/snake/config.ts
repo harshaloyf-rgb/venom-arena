@@ -101,7 +101,7 @@ export const FOOD_RESPAWN_BATCH = 40;
 export const FOOD_SPAWN_WEIGHTS: [number, number, number] = [0.93, 0.04, 0.03];
 
 /** Point values for [small, medium, large] food */
-export const FOOD_VALUES: [number, number, number] = [5, 15, 50];
+export const FOOD_VALUES: [number, number, number] = [1, 3, 5];
 
 /** Visual radii for [small, medium, large] food — reduced for cleaner look */
 export const FOOD_RADII: [number, number, number] = [1.5, 2, 3];
