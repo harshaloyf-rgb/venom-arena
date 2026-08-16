@@ -208,10 +208,10 @@ export const SPAWN_RADIUS = 29000;
 
 /** Minimum distance from all other snakes for safe spawn.
  *  Lower for 1000-bot arena — bots are smaller (avg score ~250) and map is huge. */
-export const SAFE_SPAWN_DIST = 300;
+export const SAFE_SPAWN_DIST = 400;
 
 /** Max attempts to find a safe spawn position before forcing placement */
-export const SAFE_SPAWN_ATTEMPTS = 50;
+export const SAFE_SPAWN_ATTEMPTS = 100;
 
 // ============================================================================
 // 8. SPIRAL_TURN — Progressive spiral assist for tight circular motion
@@ -342,8 +342,8 @@ const ARENA_EASY = buildArenaConfig({
   // Map: 29000px radius (58000×58000) — 2.6M sq px per bot
   spawnRadius: 29000,
   foodDespawnRadius: 30000,
-  safeSpawnDist: 300,
-  safeSpawnAttempts: 50,
+  safeSpawnDist: 400,
+  safeSpawnAttempts: 100,
 
   // Food: moderate density — player shouldn't gain 400 score in 5 sec at spawn
   foodMaxCount: 20000,
@@ -363,9 +363,9 @@ const ARENA_EASY = buildArenaConfig({
   normalBotScoreExp: 1.5,
   rankedScores: [50000, 42000, 35000, 28000, 22000, 17000, 13000, 10000, 8500, 8000],
 
-  // Spawn: spread across 1000-26000px ring
-  botSpawnInner: 1000,
-  botSpawnOuterFactor: 0.9,
+  // Spawn: spread across full map 200-27840px
+  botSpawnInner: 200,
+  botSpawnOuterFactor: 0.96,
   rankedHomeMin: 15000,
   rankedHomeMax: 25000,
   rankedHomeJitter: 3000,
@@ -397,8 +397,8 @@ const ARENA_MEDIUM = buildArenaConfig({
   // Map: 20000px radius (40000×40000) — 1.26M sq px per bot (2.1× denser)
   spawnRadius: 20000,
   foodDespawnRadius: 21000,
-  safeSpawnDist: 250,
-  safeSpawnAttempts: 50,
+  safeSpawnDist: 400,
+  safeSpawnAttempts: 100,
 
   // Food: moderate, less abundant
   foodMaxCount: 15000,
@@ -418,9 +418,9 @@ const ARENA_MEDIUM = buildArenaConfig({
   normalBotScoreExp: 1.5,
   rankedScores: [70000, 60000, 50000, 42000, 35000, 28000, 22000, 17000, 12000, 10000],
 
-  // Spawn: tighter ring proportional to smaller map
-  botSpawnInner: 800,
-  botSpawnOuterFactor: 0.88,
+  // Spawn: full map coverage 200-19200px
+  botSpawnInner: 200,
+  botSpawnOuterFactor: 0.96,
   rankedHomeMin: 10000,
   rankedHomeMax: 16000,
   rankedHomeJitter: 2000,
@@ -452,8 +452,8 @@ const ARENA_HARD = buildArenaConfig({
   // Map: 14000px radius (28000×28000) — 616K sq px per bot (4.3× denser than easy)
   spawnRadius: 14000,
   foodDespawnRadius: 15000,
-  safeSpawnDist: 200,
-  safeSpawnAttempts: 50,
+  safeSpawnDist: 400,
+  safeSpawnAttempts: 100,
 
   // Food: scarce — forces competition
   foodMaxCount: 10000,
@@ -473,9 +473,9 @@ const ARENA_HARD = buildArenaConfig({
   normalBotScoreExp: 1.3,
   rankedScores: [100000, 85000, 70000, 58000, 48000, 38000, 30000, 23000, 18000, 12000],
 
-  // Spawn: tight ring on small map
-  botSpawnInner: 600,
-  botSpawnOuterFactor: 0.85,
+  // Spawn: full map coverage 200-13440px
+  botSpawnInner: 200,
+  botSpawnOuterFactor: 0.96,
   rankedHomeMin: 7000,
   rankedHomeMax: 11000,
   rankedHomeJitter: 1500,

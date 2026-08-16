@@ -1541,13 +1541,14 @@ function isSafeSpawnPos(
 }
 
 /** Find a safe spawn position for normal bots.
- *  Uses arenaConfig for spawn ring dimensions. */
-function findBotSpawnPos(state: GameState, massSpawn = true): { x: number; y: number } {
+ *  Uses arenaConfig for spawn ring dimensions.
+ *  Returns null if no safe position found (caller should skip/try later). */
+function findBotSpawnPos(state: GameState, massSpawn = true, allowForce = false): { x: number; y: number } | null {
   const ac = state.arenaConfig;
   const minDistSq = ac.safeSpawnDist * ac.safeSpawnDist;
   const dMin = ac.botSpawnInner;
   const dMax = ac.spawnRadius * ac.botSpawnOuterFactor;
-  for (let attempt = 0; attempt < 60; attempt++) {
+  for (let attempt = 0; attempt < ac.safeSpawnAttempts; attempt++) {
     const a = Math.random() * Math.PI * 2;
     const d = dMin + Math.sqrt(Math.random()) * (dMax - dMin);
     const x = Math.cos(a) * d;
@@ -1556,6 +1557,8 @@ function findBotSpawnPos(state: GameState, massSpawn = true): { x: number; y: nu
       return { x, y };
     }
   }
+  // Only force-place if explicitly allowed (e.g. initial mass spawn)
+  if (!allowForce) return null;
   const a = Math.random() * Math.PI * 2;
   const d = dMin + Math.random() * (dMax - dMin);
   return { x: Math.cos(a) * d, y: Math.sin(a) * d };
@@ -1581,12 +1584,9 @@ function findRankedSpawnPos(state: GameState, homeAngle: number, homeRadius: num
 }
 
 // ─── Bot Starting Score Generation ──────────────────────────────────────────
-// Score range is per-arena via state.arenaConfig
+// Normal bots always spawn at min score. Only ranked bots get high scores.
 function generateNormalBotScore(state: GameState): number {
-  const ac = state.arenaConfig;
-  return ac.normalBotScoreMin + Math.floor(
-    (ac.normalBotScoreMax - ac.normalBotScoreMin) * Math.pow(Math.random(), ac.normalBotScoreExp)
-  );
+  return state.arenaConfig.normalBotScoreMin;
 }
 
 // Ranked scores are per-arena via state.arenaConfig.rankedScores
@@ -1606,16 +1606,42 @@ export function spawnBots(
   let botIndex = 0;
   const types: BotType[] = ['predator', 'coiler', 'baiter', 'interceptor', 'grazer', 'trapper'];
   const counts = [config.predator, config.coiler, config.baiter, config.interceptor, config.grazer, config.trapper];
+  const totalNormal = counts.reduce((a, b) => a + b, 0);
 
-  // Spawn regular bots first — mass spawn with fast head-only safety check
+  // Sector-based spawn: divide map into polar sectors for uniform distribution
+  const SECTORS = 36; // 10° per sector
+  const sectorAngle = (Math.PI * 2) / SECTORS;
+  const ac = state.arenaConfig;
+  const dMin = ac.botSpawnInner;
+  const dMax = ac.spawnRadius * ac.botSpawnOuterFactor;
+
+  // Pre-compute how many bots go to each sector (round-robin)
+  const sectorQueue: number[] = [];
+  for (let s = 0; s < SECTORS; s++) sectorQueue.push(s);
+  // Shuffle for variety between types
+  for (let i = sectorQueue.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [sectorQueue[i], sectorQueue[j]] = [sectorQueue[j], sectorQueue[i]];
+  }
+
+  // Spawn regular bots — sector-distributed for uniform map coverage
+  let sectorIdx = 0;
   for (let t = 0; t < types.length; t++) {
     for (let i = 0; i < counts[t]; i++) {
       const type = types[t];
-      const pos = findBotSpawnPos(state, true);
+      const sector = sectorQueue[sectorIdx % SECTORS];
+      sectorIdx++;
+
+      // Position within sector: spread across multiple radii using sqrt for uniform area distribution
+      const a = sector * sectorAngle + Math.random() * sectorAngle;
+      const d = dMin + Math.sqrt(Math.random()) * (dMax - dMin);
+      const x = Math.cos(a) * d;
+      const y = Math.sin(a) * d;
+
       const id = `bot-${type}-${botIndex++}`;
       const name = pickBotName(type);
       const startScore = generateNormalBotScore(state);
-      const snake = createSnakeFn(id, name, startScore, pos.x, pos.y, now, type);
+      const snake = createSnakeFn(id, name, startScore, x, y, now, type);
       snake.isBot = true;
       snake.isPlayer = false;
       state.snakes.set(id, snake);
@@ -1687,7 +1713,8 @@ export function respawnDeadBots(
       pos = findRankedSpawnPos(state, tempData.ranked!.homeAngle, tempData.ranked!.homeRadius, massSpawn);
       respawnScore = getRankedScore(rank, state);
     } else {
-      pos = findBotSpawnPos(state, massSpawn);
+      pos = findBotSpawnPos(state, massSpawn, false);
+      if (!pos) return; // Skip this tick — try again next tick rather than overlapping
       respawnScore = generateNormalBotScore(state);
     }
     const id = `bot-${bestType}-${_botIdCounter++}`;

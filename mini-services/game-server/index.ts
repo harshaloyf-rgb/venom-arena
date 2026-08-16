@@ -798,7 +798,7 @@ class ArenaInstance {
   spawnPlayer(playerInfo: ConnectedPlayer): Snake {
     const now = performance.now();
     const ac = this.arenaConfig;
-    const pos = findSafeSpawn(this.state.snakes, 0, 0, ac.spawnRadius * 0.5, ac.safeSpawnDist, ac.safeSpawnAttempts);
+    const pos = findSafeSpawn(this.state.snakes, 0, 0, ac.spawnRadius * 0.85, 600, ac.safeSpawnAttempts);
 
     const snake = createSnake(
       `player-${playerInfo.userTag}`,

@@ -275,3 +275,38 @@ Stage Summary:
 
 ---
 Session start: 2026-08-16T01:30:00+05:30, git: 9ee2c5b (2026-08-14_09-41-25 fix-food-collection-root-cause)
+
+---
+Task ID: 11
+Agent: Main Agent
+Task: Full-map bot distribution, safe spawning, min score for normal bots
+
+Work Log:
+- Analyzed bot spawn config: bots were in 1000-26100px ring (botSpawnInner:1000, botSpawnOuterFactor:0.9), player spawn at 0.5x radius
+- Identified that 200px inner dead zone + 10% outer dead zone + food density pull caused bots to cluster in inner half
+
+Changes made:
+
+**config.ts** (all 3 arenas: easy/medium/hard):
+- botSpawnInner: 1000/800/600 → 200 (eliminates center dead zone)
+- botSpawnOuterFactor: 0.9/0.88/0.85 → 0.96 (bots reach 96% of map radius)
+- safeSpawnDist: 300/250/200 → 400 (larger safety bubble)
+- safeSpawnAttempts: 50 → 100 (more attempts before force-place)
+
+**bot-ai.ts**:
+- generateNormalBotScore(): now always returns normalBotScoreMin (no random scores for normal bots)
+- spawnBots(): rewritten with 36-sector polar grid distribution. Bots round-robin across sectors, each position uses sqrt(random) for uniform area coverage. No more random-point-with-safety-check.
+- findBotSpawnPos(): now returns null on failure (allowForce parameter). Uses ac.safeSpawnAttempts (100) instead of hardcoded 60.
+- respawnDeadBots(): skips tick if no safe position found instead of force-placing on another snake
+
+**game-server/index.ts**:
+- Player spawn radius: spawnRadius * 0.5 → spawnRadius * 0.85
+- Player safe distance: safeSpawnDist (300) → 600px
+
+Stage Summary:
+- Bots now spread across 200-27840px ring (was 1000-26100px) — covers 96% of map radius
+- 36-sector polar grid ensures uniform angular distribution at spawn time
+- Normal bots all start at min score (500 easy, 1000 medium, 2000 hard) — only top 10 ranked keep high scores
+- Players spawn anywhere in 85% of map with 600px safety zone
+- Respawn skips if no safe spot (no more overlapping spawns)
+- Files: src/lib/snake/config.ts, src/lib/snake/bot-ai.ts, mini-services/game-server/index.ts
