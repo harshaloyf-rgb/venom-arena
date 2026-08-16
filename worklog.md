@@ -409,3 +409,31 @@ Stage Summary:
 - Minimap now shows dots across the entire map in online mode
 - Rank display also fixed to show accurate count (was showing only visible snake count)
 - Files modified: mini-services/game-server/index.ts, src/lib/game-socket.ts, src/components/game/hud.ts, src/components/game/OnlineSnakeGame.tsx
+
+---
+Task ID: 6
+Agent: Main Agent
+Task: Fix online mode not working — game server crash on snapshot broadcast
+
+Work Log:
+- User reported online mode not working
+- Checked game-server.log: found repeating `ReferenceError: buf is not defined` crash in broadcastSnapshots()
+  - Line 1270: `const minimapDots = buf.m;` — `buf` was never declared
+  - Line 1278-1279: `buf.tick = tick; buf.boundaryRadius = boundaryRadius;` — same issue
+  - The variable should be `this._snapBuf` (class property defined at line 1180-1188)
+  - This was introduced in Task 5 when minimap data stream was added — `buf` was a local alias that was never assigned
+- The crash occurred every snapshot tick (every 3 ticks / 50ms), causing:
+  1. Arena game loop to catch the error and stop
+  2. Arena cleanup after empty timeout
+  3. Player connected but received 0 snapshots before arena died
+  4. Socket disconnected → user sees "Connection failed" or blank screen
+- Fixed: replaced `buf.m` → `this._snapBuf.m`, `buf.tick` → `this._snapBuf.tick`, `buf.boundaryRadius` → `this._snapBuf.boundaryRadius`
+- Killed old game server process, restarted fresh
+- Verified: game server now runs stably with 999 bots (37% CPU, 448MB RAM, no crash errors)
+- Verified bot spawn: 999 bots spawned in tier-1 arena with correct sector distribution (predator:155, coiler:78, baiter:116, interceptor:116, grazer:271, trapper:233, ranked:30)
+- Note: agent-browser cannot test WebSocket through Caddy (connects to localhost:3000, bypasses port 81 proxy), but server-side verification confirms fix
+
+Stage Summary:
+- ROOT CAUSE: `buf` undefined variable in broadcastSnapshots() — introduced when minimap stream was added in previous session
+- Fix: 2-line change in mini-services/game-server/index.ts (lines 1270, 1278-1279)
+- Game server now runs stably without crash — online mode should work through Caddy proxy

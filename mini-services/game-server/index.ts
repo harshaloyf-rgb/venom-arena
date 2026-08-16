@@ -1267,7 +1267,7 @@ class ArenaInstance {
     // Flat array: [x, y, score, isBot(0|1), x, y, score, isBot(0|1), ...]
     // Excludes the current player's own snake for each snapshot.
     // ~16 bytes/snake × 999 = ~16KB per snapshot at 20Hz = 320KB/s — acceptable.
-    const minimapDots = buf.m;
+    const minimapDots = this._snapBuf.m;
     minimapDots.length = 0;
     for (const [, snake] of state.snakes) {
       if (!snake.alive) continue;
@@ -1275,8 +1275,8 @@ class ArenaInstance {
     }
 
     // ── Step 4: Send personalized snapshot to each player (including spectators) ──
-    buf.tick = tick;
-    buf.boundaryRadius = boundaryRadius;
+    this._snapBuf.tick = tick;
+    this._snapBuf.boundaryRadius = boundaryRadius;
 
     for (const [socketId, player] of this.players) {
       const isSpectator = player.deadAt > 0;
