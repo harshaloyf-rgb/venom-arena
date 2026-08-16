@@ -113,12 +113,13 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       emit();
 
       try {
-        socket = io('/', {
+        socket = io('/?XTransformPort=3001', {
           auth: { token },
-          transports: ['websocket'],
-          reconnection: false,
+          transports: ['websocket', 'polling'],
+          reconnection: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
           timeout: 10000,
-          query: { XTransformPort: '3001' },
         });
 
         socket.on('connect', () => {
