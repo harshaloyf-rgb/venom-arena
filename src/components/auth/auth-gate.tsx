@@ -111,10 +111,10 @@ function AuthScreen() {
   }
 
   return (
-    <div className="min-h-dvh flex items-center justify-center px-3 py-0.5">
+    <div className="min-h-dvh flex items-center justify-center px-3 py-0">
       <div className="w-full max-w-sm space-y-0.5">
         {/* Logo / Title */}
-        <div className="text-center space-y-0.5">
+        <div className="text-center space-y-0">
           <div className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-primary/15 border border-primary/30 va-neon-border">
             <Skull className="w-4.5 h-4.5 text-primary va-neon-text" />
           </div>
@@ -125,7 +125,7 @@ function AuthScreen() {
         </div>
 
         <Card className="border-primary/20 bg-card/80 backdrop-blur py-1 gap-0.5">
-          <CardHeader className="px-3 pb-0">
+          <CardHeader className="px-3 pb-0 gap-1">
             <CardTitle className="text-xs">Enter the arena</CardTitle>
             <CardDescription className="text-[11px]">Sign in or create an account to play.</CardDescription>
           </CardHeader>
@@ -236,7 +236,7 @@ function AuthScreen() {
             </Button>
 
             {/* Bottom info */}
-            <div className="mt-0 space-y-0.5">
+            <div className="mt-0 space-y-0">
               <p className="text-[11px] text-muted-foreground text-center">
                 <Zap className="w-3 h-3 inline mr-1" />
                 Guests get 150 starter chips. Register to keep your progress.
@@ -441,7 +441,7 @@ function RegisterForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-1">
+    <form onSubmit={handleSubmit} className="space-y-0.5">
       <div className="space-y-1">
         <Label htmlFor="r-name" className="text-xs">Display name (up to 20 chars)</Label>
         <Input id="r-name" required maxLength={20} value={name} onChange={(e) => setName(e.target.value)} placeholder="ViperStrike" className="text-xs h-6" />

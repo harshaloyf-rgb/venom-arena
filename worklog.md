@@ -565,3 +565,24 @@ Stage Summary:
 - Both login (516px) and register (627px) tabs fit on iPhone SE (667px) without scrolling
 - Tab switching works smoothly without layout shift
 - VLM confirmed: all content visible, no cutoff, no scrollbar, text readable
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix register tab scrolling in 599px Preview Panel viewport
+
+Work Log:
+- Analyzed user's screenshot: viewport is 1365×599px, content was 611px (12px overflow)
+- Applied 5 targeted reductions:
+  1. Outer wrapper py-0.5 → py-0 (-4px)
+  2. Logo section space-y-0.5 → space-y-0 (-4px)
+  3. CardHeader added gap-1 override (default gap-1.5) (-2px)
+  4. RegisterForm space-y-1 → space-y-0.5 (-12px from 6 inter-field gaps)
+  5. Bottom info space-y-0.5 → space-y-0 (-2px)
+
+Stage Summary:
+- Register tab: 611px → 591px (20px reduction)
+- At 599px viewport: 8px breathing room, NO scrollbar
+- VLM confirmed: all content visible, no cutoff, no scrollbar
+- iPhone SE still works: register 607px < 667px, login 508px < 667px
+- All text remains ≥ 11px
