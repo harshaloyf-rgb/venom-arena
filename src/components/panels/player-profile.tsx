@@ -478,6 +478,10 @@ function ProfileContent({
 
   // -- identity save
   function handleStartEditing() {
+    if (isEditing) {
+      setIsEditing(false);
+      return;
+    }
     setNewName(player.name);
     setSelectedCountry(player.country || 'US');
     setSelectedAvatar(player.avatar || '');
@@ -1054,70 +1058,70 @@ function ProfileContent({
               label="Banked Wallet"
               subLabel="Deposited Chips"
               value={player.bankedChips.toLocaleString() + ' c'}
-              icon={<Landmark className="w-4 h-4 text-emerald-400" />}
+              icon={<Landmark className="w-4 h-4 lg:w-3 lg:h-3 text-emerald-400" />}
               valueClass="text-emerald-400"
             />
             <StatCard
               label="Total Kills"
               subLabel="All Snake Eliminations"
               value={String(player.lifetimeKills)}
-              icon={<Skull className="w-4 h-4 text-rose-400" />}
+              icon={<Skull className="w-4 h-4 lg:w-3 lg:h-3 text-rose-400" />}
               valueClass="text-white"
             />
             <StatCard
               label="K/D Ratio"
               subLabel="Kill / Death Index"
               value={kdRatio}
-              icon={<Target className="w-4 h-4 text-amber-400" />}
+              icon={<Target className="w-4 h-4 lg:w-3 lg:h-3 text-amber-400" />}
               valueClass="text-amber-400"
             />
             <StatCard
               label="Extraction Rate"
               subLabel="Successful Handshakes"
               value={extractRate}
-              icon={<Compass className="w-4 h-4 text-cyan-400" />}
+              icon={<Compass className="w-4 h-4 lg:w-3 lg:h-3 text-cyan-400" />}
               valueClass="text-cyan-400"
             />
             <StatCard
               label="Survival Streak"
               subLabel="Consecutive Extractions"
               value={String(player.bestStreak)}
-              icon={<Trophy className="w-4 h-4 text-yellow-500" />}
+              icon={<Trophy className="w-4 h-4 lg:w-3 lg:h-3 text-yellow-500" />}
               valueClass="text-yellow-500"
             />
             <StatCard
               label="Record Extraction"
               subLabel="Max Retained in One Run"
               value={player.biggestExtract.toLocaleString()}
-              icon={<Award className="w-4 h-4 text-indigo-400" />}
+              icon={<Award className="w-4 h-4 lg:w-3 lg:h-3 text-indigo-400" />}
               valueClass="text-indigo-400"
             />
             <StatCard
               label="Lifetime Retained"
               subLabel="Cumulative Chip Profit"
               value={player.totalEarned.toLocaleString()}
-              icon={<Landmark className="w-4 h-4 text-teal-400" />}
+              icon={<Landmark className="w-4 h-4 lg:w-3 lg:h-3 text-teal-400" />}
               valueClass="text-teal-400"
             />
             <StatCard
               label="Total Forfeited"
               subLabel="Forfeited in Crash Events"
               value={player.totalLost.toLocaleString()}
-              icon={<RefreshCw className="w-4 h-4 text-red-400" />}
+              icon={<RefreshCw className="w-4 h-4 lg:w-3 lg:h-3 text-red-400" />}
               valueClass="text-red-400"
             />
             <StatCard
               label="Total Matches"
               subLabel="All Arena Runs"
               value={String(totalRuns)}
-              icon={<Gamepad2 className="w-4 h-4 text-indigo-400" />}
+              icon={<Gamepad2 className="w-4 h-4 lg:w-3 lg:h-3 text-indigo-400" />}
               valueClass="text-indigo-300"
             />
             <StatCard
               label="Account Age"
               subLabel="Days Since Join"
               value={String(accountAgeDays)}
-              icon={<Calendar className="w-4 h-4 text-emerald-400" />}
+              icon={<Calendar className="w-4 h-4 lg:w-3 lg:h-3 text-emerald-400" />}
               valueClass="text-emerald-300"
             />
           </div>

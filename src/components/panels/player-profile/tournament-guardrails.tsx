@@ -24,15 +24,15 @@ export function TournamentGuardrailsSection({
 }) {
   if (tournamentLoading) {
     return (
-      <div className="bg-slate-950 border border-amber-500/30 rounded-2xl p-5 lg:p-2 shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-900 pb-3 lg:pb-1 mb-4 lg:mb-1">
-          <div className="h-4 lg:h-3 w-48 lg:w-32 bg-slate-800 rounded animate-pulse" />
-          <div className="h-5 lg:h-4 w-36 lg:w-24 bg-amber-500/10 rounded-full animate-pulse" />
+      <div className="bg-slate-950 border border-amber-500/30 rounded-2xl p-5 lg:p-1.5 shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-900 pb-3 lg:pb-0.5 mb-4 lg:mb-0.5">
+          <div className="h-4 lg:h-3 w-48 lg:w-28 bg-slate-800 rounded animate-pulse" />
+          <div className="h-5 lg:h-3.5 w-36 lg:w-20 bg-amber-500/10 rounded-full animate-pulse" />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-1.5">
-          <div className="h-12 lg:h-10 bg-slate-900 rounded-xl animate-pulse" />
-          <div className="h-12 lg:h-10 bg-slate-900 rounded-xl animate-pulse" />
-          <div className="h-12 lg:h-10 bg-slate-900 rounded-xl animate-pulse" />
+          <div className="h-12 lg:h-8 bg-slate-900 rounded-xl animate-pulse" />
+          <div className="h-12 lg:h-8 bg-slate-900 rounded-xl animate-pulse" />
+          <div className="h-12 lg:h-8 bg-slate-900 rounded-xl animate-pulse" />
         </div>
       </div>
     );
@@ -50,11 +50,11 @@ export function TournamentGuardrailsSection({
   const adsPct = adsMax > 0 ? (adsToday / adsMax) * 100 : 0;
 
   return (
-    <div className="bg-slate-950 border border-amber-500/30 rounded-2xl p-5 lg:p-2 shadow-xl space-y-4 lg:space-y-1">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-900 pb-3 lg:pb-1">
+    <div className="bg-slate-950 border border-amber-500/30 rounded-2xl p-5 lg:p-1.5 shadow-xl space-y-4 lg:space-y-0.5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-900 pb-3 lg:pb-0.5">
         <div className="flex items-center gap-2">
-          <Shield className="w-5 h-5 lg:w-4 lg:h-4 text-amber-400" />
-          <h3 className="text-sm lg:text-[11px] font-bold text-white uppercase tracking-wider font-sans">
+          <Shield className="w-5 h-5 lg:w-3.5 lg:h-3.5 text-amber-400" />
+          <h3 className="text-sm lg:text-[11px] lg:leading-tight font-bold text-white uppercase tracking-wider font-sans">
             Annual Tournament Guardrails &amp; Limit Allowances
           </h3>
         </div>
