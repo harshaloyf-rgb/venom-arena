@@ -336,18 +336,10 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                     className="lg:hidden ml-4 pl-3 border-l-2 border-indigo-500/50 py-2 flex flex-col gap-1.5"
                     style={{ borderLeftColor: tier.accentColor }}
                   >
-                    {/* Header row: badge + index */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className={`text-[11px] px-1.5 py-0 rounded font-bold uppercase tracking-wider font-sans border border-transparent ${tier.color}`}>{tier.difficulty}</span>
-                      {isOnline && (() => { const idx = ARENA_TIERS.findIndex(t => t.id === tier.id) + 1; return idx > 0 ? <span className="text-[11px] font-mono text-slate-500">TIER {idx}/{ARENA_TIERS.length}</span> : null; })()}
-                    </div>
-
-                    {/* Description */}
-                    <p className="text-[11px] text-slate-300 font-sans leading-tight">{tier.description}</p>
-
                     {/* Stats row */}
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] font-sans text-slate-400">
                       <span><span className="text-slate-500">Buy-In:</span> <span className="font-mono font-semibold text-white">{tier.buyIn === 0 ? 'FREE' : chipFull(tier.buyIn)}</span></span>
+                      <span><span className="text-slate-500">Extraction:</span> <span className="font-mono font-semibold text-emerald-400">EXIT ANYTIME</span></span>
                       <span><span className="text-slate-500">Bots:</span> <span className="font-mono font-semibold text-cyan-400">{tier.botsCount.toLocaleString()}</span></span>
                       <span><span className="text-slate-500">XP:</span> <span className="font-mono font-semibold text-indigo-400">x{tier.rewardMultiplier}</span></span>
                     </div>
@@ -361,11 +353,11 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                       </div>
                     )}
 
-                    {/* Warning */}
+                    {/* Warning — full text matching desktop */}
                     <div className="text-[11px] text-indigo-300/80 font-sans leading-tight">
                       {isOnline
-                        ? <><strong>ONLINE:</strong> Up to 1,000 players. Commission: 0% if ≤3 players, 35% if ≥4.</>
-                        : <><strong>PRACTICE:</strong> Risk-free against {tier.botsCount.toLocaleString()} bots. No chips wagered.</>
+                        ? <><strong>ONLINE MULTIPLAYER:</strong> High-stakes arena for up to 1,000 players. Collect star chips from defeated opponents and extract safely. Graduated commission: <strong>0% if ≤3 players</strong>, <strong>35% if ≥4 players</strong>.</>
+                        : <><strong>OFFLINE PRACTICE MODE:</strong> Risk-free training ground. Test your skills against {tier.botsCount.toLocaleString()} bots without wagering, losing, or earning any of your banked chips!</>
                       }
                     </div>
 
