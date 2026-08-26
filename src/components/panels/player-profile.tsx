@@ -820,7 +820,7 @@ function ProfileContent({
 
             {/* Referral code */}
             {player.referralCode && (
-              <div className="flex items-center gap-1.5 mt-1.5 lg:hidden">
+              <div className="flex items-center gap-1.5 mt-1.5 ">
                 <LinkIcon className="w-3 h-3 text-emerald-400" />
                 <span className="text-[11px] text-slate-400 font-sans">
                   Referral:{' '}
@@ -847,7 +847,7 @@ function ProfileContent({
             )}
 
             {/* Account age + last seen */}
-            <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-500 font-sans lg:hidden">
+            <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-500 font-sans ">
               <span className="flex items-center gap-1">
                 <Calendar className="w-3 h-3" />
                 Member since {createdAtFormatted}
@@ -860,7 +860,7 @@ function ProfileContent({
             </div>
 
             {/* Socials */}
-            <div className="flex flex-wrap items-center gap-2 mt-2 lg:hidden">
+            <div className="flex flex-wrap items-center gap-2 mt-2 ">
               {instagram && (
                 <a
                   href={`https://instagram.com/${instagram.replace('@', '')}`}
@@ -954,7 +954,7 @@ function ProfileContent({
       </div>
 
       {/* Profile Picture + Character Appearance Row */}
-      <div className="lg:hidden">
+      <div className="">
       <ProfilePictureAndAppearance
         player={player}
         activeSkin={activeSkin}
@@ -972,7 +972,7 @@ function ProfileContent({
       </div>
 
       {/* Cosmetics Showcase Row */}
-      <div className="lg:hidden">
+      <div className="">
       <CosmeticsShowcase
         activeSkin={activeSkin}
         activeTrail={activeTrail}
@@ -1196,9 +1196,9 @@ function ProfileContent({
           />
 
           {/* Identity Change Policy Banner — hidden on desktop (info is in identity editor) */}
-          <div className="p-4 lg:p-2.5 rounded-xl border border-slate-900 bg-slate-900/10 flex items-center gap-4 lg:gap-2 lg:hidden">
+          <div className="p-4 lg:p-2.5 rounded-xl border border-slate-900 bg-slate-900/10 flex items-center gap-4 lg:gap-2 ">
             <Shield className="w-8 h-8 lg:w-5 lg:h-5 text-indigo-500 shrink-0" />
-            <div className="text-xs leading-relaxed text-slate-400">
+            <div className="text-xs lg:text-[11px] leading-relaxed text-slate-400">
               <span className="font-bold text-slate-200 uppercase block mb-0.5">
                 IDENTITY LOCK POLICY
               </span>
