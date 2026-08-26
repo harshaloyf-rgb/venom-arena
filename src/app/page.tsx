@@ -288,46 +288,46 @@ export default function Home() {
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
       {/* ===================== HEADER ===================== */}
       <header className="sticky top-0 shrink-0 border-b border-slate-900 bg-slate-950/80 backdrop-blur-md z-40">
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-3 h-12 md:px-6 lg:px-8 md:h-auto md:py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between px-2 h-8 md:px-3 lg:px-4 md:h-auto md:py-0.5">
           {/* Logo */}
           <button
             onClick={() => { setActiveTab('dashboard'); setMoreMenuOpen(false); }}
-            className="flex items-center gap-2 md:gap-3 cursor-pointer group select-none shrink-0"
+            className="flex items-center gap-1 md:gap-1.5 cursor-pointer group select-none shrink-0"
             aria-label="Return to lobby dashboard"
           >
-            <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-950/40 border border-indigo-400/20 group-hover:scale-105 transition duration-200">
-              <Compass className="w-4 h-4 md:w-5 md:h-5 text-white va-spin-slow" />
+            <div className="w-6 h-6 md:w-7 md:h-7 rounded-md md:rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-950/40 border border-indigo-400/20 group-hover:scale-105 transition duration-200">
+              <Compass className="w-3 h-3 md:w-3.5 md:h-3.5 text-white va-spin-slow" />
             </div>
             <div className="text-left hidden sm:block">
-              <h1 className="text-base md:text-lg font-extrabold tracking-tight text-white font-sans flex items-center gap-1.5 uppercase group-hover:text-indigo-400 transition duration-200">
+              <h1 className="text-[11px] md:text-xs font-extrabold tracking-tight text-white font-sans flex items-center gap-1.5 uppercase group-hover:text-indigo-400 transition duration-200">
                 Project Venom
-                <span className="text-xs px-2 py-0.5 bg-indigo-500 text-white font-bold rounded-full leading-none tracking-widest font-mono">
+                <span className="text-[11px] px-1.5 py-0 bg-indigo-500 text-white font-bold rounded-full leading-none tracking-widest font-mono">
                   Arena
                 </span>
               </h1>
-              <span className="text-[10px] text-slate-500 block font-mono hidden md:block">
+              <span className="text-[11px] text-slate-500 block font-mono hidden md:block">
                 STORES-SAFE COMPLIANT VERSION
               </span>
             </div>
-            <span className="sm:hidden text-sm font-extrabold text-white tracking-tight group-hover:text-indigo-400 transition-colors">
+            <span className="sm:hidden text-[11px] font-extrabold text-white tracking-tight group-hover:text-indigo-400 transition-colors">
               VENOM
             </span>
           </button>
 
           {/* Right controls */}
-          <div className="flex items-center gap-2 md:gap-3">
+          <div className="flex items-center gap-1 md:gap-1.5">
             {/* Chips wallet */}
-            <div className="bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 md:px-4 md:py-2 rounded-lg md:rounded-xl flex items-center gap-1.5">
-              <Coins className="w-3.5 h-3.5 md:w-4 md:h-4 text-emerald-400 animate-pulse" />
-              <span className="text-xs md:text-sm font-bold font-mono text-emerald-400 tabular-nums">
+            <div className="bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 md:px-2.5 md:py-1 rounded-lg flex items-center gap-1">
+              <Coins className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-400 animate-pulse" />
+              <span className="text-[11px] md:text-xs font-bold font-mono text-emerald-400 tabular-nums">
                 {player.bankedChips.toLocaleString()}
               </span>
             </div>
 
             {/* Desktop: Player badge + Rules + Sign Out */}
-            <div className="hidden md:flex items-center gap-3">
-              <div className="bg-slate-900/60 border border-slate-800/80 px-4 py-2 rounded-xl flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-slate-950 flex items-center justify-center border border-slate-800/80 text-xs overflow-hidden shrink-0 shadow-inner">
+            <div className="hidden md:flex items-center gap-1.5">
+              <div className="bg-slate-900/60 border border-slate-800/80 px-2 py-0.5 rounded-lg flex items-center gap-1.5">
+                <div className="w-6 h-6 rounded-md bg-slate-950 flex items-center justify-center border border-slate-800/80 text-xs overflow-hidden shrink-0 shadow-inner">
                   {player.avatar ? (
                     player.avatar.startsWith('data:') || player.avatar.startsWith('http') ? (
                       <img src={player.avatar} alt={player.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
@@ -335,21 +335,21 @@ export default function Home() {
                       <span className="select-none text-base">{player.avatar}</span>
                     )
                   ) : (
-                    <span className="select-none text-[10px] font-mono font-bold text-slate-400">{player.level}</span>
+                    <span className="select-none text-[11px] font-mono font-bold text-slate-400">{player.level}</span>
                   )}
                 </div>
                 <div className="text-left leading-none">
-                  <span className="text-[9px] text-slate-500 block uppercase font-semibold">Challenger (Lvl {player.level})</span>
-                  <span className="text-xs font-bold font-sans text-white truncate max-w-28 block">{player.name}</span>
+                  <span className="text-[11px] text-slate-500 block uppercase font-semibold leading-none">Challenger (Lvl {player.level})</span>
+                  <span className="text-[11px] font-bold font-sans text-white truncate max-w-20 block">{player.name}</span>
                 </div>
               </div>
-              <button onClick={() => setIsRulesOpen(true)} className="bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 p-2 py-2.5 rounded-xl transition duration-200 cursor-pointer flex items-center gap-1.5 shadow" title="Official Guide, Rules & FAQ">
-                <BookOpen className="w-4 h-4 text-indigo-400" />
-                <span className="text-xs font-bold font-sans">Rules &amp; Guide</span>
+              <button onClick={() => setIsRulesOpen(true)} className="bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 px-1.5 py-0.5 rounded-lg transition duration-200 cursor-pointer flex items-center gap-1 shadow" title="Official Guide, Rules & FAQ">
+                <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="text-[11px] font-bold font-sans">Rules &amp; Guide</span>
               </button>
-              <button onClick={handleLogout} className="bg-slate-900/60 hover:bg-red-950/40 hover:text-red-400 hover:border-red-500/20 border border-slate-800/80 p-2 py-2.5 rounded-xl transition duration-200 cursor-pointer flex items-center gap-1.5" title="Secure Logout">
-                <LogOut className="w-4 h-4" />
-                <span className="text-xs font-bold font-sans">Sign Out</span>
+              <button onClick={handleLogout} className="bg-slate-900/60 hover:bg-red-950/40 hover:text-red-400 hover:border-red-500/20 border border-slate-800/80 px-1.5 py-0.5 rounded-lg transition duration-200 cursor-pointer flex items-center gap-1" title="Secure Logout">
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="text-[11px] font-bold font-sans">Sign Out</span>
               </button>
             </div>
 
@@ -357,22 +357,22 @@ export default function Home() {
             <div className="md:hidden">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="w-8 h-8 rounded-lg bg-slate-900/60 border border-slate-800/80 flex items-center justify-center cursor-pointer" aria-label="Menu">
-                    <MoreHorizontal className="w-4 h-4 text-slate-400" />
+                  <button className="w-7 h-7 rounded-lg bg-slate-900/60 border border-slate-800/80 flex items-center justify-center cursor-pointer" aria-label="Menu">
+                    <MoreHorizontal className="w-3.5 h-3.5 text-slate-400" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-44 bg-slate-900 border-slate-800">
-                  <div className="px-2 py-1.5 border-b border-slate-800 mb-1">
-                    <p className="text-[10px] text-slate-500 font-mono">{player.name} · LVL {player.level}</p>
+                  <div className="px-1.5 py-1 border-b border-slate-800 mb-0.5">
+                    <p className="text-[11px] text-slate-500 font-mono">{player.name} · LVL {player.level}</p>
                   </div>
                   <DropdownMenuItem onClick={() => setIsRulesOpen(true)} className="cursor-pointer focus:bg-slate-800">
                     <BookOpen className="w-4 h-4 mr-2 text-indigo-400" />
-                    <span className="text-xs">Rules & Guide</span>
+                    <span className="text-[11px]">Rules & Guide</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="bg-slate-800" />
                   <DropdownMenuItem onClick={handleLogout} className="cursor-pointer focus:bg-red-950/40 text-red-400 focus:text-red-400">
                     <LogOut className="w-4 h-4 mr-2" />
-                    <span className="text-xs">Sign Out</span>
+                    <span className="text-[11px]">Sign Out</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -382,7 +382,7 @@ export default function Home() {
       </header>
 
       {/* ===================== MAIN ===================== */}
-      <main className="flex-1 flex flex-col w-full max-w-7xl mx-auto md:px-4 lg:px-8 md:py-6">
+      <main className="flex-1 flex flex-col w-full max-w-7xl mx-auto md:px-3 lg:px-4 md:py-2">
 
         {/* ====== DASHBOARD TAB ====== */}
         {activeTab === 'dashboard' && (
@@ -472,37 +472,37 @@ export default function Home() {
             </div>
 
             {/* ---- Desktop Dashboard (bento grid, current layout) ---- */}
-            <div className="hidden md:grid md:grid-cols-12 gap-6 items-start w-full va-fade-in">
+            <div className="hidden md:grid md:grid-cols-12 gap-2 items-start w-full va-fade-in">
               {/* LEFT COLUMN */}
-              <div className="md:col-span-8 flex flex-col gap-6">
+              <div className="md:col-span-8 flex flex-col gap-2">
                 {/* Hero banner */}
-                <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 to-indigo-950/80 border border-indigo-500/10 shadow-2xl relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-6">
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-                  <div className="flex items-center gap-4 relative">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-950/40 border border-indigo-400/20 shrink-0">
-                      <Award className="w-7 h-7 text-white animate-pulse" />
+                <div className="p-1.5 rounded-xl bg-gradient-to-r from-slate-900 to-indigo-950/80 border border-indigo-500/10 shadow-2xl relative overflow-hidden flex items-center justify-between gap-2">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+                  <div className="flex items-center gap-2 relative">
+                    <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-950/40 border border-indigo-400/20 shrink-0">
+                      <Award className="w-3.5 h-3.5 text-white animate-pulse" />
                     </div>
                     <div>
-                      <span className="text-[10px] text-indigo-400 font-mono font-bold tracking-widest block uppercase">Lobby Headquarters</span>
-                      <h2 className="text-xl font-black text-white font-sans tracking-tight mt-0.5">WELCOME BACK, {player.name.toUpperCase()}</h2>
-                      <div className="flex items-center gap-3 mt-2">
-                        <span className="text-[10px] font-mono text-slate-400">LVL {player.level}</span>
-                        <div className="w-36 h-1.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+                      <span className="text-[11px] text-indigo-400 font-mono font-bold tracking-widest uppercase">Lobby Headquarters</span>
+                      <h2 className="text-[11px] font-bold text-white font-sans tracking-tight">WELCOME BACK, {player.name.toUpperCase()}</h2>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[11px] font-mono text-slate-400">LVL {player.level}</span>
+                        <div className="w-20 h-1 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
                           <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${xpPercent}%` }} />
                         </div>
-                        <span className="text-[9px] font-mono text-slate-500">{xpIntoLevel.toLocaleString()} / {xpSpan.toLocaleString()} XP</span>
+                        <span className="text-[11px] font-mono text-slate-500">{xpIntoLevel.toLocaleString()} / {xpSpan.toLocaleString()} XP</span>
                       </div>
                     </div>
                   </div>
-                  <button onClick={() => setActiveTab('arena')} className="px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-sans font-bold text-xs flex items-center gap-2 transition duration-200 cursor-pointer shadow-lg shadow-indigo-950/40 border border-indigo-500 shrink-0 self-stretch sm:self-auto justify-center">
-                    <Play className="w-3.5 h-3.5 fill-current" /> LAUNCH MATCHMAKER
+                  <button onClick={() => setActiveTab('arena')} className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-sans font-bold text-[11px] flex items-center gap-1 transition duration-200 cursor-pointer shadow-lg shadow-indigo-950/40 border border-indigo-500 shrink-0 justify-center">
+                    <Play className="w-3 h-3 fill-current" /> LAUNCH MATCHMAKER
                   </button>
                 </div>
 
                 {/* Bento grid */}
-                <div className="flex flex-col gap-3">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Lobby Stations</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Lobby Stations</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <BentoGate onClick={() => setActiveTab('arena')} icon={Compass} accent="indigo" badge="Battle Gate" title="Play Endless Arenas" desc="Risk chips to compete in simulated multiplayer shards. Harvest dropping stars and escape safely." footLeft="STAKES FROM: 10 chips" footRight="Enter" />
                     <BentoGate onClick={() => setActiveTab('shop')} icon={ShoppingBag} accent="purple" badge="Customize Lab" title="Identity Workshop & Shop" desc="Unlock glowing skins, trials, death burst novas, or design a custom repeating body segment sequence." footLeft={`EQUIPPED: ${player.currentSkin ? 'Custom DNA' : 'Gallery Skin'}`} footRight="Modify" />
                     <BentoGate onClick={() => setActiveTab('profile')} icon={User} accent="blue" badge="My Record" title="Agent Profile" desc="Examine your records, high scores, total banked wealth, and change your operative callsign." footLeft={`HIGH SCORE: ${(player.biggestExtract || 0).toLocaleString()}`} footRight="Inspect" />
@@ -516,7 +516,7 @@ export default function Home() {
                     footRight="View Pass" />
                     <BentoGate onClick={() => setActiveTab('clips')} icon={Film} accent="red" badge="Replays" title="Highlights" desc="Watch and share your greatest moments. Review match replays, clutch extractions, and legendary eliminations." footLeft="MATCH HIGHLIGHTS" footRight="Watch" />
                     <div className="relative">
-                      <BentoGate onClick={() => setActiveTab('social')} icon={Users} accent="violet" badge="Friends & Search" title="Friends & Global Player Search" desc="Search players by name or tag, send chip gifts, block players, and manage your friend network!" footLeft="SOCIAL HUB" footRight="Connect" wide />
+                      <BentoGate onClick={() => setActiveTab('social')} icon={Users} accent="violet" badge="Friends & Search" title="Friends & Global Player Search" desc="Search players by name or tag, send chip gifts, block players, and manage your friend network!" footLeft="SOCIAL HUB" footRight="Connect" />
                       {pendingFriendCount > 0 && (
                         <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center">{pendingFriendCount}</span>
                       )}
@@ -526,7 +526,7 @@ export default function Home() {
               </div>
 
               {/* RIGHT COLUMN: Challenges (desktop) */}
-              <div className="md:col-span-4 flex flex-col gap-4">
+              <div className="md:col-span-4 flex flex-col gap-1">
                 <DashboardChallenges
                   missions={missions}
                   challengesLoading={challengesLoading}
@@ -589,10 +589,10 @@ export default function Home() {
       </main>
 
       {/* ===================== FOOTER (desktop only) ===================== */}
-      <footer className="hidden md:block shrink-0 border-t border-slate-900/60 bg-slate-950/40 py-6 mt-auto text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <footer className="hidden md:block shrink-0 border-t border-slate-900/60 bg-slate-950/40 py-1 mt-auto text-center text-[11px] text-slate-500">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <p className="font-sans">&copy; 2026 Project Venom Arena. All Rights Reserved. Fully store-safe, non-gambling gameplay edition.</p>
-          <div className="flex gap-4 font-mono text-[10px] text-slate-400">
+          <div className="flex gap-4 font-mono text-[11px] text-slate-400">
             <span>APP_VERSION: 1.0.0-MVP</span>
             <span>ENGINE: TSX_CANVAS</span>
           </div>
@@ -639,14 +639,14 @@ function DashboardChallenges({
   compact?: boolean;
 }) {
   return (
-    <section className={`${compact ? 'flex-1 flex flex-col min-h-0' : 'bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 shadow-xl flex flex-col gap-4'}`} aria-label="Tactical challenges">
+    <section className={`${compact ? 'flex-1 flex flex-col min-h-0' : 'bg-slate-900/60 border border-slate-800/80 rounded-xl p-2 shadow-lg flex flex-col gap-1'}`} aria-label="Tactical challenges">
       {/* Header */}
-      <div className={`${compact ? 'shrink-0 flex items-center justify-between px-1' : 'flex items-center justify-between border-b border-slate-800 pb-3'}`}>
+      <div className={`${compact ? 'shrink-0 flex items-center justify-between px-1' : 'flex items-center justify-between border-b border-slate-800 pb-1.5'}`}>
         <div className="flex items-center gap-2">
-          <ListTodo className="w-4 h-4 text-indigo-400 animate-pulse" />
-          <span className="text-xs font-bold text-white font-sans uppercase tracking-wider">Tactical Challenges</span>
+          <ListTodo className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
+          <span className="text-[11px] font-bold text-white font-sans uppercase tracking-wider">Tactical Challenges</span>
           {challengeTier && (
-            <span className={`text-[8px] px-1.5 py-0.5 font-bold rounded font-sans uppercase ${
+            <span className={`text-[11px] px-1.5 py-0 font-bold rounded font-sans uppercase ${
               challengeTier === 'elite' ? 'bg-red-500/15 border border-red-500/20 text-red-400' :
               challengeTier === 'veteran' ? 'bg-amber-500/15 border border-amber-500/20 text-amber-400' :
               challengeTier === 'operative' ? 'bg-cyan-500/15 border border-cyan-500/20 text-cyan-400' :
@@ -655,33 +655,33 @@ function DashboardChallenges({
           )}
         </div>
         {streakMultiplier > 1 ? (
-          <span className="text-[9px] font-mono text-amber-400 font-bold">🔥 {challengeStreak}d streak ×{streakMultiplier}</span>
+          <span className="text-[11px] font-mono text-amber-400 font-bold">🔥 {challengeStreak}d streak ×{streakMultiplier}</span>
         ) : (
-          <Sparkles className="w-4 h-4 text-indigo-400" />
+          <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
         )}
       </div>
 
       {/* Content */}
       {challengesLoading && missions.length === 0 ? (
-        <div className="flex items-center justify-center py-6">
-          <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
-          <span className="text-xs text-slate-400 ml-2">Loading challenges…</span>
+        <div className="flex items-center justify-center py-3">
+          <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+          <span className="text-[11px] text-slate-400 ml-2">Loading challenges…</span>
         </div>
       ) : missions.length === 0 ? (
-        <div className="text-center py-6">
-          <p className="text-xs text-slate-500 font-sans">No challenges available right now.</p>
+        <div className="text-center py-3">
+          <p className="text-[11px] text-slate-500 font-sans">No challenges available right now.</p>
         </div>
       ) : (
-        <div className={`flex flex-col gap-4 ${compact ? 'flex-1 overflow-y-auto va-scroll' : 'max-h-[480px] overflow-y-auto pr-1 custom-scrollbar'}`}>
+        <div className={`flex flex-col gap-2 ${compact ? 'flex-1 overflow-y-auto va-scroll' : 'max-h-[420px] overflow-y-auto pr-1 custom-scrollbar'}`}>
           {/* Daily */}
           {(() => {
             const dailies = missions.filter((m) => m.type === 'daily');
             if (dailies.length === 0) return null;
             return (
-              <div className="flex flex-col gap-2.5">
-                <div className="flex items-center gap-2">
-                  <Sunrise className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="text-[10px] font-bold text-amber-400 font-sans uppercase tracking-widest">Daily ({dailies.length})</span>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Sunrise className="w-3 h-3 text-amber-400" />
+                  <span className="text-[11px] font-bold text-amber-400 font-sans uppercase tracking-widest">Daily ({dailies.length})</span>
                 </div>
                 {dailies.map((m) => <ChallengeCard key={m.id} mission={m} onClaim={claimMission} />)}
               </div>
@@ -693,10 +693,10 @@ function DashboardChallenges({
             const weeklies = missions.filter((m) => m.type === 'weekly');
             if (weeklies.length === 0) return null;
             return (
-              <div className="flex flex-col gap-2.5">
-                <div className="flex items-center gap-2 border-t border-slate-800 pt-3 mt-1">
-                  <Star className="w-3.5 h-3.5 text-violet-400" />
-                  <span className="text-[10px] font-bold text-violet-400 font-sans uppercase tracking-widest">Weekly ({weeklies.length})</span>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-1.5 border-t border-slate-800 pt-1.5 mt-0.5">
+                  <Star className="w-3 h-3 text-violet-400" />
+                  <span className="text-[11px] font-bold text-violet-400 font-sans uppercase tracking-widest">Weekly ({weeklies.length})</span>
                 </div>
                 {weeklies.map((m) => <ChallengeCard key={m.id} mission={m} onClaim={claimMission} />)}
               </div>
@@ -707,13 +707,13 @@ function DashboardChallenges({
 
       {/* Last match (desktop only — mobile shows it above challenges) */}
       {!compact && lastResult && (
-        <div className="mt-2 p-3 rounded-xl border border-slate-800 bg-slate-950/80">
-          <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Last Match</span>
+        <div className="mt-1 p-1.5 rounded-lg border border-slate-800 bg-slate-950/80">
+          <span className="text-[11px] font-mono text-slate-500 uppercase tracking-widest">Last Match</span>
           <div className="mt-1 flex items-center gap-2">
-            <span className="text-base">{lastResult.outcome === 'extract' ? '🏆' : '💀'}</span>
+            <span className="text-sm">{lastResult.outcome === 'extract' ? '🏆' : '💀'}</span>
             <div className="text-[11px] text-slate-300 leading-tight">
               <p className="font-bold text-white">{lastResult.outcome === 'extract' ? 'Extracted' : 'Eliminated'} · {lastResult.arenaName}</p>
-              <p className="text-slate-500">{lastResult.chipsExtracted.toLocaleString()}c · {lastResult.kills} kills · +{lastResult.xpGained} XP · {Math.floor(lastResult.durationSeconds)}s</p>
+              <p className="text-[11px] text-slate-500">{lastResult.chipsExtracted.toLocaleString()}c · {lastResult.kills} kills · +{lastResult.xpGained} XP · {Math.floor(lastResult.durationSeconds)}s</p>
             </div>
           </div>
         </div>
@@ -730,30 +730,30 @@ function ChallengeCard({ mission, onClaim }: { mission: Mission; onClaim: (m: Mi
   const percent = Math.min(100, Math.floor((mission.current / mission.target) * 100));
   const isWeekly = mission.type === 'weekly';
   return (
-    <div className={`p-3.5 bg-slate-950/90 rounded-xl border ${isWeekly ? 'border-violet-500/20' : 'border-slate-800'} flex flex-col gap-2.5`}>
+    <div className={`p-2 bg-slate-950/90 rounded-lg border ${isWeekly ? 'border-violet-500/20' : 'border-slate-800'} flex flex-col gap-1.5`}>
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h4 className="text-xs font-bold text-white font-sans leading-snug">{mission.title}</h4>
-          <p className="text-[10.5px] text-slate-400 font-sans mt-1 leading-normal">{mission.description}</p>
+          <h4 className="text-[11px] font-bold text-white font-sans leading-snug">{mission.title}</h4>
+          <p className="text-[11px] text-slate-400 font-sans mt-0.5 leading-normal">{mission.description}</p>
         </div>
       </div>
-      <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 mt-0.5">
+      <div className="flex items-center justify-between text-[11px] font-mono text-slate-500">
         <span>PROGRESS:</span>
         <span>{mission.current} / {mission.target} ({percent}%)</span>
       </div>
-      <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800/60">
+      <div className="w-full h-1 bg-slate-900 rounded-full overflow-hidden border border-slate-800/60">
         <div className={`h-full rounded-full transition-all duration-300 ${
           mission.claimed ? 'bg-emerald-600' :
           mission.completed ? 'bg-gradient-to-r from-emerald-400 to-teal-500' :
           isWeekly ? 'bg-gradient-to-r from-violet-500 to-purple-500' : 'bg-gradient-to-r from-amber-500 to-orange-500'
         }`} style={{ width: `${percent}%` }} />
       </div>
-      <div className="flex justify-between items-center mt-1 pt-2 border-t border-slate-900/40">
-        <span className="text-[10px] font-mono font-bold text-emerald-400">+{mission.reward} CHIPS</span>
+      <div className="flex justify-between items-center pt-1.5 border-t border-slate-900/40">
+        <span className="text-[11px] font-mono font-bold text-emerald-400">+{mission.reward} CHIPS</span>
         <button
           onClick={() => void onClaim(mission)}
           disabled={!mission.completed || mission.claimed}
-          className={`px-3 py-1 rounded-lg text-[10px] font-sans font-bold transition-all cursor-pointer ${
+          className={`px-2 py-0.5 rounded-md text-[11px] font-sans font-bold transition-all cursor-pointer ${
             mission.claimed ? 'bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed' :
             mission.completed ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 text-black shadow shadow-emerald-950/20' :
             'bg-slate-900 text-slate-500 border border-slate-800 cursor-not-allowed'
@@ -797,18 +797,18 @@ const ACCENT_CLASSES: Record<BentoGateProps['accent'], { iconBg: string; badgeBg
 function BentoGate({ icon: Icon, accent, badge, title, desc, footLeft, footRight, onClick, wide }: BentoGateProps) {
   const c = ACCENT_CLASSES[accent];
   return (
-    <button onClick={onClick} className={`p-5 bg-slate-900/60 hover:bg-slate-900 border border-slate-800/80 ${c.borderHover} rounded-2xl cursor-pointer transition-all duration-300 group shadow-md flex flex-col justify-between h-44 text-left ${wide ? 'sm:col-span-2' : ''}`}>
+    <button onClick={onClick} className={`p-2 bg-slate-900/60 hover:bg-slate-900 border border-slate-800/80 ${c.borderHover} rounded-xl cursor-pointer transition-all duration-300 group shadow-sm flex flex-col justify-between text-left`}>
       <div className="flex items-start justify-between">
-        <div className={`w-10 h-10 rounded-xl ${c.iconBg} border flex items-center justify-center group-hover:scale-110 transition-transform`}>
-          <Icon className="w-5 h-5" />
+        <div className={`w-6 h-6 rounded-md ${c.iconBg} border flex items-center justify-center group-hover:scale-110 transition-transform`}>
+          <Icon className="w-3.5 h-3.5" />
         </div>
-        <span className={`text-[9px] px-2 py-0.5 ${c.badgeBg} border font-bold font-sans rounded-full uppercase`}>{badge}</span>
+        <span className={`text-[11px] px-1.5 py-0 ${c.badgeBg} border font-bold font-sans rounded-full uppercase`}>{badge}</span>
       </div>
       <div>
-        <h3 className={`text-sm font-bold text-white ${c.textHover} transition-colors`}>{title}</h3>
-        <p className="text-xs text-slate-400 font-sans mt-1 line-clamp-2 leading-relaxed">{desc}</p>
+        <h3 className={`text-[11px] font-bold text-white ${c.textHover} transition-colors`}>{title}</h3>
+        <p className="text-[11px] text-slate-400 font-sans mt-0.5 line-clamp-1 leading-tight">{desc}</p>
       </div>
-      <div className="text-[10px] font-mono text-slate-500 border-t border-slate-800/40 pt-2 flex justify-between">
+      <div className="text-[11px] font-mono text-slate-500 border-t border-slate-800/40 pt-1 flex justify-between">
         <span className="truncate pr-2">{footLeft}</span>
         <span className={`${c.arrow} group-hover:translate-x-1 transition-transform shrink-0`}>{footRight} →</span>
       </div>
