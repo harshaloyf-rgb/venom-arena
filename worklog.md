@@ -711,3 +711,25 @@ Work Log:
 - Passed row={!compact} to all ChallengeCard instances
 - Verified with agent-browser at 1365x599: scrollHeight=599/viewportHeight=599 (no overflow), no scrollbar on desktop panel, all 5 challenge rows have title tooltips
 - Lint: only pre-existing no-require-imports error (unrelated)
+
+---
+Task ID: mobile-challenges-fix
+Agent: Main Agent
+Task: Fix tactical challenges clipping in mobile view — all challenges must be fully visible without scroll/clipping
+
+Work Log:
+- Identified two layers of mobile clipping:
+  1. Outer container (line 288): `h-dvh` + `overflow-hidden` locked mobile to viewport height
+  2. Compact challenges (line 675): `overflow-y-auto va-scroll` created scrollbar that hid half the challenges
+- Fixed outer container: `h-dvh overflow-hidden` → `min-h-dvh md:overflow-hidden` (mobile can scroll, desktop stays locked)
+- Fixed challenges container: removed `overflow-y-auto va-scroll` from compact mode
+- Removed `min-h-0` from compact challenges section (allowed flexbox to shrink content)
+- Verified via agent-browser:
+  - Mobile (375x812): All 5 challenges visible, `overflow: visible`, `scrollHeight === clientHeight` on challenges section
+  - Desktop (1365x599): `overflow: hidden`, `scrollHeight === clientHeight === 599px` — fits perfectly
+
+Stage Summary:
+- Mobile tactical challenges no longer clipped — page scrolls naturally to show all content
+- Desktop layout unchanged — still fits 1365x599 viewport without scrolling
+- "Face test" component (snake-face-tester.tsx) exists but is NOT imported/rendered anywhere in the app
+

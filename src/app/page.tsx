@@ -285,7 +285,7 @@ export default function Home() {
   // -----------------------------------------------------------------------
 
   return (
-    <div className="h-dvh md:h-auto md:min-h-screen flex flex-col bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white overflow-hidden">
+    <div className="min-h-dvh md:h-auto md:min-h-screen flex flex-col bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white md:overflow-hidden">
       {/* ===================== HEADER ===================== */}
       <header className="sticky top-0 shrink-0 border-b border-slate-900 bg-slate-950/80 backdrop-blur-md z-40">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-2 h-8 md:px-3 lg:px-4 md:h-auto md:py-0">
@@ -639,7 +639,7 @@ function DashboardChallenges({
   compact?: boolean;
 }) {
   return (
-    <section className={`${compact ? 'flex-1 flex flex-col min-h-0' : 'bg-slate-900/60 border border-slate-800/80 rounded-lg p-1.5 shadow-lg flex flex-col gap-0.5'}`} aria-label="Tactical challenges">
+    <section className={`${compact ? 'flex-1 flex flex-col' : 'bg-slate-900/60 border border-slate-800/80 rounded-lg p-1.5 shadow-lg flex flex-col gap-0.5'}`} aria-label="Tactical challenges">
       {/* Header */}
       <div className={`${compact ? 'shrink-0 flex items-center justify-between px-1' : 'flex items-center justify-between border-b border-slate-800 pb-1'}`}>
         <div className="flex items-center gap-2">
@@ -672,7 +672,7 @@ function DashboardChallenges({
           <p className="text-[11px] text-slate-500 font-sans">No challenges available right now.</p>
         </div>
       ) : (
-        <div className={`flex flex-col gap-2 ${compact ? 'flex-1 overflow-y-auto va-scroll' : 'flex flex-col gap-0'}`}>
+        <div className={`flex flex-col gap-2 ${compact ? 'flex-1' : 'flex flex-col gap-0'}`}>
           {/* Daily */}
           {(() => {
             const dailies = missions.filter((m) => m.type === 'daily');
