@@ -820,3 +820,41 @@ Stage Summary:
 - Footer visible at y=577.5, arena ends at y=481.8 — no overlap
 - Screenshot saved: /home/z/my-project/arena-599.png
 
+---
+Task ID: arena-mobile-accordion
+Agent: Subagent
+Task: Mobile inline accordion detail + mobile compression for arena-selector
+
+Work Log:
+- Added mobileExpandedId state for accordion toggle
+- Modified tier onClick to toggle accordion (click same = collapse)
+- Added inline detail card after selected tier (lg:hidden)
+- Hidden right column on mobile (hidden lg:flex)
+- Compressed all base mobile classes (text, padding, gaps)
+- Updated handleDifficultyFilter and handleModeSwitch to reset mobileExpandedId
+
+Stage Summary:
+- Mobile: inline accordion detail appears below selected tier, buy button always accessible
+- Desktop: unchanged (right column still visible)
+- All mobile text ≥ 11px, no clipping
+
+---
+Task ID: arena-mobile-accordion
+Agent: Main Agent
+Task: Mobile inline accordion detail + mobile compression for arena-selector
+
+Work Log:
+- Added mobileExpandedId state for accordion toggle behavior
+- Modified tier card onClick: same tier click = collapse, different tier = expand
+- Built inline accordion detail card (lg:hidden) with: badge, tier index, description, stats row, live players, warning, buy button
+- Hidden right-column detail card on mobile (hidden lg:flex)
+- Compressed all base mobile classes: text to text-[11px], gaps reduced, padding reduced
+- Updated handleDifficultyFilter and handleModeSwitch to reset mobileExpandedId
+
+Stage Summary:
+- Mobile: inline accordion below selected tier, buy button always accessible without scrolling
+- Desktop: unchanged — right column visible, inline detail hidden, fits 599px
+- Accordion toggle: click selected tier = collapse, click different tier = expand new one
+- All mobile text ≥ 11px (only hidden right column has 10px base, overridden by lg:)
+- Browser verified: mobile accordion works, desktop 599px fits
+
