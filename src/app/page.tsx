@@ -752,19 +752,22 @@ function ChallengeCard({ mission, onClaim, row }: { mission: Mission; onClaim: (
 
   if (row) {
     return (
-      <div title={mission.description} className="flex items-center gap-1.5 py-0.5 border-b border-slate-800/40 last:border-b-0">
-        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isWeekly ? 'bg-violet-400' : 'bg-amber-400'}`} />
-        <span className="text-[11px] font-bold text-white shrink-0">{mission.title}</span>
-        <span className="text-[11px] font-mono text-slate-500 shrink-0">{mission.current}/{mission.target} ({percent}%)</span>
-        <div className="flex-1 h-1 bg-slate-900 rounded-full overflow-hidden border border-slate-800/60 min-w-[40px]">
-          <div className={`h-full rounded-full transition-all duration-300 ${barClass}`} style={{ width: `${percent}%` }} />
+      <div className="py-0.5 border-b border-slate-800/40 last:border-b-0">
+        <div className="flex items-center gap-1.5">
+          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isWeekly ? 'bg-violet-400' : 'bg-amber-400'}`} />
+          <span className="text-[11px] font-bold text-white shrink-0">{mission.title}</span>
+          <span className="text-[11px] font-mono text-slate-500 shrink-0">{mission.current}/{mission.target} ({percent}%)</span>
+          <div className="flex-1 h-1 bg-slate-900 rounded-full overflow-hidden border border-slate-800/60 min-w-[40px]">
+            <div className={`h-full rounded-full transition-all duration-300 ${barClass}`} style={{ width: `${percent}%` }} />
+          </div>
+          <span className="text-[11px] font-mono font-bold text-emerald-400 shrink-0">+{mission.reward} CHIPS</span>
+          <button
+            onClick={() => void onClaim(mission)}
+            disabled={!mission.completed || mission.claimed}
+            className={`px-1.5 py-0 rounded-md text-[11px] font-sans font-bold transition-all cursor-pointer shrink-0 ${btnClass}`}
+          >{mission.claimed ? 'Claimed ✓' : 'Claim'}</button>
         </div>
-        <span className="text-[11px] font-mono font-bold text-emerald-400 shrink-0">+{mission.reward} CHIPS</span>
-        <button
-          onClick={() => void onClaim(mission)}
-          disabled={!mission.completed || mission.claimed}
-          className={`px-1.5 py-0 rounded-md text-[11px] font-sans font-bold transition-all cursor-pointer shrink-0 ${btnClass}`}
-        >{mission.claimed ? 'Claimed ✓' : 'Claim'}</button>
+        <p className="text-[11px] text-slate-400 font-sans leading-tight pl-3">{mission.description}</p>
       </div>
     );
   }
