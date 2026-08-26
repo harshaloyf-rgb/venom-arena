@@ -858,3 +858,21 @@ Stage Summary:
 - All mobile text ≥ 11px (only hidden right column has 10px base, overridden by lg:)
 - Browser verified: mobile accordion works, desktop 599px fits
 
+
+---
+Task ID: desktop-card-uniform-height
+Agent: Main Agent
+Task: Fix inconsistent arena tier card heights on desktop view
+
+Work Log:
+- Analyzed user screenshot via VLM — confirmed cards had varying heights due to description text wrapping to 1 or 2 lines
+- Extracted all 30 tier descriptions, measured character lengths
+- Root cause: description <p> has no min-height, so 1-line descriptions produce shorter cards than 2-line descriptions
+- Fix: Added `lg:min-h-[34px]` to the description <p> element (line 288 of arena-selector.tsx)
+- This ensures all cards allocate 2 lines of vertical space for the description, making all cards uniform height
+- Verified via agent-browser DOM measurement: all 6 beginner cards = exactly 70.5px height, bottom edges evenly spaced 72.5px apart
+
+Stage Summary:
+- Single CSS change: `lg:min-h-[34px]` on description paragraph
+- All desktop tier cards now have identical height regardless of description length
+- No mobile impact (only lg: prefix used)
