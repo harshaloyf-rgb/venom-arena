@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -75,10 +75,33 @@ function AuthScreen() {
   const [error, setError] = useState<string | null>(null);
   const [forgotOpen, setForgotOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(1);
+
+  // Dynamically calculate zoom so content fits any viewport (toolbars, etc.)
+  const recalcZoom = useCallback(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    const currentZoom = parseFloat(getComputedStyle(el).zoom) || 1;
+    const naturalH = el.offsetHeight / currentZoom;
+    const vh = window.innerHeight;
+    const z = Math.min(1, (vh - 4) / naturalH);
+    if (Math.abs(z - currentZoom) > 0.005) {
+      setZoom(z);
+    }
+  }, []);
+
+  useEffect(() => {
+    recalcZoom();
+    window.addEventListener('resize', recalcZoom);
+    return () => window.removeEventListener('resize', recalcZoom);
+  }, [recalcZoom]);
 
   // Per-tab error handling — clear error when switching tabs
   function handleTabChange(value: string) {
     setError(null);
+    // Re-measure after tab content changes
+    requestAnimationFrame(recalcZoom);
   }
 
   async function callApi(path: string, body: unknown) {
@@ -113,7 +136,7 @@ function AuthScreen() {
 
   return (
     <div className="h-dvh flex items-center justify-center px-3 py-1 overflow-hidden">
-      <div className="w-full max-w-sm space-y-1" style={{ zoom: 0.93 }}>
+      <div ref={contentRef} className="w-full max-w-sm space-y-1" style={{ zoom }}>
         {/* Logo / Title */}
         <div className="text-center space-y-0.5">
           <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-primary/15 border border-primary/30 va-neon-border">
