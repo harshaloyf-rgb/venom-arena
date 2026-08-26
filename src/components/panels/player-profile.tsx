@@ -722,7 +722,7 @@ function ProfileContent({
   // =========================================================================
   return (
     <TooltipProvider>
-    <div className="w-full max-w-6xl mx-auto p-4 sm:p-6 lg:p-2 bg-slate-950/60 border border-slate-900 rounded-2xl shadow-xl relative overflow-hidden backdrop-blur-md">
+    <div className="w-full max-w-6xl mx-auto p-4 sm:p-6 lg:p-2 bg-slate-950/60 border border-slate-900 rounded-2xl shadow-xl relative backdrop-blur-md">
       {/* Glow */}
       <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
@@ -1168,7 +1168,7 @@ function ProfileContent({
                 <Trophy className="w-6 h-6 lg:w-4 lg:h-4 text-slate-600 mx-auto mb-1" />
                 <p className="text-xs lg:text-[11px] text-slate-400">No chip milestones achieved yet.</p>
                 <p className="text-[10px] lg:text-[11px] text-slate-600 mt-0.5">
-                  Keep extracting to unlock Bronze (100K), Silver (500K), Gold (1M), and beyond!
+                  Banked: {player.bankedChips.toLocaleString()}c — Next milestone: Bronze at 100,000c. Keep extracting!
                 </p>
               </div>
             ) : (
@@ -1249,7 +1249,7 @@ function ProfileContent({
                 No match records found in the ledger.
               </p>
               <p className="text-[11px] lg:text-[11px] text-slate-600 mt-0.5">
-                Complete arena runs to log your extraction data here.
+                Play arena matches to log your extraction data here. Future matches will appear automatically.
               </p>
             </div>
           ) : (

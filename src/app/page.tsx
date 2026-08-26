@@ -568,8 +568,8 @@ export default function Home() {
               <span className="text-xs font-bold text-white tracking-wide uppercase">{PANEL_TITLES[activeTab] || activeTab}</span>
             </div>
 
-            {/* Panel content — scrollable on mobile, natural on desktop */}
-            <div className="flex-1 overflow-y-auto md:overflow-visible va-scroll">
+            {/* Panel content — scrollable on mobile and desktop */}
+            <div className="flex-1 overflow-y-auto va-scroll">
               {activeTab === 'arena' && <ArenaSelector onPlay={handlePlayArena} onToast={toastFn} />}
               {activeTab === 'shop' && <CosmeticsShop />}
               {activeTab === 'profile' && <PlayerProfilePanel />}

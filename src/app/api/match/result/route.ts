@@ -216,6 +216,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // --- Match History recording ---
+    await tx.matchHistory.create({
+      data: {
+        playerId: player.id,
+        arenaId,
+        arenaName: arena.name,
+        isOnline: arena.rewardMultiplier > 0,
+        status: outcome === 'extract' ? 'EXTRACTED' : 'COLLIDED',
+        chipsEarned,
+        chipsLost,
+        kills,
+        snakeLength: score,
+        durationSec: durationSeconds,
+      },
+    });
+
     // --- War scoring (if player is in a clan with an active war) ---
     if (p.clanTag && kills > 0) {
       const war = await tx.clanWar.findFirst({
