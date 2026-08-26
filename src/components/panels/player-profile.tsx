@@ -752,7 +752,7 @@ function ProfileContent({
                 {activeSkin?.emoji || '🐍'}
               </span>
             )}
-            <div className="absolute -bottom-1 -right-1 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded text-[10px] lg:text-[11px] font-mono font-bold text-indigo-400 shadow">
+            <div className="absolute -bottom-1 -right-1 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded text-[11px] font-mono font-bold text-indigo-400 shadow">
               Lvl {player.level}
             </div>
           </div>
@@ -765,11 +765,11 @@ function ProfileContent({
                   {activeFlag?.flag || '🇺🇸'}
                 </span>
                 <span>{player.name}</span>
-                <span className="text-[10px] lg:text-[11px] font-mono font-bold bg-slate-950 border border-slate-800 text-indigo-400 px-1.5 py-0.5 rounded uppercase">
+                <span className="text-[11px] font-mono font-bold bg-slate-950 border border-slate-800 text-indigo-400 px-1.5 py-0.5 rounded uppercase">
                   {player.country || 'US'}
                 </span>
                 {player.clanTag && (
-                  <Badge className="bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-[10px] lg:text-[11px] font-mono font-bold px-2 py-0.5">
+                  <Badge className="bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-[11px] font-mono font-bold px-2 py-0.5">
                     [{player.clanTag}]{player.clanRank ? ` ${player.clanRank}` : ''}
                   </Badge>
                 )}
@@ -901,7 +901,7 @@ function ProfileContent({
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
           {/* Level progress */}
-          <div className="w-full md:w-72 lg:w-36 bg-slate-900/60 p-3 lg:p-1.5 rounded-xl border border-slate-800 backdrop-blur-sm flex-1">
+          <div className="w-full md:w-72 lg:w-52 bg-slate-900/60 p-3 lg:p-1.5 rounded-xl border border-slate-800 backdrop-blur-sm flex-1">
             <div className="flex justify-between items-center text-xs text-slate-400 font-sans mb-1.5 lg:mb-0.5">
               <span className="flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />{' '}
@@ -911,7 +911,7 @@ function ProfileContent({
                 {player.xp} / {xpNeeded} XP
               </span>
             </div>
-            <div className="w-full h-2 lg:h-1.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800 p-0.5">
+            <div className="w-full h-2.5 lg:h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800 p-0.5">
               <div
                 className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
                 style={{ width: `${xpPercent}%` }}
@@ -1167,7 +1167,7 @@ function ProfileContent({
               <div className="rounded-xl border border-dashed border-slate-800 p-4 lg:p-2 text-center">
                 <Trophy className="w-6 h-6 lg:w-4 lg:h-4 text-slate-600 mx-auto mb-1" />
                 <p className="text-xs lg:text-[11px] text-slate-400">No chip milestones achieved yet.</p>
-                <p className="text-[10px] lg:text-[11px] text-slate-600 mt-0.5">
+                <p className="text-[11px] text-slate-600 mt-0.5">
                   Banked: {player.bankedChips.toLocaleString()}c — Next milestone: Bronze at 100,000c. Keep extracting!
                 </p>
               </div>
@@ -1185,7 +1185,7 @@ function ProfileContent({
                         <span className="text-2xl lg:text-base" title={tier.name}>{tier.badge.split(' ')[0]}</span>
                         <div className="lg:leading-tight">
                           <div className="text-xs lg:text-[11px] font-bold text-white">{tier.name}</div>
-                          <div className="text-[10px] lg:text-[11px] text-slate-500 font-mono">
+                          <div className="text-[11px] text-slate-500 font-mono">
                             {ms.chipsAtMilestone.toLocaleString('en-IN')} chips • {new Date(ms.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
                           </div>
                         </div>
@@ -1258,7 +1258,7 @@ function ProfileContent({
               <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-900 text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                    <tr className="border-b border-slate-900 text-[11px] uppercase font-bold text-slate-500 tracking-wider">
                       <th className="py-3 px-4">Arena Sector</th>
                       <th className="py-3 px-4">Status</th>
                       <th className="py-3 px-4 text-right">Chips Outcome</th>
@@ -1288,7 +1288,7 @@ function ProfileContent({
                         </td>
                         <td className="py-3.5 px-4">
                           <Badge
-                            className={`text-[10px] font-mono font-bold border ${
+                            className={`text-[11px] font-mono font-bold border ${
                               match.status === 'EXTRACTED'
                                 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                                 : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
@@ -1345,7 +1345,7 @@ function ProfileContent({
                         <Compass className="w-3.5 h-3.5 text-indigo-400" />
                         <span className="text-xs font-bold text-slate-300 font-sans">{match.arenaName}</span>
                         <span
-                          className={`text-[7px] font-mono px-1 rounded ${
+                          className={`text-[11px] font-mono px-1 rounded ${
                             match.isOnline
                               ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-300'
                               : 'bg-slate-800 text-slate-400'
@@ -1355,7 +1355,7 @@ function ProfileContent({
                         </span>
                       </div>
                       <Badge
-                        className={`text-[9px] font-mono font-bold border ${
+                        className={`text-[11px] font-mono font-bold border ${
                           match.status === 'EXTRACTED'
                             ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                             : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
@@ -1366,7 +1366,7 @@ function ProfileContent({
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-[11px]">
                       <div>
-                        <span className="text-slate-500 block text-[9px] font-mono uppercase">Chips</span>
+                        <span className="text-slate-500 block text-[11px] font-mono uppercase">Chips</span>
                         <span className={`font-mono font-bold ${match.status === 'EXTRACTED' ? 'text-emerald-400' : 'text-rose-400'}`}>
                           {match.status === 'EXTRACTED'
                             ? `+${match.chipsEarned.toLocaleString()}`
@@ -1374,15 +1374,15 @@ function ProfileContent({
                         </span>
                       </div>
                       <div>
-                        <span className="text-slate-500 block text-[9px] font-mono uppercase">Kills</span>
+                        <span className="text-slate-500 block text-[11px] font-mono uppercase">Kills</span>
                         <span className="font-mono font-semibold text-slate-300">{match.kills}</span>
                       </div>
                       <div>
-                        <span className="text-slate-500 block text-[9px] font-mono uppercase">Duration</span>
+                        <span className="text-slate-500 block text-[11px] font-mono uppercase">Duration</span>
                         <span className="font-mono text-slate-400">{match.durationSec}s</span>
                       </div>
                     </div>
-                    <div className="text-[10px] font-mono text-slate-500 flex items-center gap-1">
+                    <div className="text-[11px] font-mono text-slate-500 flex items-center gap-1">
                       <Clock className="w-2.5 h-2.5" />
                       {new Date(match.timestamp).toLocaleDateString()}{' '}
                       {new Date(match.timestamp).toLocaleTimeString([], {

@@ -36,7 +36,7 @@ export async function GET() {
 
   const player = await db.player.findUnique({
     where: { userTag: session.userTag },
-    select: { id: true, userTag: true, country: true, bankedChips: true, level: true, clanTag: true },
+    select: { id: true, userTag: true, country: true, bankedChips: true, level: true, clanTag: true, createdAt: true },
   });
 
   if (!player) {
@@ -57,12 +57,31 @@ export async function GET() {
   let milestoneHistory: MilestoneEntry[] = [];
 
   try {
+    // Tie-breaking: bankedChips DESC → level DESC → createdAt ASC (veteran wins)
+    // Rank = players with more chips + same chips but higher level + same chips & level but earlier join
+    const rankWhere = (countryFilter?: Record<string, unknown>) => ({
+      banned: false as const,
+      ...countryFilter,
+    });
+
+    const moreChips = { bankedChips: { gt: player.bankedChips } };
+    const sameChipsHigherLevel = { bankedChips: player.bankedChips, level: { gt: player.level } };
+    const sameChipsSameLevelEarlier = { bankedChips: player.bankedChips, level: player.level, createdAt: { lt: player.createdAt } };
+
+    const calcRank = async (countryFilter?: Record<string, unknown>) => {
+      const base = rankWhere(countryFilter);
+      const [a, b, c] = await Promise.all([
+        db.player.count({ where: { ...base, ...moreChips } }),
+        db.player.count({ where: { ...base, ...sameChipsHigherLevel } }),
+        db.player.count({ where: { ...base, ...sameChipsSameLevelEarlier } }),
+      ]);
+      return a + b + c + 1;
+    };
+
     [globalRank, nationalRank, regionalRank, totalGlobal, totalNational, totalRegional, milestoneHistory] = await Promise.all([
-      db.player.count({ where: { banned: false, bankedChips: { gt: player.bankedChips } } }).then((c) => c + 1),
-      db.player.count({ where: { banned: false, country: player.country, bankedChips: { gt: player.bankedChips } } }).then((c) => c + 1),
-      db.player.count({
-        where: { banned: false, country: { in: regionCountries }, bankedChips: { gt: player.bankedChips } },
-      }).then((c) => c + 1),
+      calcRank(),
+      calcRank(player.country ? { country: player.country } : undefined),
+      calcRank(regionCountries.length > 0 ? { country: { in: regionCountries } } : undefined),
       db.player.count({ where: { banned: false } }),
       db.player.count({ where: { banned: false, country: player.country } }),
       db.player.count({ where: { banned: false, country: { in: regionCountries } } }),

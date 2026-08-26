@@ -45,7 +45,7 @@ export function ProfilePictureAndAppearance({
       {/* Profile Picture Card */}
       <div className="md:col-span-4">
         <div className="bg-slate-950/40 border border-slate-900 rounded-2xl p-5 h-full flex flex-col items-center justify-center text-center">
-          <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest mb-3">Profile Picture</span>
+          <span className="text-[11px] uppercase font-bold text-slate-500 tracking-widest mb-3">Profile Picture</span>
           <div
             className="w-24 h-24 rounded-2xl flex items-center justify-center border-2 shadow-lg relative overflow-hidden cursor-pointer group mb-3"
             style={{ borderColor: skinColor + '50', backgroundColor: skinColor + '10' }}
@@ -64,11 +64,11 @@ export function ProfilePictureAndAppearance({
             <div className="absolute inset-0 bg-slate-950/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
               <Upload className="w-6 h-6 text-indigo-400" />
             </div>
-            <div className="absolute -bottom-1 -right-1 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold text-indigo-400 shadow">
+            <div className="absolute -bottom-1 -right-1 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded text-[11px] font-mono font-bold text-indigo-400 shadow">
               Lvl {player.level}
             </div>
           </div>
-          <button type="button" onClick={onStartEditing} className="px-3 py-1.5 bg-indigo-600/15 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-600/25 rounded-xl text-[10px] font-bold transition cursor-pointer flex items-center gap-1">
+          <button type="button" onClick={onStartEditing} className="px-3 py-1.5 bg-indigo-600/15 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-600/25 rounded-xl text-[11px] font-bold transition cursor-pointer flex items-center gap-1">
             <Edit2 className="w-3 h-3" /> Change Picture
           </button>
         </div>
@@ -77,7 +77,7 @@ export function ProfilePictureAndAppearance({
       {/* Character Appearance Card */}
       <div className="md:col-span-8">
         <div className="bg-slate-950/40 border border-slate-900 rounded-2xl p-5 h-full">
-          <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest mb-4 block">Character Appearance</span>
+          <span className="text-[11px] uppercase font-bold text-slate-500 tracking-widest mb-4 block">Character Appearance</span>
           <div className="flex flex-col sm:flex-row gap-5">
             {/* Snake Visual */}
             <div className="relative w-full sm:w-48 h-40 shrink-0 rounded-xl bg-slate-900/80 border border-slate-900 overflow-hidden">
@@ -108,20 +108,20 @@ export function ProfilePictureAndAppearance({
                     <circle cx="22" cy="68" r="1" fill={trailColor} opacity="0.4" className="animate-pulse" />
                   </svg>
                   {/* Death FX indicator */}
-                  <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 text-[8px] font-bold text-slate-500 uppercase tracking-wider">{activeDeath?.emoji || '💥'}</div>
+                  <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 text-[11px] font-bold text-slate-500 uppercase tracking-wider">{activeDeath?.emoji || '💥'}</div>
                 </div>
               </div>
               {/* Status indicator */}
               <div className="absolute top-2 right-2 flex items-center gap-1 bg-slate-950/80 rounded-full px-2 py-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[8px] font-mono text-slate-400">ACTIVE</span>
+                <span className="text-[11px] font-mono text-slate-400">ACTIVE</span>
               </div>
             </div>
 
             {/* Equipped items grid */}
             <div className="flex-1 grid grid-cols-2 gap-3">
               <div className="bg-slate-900/60 rounded-xl p-3 border border-slate-900/60">
-                <span className="text-[8px] uppercase font-bold text-slate-500 tracking-wider block">Skin</span>
+                <span className="text-[11px] uppercase font-bold text-slate-500 tracking-wider block">Skin</span>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-lg">{activeSkin?.emoji || '🐍'}</span>
                   <div>
@@ -131,7 +131,7 @@ export function ProfilePictureAndAppearance({
                 </div>
               </div>
               <div className="bg-slate-900/60 rounded-xl p-3 border border-slate-900/60">
-                <span className="text-[8px] uppercase font-bold text-slate-500 tracking-wider block">Trail</span>
+                <span className="text-[11px] uppercase font-bold text-slate-500 tracking-wider block">Trail</span>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-lg">{activeTrail?.emoji || '✨'}</span>
                   <div>
@@ -141,7 +141,7 @@ export function ProfilePictureAndAppearance({
                 </div>
               </div>
               <div className="bg-slate-900/60 rounded-xl p-3 border border-slate-900/60">
-                <span className="text-[8px] uppercase font-bold text-slate-500 tracking-wider block">Death FX</span>
+                <span className="text-[11px] uppercase font-bold text-slate-500 tracking-wider block">Death FX</span>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-lg">{activeDeath?.emoji || '💥'}</span>
                   <div>
@@ -151,12 +151,12 @@ export function ProfilePictureAndAppearance({
                 </div>
               </div>
               <div className="bg-slate-900/60 rounded-xl p-3 border border-slate-900/60">
-                <span className="text-[8px] uppercase font-bold text-slate-500 tracking-wider block">Region</span>
+                <span className="text-[11px] uppercase font-bold text-slate-500 tracking-wider block">Region</span>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-lg">{activeFlag?.flag || '🏴'}</span>
                   <div>
                     <span className="text-xs font-bold text-slate-200 block">{activeFlag?.name || 'Unknown'}</span>
-                    <span className="text-[9px] font-mono text-slate-500">{activeFlag?.code || 'US'}</span>
+                    <span className="text-[11px] font-mono text-slate-500">{activeFlag?.code || 'US'}</span>
                   </div>
                 </div>
               </div>
@@ -200,7 +200,7 @@ export function CosmeticsShowcase({
         >
           <span className="text-sm">{item.cosmetic?.emoji || item.fallbackEmoji}</span>
           <div className="flex flex-col">
-            <span className="text-[9px] font-mono uppercase text-slate-500 leading-none">{item.label}</span>
+            <span className="text-[11px] font-mono uppercase text-slate-500 leading-none">{item.label}</span>
             <span className="text-[11px] font-sans font-bold text-slate-300 leading-tight">
               {item.cosmetic?.name || item.fallbackName}
             </span>

@@ -25,7 +25,7 @@ export function StatCard({
         >
           {value}
         </span>
-        <span className="text-[9px] lg:text-[11px] font-mono uppercase text-slate-500 tracking-wider">
+        <span className="text-[11px] font-mono uppercase text-slate-500 tracking-wider">
           {subLabel}
         </span>
       </div>
@@ -66,7 +66,7 @@ export function CapCard({
           style={{ width: `${Math.min(100, pct)}%` }}
         />
       </div>
-      <div className="flex justify-between text-[10px] lg:text-[11px] text-slate-500 font-mono">
+      <div className="flex justify-between text-[11px] text-slate-500 font-mono">
         <span>{leftLabel}</span>
         <span className={rightClass}>{rightLabel}</span>
       </div>
