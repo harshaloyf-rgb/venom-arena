@@ -256,13 +256,13 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                     setSelectedTierId(tier.id);
                     setMobileExpandedId(prev => prev === tier.id ? null : tier.id);
                   }}
-                  className={`relative flex items-center justify-between p-2 lg:p-1.5 rounded-xl border transition-all text-left group ${
+                  className={`relative flex items-center justify-between p-2 lg:w-full lg:grid lg:grid-cols-[auto_1fr_5rem_4rem_auto] lg:items-center lg:p-1.5 rounded-xl border transition-all text-left group ${
                     active
                       ? 'bg-slate-800/50 border-indigo-500 shadow-md shadow-indigo-950/20'
                       : 'bg-slate-900 border-slate-800/80 hover:border-slate-700/80'
                   }`}
                 >
-                  <div className="flex items-center gap-2 lg:gap-2 min-w-0">
+                  <div className="flex items-center gap-2 lg:gap-2 min-w-0 lg:contents">
                     {/* Glowing accent dot */}
                     <div
                       aria-hidden="true"
@@ -291,9 +291,9 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 lg:gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 lg:gap-1.5 shrink-0 lg:contents">
                     {isOnline && (
-                      <div className="text-right mr-1.5 select-none">
+                      <div className="text-right mr-1.5 select-none lg:w-20">
                         <span className="text-[11px] lg:text-[11px] text-slate-500 block uppercase font-mono tracking-wider">
                           Online
                         </span>
@@ -305,7 +305,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                         </span>
                       </div>
                     )}
-                    <div className="text-right">
+                    <div className="text-right lg:w-16">
                       <span className="text-[11px] lg:text-[11px] text-slate-500 block uppercase font-mono tracking-wider">
                         Buy-In
                       </span>
