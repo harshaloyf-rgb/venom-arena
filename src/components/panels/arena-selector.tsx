@@ -314,13 +314,8 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                           unaffordable ? 'text-red-400' : 'text-emerald-400'
                         }`}
                       >
-                        {tier.buyIn === 0 ? 'FREE' : `${tier.buyIn.toLocaleString()}c`}
+                        {tier.buyIn === 0 ? 'FREE' : chipShort(tier.buyIn)}
                       </span>
-                      {tier.buyIn >= 1_000 && (
-                        <span className={`text-[11px] lg:text-[11px] font-mono block mt-0 lg:mt-0 ${unaffordable ? 'text-red-400/50' : 'text-emerald-400/50'}`}>
-                          {chipShort(tier.buyIn)}
-                        </span>
-                      )}
                     </div>
                     <ChevronRight
                       className={`w-3 h-3 lg:w-3 lg:h-3 text-slate-500 transition-transform ${
