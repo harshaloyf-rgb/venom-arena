@@ -285,15 +285,16 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                           {tier.difficulty}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-400 font-sans mt-0 lg:text-[11px] lg:mt-0 lg:min-h-[34px]">
+                      <p className="text-[11px] text-slate-400 font-sans mt-0 lg:text-[11px] lg:mt-0">
                         {tier.description}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-1.5 lg:gap-1.5 shrink-0 lg:contents">
-                    {isOnline && (
-                      <div className="text-right mr-1.5 select-none lg:w-20">
+                    <div className={isOnline ? 'text-right mr-1.5 select-none lg:w-20' : 'lg:w-20'}>
+                      {isOnline && (
+                        <>
                         <span className="text-[11px] lg:text-[11px] text-slate-500 block uppercase font-mono tracking-wider">
                           Online
                         </span>
@@ -303,8 +304,9 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                             ? `${arenaStats[tier.id].players} / ${arenaStats[tier.id].maxPlayers.toLocaleString()}`
                             : '0 / 1,000'}
                         </span>
-                      </div>
-                    )}
+                        </>
+                      )}
+                    </div>
                     <div className="text-right lg:w-28">
                       <span className="text-[11px] lg:text-[11px] text-slate-500 block uppercase font-mono tracking-wider">
                         Buy-In
