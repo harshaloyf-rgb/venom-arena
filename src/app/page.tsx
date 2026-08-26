@@ -672,18 +672,25 @@ function DashboardChallenges({
           <p className="text-[11px] text-slate-500 font-sans">No challenges available right now.</p>
         </div>
       ) : (
-        <div className={`flex flex-col gap-2 ${compact ? 'flex-1 overflow-y-auto va-scroll' : 'max-h-[420px] overflow-y-auto pr-1 custom-scrollbar'}`}>
+        <div className={`flex flex-col gap-2 ${compact ? 'flex-1 overflow-y-auto va-scroll' : 'flex flex-col gap-0'}`}>
           {/* Daily */}
           {(() => {
             const dailies = missions.filter((m) => m.type === 'daily');
             if (dailies.length === 0) return null;
             return (
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center gap-1.5">
-                  <Sunrise className="w-3 h-3 text-amber-400" />
-                  <span className="text-[11px] font-bold text-amber-400 font-sans uppercase tracking-widest">Daily ({dailies.length})</span>
-                </div>
-                {dailies.map((m) => <ChallengeCard key={m.id} mission={m} onClaim={claimMission} />)}
+              <div className="flex flex-col gap-0">
+                {compact ? (
+                  <div className="flex items-center gap-1.5">
+                    <Sunrise className="w-3 h-3 text-amber-400" />
+                    <span className="text-[11px] font-bold text-amber-400 font-sans uppercase tracking-widest">Daily ({dailies.length})</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 border-b border-slate-800/40">
+                    <Sunrise className="w-3 h-3 text-amber-400" />
+                    <span className="text-[11px] font-bold text-amber-400 font-sans uppercase tracking-widest">Daily ({dailies.length})</span>
+                  </div>
+                )}
+                {dailies.map((m) => <ChallengeCard key={m.id} mission={m} onClaim={claimMission} row={!compact} />)}
               </div>
             );
           })()}
@@ -693,12 +700,19 @@ function DashboardChallenges({
             const weeklies = missions.filter((m) => m.type === 'weekly');
             if (weeklies.length === 0) return null;
             return (
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center gap-1.5 border-t border-slate-800 pt-1.5 mt-0.5">
-                  <Star className="w-3 h-3 text-violet-400" />
-                  <span className="text-[11px] font-bold text-violet-400 font-sans uppercase tracking-widest">Weekly ({weeklies.length})</span>
-                </div>
-                {weeklies.map((m) => <ChallengeCard key={m.id} mission={m} onClaim={claimMission} />)}
+              <div className="flex flex-col gap-0">
+                {compact ? (
+                  <div className="flex items-center gap-1.5 border-t border-slate-800 pt-1.5 mt-0.5">
+                    <Star className="w-3 h-3 text-violet-400" />
+                    <span className="text-[11px] font-bold text-violet-400 font-sans uppercase tracking-widest">Weekly ({weeklies.length})</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 border-t border-slate-800 pt-1">
+                    <Star className="w-3 h-3 text-violet-400" />
+                    <span className="text-[11px] font-bold text-violet-400 font-sans uppercase tracking-widest">Weekly ({weeklies.length})</span>
+                  </div>
+                )}
+                {weeklies.map((m) => <ChallengeCard key={m.id} mission={m} onClaim={claimMission} row={!compact} />)}
               </div>
             );
           })()}
@@ -726,9 +740,35 @@ function DashboardChallenges({
 // Challenge Card (shared)
 // ---------------------------------------------------------------------------
 
-function ChallengeCard({ mission, onClaim }: { mission: Mission; onClaim: (m: Mission) => void }) {
+function ChallengeCard({ mission, onClaim, row }: { mission: Mission; onClaim: (m: Mission) => void; row?: boolean }) {
   const percent = Math.min(100, Math.floor((mission.current / mission.target) * 100));
   const isWeekly = mission.type === 'weekly';
+  const barClass = mission.claimed ? 'bg-emerald-600' :
+    mission.completed ? 'bg-gradient-to-r from-emerald-400 to-teal-500' :
+    isWeekly ? 'bg-gradient-to-r from-violet-500 to-purple-500' : 'bg-gradient-to-r from-amber-500 to-orange-500';
+  const btnClass = mission.claimed ? 'bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed' :
+    mission.completed ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 text-black shadow shadow-emerald-950/20' :
+    'bg-slate-900 text-slate-500 border border-slate-800 cursor-not-allowed';
+
+  if (row) {
+    return (
+      <div title={mission.description} className="flex items-center gap-1.5 py-0.5 border-b border-slate-800/40 last:border-b-0">
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isWeekly ? 'bg-violet-400' : 'bg-amber-400'}`} />
+        <span className="text-[11px] font-bold text-white shrink-0">{mission.title}</span>
+        <span className="text-[11px] font-mono text-slate-500 shrink-0">{mission.current}/{mission.target} ({percent}%)</span>
+        <div className="flex-1 h-1 bg-slate-900 rounded-full overflow-hidden border border-slate-800/60 min-w-[40px]">
+          <div className={`h-full rounded-full transition-all duration-300 ${barClass}`} style={{ width: `${percent}%` }} />
+        </div>
+        <span className="text-[11px] font-mono font-bold text-emerald-400 shrink-0">+{mission.reward} CHIPS</span>
+        <button
+          onClick={() => void onClaim(mission)}
+          disabled={!mission.completed || mission.claimed}
+          className={`px-1.5 py-0 rounded-md text-[11px] font-sans font-bold transition-all cursor-pointer shrink-0 ${btnClass}`}
+        >{mission.claimed ? 'Claimed ✓' : 'Claim'}</button>
+      </div>
+    );
+  }
+
   return (
     <div className={`p-2 bg-slate-950/90 rounded-lg border ${isWeekly ? 'border-violet-500/20' : 'border-slate-800'} flex flex-col gap-1.5`}>
       <div className="flex items-start justify-between gap-2">
@@ -742,22 +782,14 @@ function ChallengeCard({ mission, onClaim }: { mission: Mission; onClaim: (m: Mi
         <span>{mission.current} / {mission.target} ({percent}%)</span>
       </div>
       <div className="w-full h-1 bg-slate-900 rounded-full overflow-hidden border border-slate-800/60">
-        <div className={`h-full rounded-full transition-all duration-300 ${
-          mission.claimed ? 'bg-emerald-600' :
-          mission.completed ? 'bg-gradient-to-r from-emerald-400 to-teal-500' :
-          isWeekly ? 'bg-gradient-to-r from-violet-500 to-purple-500' : 'bg-gradient-to-r from-amber-500 to-orange-500'
-        }`} style={{ width: `${percent}%` }} />
+        <div className={`h-full rounded-full transition-all duration-300 ${barClass}`} style={{ width: `${percent}%` }} />
       </div>
       <div className="flex justify-between items-center pt-1.5 border-t border-slate-900/40">
         <span className="text-[11px] font-mono font-bold text-emerald-400">+{mission.reward} CHIPS</span>
         <button
           onClick={() => void onClaim(mission)}
           disabled={!mission.completed || mission.claimed}
-          className={`px-2 py-0.5 rounded-md text-[11px] font-sans font-bold transition-all cursor-pointer ${
-            mission.claimed ? 'bg-slate-900 text-slate-600 border border-slate-800 cursor-not-allowed' :
-            mission.completed ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 text-black shadow shadow-emerald-950/20' :
-            'bg-slate-900 text-slate-500 border border-slate-800 cursor-not-allowed'
-          }`}
+          className={`px-2 py-0.5 rounded-md text-[11px] font-sans font-bold transition-all cursor-pointer ${btnClass}`}
         >{mission.claimed ? 'Claimed ✓' : 'Claim'}</button>
       </div>
     </div>

@@ -695,3 +695,19 @@ Work Log:
 - No line-clamp, truncate, or text-overflow used
 - All text remains ≥ 11px
 - Only md: prefixed and desktop-only classes modified
+
+---
+Task ID: challenges-horizontal-rows
+Agent: Main Agent
+Task: Convert desktop Tactical Challenges panel from vertical scrollable cards to horizontal rows
+
+Work Log:
+- Modified ChallengeCard to accept optional `row` boolean prop
+- When row={true}: renders single horizontal line with colored dot, title, progress text, inline progress bar, reward, and claim button
+- Row has title={mission.description} for native hover tooltip
+- When row=false/undefined: keeps exact original vertical card layout (mobile/compact)
+- Modified DashboardChallenges non-compact section: removed max-h-[420px] overflow-y-auto pr-1 custom-scrollbar, replaced with flex flex-col gap-0
+- Daily/Weekly section headers now use border-b border-slate-800/40 (daily) and border-t border-slate-800 pt-1 (weekly) inline rows
+- Passed row={!compact} to all ChallengeCard instances
+- Verified with agent-browser at 1365x599: scrollHeight=599/viewportHeight=599 (no overflow), no scrollbar on desktop panel, all 5 challenge rows have title tooltips
+- Lint: only pre-existing no-require-imports error (unrelated)
