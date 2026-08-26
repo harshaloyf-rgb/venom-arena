@@ -896,3 +896,29 @@ Stage Summary:
 - Fix: Inner scroll wrapper div with lg:max-h + lg:overflow-y-auto, desktop-only constraint
 - Mobile: Zero impact
 
+
+---
+Task ID: profile-compress-desktop
+Agent: Main Agent
+Task: Compress Agent Profile panel to fit 1365x599 viewport without scrollbar
+
+Work Log:
+- Analyzed all profile sub-components and their desktop heights
+- Identified key overflow: panel was 777px for 599px viewport (178px over)
+- Reverted rejected scroll wrapper hack from previous session
+- Compressed player-profile.tsx: root lg:p-2, header lg:gap-2/pb-2/mb-2, avatar lg:w-9/h-9, name lg:text-[13px], level bar lg:w-36/p-1.5/h-1.5, sign out lg:h-8, tab nav lg:mb-2/pb-1, section spacing lg:space-y-1.5, stat grid lg:gap-1.5
+- Compressed stat-card.tsx: StatCard lg:p-1.5/justify-start/mb-0/text-[13px], CapCard lg:p-1.5/space-y-0.5/h-1, all text ≥11px via lg:text-[11px]
+- Compressed tournament-guardrails.tsx: loading skeleton redesigned as 3-col grid matching actual layout, outer lg:p-2/space-y-1, header lg:pb-1, grid lg:gap-1.5, badge lg:text-[11px]
+- Restructured security.tsx: Password+PIN side-by-side on desktop via lg:grid-cols-2, all text-[10px] → lg:text-[11px]
+- Rewrote delete-account.tsx: desktop shows single compact row (icon+title+button), mobile keeps full layout
+- Fixed guest-upgrade.tsx: all text-[10px] → lg:text-[11px], icon lg:w-3/h-3, padding lg:p-2
+
+Stage Summary:
+- Panel reduced from 777px to 482px on desktop (295px savings)
+- Panel bottom at 565px within 599px viewport (34px breathing room)
+- Both Stats and Match History tabs fit without scrollbar
+- All visible text ≥11px on desktop (verified via computed font-size scan)
+- No scrollbar on any ancestor container
+- No text clipping/truncation/ellipsis added
+- Lint clean (only pre-existing fix-bom.ts error)
+- All changes use lg: prefix for desktop-only, mobile untouched

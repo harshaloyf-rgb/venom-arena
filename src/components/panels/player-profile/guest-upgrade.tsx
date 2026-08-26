@@ -21,17 +21,17 @@ function GuestUpgradeBanner({
 
   if (!open) {
     return (
-      <div className="p-4 lg:p-2.5 rounded-2xl bg-gradient-to-r from-amber-950/40 via-slate-900 to-indigo-950/40 border border-amber-500/30">
+      <div className="p-4 lg:p-2 rounded-2xl bg-gradient-to-r from-amber-950/40 via-slate-900 to-indigo-950/40 border border-amber-500/30">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 lg:gap-2">
-          <div className="flex items-center gap-3 lg:gap-2 min-w-0">
-            <div className="w-10 h-10 lg:w-7 lg:h-7 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-              <Shield className="w-5 h-5 lg:w-3.5 lg:h-3.5" />
+          <div className="flex items-center gap-3 lg:gap-1.5 min-w-0">
+            <div className="w-10 h-10 lg:w-6 lg:h-6 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+              <Shield className="w-5 h-5 lg:w-3 lg:h-3" />
             </div>
             <div className="min-w-0">
               <h3 className="text-sm lg:text-[11px] font-bold text-amber-300 font-sans">
                 You&apos;re playing as a Guest
               </h3>
-              <p className="text-xs lg:text-[10px] text-slate-400 font-sans mt-0.5">
+              <p className="text-xs lg:text-[11px] text-slate-400 font-sans mt-0.5">
                 Upgrade to a registered account to secure your progress. All chips, stats, cosmetics, and friends carry over.
               </p>
             </div>
@@ -98,7 +98,7 @@ function GuestUpgradeBanner({
       <form onSubmit={handleUpgrade} className="space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label htmlFor="ug-name" className="text-[10px] uppercase tracking-wider text-slate-500 font-bold font-sans">
+            <label htmlFor="ug-name" className="text-[10px] lg:text-[11px] uppercase tracking-wider text-slate-500 font-bold font-sans">
               Display Name
             </label>
             <input
@@ -113,7 +113,7 @@ function GuestUpgradeBanner({
             />
           </div>
           <div className="space-y-1">
-            <label htmlFor="ug-email" className="text-[10px] uppercase tracking-wider text-slate-500 font-bold font-sans">
+            <label htmlFor="ug-email" className="text-[10px] lg:text-[11px] uppercase tracking-wider text-slate-500 font-bold font-sans">
               Email
             </label>
             <input
@@ -129,7 +129,7 @@ function GuestUpgradeBanner({
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label htmlFor="ug-pass" className="text-[10px] uppercase tracking-wider text-slate-500 font-bold font-sans">
+            <label htmlFor="ug-pass" className="text-[10px] lg:text-[11px] uppercase tracking-wider text-slate-500 font-bold font-sans">
               Password (min 6 chars)
             </label>
             <input
@@ -144,7 +144,7 @@ function GuestUpgradeBanner({
             />
           </div>
           <div className="space-y-1">
-            <label htmlFor="ug-pin" className="text-[10px] uppercase tracking-wider text-slate-500 font-bold font-sans">
+            <label htmlFor="ug-pin" className="text-[10px] lg:text-[11px] uppercase tracking-wider text-slate-500 font-bold font-sans">
               Security PIN (4 digits, optional)
             </label>
             <input

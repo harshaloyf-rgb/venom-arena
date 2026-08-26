@@ -717,16 +717,16 @@ function ProfileContent({
   // =========================================================================
   return (
     <TooltipProvider>
-    <div className="w-full max-w-6xl mx-auto p-4 sm:p-6 lg:p-3 bg-slate-950/60 border border-slate-900 rounded-2xl shadow-xl relative overflow-hidden backdrop-blur-md">
+    <div className="w-full max-w-6xl mx-auto p-4 sm:p-6 lg:p-2 bg-slate-950/60 border border-slate-900 rounded-2xl shadow-xl relative overflow-hidden backdrop-blur-md">
       {/* Glow */}
       <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
 
       {/* HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 lg:gap-3 border-b border-slate-900 pb-4 mb-4 lg:pb-3 lg:mb-3">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 lg:gap-2 border-b border-slate-900 pb-4 mb-4 lg:pb-2 lg:mb-2">
         <div className="flex items-center gap-4">
           {/* Avatar */}
-          <div className="w-16 h-16 lg:w-10 lg:h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border border-indigo-400/30 relative shadow-md overflow-hidden shrink-0">
+          <div className="w-16 h-16 lg:w-9 lg:h-9 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border border-indigo-400/30 relative shadow-md overflow-hidden shrink-0">
             {player.avatar ? (
               player.avatar.startsWith('data:') ||
               player.avatar.startsWith('http') ? (
@@ -737,17 +737,17 @@ function ProfileContent({
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <span className="text-3xl lg:text-lg select-none">{player.avatar}</span>
+                <span className="text-3xl lg:text-base select-none">{player.avatar}</span>
               )
             ) : (
               <span
-                className="text-3xl lg:text-lg select-none"
+                className="text-3xl lg:text-base select-none"
                 title="Equipped DNA Skin"
               >
                 {activeSkin?.emoji || '🐍'}
               </span>
             )}
-            <div className="absolute -bottom-1 -right-1 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold text-indigo-400 shadow">
+            <div className="absolute -bottom-1 -right-1 bg-slate-950 border border-slate-800 px-1.5 py-0.5 rounded text-[10px] lg:text-[11px] font-mono font-bold text-indigo-400 shadow">
               Lvl {player.level}
             </div>
           </div>
@@ -755,16 +755,16 @@ function ProfileContent({
           {/* Name + tag + socials */}
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-xl lg:text-sm font-bold text-white font-sans tracking-tight flex items-center gap-2">
-                <span className="text-xl lg:text-sm" title="Region flag">
+              <h2 className="text-xl lg:text-[13px] font-bold text-white font-sans tracking-tight flex items-center gap-2">
+                <span className="text-xl lg:text-[13px]" title="Region flag">
                   {activeFlag?.flag || '🇺🇸'}
                 </span>
                 <span>{player.name}</span>
-                <span className="text-[10px] font-mono font-bold bg-slate-950 border border-slate-800 text-indigo-400 px-1.5 py-0.5 rounded uppercase">
+                <span className="text-[10px] lg:text-[11px] font-mono font-bold bg-slate-950 border border-slate-800 text-indigo-400 px-1.5 py-0.5 rounded uppercase">
                   {player.country || 'US'}
                 </span>
                 {player.clanTag && (
-                  <Badge className="bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-[10px] font-mono font-bold px-2 py-0.5">
+                  <Badge className="bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-[10px] lg:text-[11px] font-mono font-bold px-2 py-0.5">
                     [{player.clanTag}]{player.clanRank ? ` ${player.clanRank}` : ''}
                   </Badge>
                 )}
@@ -893,8 +893,8 @@ function ProfileContent({
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
           {/* Level progress */}
-          <div className="w-full md:w-72 lg:w-44 bg-slate-900/60 p-3 lg:p-2 rounded-xl border border-slate-800 backdrop-blur-sm flex-1">
-            <div className="flex justify-between items-center text-xs text-slate-400 font-sans mb-1.5 lg:mb-1">
+          <div className="w-full md:w-72 lg:w-36 bg-slate-900/60 p-3 lg:p-1.5 rounded-xl border border-slate-800 backdrop-blur-sm flex-1">
+            <div className="flex justify-between items-center text-xs text-slate-400 font-sans mb-1.5 lg:mb-0.5">
               <span className="flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />{' '}
                 Level Progress
@@ -903,7 +903,7 @@ function ProfileContent({
                 {player.xp} / {xpNeeded} XP
               </span>
             </div>
-            <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800 p-0.5">
+            <div className="w-full h-2 lg:h-1.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800 p-0.5">
               <div
                 className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500"
                 style={{ width: `${xpPercent}%` }}
@@ -917,7 +917,7 @@ function ProfileContent({
               <button
                 type="button"
                 disabled={loggingOut}
-                className="px-4 py-3 lg:px-3 lg:py-1.5 bg-red-950/20 hover:bg-red-950/40 border border-red-500/20 text-red-400 hover:text-red-300 rounded-xl text-xs font-bold transition duration-200 cursor-pointer flex items-center justify-center gap-1.5 shadow h-[52px] lg:h-9 disabled:opacity-50"
+                className="px-4 py-3 lg:px-2.5 lg:py-1 bg-red-950/20 hover:bg-red-950/40 border border-red-500/20 text-red-400 hover:text-red-300 rounded-xl text-xs font-bold transition duration-200 cursor-pointer flex items-center justify-center gap-1.5 shadow h-[52px] lg:h-8 disabled:opacity-50"
                 title="Logout Session"
               >
                 <LogOut className="w-4 h-4" />
@@ -986,7 +986,7 @@ function ProfileContent({
       </button>
 
       {/* TAB NAV */}
-      <div className="flex flex-wrap gap-2 mb-4 lg:mb-3 border-b border-slate-900 pb-3 lg:pb-1.5">
+      <div className="flex flex-wrap gap-2 mb-4 lg:mb-2 border-b border-slate-900 pb-3 lg:pb-1">
         {(
           [
             { id: 'stats', label: 'Records & Statistics', icon: Target },
@@ -1002,7 +1002,7 @@ function ProfileContent({
                 setActiveTab(tab.id);
                 setIsEditing(false);
               }}
-              className={`px-4 lg:px-3 py-2 lg:py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              className={`px-4 lg:px-2.5 py-2 lg:py-1 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
                 activeTab === tab.id
                   ? 'bg-indigo-600/10 border border-indigo-500/30 text-indigo-400 shadow-lg'
                   : 'bg-transparent border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
@@ -1017,7 +1017,7 @@ function ProfileContent({
 
       {/* TAB CONTENT */}
       {activeTab === 'stats' && (
-        <div className="space-y-6 lg:space-y-3">
+        <div className="space-y-6 lg:space-y-1.5">
           {/* Guest Upgrade Banner */}
           {!player.email && <GuestUpgradeBanner onRefresh={onRefresh} onToast={onToast} />}
 
@@ -1049,7 +1049,7 @@ function ProfileContent({
           )}
 
           {/* Statistics grid — now 10 cards (8 original + Total Matches + Account Age) */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 lg:gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 lg:gap-1.5">
             <StatCard
               label="Banked Wallet"
               subLabel="Deposited Chips"
