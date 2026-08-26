@@ -382,7 +382,7 @@ export default function Home() {
       </header>
 
       {/* ===================== MAIN ===================== */}
-      <main className="flex-1 flex flex-col w-full max-w-7xl mx-auto md:px-3 lg:px-4 md:py-1">
+      <main className="flex-1 min-h-0 flex flex-col w-full max-w-7xl mx-auto md:px-3 lg:px-4 md:py-1">
 
         {/* ====== DASHBOARD TAB ====== */}
         {activeTab === 'dashboard' && (
@@ -543,7 +543,7 @@ export default function Home() {
 
         {/* ====== SUB-PAGE TAB ====== */}
         {activeTab !== 'dashboard' && (
-          <div className="h-full flex flex-col overflow-hidden va-fade-in">
+          <div className="h-full flex flex-col va-fade-in">
             {/* Desktop: back button + tab strip */}
             <div className="hidden md:flex flex-col sm:flex-row items-start sm:items-center justify-between md:gap-1 bg-slate-900/40 border border-slate-800 rounded-2xl md:p-1.5 md:mb-1 shadow-md shrink-0">
               <div className="flex items-center gap-3 shrink-0">
