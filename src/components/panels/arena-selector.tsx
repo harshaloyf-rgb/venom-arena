@@ -285,7 +285,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                           {tier.difficulty}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-400 font-sans mt-0 lg:text-[11px] lg:mt-0 lg:min-h-[34px]">
+                      <p className="text-[11px] text-slate-400 font-sans mt-0 lg:text-[11px] lg:mt-0">
                         {tier.description}
                       </p>
                     </div>
