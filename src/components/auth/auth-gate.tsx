@@ -112,7 +112,7 @@ function AuthScreen() {
   }
 
   return (
-    <div className="min-h-dvh flex items-center justify-center px-3 py-1">
+    <div className="h-dvh flex items-center justify-center px-3 py-1 overflow-hidden">
       <div className="w-full max-w-sm space-y-1" style={{ zoom: 0.93 }}>
         {/* Logo / Title */}
         <div className="text-center space-y-0.5">
