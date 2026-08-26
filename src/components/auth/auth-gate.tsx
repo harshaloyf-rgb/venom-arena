@@ -111,12 +111,12 @@ function AuthScreen() {
   }
 
   return (
-    <div className="min-h-dvh flex items-center justify-center px-3 py-1">
-      <div className="w-full max-w-sm space-y-1">
+    <div className="min-h-dvh flex items-center justify-center px-3 py-0.5">
+      <div className="w-full max-w-sm space-y-0.5">
         {/* Logo / Title */}
         <div className="text-center space-y-0.5">
-          <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-primary/15 border border-primary/30 va-neon-border">
-            <Skull className="w-5 h-5 text-primary va-neon-text" />
+          <div className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-primary/15 border border-primary/30 va-neon-border">
+            <Skull className="w-4.5 h-4.5 text-primary va-neon-text" />
           </div>
           <h1 className="text-xl font-black tracking-tight va-neon-text">VENOM ARENA</h1>
           <p className="text-xs text-muted-foreground">
@@ -130,7 +130,7 @@ function AuthScreen() {
             <CardDescription className="text-[11px]">Sign in or create an account to play.</CardDescription>
           </CardHeader>
           <CardContent className="px-3">
-            <Tabs defaultValue="login" className="w-full" onValueChange={handleTabChange}>
+            <Tabs defaultValue="login" className="w-full gap-0.5" onValueChange={handleTabChange}>
               <TabsList className="grid w-full grid-cols-2 h-7">
                 <TabsTrigger value="login">
                   <LogIn className="w-3 h-3 mr-1" />
@@ -146,13 +146,13 @@ function AuthScreen() {
                 <LoginForm busy={busy} error={error} onSubmit={callApi} onForgotPassword={() => { setError(null); setForgotOpen(true); }} />
               </TabsContent>
 
-              <TabsContent value="register" className="mt-1">
+              <TabsContent value="register" className="mt-0">
                 <RegisterForm busy={busy} error={error} onSubmit={callApi} />
               </TabsContent>
             </Tabs>
 
             {/* Divider */}
-            <div className="relative my-1.5">
+            <div className="relative my-1">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t border-border" />
               </div>
@@ -208,7 +208,7 @@ function AuthScreen() {
             </div>
 
             {/* Divider */}
-            <div className="relative my-1.5">
+            <div className="relative my-1">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t border-border" />
               </div>
@@ -236,7 +236,7 @@ function AuthScreen() {
             </Button>
 
             {/* Bottom info */}
-            <div className="mt-1 space-y-0.5">
+            <div className="mt-0 space-y-0.5">
               <p className="text-[11px] text-muted-foreground text-center">
                 <Zap className="w-3 h-3 inline mr-1" />
                 Guests get 150 starter chips. Register to keep your progress.
@@ -550,7 +550,7 @@ function RegisterForm({
         </p>
       )}
       {!error && (
-        <span data-register-error className="hidden" />
+        <span data-register-error className="hidden" hidden />
       )}
 
       <Button type="submit" size="sm" className="w-full text-xs" disabled={busy}>
@@ -679,7 +679,7 @@ function ForgotPasswordForm({
           placeholder="1234"
           className="text-sm"
         />
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-[11px] text-muted-foreground">
           This is the PIN you set during registration.
         </p>
       </div>

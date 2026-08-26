@@ -538,3 +538,30 @@ Stage Summary:
 - Rules link moved to card header for better space usage
 - File modified: src/components/auth/auth-gate.tsx
 - Pre-existing lint error in fix-bom.ts (not related to this change)
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix auth-gate register tab scrolling issue - ensure no scrolling on desktop with browser chrome and mobile
+
+Work Log:
+- Diagnosed the hidden span missing HTML `hidden` attribute causing 4px extra space-y gap
+- Applied 7 size reductions to auth-gate.tsx:
+  1. Outer wrapper: py-1 → py-0.5 (-4px)
+  2. Inner wrapper: space-y-1 → space-y-0.5 (-2px)
+  3. Logo icon: w-10 h-10 → w-9 h-9 (-2px)
+  4. Tabs: gap-2 (default) → gap-0.5 (-6px)
+  5. Register TabsContent: mt-1 → mt-0 (merged with gap)
+  6. Both dividers: my-1.5 → my-1 (-8px total)
+  7. Bottom info: mt-1 → mt-0 (-4px)
+  8. Hidden span: added `hidden` HTML attribute (-4px from space-y)
+- Bumped text-[10px] → text-[11px] in ForgotPasswordForm PIN helper
+- Total reduction: ~30px (639px → 611px on desktop, 655px → 627px on mobile)
+
+Stage Summary:
+- Register tab content: 611px (desktop), 627px (iPhone SE 375px width)
+- No scrolling at any tested viewport: 650px, 667px, 700px, 800px, 850px, 900px
+- All text elements verified ≥ 11px
+- Both login (516px) and register (627px) tabs fit on iPhone SE (667px) without scrolling
+- Tab switching works smoothly without layout shift
+- VLM confirmed: all content visible, no cutoff, no scrollbar, text readable
