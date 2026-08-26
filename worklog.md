@@ -506,3 +506,35 @@ Stage Summary:
 - Rules Section 3 updated to reflect wall death star drop behavior
 ---
 Session start: 2026-08-26T11:15:03Z, git: cbfa027
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Compact login page to fit screen without scrolling
+
+Work Log:
+- Analyzed login page vertical space: ~780px total, overflowing iPhone SE (667px)
+- Shrink logo block: icon 64→44px, title text-4xl→text-2xl, tagline text-sm→text-[11px], space-y-2→space-y-1 (~35px saved)
+- Merged two dividers ("or continue with" + "or") into single divider (~50px saved)
+- Tightened Card padding: py-6→py-3, CardHeader p-6→p-4 pb-0, CardContent p-6→p-4 (~32px saved)
+- Tightened form spacing: space-y-3→space-y-2, space-y-1.5→space-y-1 (~15px saved)
+- Moved "View Rules & Guide" link from below guest button into card header row (~20px saved)
+- Reduced outer wrapper: min-h-screen p-4 → h-dvh px-3 py-2, space-y-6→space-y-3 (~20px saved)
+- Made CardContent overflow-y-auto with hidden scrollbar for Register tab (5 fields need internal scroll on tiny screens)
+- Removed empty error placeholder in register form (~16px saved)
+- Tightened register form: same space-y-2 + space-y-1 treatment
+
+Verification:
+- iPhone SE (375×667): Login tab scrollH=667=clientH ✅ no scroll
+- iPhone SE (375×667): Register tab scrollH=667=clientH ✅ no page scroll (internal card scroll for extra fields)
+- iPhone 14 (390×844): scrollH=844=clientH ✅ no scroll
+- Desktop (1920×1080): scrollH=1080=clientH ✅ no scroll
+- All information preserved: logo, title, tagline, tabs, social buttons, guest button, rules link, chips info
+
+Stage Summary:
+- Login page now fits on all screen sizes without page scroll
+- Login tab: perfectly fits iPhone SE (smallest common screen)
+- Register tab: no page scroll, form area internally scrollable only when needed
+- Rules link moved to card header for better space usage
+- File modified: src/components/auth/auth-gate.tsx
+- Pre-existing lint error in fix-bom.ts (not related to this change)
