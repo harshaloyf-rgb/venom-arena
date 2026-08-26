@@ -58,7 +58,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
   const { player, loading } = useAuth();
   const [isOnline, setIsOnline] = useState(true);
   const [selectedTierId, setSelectedTierId] = useState<string>('tier-1');
-  const [difficultyFilter, setDifficultyFilter] = useState<string | null>(null);
+  const [difficultyFilter, setDifficultyFilter] = useState<string | null>('Beginner');
   const [arenaStats, setArenaStats] = useState<
     Record<string, ArenaStats>
   >({});
@@ -150,27 +150,27 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
   return (
     <div
       id="arena-selector"
-      className="grid grid-cols-1 lg:grid-cols-12 gap-6"
+      className="grid grid-cols-1 lg:grid-cols-12 lg:gap-2 gap-6"
     >
       {/* LEFT: tier list */}
-      <div className="lg:col-span-7 flex flex-col gap-3">
+      <div className="lg:col-span-7 flex flex-col lg:gap-1 gap-3">
         {/* Header row: title + mode toggle */}
         <div className="flex items-center justify-between px-2">
           <div>
-            <h3 className="text-sm font-bold font-sans uppercase tracking-wider text-slate-400">
+            <h3 className="text-sm lg:text-[11px] font-bold font-sans uppercase tracking-wider text-slate-400">
               {isOnline ? 'Online PvP Shards' : 'Practice Arenas'}
             </h3>
-            <p className="text-xs text-slate-500 font-sans mt-0.5">
+            <p className="text-xs text-slate-500 font-sans mt-0.5 lg:text-[11px] lg:mt-0">
               {isOnline ? '30 tiers · 10c → 1B chips' : 'Choose your difficulty'}
             </p>
           </div>
 
           {/* Mode Selector */}
-          <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800/80">
+          <div className="flex bg-slate-950 p-0.5 lg:p-0.5 rounded-lg border border-slate-800/80">
             <button
               type="button"
               onClick={() => handleModeSwitch(true)}
-              className={`px-3 py-1 rounded-md text-xs font-sans font-medium flex items-center gap-1 transition-all ${
+              className={`px-3 py-1 lg:px-1.5 lg:py-0.5 rounded-md text-xs lg:text-[11px] font-sans font-medium flex items-center gap-1 transition-all ${
                 isOnline
                   ? 'bg-indigo-600/25 text-indigo-300 border border-indigo-500/20'
                   : 'text-slate-500 hover:text-slate-300'
@@ -181,7 +181,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
             <button
               type="button"
               onClick={() => handleModeSwitch(false)}
-              className={`px-3 py-1 rounded-md text-xs font-sans font-medium flex items-center gap-1 transition-all ${
+              className={`px-3 py-1 lg:px-1.5 lg:py-0.5 rounded-md text-xs lg:text-[11px] font-sans font-medium flex items-center gap-1 transition-all ${
                 !isOnline
                   ? 'bg-amber-600/25 text-amber-300 border border-amber-500/20'
                   : 'text-slate-500 hover:text-slate-300'
@@ -194,7 +194,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
 
         {/* Difficulty filter tabs (online mode only) */}
         {isOnline && (
-          <div className="flex items-center gap-1.5 px-2 flex-wrap">
+          <div className="flex items-center gap-1.5 lg:gap-1 lg:px-1 px-2 flex-wrap">
             <Filter className="w-3.5 h-3.5 text-slate-600 shrink-0" />
             {DIFFICULTY_GROUPS.map((group) => {
               const isActive = difficultyFilter === group.difficulty;
@@ -206,14 +206,14 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                   key={group.label}
                   type="button"
                   onClick={() => handleDifficultyFilter(group.difficulty)}
-                  className={`px-2.5 py-1 rounded-md text-[10px] font-sans font-bold uppercase tracking-wider border transition-all cursor-pointer ${
+                  className={`px-2.5 py-1 lg:px-1.5 lg:py-0.5 rounded-md text-[10px] lg:text-[11px] font-sans font-bold uppercase tracking-wider border transition-all cursor-pointer ${
                     isActive
                       ? 'bg-slate-800 border-slate-600 text-white'
                       : 'bg-slate-950 border-slate-800/80 text-slate-500 hover:text-slate-300 hover:border-slate-700'
                   }`}
                 >
                   {group.label}
-                  <span className="ml-1 text-slate-600">({count})</span>
+                  <span className="ml-1 text-slate-600 lg:text-[11px]">({count})</span>
                 </button>
               );
             })}
@@ -229,7 +229,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                 setDifficultyFilter(null);
                 setSelectedTierId(highestAffordableTier.id);
               }}
-              className="text-[10px] font-sans text-emerald-400/70 hover:text-emerald-400 transition-colors cursor-pointer flex items-center gap-1"
+              className="text-[10px] lg:text-[11px] font-sans text-emerald-400/70 hover:text-emerald-400 transition-colors cursor-pointer flex items-center gap-1"
             >
               <Zap className="w-3 h-3" />
               Jump to highest affordable: {highestAffordableTier.name} ({chipFull(highestAffordableTier.buyIn)})
@@ -238,7 +238,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
         )}
 
         {/* Tiers list — no max-height needed since filter shows max 6 tiers */}
-        <div className="flex flex-col gap-2.5 pr-1">
+        <div className="flex flex-col gap-2.5 lg:gap-0.5 lg:pr-0 pr-1">
           {tiersList.map((tier) => {
             const active = tier.id === selectedTierId;
             const unaffordable =
@@ -248,17 +248,17 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                 key={tier.id}
                 type="button"
                 onClick={() => setSelectedTierId(tier.id)}
-                className={`relative flex items-center justify-between p-4 rounded-xl border transition-all text-left group ${
+                className={`relative flex items-center justify-between p-4 lg:p-1.5 rounded-xl border transition-all text-left group ${
                   active
                     ? 'bg-slate-800/50 border-indigo-500 shadow-md shadow-indigo-950/20'
                     : 'bg-slate-900 border-slate-800/80 hover:border-slate-700/80'
                 }`}
               >
-                <div className="flex items-center gap-4 min-w-0">
+                <div className="flex items-center gap-4 lg:gap-2 min-w-0">
                   {/* Glowing accent dot */}
                   <div
                     aria-hidden="true"
-                    className="w-3.5 h-3.5 rounded-full border border-white/20 shadow-lg shrink-0"
+                    className="w-3.5 h-3.5 lg:w-2.5 lg:h-2.5 rounded-full border border-white/20 shadow-lg shrink-0"
                     style={{
                       backgroundColor: tier.accentColor,
                       boxShadow: active
@@ -268,28 +268,28 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                   />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-bold font-sans text-white group-hover:text-indigo-300 transition-colors truncate">
+                      <span className="text-sm lg:text-[11px] font-bold font-sans text-white group-hover:text-indigo-300 transition-colors">
                         {tier.name}
                       </span>
                       <span
-                        className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider font-sans border border-transparent ${tier.color}`}
+                        className={`text-[9px] lg:text-[11px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider font-sans border border-transparent ${tier.color}`}
                       >
                         {tier.difficulty}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400 font-sans mt-1 line-clamp-1">
+                    <p className="text-xs text-slate-400 font-sans mt-1 lg:text-[11px] lg:mt-0">
                       {tier.description}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex items-center gap-3 lg:gap-1.5 shrink-0">
                   {isOnline && (
                     <div className="text-right mr-3 select-none">
-                      <span className="text-[10px] text-slate-500 block uppercase font-mono tracking-wider">
+                      <span className="text-[10px] lg:text-[11px] text-slate-500 block uppercase font-mono tracking-wider">
                         Online
                       </span>
-                      <span className="text-xs font-bold font-mono text-indigo-400 flex items-center justify-end gap-1">
+                      <span className="text-xs lg:text-[11px] font-bold font-mono text-indigo-400 flex items-center justify-end gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
                         {arenaStats[tier.id]
                           ? `${arenaStats[tier.id].players} / ${arenaStats[tier.id].maxPlayers.toLocaleString()}`
@@ -298,24 +298,24 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                     </div>
                   )}
                   <div className="text-right">
-                    <span className="text-[10px] text-slate-500 block uppercase font-mono tracking-wider">
+                    <span className="text-[10px] lg:text-[11px] text-slate-500 block uppercase font-mono tracking-wider">
                       Buy-In
                     </span>
                     <span
-                      className={`text-sm font-bold font-mono block ${
+                      className={`text-sm lg:text-[11px] font-bold font-mono block ${
                         unaffordable ? 'text-red-400' : 'text-emerald-400'
                       }`}
                     >
                       {tier.buyIn === 0 ? 'FREE' : `${tier.buyIn.toLocaleString()}c`}
                     </span>
                     {tier.buyIn >= 1_000 && (
-                      <span className={`text-[9px] font-mono block mt-0.5 ${unaffordable ? 'text-red-400/50' : 'text-emerald-400/50'}`}>
+                      <span className={`text-[9px] lg:text-[11px] font-mono block mt-0.5 lg:mt-0 ${unaffordable ? 'text-red-400/50' : 'text-emerald-400/50'}`}>
                         {chipShort(tier.buyIn)}
                       </span>
                     )}
                   </div>
                   <ChevronRight
-                    className={`w-4 h-4 text-slate-500 transition-transform ${
+                    className={`w-4 h-4 lg:w-3 lg:h-3 text-slate-500 transition-transform ${
                       active ? 'translate-x-1 text-indigo-400' : ''
                     }`}
                   />
@@ -327,38 +327,38 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
       </div>
 
       {/* RIGHT: selected arena detail card — sticky so BUY IN stays visible */}
-      <div className="lg:col-span-5 lg:sticky lg:top-4 lg:self-start flex flex-col justify-between bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
+      <div className="lg:col-span-5 lg:sticky lg:top-4 lg:self-start flex flex-col justify-between bg-slate-900 border border-slate-800 rounded-2xl p-6 lg:p-2 shadow-2xl relative overflow-hidden">
         {/* Glow */}
         <div
           aria-hidden="true"
-          className="absolute -top-12 -right-12 w-48 h-48 rounded-full blur-3xl opacity-10 pointer-events-none transition-all duration-300"
+          className="absolute -top-12 -right-12 w-48 h-48 lg:w-24 lg:h-24 rounded-full blur-3xl opacity-10 pointer-events-none transition-all duration-300"
           style={{ backgroundColor: selectedTier.accentColor }}
         />
 
         <div>
           <span
-            className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider font-sans border border-transparent ${selectedTier.color}`}
+            className={`text-[10px] lg:text-[11px] px-2 lg:px-1.5 py-1 lg:py-0.5 rounded-full font-bold uppercase tracking-wider font-sans border border-transparent ${selectedTier.color}`}
           >
             {selectedTier.difficulty} Match
           </span>
 
-          <h2 className="text-2xl font-bold font-sans tracking-tight text-white mt-4 flex items-center gap-2">
+          <h2 className="text-2xl lg:text-[11px] font-bold font-sans tracking-tight text-white mt-4 lg:mt-1 flex items-center gap-2">
             {selectedTier.name}
             {isOnline && tierIndex > 0 && (
-              <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-950/60 px-2 py-0.5 rounded-full border border-slate-800">
+              <span className="text-[10px] lg:text-[11px] font-mono font-bold text-slate-500 bg-slate-950/60 px-2 py-0.5 rounded-full border border-slate-800">
                 TIER {tierIndex} / {ARENA_TIERS.length}
               </span>
             )}
           </h2>
 
-          <p className="text-sm text-slate-300 font-sans mt-2.5 leading-relaxed">
+          <p className="text-sm text-slate-300 font-sans mt-2.5 lg:text-[11px] lg:mt-0.5 leading-relaxed">
             {selectedTier.description}
           </p>
 
           {/* Details list */}
-          <div className="flex flex-col gap-3 mt-6 bg-slate-950/60 p-4 rounded-xl border border-slate-800/60">
+          <div className="flex flex-col gap-3 lg:gap-1 mt-6 lg:mt-1 bg-slate-950/60 p-4 lg:p-1.5 rounded-xl border border-slate-800/60">
             <DetailRow
-              icon={<Landmark className="w-3.5 h-3.5 text-slate-500" />}
+              icon={<Landmark className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-slate-500" />}
               label="Stake Buy-In"
               value={
                 selectedTier.buyIn === 0
@@ -369,21 +369,21 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
             />
 
             <DetailRow
-              icon={<Trophy className="w-3.5 h-3.5 text-slate-500" />}
+              icon={<Trophy className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-slate-500" />}
               label="Extraction"
               value={'EXIT ANYTIME'}
               valueClass="text-emerald-400"
             />
 
             <DetailRow
-              icon={<Users className="w-3.5 h-3.5 text-slate-500" />}
+              icon={<Users className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-slate-500" />}
               label="Bot Population"
               value={`${selectedTier.botsCount.toLocaleString()} Bots`}
               valueClass="text-cyan-400"
             />
 
             {isOnline && (
-              <div className="flex items-center justify-between text-xs font-sans text-slate-400 border-t border-slate-900/50 pt-2.5 mt-0.5">
+              <div className="flex items-center justify-between text-xs lg:text-[11px] font-sans text-slate-400 border-t border-slate-900/50 pt-2.5 lg:pt-1 mt-0.5 lg:mt-0">
                 <span className="flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   Live Online Players
@@ -397,7 +397,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
             )}
 
             <DetailRow
-              icon={<Zap className="w-3.5 h-3.5 text-slate-500" />}
+              icon={<Zap className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-slate-500" />}
               label="XP Multiplier"
               value={`x${selectedTier.rewardMultiplier} Multi`}
               valueClass="text-indigo-400"
@@ -405,8 +405,8 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
           </div>
 
           {/* Mode warning */}
-          <div className="mt-4 p-3 rounded-lg bg-indigo-950/20 border border-indigo-900/30 text-[11px] text-indigo-300 font-sans flex items-start gap-2 leading-relaxed">
-            <Shield className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+          <div className="mt-4 lg:mt-1 p-3 lg:p-1.5 rounded-lg bg-indigo-950/20 border border-indigo-900/30 text-[11px] text-indigo-300 font-sans flex items-start gap-2 leading-relaxed">
+            <Shield className="w-4 h-4 lg:w-3 lg:h-3 text-indigo-400 shrink-0 mt-0.5" />
             <div>
               {isOnline ? (
                 <span>
@@ -426,11 +426,11 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
         </div>
 
         {/* Enter trigger */}
-        <div className="mt-6 pt-4 border-t border-slate-800/60">
+        <div className="mt-6 lg:mt-1 pt-4 lg:pt-1 border-t border-slate-800/60">
           <button
             type="button"
             onClick={handleEnterArena}
-            className={`w-full py-3 rounded-xl font-sans font-bold text-sm flex items-center justify-center gap-2 transition duration-200 cursor-pointer ${
+            className={`w-full py-3 lg:py-1 rounded-xl font-sans font-bold text-sm lg:text-[11px] flex items-center justify-center gap-2 transition duration-200 cursor-pointer ${
               canPlay
                 ? isOnline
                   ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-400 hover:to-indigo-500 text-white shadow-lg shadow-indigo-950/30 border border-indigo-500'
@@ -438,7 +438,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                 : 'bg-slate-950 border border-slate-800 text-slate-600 cursor-not-allowed'
             }`}
           >
-            <Play className="w-4 h-4 fill-current" />
+            <Play className="w-4 h-4 lg:w-3 lg:h-3 fill-current" />
             {isOnline
               ? canPlay
                 ? `BUY IN ARENA (-${chipFull(selectedTier.buyIn)})`
@@ -463,7 +463,7 @@ function DetailRow({
   valueClass?: string;
 }) {
   return (
-    <div className="flex items-center justify-between text-xs font-sans text-slate-400">
+    <div className="flex items-center justify-between text-xs lg:text-[11px] font-sans text-slate-400">
       <span className="flex items-center gap-1.5">
         {icon}
         {label}

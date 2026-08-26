@@ -107,7 +107,7 @@ export function ScrollTabStrip({ tabs, activeTab, onTabChange }: ScrollTabStripP
       {/* Scrollable tab container */}
       <div
         ref={scrollRef}
-        className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800/60 overflow-x-auto no-scrollbar scroll-smooth"
+        className="flex items-center md:gap-1 gap-1.5 bg-slate-950 md:p-0.5 p-1 rounded-xl border border-slate-800/60 overflow-x-auto no-scrollbar scroll-smooth"
       >
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -117,7 +117,7 @@ export function ScrollTabStrip({ tabs, activeTab, onTabChange }: ScrollTabStripP
               key={tab.id}
               data-tab-id={tab.id}
               onClick={() => onTabChange(tab.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border border-transparent shrink-0 ${
+              className={`px-3 md:py-0.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border border-transparent shrink-0 ${
                 isActive ? `${tab.activeColor} border` : 'text-slate-500 hover:text-slate-300'
               }`}
             >

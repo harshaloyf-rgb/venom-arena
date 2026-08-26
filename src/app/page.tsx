@@ -545,13 +545,13 @@ export default function Home() {
         {activeTab !== 'dashboard' && (
           <div className="h-full flex flex-col overflow-hidden va-fade-in">
             {/* Desktop: back button + tab strip */}
-            <div className="hidden md:flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-900/40 border border-slate-800 rounded-2xl p-4 mb-6 shadow-md shrink-0">
+            <div className="hidden md:flex flex-col sm:flex-row items-start sm:items-center justify-between md:gap-1 bg-slate-900/40 border border-slate-800 rounded-2xl md:p-1.5 md:mb-1 shadow-md shrink-0">
               <div className="flex items-center gap-3 shrink-0">
-                <button onClick={() => setActiveTab('dashboard')} className="px-3.5 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-900 transition-all cursor-pointer flex items-center gap-1.5 shadow">
+                <button onClick={() => setActiveTab('dashboard')} className="md:px-2 md:py-0.5 px-3.5 py-1.5 rounded-xl bg-slate-950 border border-slate-800 md:text-[11px] text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-900 transition-all cursor-pointer flex items-center gap-1.5 shadow">
                   <ChevronLeft className="w-4 h-4 text-indigo-400" /> Lobby HQ
                 </button>
                 <div className="h-4 w-[1px] bg-slate-800 hidden sm:block" />
-                <div className="text-[10px] text-slate-500 font-mono hidden sm:block">STATION / {activeTab.toUpperCase()}</div>
+                <div className="md:text-[11px] text-[10px] text-slate-500 font-mono hidden sm:block">STATION / {activeTab.toUpperCase()}</div>
               </div>
               <ScrollTabStrip
                 tabs={visibleTabs.map((tab) => ({ id: tab.id, label: tab.label, icon: tab.icon, activeColor: tab.activeColor }))}
