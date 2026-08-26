@@ -53,39 +53,39 @@ export function TournamentGuardrailsSection({
     <div className="bg-slate-950 border border-amber-500/30 rounded-2xl p-5 lg:p-1.5 shadow-xl space-y-4 lg:space-y-0.5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-900 pb-3 lg:pb-0.5">
         <div className="flex items-center gap-2">
-          <Shield className="w-5 h-5 lg:w-3.5 lg:h-3.5 text-amber-400" />
+          <Shield className="w-5 h-5 lg:w-3 lg:h-3 text-amber-400" />
           <h3 className="text-sm lg:text-[11px] lg:leading-tight font-bold text-white uppercase tracking-wider font-sans">
-            Annual Tournament Guardrails &amp; Limit Allowances
+            Tournament Guardrails &amp; Limits
           </h3>
         </div>
-        <span className="text-[11px] lg:text-[11px] font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 lg:px-2 py-1 lg:py-0.5 rounded-full border border-amber-500/20">
-          1-YEAR UTC TOURNAMENT CYCLE ACTIVE
+        <span className="text-[11px] font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 lg:px-2 py-1 lg:py-0.5 rounded-full border border-amber-500/20">
+          1-YEAR CYCLE ACTIVE
         </span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-1.5">
         <CapCard
-          icon={<Swords className="w-3.5 h-3.5 text-indigo-400" />}
+          icon={<Swords className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-indigo-400" />}
           label="Matches Allowed"
           value={`${matchesPlayed.toLocaleString()} / ${matchesMax.toLocaleString()}`}
           barClass="from-indigo-500 to-purple-500"
           pct={matchPct}
           leftLabel={`Completed: ${matchesPlayed.toLocaleString()}`}
-          rightLabel={`Remaining: ${(matchesMax - matchesPlayed).toLocaleString()} matches`}
+          rightLabel={`Remaining: ${(matchesMax - matchesPlayed).toLocaleString()}`}
           rightClass="text-emerald-400 font-bold"
         />
         <CapCard
-          icon={<Landmark className="w-3.5 h-3.5 text-emerald-400" />}
+          icon={<Landmark className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-emerald-400" />}
           label="Annual Buy Cap (25L)"
           value={`${totalBought.toLocaleString()} / ${annualBuyCap.toLocaleString()} c`}
           barClass="from-emerald-500 to-teal-400"
           pct={buyPct}
           leftLabel={`Bought: ${totalBought.toLocaleString()} c`}
-          rightLabel={`Cap Remaining: ${(annualBuyCap - totalBought).toLocaleString()} c`}
+          rightLabel={`Remaining: ${(annualBuyCap - totalBought).toLocaleString()} c`}
           rightClass="text-emerald-400 font-bold"
         />
         <CapCard
-          icon={<Trophy className="w-3.5 h-3.5 text-amber-400" />}
+          icon={<Trophy className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-amber-400" />}
           label="Rewarded Ads Today"
           value={`${adsToday} / ${adsMax} Ads`}
           barClass="from-amber-500 to-yellow-400"

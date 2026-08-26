@@ -272,6 +272,7 @@ function ProfileContent({
   const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
@@ -773,6 +774,8 @@ function ProfileContent({
                   </Badge>
                 )}
               </h2>
+              {/* Hide Edit Identity for guest accounts */}
+              {player.email && (
               <button
                 type="button"
                 onClick={handleStartEditing}
@@ -780,8 +783,9 @@ function ProfileContent({
                 title="Edit Identity"
                 aria-label="Edit identity"
               >
-                <Edit2 className="w-4 h-4" />
+                <Edit2 className="w-4 h-4 lg:w-3 lg:h-3" />
               </button>
+              )}
             </div>
             <p className="text-xs text-slate-400 font-sans mt-1 flex items-center gap-1.5 flex-wrap">
               <span>
@@ -1141,7 +1145,7 @@ function ProfileContent({
             deleting={deletingAccount}
           />
 
-          {/* Identity Change Policy Banner */}
+          {/* Identity Change Policy Banner — hidden on desktop (info is in identity editor) */}
           <div className="p-4 lg:p-2.5 rounded-xl border border-slate-900 bg-slate-900/10 flex items-center gap-4 lg:gap-2 lg:hidden">
             <Shield className="w-8 h-8 lg:w-5 lg:h-5 text-indigo-500 shrink-0" />
             <div className="text-xs leading-relaxed text-slate-400">
@@ -1152,18 +1156,18 @@ function ProfileContent({
             </div>
           </div>
 
-          {/* Milestones Section */}
-          <div className="space-y-3 lg:space-y-2 lg:hidden">
+          {/* Milestones Section — visible on all screens */}
+          <div className="space-y-3 lg:space-y-1">
             <h3 className="text-sm lg:text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-              <Award className="w-4 h-4 text-amber-400" /> Chip Milestones
+              <Award className="w-4 h-4 lg:w-3 lg:h-3 text-amber-400" /> Chip Milestones
             </h3>
             {milestonesLoading ? (
               <PanelSkeleton count={2} height="h-16" />
             ) : milestones.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-800 p-6 text-center">
-                <Trophy className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-                <p className="text-xs text-slate-400">No chip milestones achieved yet.</p>
-                <p className="text-[10px] text-slate-600 mt-1">
+              <div className="rounded-xl border border-dashed border-slate-800 p-4 lg:p-2 text-center">
+                <Trophy className="w-6 h-6 lg:w-4 lg:h-4 text-slate-600 mx-auto mb-1" />
+                <p className="text-xs lg:text-[11px] text-slate-400">No chip milestones achieved yet.</p>
+                <p className="text-[10px] lg:text-[11px] text-slate-600 mt-0.5">
                   Keep extracting to unlock Bronze (100K), Silver (500K), Gold (1M), and beyond!
                 </p>
               </div>
@@ -1175,13 +1179,13 @@ function ProfileContent({
                   return (
                     <div
                       key={ms.id}
-                      className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3"
+                      className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 lg:px-2 lg:py-1.5"
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl" title={tier.name}>{tier.badge.split(' ')[0]}</span>
-                        <div>
-                          <div className="text-xs font-bold text-white">{tier.name}</div>
-                          <div className="text-[10px] text-slate-500 font-mono">
+                      <div className="flex items-center gap-3 lg:gap-1.5">
+                        <span className="text-2xl lg:text-base" title={tier.name}>{tier.badge.split(' ')[0]}</span>
+                        <div className="lg:leading-tight">
+                          <div className="text-xs lg:text-[11px] font-bold text-white">{tier.name}</div>
+                          <div className="text-[10px] lg:text-[11px] text-slate-500 font-mono">
                             {ms.chipsAtMilestone.toLocaleString('en-IN')} chips • {new Date(ms.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
                           </div>
                         </div>
@@ -1190,9 +1194,9 @@ function ProfileContent({
                         type="button"
                         onClick={() => handleGenerateMilestoneCard(ms)}
                         disabled={milestoneCardLoading}
-                        className="flex items-center gap-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 text-[11px] font-bold text-amber-300 hover:bg-amber-500/20 transition disabled:opacity-50 cursor-pointer"
+                        className="flex items-center gap-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 lg:px-2 py-1.5 lg:py-1 text-[11px] font-bold text-amber-300 hover:bg-amber-500/20 transition disabled:opacity-50 cursor-pointer"
                       >
-                        <Share2 className="w-3 h-3" />
+                        <Share2 className="w-3 h-3 lg:w-2.5 lg:h-2.5" />
                         Share
                       </button>
                     </div>
@@ -1206,10 +1210,10 @@ function ProfileContent({
 
       {/* TAB: HISTORY — DB-backed with filters and mobile-responsive */}
       {activeTab === 'history' && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-900 pb-3">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-              <History className="w-4 h-4 text-indigo-400" /> Match Run Records
+        <div className="space-y-4 lg:space-y-2">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 lg:gap-2 border-b border-slate-900 pb-3 lg:pb-1.5">
+            <h3 className="text-sm lg:text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+              <History className="w-4 h-4 lg:w-3 lg:h-3 text-indigo-400" /> Match Run Records
               Ledger
             </h3>
             <span className="text-xs text-slate-500 font-mono">
@@ -1218,14 +1222,14 @@ function ProfileContent({
           </div>
 
           {/* Filter buttons */}
-          <div className="flex items-center gap-2">
-            <Filter className="w-3.5 h-3.5 text-slate-500" />
+          <div className="flex items-center gap-2 lg:gap-1">
+            <Filter className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-slate-500" />
             {(['all', 'EXTRACTED', 'COLLIDED'] as const).map((f) => (
               <button
                 key={f}
                 type="button"
                 onClick={() => setMatchFilter(f)}
-                className={`px-3 py-1.5 rounded-lg text-[11px] font-bold font-sans transition cursor-pointer border ${
+                className={`px-3 lg:px-2 py-1.5 lg:py-1 rounded-lg text-[11px] font-bold font-sans transition cursor-pointer border ${
                   matchFilter === f
                     ? 'bg-indigo-600/15 border-indigo-500/30 text-indigo-400'
                     : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
@@ -1239,22 +1243,14 @@ function ProfileContent({
           {matchLoading ? (
             <PanelSkeleton count={3} height="h-16" />
           ) : displayMatches.length === 0 ? (
-            <div className="text-center py-12 border border-dashed border-slate-900 rounded-2xl">
-              <History className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-              <p className="text-sm text-slate-400">
-                No matches found in the active ledger standing.
+            <div className="text-center py-6 lg:py-3 border border-dashed border-slate-900 rounded-2xl">
+              <History className="w-6 h-6 lg:w-4 lg:h-4 text-slate-600 mx-auto mb-1" />
+              <p className="text-xs lg:text-[11px] text-slate-400">
+                No match records found in the ledger.
               </p>
-              <p className="text-xs text-slate-600 mt-1">
-                Jump into any arena to log your first run data!
+              <p className="text-[11px] lg:text-[11px] text-slate-600 mt-0.5">
+                Complete arena runs to log your extraction data here.
               </p>
-              <button
-                type="button"
-                onClick={() => notify('Head to the Arena to log your first match!', 'info', onToast)}
-                className="mt-4 px-4 py-2 bg-indigo-600/15 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-600/25 rounded-xl text-xs font-bold transition cursor-pointer inline-flex items-center gap-1.5"
-              >
-                <Gamepad2 className="w-3.5 h-3.5" />
-                Go to Arena
-              </button>
             </div>
           ) : (
             <>

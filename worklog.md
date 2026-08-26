@@ -922,3 +922,33 @@ Stage Summary:
 - No text clipping/truncation/ellipsis added
 - Lint clean (only pre-existing fix-bom.ts error)
 - All changes use lg: prefix for desktop-only, mobile untouched
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix all Agent Profile panel issues - scrollbar, edit toggle, empty data, guest vs registered, milestones, upgrade form
+
+Work Log:
+- Analyzed all 7 profile sub-component files and the main page.tsx layout
+- Discovered page root had `md:h-auto md:min-h-screen` causing page to grow beyond viewport → changed to `md:h-screen`
+- Discovered React Strict Mode bug: `mountedRef.current = useRef(true)` but cleanup sets it to false, and Strict Mode's double-effect leaves it false → added `mountedRef.current = true` at start of effect
+- Hid Edit Identity button for guest accounts (`!player.email` condition)
+- Removed `lg:hidden` from Chip Milestones section, added `lg:` compression to milestone cards
+- Rewrote identity-editor.tsx with full `lg:` compression (padding, gaps, text sizes, avatar grid 8-col on desktop)
+- Rewrote guest-upgrade.tsx expanded form with `lg:` compression (4-col grid, smaller inputs/buttons)
+- Rewrote security.tsx with all text ≥11px, compressed padding/gaps for desktop
+- Compressed tournament-guardrails.tsx (shorter heading, smaller icons)
+- Improved match history empty state messaging (compact on desktop)
+- Compressed stat-card.tsx CapCard bar height from 0.5 to 1px
+
+Stage Summary:
+- Page scrollbar eliminated: html scrollH changed from 709 to 577px at 1365×599
+- Guest profile: no scrollbar, all sections visible (stats, guardrails, delete, milestones)
+- Registered users: Security Settings + Delete Account both compressed to fit
+- Edit Identity button hidden for guest accounts
+- Chip Milestones now visible on desktop (was lg:hidden)
+- Identity Editor has full lg: compression for desktop
+- Guest Upgrade form has lg: compression when expanded
+- Match History: DB has 0 records (game doesn't POST match results), empty state shows properly
+- Strict Mode loading bug fixed (tournament guardrails + milestones were stuck in skeleton)
+

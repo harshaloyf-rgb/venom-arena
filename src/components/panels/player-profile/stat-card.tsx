@@ -60,7 +60,7 @@ export function CapCard({
         </span>
         <span className="font-mono font-bold text-slate-300">{value}</span>
       </div>
-      <div className="w-full h-2.5 lg:h-0.5 bg-slate-950 rounded-full border border-slate-800 overflow-hidden">
+      <div className="w-full h-2.5 lg:h-1 bg-slate-950 rounded-full border border-slate-800 overflow-hidden">
         <div
           className={`h-full bg-gradient-to-r ${barClass} rounded-full`}
           style={{ width: `${Math.min(100, pct)}%` }}

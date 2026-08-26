@@ -75,30 +75,30 @@ function GuestUpgradeBanner({
   }
 
   return (
-    <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-950/40 via-slate-900 to-indigo-950/40 border border-amber-500/30 space-y-4">
+    <div className="p-5 lg:p-2 rounded-2xl bg-gradient-to-r from-amber-950/40 via-slate-900 to-indigo-950/40 border border-amber-500/30 space-y-4 lg:space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Shield className="w-4 h-4 text-amber-400" />
-          <h3 className="text-sm font-bold text-amber-300 font-sans">Upgrade to Registered Account</h3>
+          <Shield className="w-4 h-4 lg:w-3 lg:h-3 text-amber-400" />
+          <h3 className="text-sm lg:text-[11px] font-bold text-amber-300 font-sans">Upgrade to Registered Account</h3>
         </div>
         <button
           type="button"
           onClick={() => setOpen(false)}
           className="text-slate-500 hover:text-slate-300 transition cursor-pointer"
         >
-          <X className="w-4 h-4" />
+          <X className="w-4 h-4 lg:w-3 lg:h-3" />
         </button>
       </div>
 
-      <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/60 text-[11px] text-slate-400 leading-relaxed">
+      <div className="p-3 lg:p-1.5 rounded-xl bg-slate-950/60 border border-slate-800/60 text-[11px] lg:text-[11px] text-slate-400 leading-relaxed">
         <Lock className="w-3.5 h-3.5 inline mr-1 text-emerald-400" />
         <strong className="text-slate-300">Your progress is safe.</strong> All chips, stats, cosmetics, streaks, friends, and clan memberships carry over. You keep your VENOM tag. Just add an email and password to secure your account.
       </div>
 
-      <form onSubmit={handleUpgrade} className="space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label htmlFor="ug-name" className="text-[10px] lg:text-[11px] uppercase tracking-wider text-slate-500 font-bold font-sans">
+      <form onSubmit={handleUpgrade} className="space-y-3 lg:space-y-1.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-2">
+          <div className="space-y-1 lg:space-y-0">
+            <label htmlFor="ug-name" className="text-[11px] uppercase tracking-wider text-slate-500 font-bold font-sans">
               Display Name
             </label>
             <input
@@ -109,11 +109,11 @@ function GuestUpgradeBanner({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="ViperStrike"
-              className="w-full px-3 py-2 rounded-lg bg-slate-950/60 border border-slate-700/60 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50 transition"
+              className="w-full px-3 lg:px-2 py-2 lg:py-1 rounded-lg bg-slate-950/60 border border-slate-700/60 text-sm lg:text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50 transition"
             />
           </div>
-          <div className="space-y-1">
-            <label htmlFor="ug-email" className="text-[10px] lg:text-[11px] uppercase tracking-wider text-slate-500 font-bold font-sans">
+          <div className="space-y-1 lg:space-y-0">
+            <label htmlFor="ug-email" className="text-[11px] uppercase tracking-wider text-slate-500 font-bold font-sans">
               Email
             </label>
             <input
@@ -123,14 +123,12 @@ function GuestUpgradeBanner({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@arena.gg"
-              className="w-full px-3 py-2 rounded-lg bg-slate-950/60 border border-slate-700/60 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50 transition"
+              className="w-full px-3 lg:px-2 py-2 lg:py-1 rounded-lg bg-slate-950/60 border border-slate-700/60 text-sm lg:text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50 transition"
             />
           </div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label htmlFor="ug-pass" className="text-[10px] lg:text-[11px] uppercase tracking-wider text-slate-500 font-bold font-sans">
-              Password (min 6 chars)
+          <div className="space-y-1 lg:space-y-0">
+            <label htmlFor="ug-pass" className="text-[11px] uppercase tracking-wider text-slate-500 font-bold font-sans">
+              Password (min 6)
             </label>
             <input
               id="ug-pass"
@@ -140,12 +138,12 @@ function GuestUpgradeBanner({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full px-3 py-2 rounded-lg bg-slate-950/60 border border-slate-700/60 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50 transition"
+              className="w-full px-3 lg:px-2 py-2 lg:py-1 rounded-lg bg-slate-950/60 border border-slate-700/60 text-sm lg:text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50 transition"
             />
           </div>
-          <div className="space-y-1">
-            <label htmlFor="ug-pin" className="text-[10px] lg:text-[11px] uppercase tracking-wider text-slate-500 font-bold font-sans">
-              Security PIN (4 digits, optional)
+          <div className="space-y-1 lg:space-y-0">
+            <label htmlFor="ug-pin" className="text-[11px] uppercase tracking-wider text-slate-500 font-bold font-sans">
+              Security PIN (4 digits)
             </label>
             <input
               id="ug-pin"
@@ -155,7 +153,7 @@ function GuestUpgradeBanner({
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
               placeholder="e.g. 1234"
-              className="w-full px-3 py-2 rounded-lg bg-slate-950/60 border border-slate-700/60 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50 transition"
+              className="w-full px-3 lg:px-2 py-2 lg:py-1 rounded-lg bg-slate-950/60 border border-slate-700/60 text-sm lg:text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50 transition"
             />
           </div>
         </div>
@@ -166,14 +164,14 @@ function GuestUpgradeBanner({
           <button
             type="submit"
             disabled={busy}
-            className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white text-xs font-bold font-sans rounded-xl border border-amber-500 transition cursor-pointer shadow-lg shadow-amber-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-5 lg:px-3 py-2.5 lg:py-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white text-xs lg:text-[11px] font-bold font-sans rounded-xl border border-amber-500 transition cursor-pointer shadow-lg shadow-amber-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {busy ? 'Upgrading…' : 'Upgrade & Secure Account'}
           </button>
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="px-4 py-2.5 border border-slate-800 hover:border-slate-700 bg-slate-950/40 text-slate-400 hover:text-white text-xs font-bold font-sans rounded-xl transition cursor-pointer"
+            className="px-4 lg:px-2.5 py-2.5 lg:py-1 border border-slate-800 hover:border-slate-700 bg-slate-950/40 text-slate-400 hover:text-white text-xs lg:text-[11px] font-bold font-sans rounded-xl transition cursor-pointer"
           >
             Cancel
           </button>
