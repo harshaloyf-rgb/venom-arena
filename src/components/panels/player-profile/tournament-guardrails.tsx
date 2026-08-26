@@ -42,20 +42,20 @@ export function TournamentGuardrailsSection({
   const adsPct = adsMax > 0 ? (adsToday / adsMax) * 100 : 0;
 
   return (
-    <div className="bg-slate-950 border border-amber-500/30 rounded-2xl p-5 shadow-xl space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-900 pb-3">
+    <div className="bg-slate-950 border border-amber-500/30 rounded-2xl p-5 lg:p-3 shadow-xl space-y-4 lg:space-y-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-900 pb-3 lg:pb-2">
         <div className="flex items-center gap-2">
-          <Shield className="w-5 h-5 text-amber-400" />
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">
+          <Shield className="w-5 h-5 lg:w-4 lg:h-4 text-amber-400" />
+          <h3 className="text-sm lg:text-[11px] font-bold text-white uppercase tracking-wider font-sans">
             Annual Tournament Guardrails &amp; Limit Allowances
           </h3>
         </div>
-        <span className="text-[11px] font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+        <span className="text-[11px] lg:text-[9px] font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 lg:px-2 py-1 lg:py-0.5 rounded-full border border-amber-500/20">
           1-YEAR UTC TOURNAMENT CYCLE ACTIVE
         </span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-2">
         <CapCard
           icon={<Swords className="w-3.5 h-3.5 text-indigo-400" />}
           label="Matches Allowed"

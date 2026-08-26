@@ -21,17 +21,17 @@ function GuestUpgradeBanner({
 
   if (!open) {
     return (
-      <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/40 via-slate-900 to-indigo-950/40 border border-amber-500/30">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-              <Shield className="w-5 h-5" />
+      <div className="p-4 lg:p-2.5 rounded-2xl bg-gradient-to-r from-amber-950/40 via-slate-900 to-indigo-950/40 border border-amber-500/30">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 lg:gap-2">
+          <div className="flex items-center gap-3 lg:gap-2 min-w-0">
+            <div className="w-10 h-10 lg:w-7 lg:h-7 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+              <Shield className="w-5 h-5 lg:w-3.5 lg:h-3.5" />
             </div>
             <div className="min-w-0">
-              <h3 className="text-sm font-bold text-amber-300 font-sans">
+              <h3 className="text-sm lg:text-[11px] font-bold text-amber-300 font-sans">
                 You&apos;re playing as a Guest
               </h3>
-              <p className="text-xs text-slate-400 font-sans mt-0.5">
+              <p className="text-xs lg:text-[10px] text-slate-400 font-sans mt-0.5">
                 Upgrade to a registered account to secure your progress. All chips, stats, cosmetics, and friends carry over.
               </p>
             </div>
@@ -39,7 +39,7 @@ function GuestUpgradeBanner({
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="shrink-0 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white text-xs font-bold font-sans rounded-xl border border-amber-500 transition cursor-pointer shadow-lg shadow-amber-600/20"
+            className="shrink-0 px-4 lg:px-3 py-2 lg:py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white text-xs font-bold font-sans rounded-xl border border-amber-500 transition cursor-pointer shadow-lg shadow-amber-600/20"
           >
             <UserPlus className="w-3.5 h-3.5 mr-1.5 inline" />
             Upgrade Now

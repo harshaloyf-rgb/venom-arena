@@ -717,18 +717,16 @@ function ProfileContent({
   // =========================================================================
   return (
     <TooltipProvider>
-    <div className="w-full max-w-6xl mx-auto bg-slate-950/60 border border-slate-900 rounded-2xl shadow-xl relative overflow-hidden backdrop-blur-md">
+    <div className="w-full max-w-6xl mx-auto p-4 sm:p-6 lg:p-3 bg-slate-950/60 border border-slate-900 rounded-2xl shadow-xl relative overflow-hidden backdrop-blur-md">
       {/* Glow */}
       <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Scrollable content — desktop constrained to viewport */}
-      <div className="p-4 sm:p-6 lg:max-h-[calc(100dvh-120px)] lg:overflow-y-auto va-scroll">
       {/* HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-900 pb-6 mb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 lg:gap-3 border-b border-slate-900 pb-4 mb-4 lg:pb-3 lg:mb-3">
         <div className="flex items-center gap-4">
           {/* Avatar */}
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border border-indigo-400/30 relative shadow-md overflow-hidden shrink-0">
+          <div className="w-16 h-16 lg:w-10 lg:h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border border-indigo-400/30 relative shadow-md overflow-hidden shrink-0">
             {player.avatar ? (
               player.avatar.startsWith('data:') ||
               player.avatar.startsWith('http') ? (
@@ -739,11 +737,11 @@ function ProfileContent({
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <span className="text-3xl select-none">{player.avatar}</span>
+                <span className="text-3xl lg:text-lg select-none">{player.avatar}</span>
               )
             ) : (
               <span
-                className="text-3xl select-none"
+                className="text-3xl lg:text-lg select-none"
                 title="Equipped DNA Skin"
               >
                 {activeSkin?.emoji || '🐍'}
@@ -757,8 +755,8 @@ function ProfileContent({
           {/* Name + tag + socials */}
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-xl font-bold text-white font-sans tracking-tight flex items-center gap-2">
-                <span className="text-xl" title="Region flag">
+              <h2 className="text-xl lg:text-sm font-bold text-white font-sans tracking-tight flex items-center gap-2">
+                <span className="text-xl lg:text-sm" title="Region flag">
                   {activeFlag?.flag || '🇺🇸'}
                 </span>
                 <span>{player.name}</span>
@@ -814,7 +812,7 @@ function ProfileContent({
 
             {/* Referral code */}
             {player.referralCode && (
-              <div className="flex items-center gap-1.5 mt-1.5">
+              <div className="flex items-center gap-1.5 mt-1.5 lg:hidden">
                 <LinkIcon className="w-3 h-3 text-emerald-400" />
                 <span className="text-[11px] text-slate-400 font-sans">
                   Referral:{' '}
@@ -841,7 +839,7 @@ function ProfileContent({
             )}
 
             {/* Account age + last seen */}
-            <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-500 font-sans">
+            <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-500 font-sans lg:hidden">
               <span className="flex items-center gap-1">
                 <Calendar className="w-3 h-3" />
                 Member since {createdAtFormatted}
@@ -854,7 +852,7 @@ function ProfileContent({
             </div>
 
             {/* Socials */}
-            <div className="flex flex-wrap items-center gap-2 mt-2">
+            <div className="flex flex-wrap items-center gap-2 mt-2 lg:hidden">
               {instagram && (
                 <a
                   href={`https://instagram.com/${instagram.replace('@', '')}`}
@@ -895,8 +893,8 @@ function ProfileContent({
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
           {/* Level progress */}
-          <div className="w-full md:w-72 bg-slate-900/60 p-3 rounded-xl border border-slate-800 backdrop-blur-sm flex-1">
-            <div className="flex justify-between items-center text-xs text-slate-400 font-sans mb-1.5">
+          <div className="w-full md:w-72 lg:w-44 bg-slate-900/60 p-3 lg:p-2 rounded-xl border border-slate-800 backdrop-blur-sm flex-1">
+            <div className="flex justify-between items-center text-xs text-slate-400 font-sans mb-1.5 lg:mb-1">
               <span className="flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />{' '}
                 Level Progress
@@ -919,7 +917,7 @@ function ProfileContent({
               <button
                 type="button"
                 disabled={loggingOut}
-                className="px-4 py-3 bg-red-950/20 hover:bg-red-950/40 border border-red-500/20 text-red-400 hover:text-red-300 rounded-xl text-xs font-bold transition duration-200 cursor-pointer flex items-center justify-center gap-1.5 shadow h-[52px] disabled:opacity-50"
+                className="px-4 py-3 lg:px-3 lg:py-1.5 bg-red-950/20 hover:bg-red-950/40 border border-red-500/20 text-red-400 hover:text-red-300 rounded-xl text-xs font-bold transition duration-200 cursor-pointer flex items-center justify-center gap-1.5 shadow h-[52px] lg:h-9 disabled:opacity-50"
                 title="Logout Session"
               >
                 <LogOut className="w-4 h-4" />
@@ -948,6 +946,7 @@ function ProfileContent({
       </div>
 
       {/* Profile Picture + Character Appearance Row */}
+      <div className="lg:hidden">
       <ProfilePictureAndAppearance
         player={player}
         activeSkin={activeSkin}
@@ -962,8 +961,10 @@ function ProfileContent({
         isDragging={isDragging}
         setIsDragging={setIsDragging}
       />
+      </div>
 
       {/* Cosmetics Showcase Row */}
+      <div className="lg:hidden">
       <CosmeticsShowcase
         activeSkin={activeSkin}
         activeTrail={activeTrail}
@@ -971,20 +972,21 @@ function ProfileContent({
         activeFlagCosmetic={activeFlagCosmetic}
         activeBanner={activeBanner}
       />
+      </div>
 
       {/* Generate Profile Card Button */}
       <button
         type="button"
         onClick={handleGenerateProfileCard}
         disabled={profileCardLoading}
-        className="flex w-full items-center justify-center gap-2 rounded-xl border border-violet-500/30 bg-violet-500/10 py-2.5 text-xs font-bold text-violet-300 hover:bg-violet-500/20 transition disabled:opacity-50 cursor-pointer"
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-violet-500/30 bg-violet-500/10 py-2.5 lg:hidden text-xs font-bold text-violet-300 hover:bg-violet-500/20 transition disabled:opacity-50 cursor-pointer"
       >
         <UserCircle className="w-4 h-4" />
         {profileCardLoading ? 'Generating Profile Card…' : '🪪 Generate Profile Card'}
       </button>
 
       {/* TAB NAV */}
-      <div className="flex flex-wrap gap-2 mb-6 border-b border-slate-900 pb-3">
+      <div className="flex flex-wrap gap-2 mb-4 lg:mb-3 border-b border-slate-900 pb-3 lg:pb-1.5">
         {(
           [
             { id: 'stats', label: 'Records & Statistics', icon: Target },
@@ -1000,7 +1002,7 @@ function ProfileContent({
                 setActiveTab(tab.id);
                 setIsEditing(false);
               }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              className={`px-4 lg:px-3 py-2 lg:py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
                 activeTab === tab.id
                   ? 'bg-indigo-600/10 border border-indigo-500/30 text-indigo-400 shadow-lg'
                   : 'bg-transparent border border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
@@ -1015,7 +1017,7 @@ function ProfileContent({
 
       {/* TAB CONTENT */}
       {activeTab === 'stats' && (
-        <div className="space-y-6">
+        <div className="space-y-6 lg:space-y-3">
           {/* Guest Upgrade Banner */}
           {!player.email && <GuestUpgradeBanner onRefresh={onRefresh} onToast={onToast} />}
 
@@ -1047,7 +1049,7 @@ function ProfileContent({
           )}
 
           {/* Statistics grid — now 10 cards (8 original + Total Matches + Account Age) */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 lg:gap-2">
             <StatCard
               label="Banked Wallet"
               subLabel="Deposited Chips"
@@ -1136,8 +1138,8 @@ function ProfileContent({
           />
 
           {/* Identity Change Policy Banner */}
-          <div className="p-4 rounded-xl border border-slate-900 bg-slate-900/10 flex items-center gap-4">
-            <Shield className="w-8 h-8 text-indigo-500 shrink-0" />
+          <div className="p-4 lg:p-2.5 rounded-xl border border-slate-900 bg-slate-900/10 flex items-center gap-4 lg:gap-2 lg:hidden">
+            <Shield className="w-8 h-8 lg:w-5 lg:h-5 text-indigo-500 shrink-0" />
             <div className="text-xs leading-relaxed text-slate-400">
               <span className="font-bold text-slate-200 uppercase block mb-0.5">
                 IDENTITY LOCK POLICY
@@ -1147,8 +1149,8 @@ function ProfileContent({
           </div>
 
           {/* Milestones Section */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+          <div className="space-y-3 lg:space-y-2 lg:hidden">
+            <h3 className="text-sm lg:text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
               <Award className="w-4 h-4 text-amber-400" /> Chip Milestones
             </h3>
             {milestonesLoading ? (
@@ -1395,8 +1397,6 @@ function ProfileContent({
           )}
         </div>
       )}
-
-      </div>
 
       {/* PROFILE CARD MODAL */}
       {profileCardPreview && (
