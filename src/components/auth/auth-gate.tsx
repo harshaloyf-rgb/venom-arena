@@ -112,37 +112,25 @@ function AuthScreen() {
   }
 
   return (
-    <div className="h-dvh flex items-center justify-center px-3 py-2">
-      <div className="w-full max-w-md space-y-3">
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="w-full max-w-md space-y-6">
         {/* Logo / Title */}
-        <div className="text-center space-y-1">
-          <div className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-primary/15 border border-primary/30 va-neon-border">
-            <Skull className="w-6 h-6 text-primary va-neon-text" />
+        <div className="text-center space-y-2">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/15 border border-primary/30 va-neon-border">
+            <Skull className="w-9 h-9 text-primary va-neon-text" />
           </div>
-          <h1 className="text-2xl font-black tracking-tight va-neon-text">VENOM ARENA</h1>
-          <p className="text-[11px] text-muted-foreground">
+          <h1 className="text-4xl font-black tracking-tight va-neon-text">VENOM ARENA</h1>
+          <p className="text-sm text-muted-foreground">
             Hunt. Harvest. Extract. <span className="text-primary font-semibold">Don&apos;t get caught.</span>
           </p>
         </div>
 
-        <Card className="border-primary/20 bg-card/80 backdrop-blur py-3">
-          <CardHeader className="p-4 pb-0">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-base">Enter the arena</CardTitle>
-                <CardDescription className="text-xs">Sign in or create an account to play.</CardDescription>
-              </div>
-              <button
-                type="button"
-                onClick={() => setRulesOpen(true)}
-                className="inline-flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 underline-offset-2 hover:underline cursor-pointer"
-              >
-                <BookOpen className="w-3 h-3" />
-                Rules
-              </button>
-            </div>
+        <Card className="border-primary/20 bg-card/80 backdrop-blur">
+          <CardHeader>
+            <CardTitle className="text-lg">Enter the arena</CardTitle>
+            <CardDescription>Sign in or create an account to play.</CardDescription>
           </CardHeader>
-          <CardContent className="p-4 overflow-y-auto max-h-[calc(100dvh-280px)]" style={{scrollbarWidth:'none',msOverflowStyle:'none'}}>
+          <CardContent>
             <Tabs defaultValue="login" className="w-full" onValueChange={handleTabChange}>
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="login">
@@ -155,22 +143,22 @@ function AuthScreen() {
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="login" className="mt-3">
+              <TabsContent value="login" className="mt-4">
                 <LoginForm busy={busy} error={error} onSubmit={callApi} onForgotPassword={() => { setError(null); setForgotOpen(true); }} />
               </TabsContent>
 
-              <TabsContent value="register" className="mt-3">
+              <TabsContent value="register" className="mt-4">
                 <RegisterForm busy={busy} error={error} onSubmit={callApi} />
               </TabsContent>
             </Tabs>
 
             {/* Divider */}
-            <div className="relative my-2">
+            <div className="relative my-4">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center">
-                <span className="bg-card px-2 text-[11px] text-muted-foreground">or continue with</span>
+                <span className="bg-card px-2 text-xs text-muted-foreground">or continue with</span>
               </div>
             </div>
 
@@ -220,6 +208,16 @@ function AuthScreen() {
               </Button>
             </div>
 
+            {/* Divider */}
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-card px-2 text-xs text-muted-foreground">or</span>
+              </div>
+            </div>
+
             {/* Guest Play */}
             <Button
               variant="secondary"
@@ -238,10 +236,24 @@ function AuthScreen() {
             </Button>
 
             {/* Bottom info */}
-            <p className="mt-1 text-[11px] text-muted-foreground text-center">
-              <Zap className="w-3 h-3 inline mr-1" />
-              Guests get 150 starter chips. Register to keep your progress.
-            </p>
+            <div className="mt-3 space-y-2">
+              <p className="text-[11px] text-muted-foreground text-center">
+                <Zap className="w-3 h-3 inline mr-1" />
+                Guests get 150 starter chips. Register to keep your progress.
+              </p>
+
+              {/* View Rules & Guide link */}
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => setRulesOpen(true)}
+                  className="inline-flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 underline-offset-2 hover:underline cursor-pointer"
+                >
+                  <BookOpen className="w-3 h-3" />
+                  View Rules &amp; Guide
+                </button>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -300,9 +312,9 @@ function LoginForm({
         e.preventDefault();
         await onSubmit('/api/auth/login', { email, password, remember });
       }}
-      className="space-y-2"
+      className="space-y-3"
     >
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         <Label htmlFor="l-email" className="text-xs">Email</Label>
         <div className="relative">
           <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -318,7 +330,7 @@ function LoginForm({
           />
         </div>
       </div>
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         <Label htmlFor="l-pass" className="text-xs">Password</Label>
         <div className="relative">
           <KeyRound className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -429,12 +441,12 @@ function RegisterForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-2">
-      <div className="space-y-1">
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div className="space-y-1.5">
         <Label htmlFor="r-name" className="text-xs">Display name (up to 20 chars)</Label>
         <Input id="r-name" required maxLength={20} value={name} onChange={(e) => setName(e.target.value)} placeholder="ViperStrike" className="text-sm" />
       </div>
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         <Label htmlFor="r-email" className="text-xs">Email</Label>
         <div className="relative">
           <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -450,7 +462,7 @@ function RegisterForm({
           />
         </div>
       </div>
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         <Label htmlFor="r-pass" className="text-xs">Password (min 6 chars)</Label>
         <div className="relative">
           <KeyRound className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -486,7 +498,7 @@ function RegisterForm({
           </div>
         )}
       </div>
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         <Label htmlFor="r-confirm" className="text-xs">Confirm Password</Label>
         <div className="relative">
           <KeyRound className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -516,7 +528,7 @@ function RegisterForm({
           </button>
         </div>
       </div>
-      <div className="space-y-1">
+      <div className="space-y-1.5">
         <Label htmlFor="r-pin" className="text-xs">Security PIN (4 digits, optional)</Label>
         <Input
           id="r-pin"
@@ -530,13 +542,18 @@ function RegisterForm({
           placeholder="e.g. 1234"
           className="text-sm"
         />
-        <p className="text-[10px] text-muted-foreground">For password recovery. Keep it safe!</p>
+        <p className="text-[10px] text-muted-foreground">
+          Required for password recovery. Keep it safe!
+        </p>
       </div>
 
       {error && (
         <p className="text-xs text-destructive flex items-center gap-1" data-register-error>
           <Shield className="w-3 h-3 shrink-0" /> {error}
         </p>
+      )}
+      {!error && (
+        <p className="text-xs text-destructive" data-register-error />
       )}
 
       <Button type="submit" className="w-full" disabled={busy}>
