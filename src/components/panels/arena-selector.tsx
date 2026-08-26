@@ -338,20 +338,10 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                   >
                     {/* Stats row */}
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] font-sans text-slate-400">
-                      <span><span className="text-slate-500">Buy-In:</span> <span className="font-mono font-semibold text-white">{tier.buyIn === 0 ? 'FREE' : chipFull(tier.buyIn)}</span></span>
                       <span><span className="text-slate-500">Extraction:</span> <span className="font-mono font-semibold text-emerald-400">EXIT ANYTIME</span></span>
                       <span><span className="text-slate-500">Bots:</span> <span className="font-mono font-semibold text-cyan-400">{tier.botsCount.toLocaleString()}</span></span>
                       <span><span className="text-slate-500">XP:</span> <span className="font-mono font-semibold text-indigo-400">x{tier.rewardMultiplier}</span></span>
                     </div>
-
-                    {/* Live players (online) */}
-                    {isOnline && (
-                      <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        <span>Live:</span>
-                        <span className="font-mono font-semibold text-indigo-400">{arenaStats[tier.id] ? `${arenaStats[tier.id].players}/${arenaStats[tier.id].maxPlayers.toLocaleString()}` : '0/1,000'}</span>
-                      </div>
-                    )}
 
                     {/* Warning — full text matching desktop */}
                     <div className="text-[11px] text-indigo-300/80 font-sans leading-tight">
