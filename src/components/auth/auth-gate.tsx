@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -75,33 +75,9 @@ function AuthScreen() {
   const [error, setError] = useState<string | null>(null);
   const [forgotOpen, setForgotOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [zoom, setZoom] = useState(1);
-
-  // Dynamically calculate zoom so content fits any viewport (toolbars, etc.)
-  const recalcZoom = useCallback(() => {
-    const el = contentRef.current;
-    if (!el) return;
-    const currentZoom = parseFloat(getComputedStyle(el).zoom) || 1;
-    const naturalH = el.offsetHeight / currentZoom;
-    const vh = window.innerHeight;
-    const z = Math.min(1, (vh - 4) / naturalH);
-    if (Math.abs(z - currentZoom) > 0.005) {
-      setZoom(z);
-    }
-  }, []);
-
-  useEffect(() => {
-    recalcZoom();
-    window.addEventListener('resize', recalcZoom);
-    return () => window.removeEventListener('resize', recalcZoom);
-  }, [recalcZoom]);
-
   // Per-tab error handling — clear error when switching tabs
   function handleTabChange(value: string) {
     setError(null);
-    // Re-measure after tab content changes
-    requestAnimationFrame(recalcZoom);
   }
 
   async function callApi(path: string, body: unknown) {
@@ -135,8 +111,8 @@ function AuthScreen() {
   }
 
   return (
-    <div className="h-dvh flex items-center justify-center px-3 py-1 overflow-hidden">
-      <div ref={contentRef} className="w-full max-w-sm space-y-1" style={{ zoom }}>
+    <div className="min-h-dvh flex items-center justify-center px-3 py-1">
+      <div className="w-full max-w-sm space-y-1">
         {/* Logo / Title */}
         <div className="text-center space-y-0.5">
           <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-primary/15 border border-primary/30 va-neon-border">
@@ -148,12 +124,12 @@ function AuthScreen() {
           </p>
         </div>
 
-        <Card className="border-primary/20 bg-card/80 backdrop-blur py-2 gap-1">
-          <CardHeader className="px-4 pb-0">
+        <Card className="border-primary/20 bg-card/80 backdrop-blur py-1 gap-0.5">
+          <CardHeader className="px-3 pb-0">
             <CardTitle className="text-xs">Enter the arena</CardTitle>
-            <CardDescription className="text-[10px]">Sign in or create an account to play.</CardDescription>
+            <CardDescription className="text-[11px]">Sign in or create an account to play.</CardDescription>
           </CardHeader>
-          <CardContent className="px-4">
+          <CardContent className="px-3">
             <Tabs defaultValue="login" className="w-full" onValueChange={handleTabChange}>
               <TabsList className="grid w-full grid-cols-2 h-7">
                 <TabsTrigger value="login">
@@ -181,7 +157,7 @@ function AuthScreen() {
                 <span className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center">
-                <span className="bg-card px-2 text-[10px] text-muted-foreground">or continue with</span>
+                <span className="bg-card px-2 text-[11px] text-muted-foreground">or continue with</span>
               </div>
             </div>
 
@@ -237,7 +213,7 @@ function AuthScreen() {
                 <span className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center">
-                <span className="bg-card px-2 text-[10px] text-muted-foreground">or</span>
+                <span className="bg-card px-2 text-[11px] text-muted-foreground">or</span>
               </div>
             </div>
 
@@ -350,7 +326,7 @@ function LoginForm({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@arena.gg"
-            className="pl-7 text-xs h-7"
+            className="pl-7 text-xs h-6"
           />
         </div>
       </div>
@@ -366,7 +342,7 @@ function LoginForm({
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
-            className="pl-7 pr-8 text-xs h-7"
+            className="pl-7 pr-8 text-xs h-6"
           />
           <button
             type="button"
@@ -468,7 +444,7 @@ function RegisterForm({
     <form onSubmit={handleSubmit} className="space-y-1">
       <div className="space-y-1">
         <Label htmlFor="r-name" className="text-xs">Display name (up to 20 chars)</Label>
-        <Input id="r-name" required maxLength={20} value={name} onChange={(e) => setName(e.target.value)} placeholder="ViperStrike" className="text-xs h-7" />
+        <Input id="r-name" required maxLength={20} value={name} onChange={(e) => setName(e.target.value)} placeholder="ViperStrike" className="text-xs h-6" />
       </div>
       <div className="space-y-1">
         <Label htmlFor="r-email" className="text-xs">Email</Label>
@@ -482,7 +458,7 @@ function RegisterForm({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@arena.gg"
-            className="pl-7 text-xs h-7"
+            className="pl-7 text-xs h-6"
           />
         </div>
       </div>
@@ -499,7 +475,7 @@ function RegisterForm({
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
-            className="pl-7 pr-8 text-xs h-7"
+            className="pl-7 pr-8 text-xs h-6"
           />
           <button
             type="button"
@@ -516,7 +492,7 @@ function RegisterForm({
             <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
               <div className={`h-full ${strength.color} ${strength.width} rounded-full transition-all duration-300`} />
             </div>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground">
               Strength: <span className={strength.score >= 3 ? 'text-emerald-500' : strength.score >= 2 ? 'text-yellow-500' : 'text-red-500'}>{strength.label}</span>
             </p>
           </div>
@@ -540,7 +516,7 @@ function RegisterForm({
               if (errEl && e.target.value === password) errEl.textContent = '';
             }}
             placeholder="••••••••"
-            className="pl-7 pr-8 text-xs h-7"
+            className="pl-7 pr-8 text-xs h-6"
           />
           <button
             type="button"
@@ -564,11 +540,8 @@ function RegisterForm({
           value={pin}
           onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
           placeholder="e.g. 1234"
-          className="text-xs h-7"
+          className="text-xs h-6"
         />
-        <p className="text-[10px] text-muted-foreground">
-          Required for password recovery. Keep it safe!
-        </p>
       </div>
 
       {error && (
@@ -577,7 +550,7 @@ function RegisterForm({
         </p>
       )}
       {!error && (
-        <span data-register-error />
+        <span data-register-error className="hidden" />
       )}
 
       <Button type="submit" size="sm" className="w-full text-xs" disabled={busy}>
