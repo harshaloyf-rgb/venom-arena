@@ -813,7 +813,7 @@ function ProfileContent({
               <span>
                 Global Standing:{' '}
                 <span className="text-amber-400 font-bold font-mono">
-                  {globalRank ?? '…'}
+                  {globalRank ? `Rank ${globalRank.replace('#', '')}` : '…'}
                 </span>
               </span>
             </p>
@@ -1130,33 +1130,7 @@ function ProfileContent({
             />
           </div>
 
-          {/* Tournament Guardrails — DB-backed */}
-          <TournamentGuardrailsSection
-            tournamentStats={tournamentStats}
-            tournamentLoading={tournamentLoading}
-          />
-
-          {/* Security Settings — Change Password & PIN */}
-          <SecuritySettingsCard player={player} onToast={onToast} />
-
-          {/* Delete Account Section */}
-          <DeleteAccountSection
-            onConfirm={handleDeleteAccount}
-            deleting={deletingAccount}
-          />
-
-          {/* Identity Change Policy Banner — hidden on desktop (info is in identity editor) */}
-          <div className="p-4 lg:p-2.5 rounded-xl border border-slate-900 bg-slate-900/10 flex items-center gap-4 lg:gap-2 lg:hidden">
-            <Shield className="w-8 h-8 lg:w-5 lg:h-5 text-indigo-500 shrink-0" />
-            <div className="text-xs leading-relaxed text-slate-400">
-              <span className="font-bold text-slate-200 uppercase block mb-0.5">
-                IDENTITY LOCK POLICY
-              </span>
-              Your <strong className="text-slate-200">Challenger Handle</strong> can only be changed once every <strong className="text-amber-400">30 days</strong> and your <strong className="text-slate-200">Faction Region</strong> once every <strong className="text-amber-400">7 days</strong>. This protects leaderboard integrity and prevents identity confusion. Your permanent VENOM-XXXX tag never changes.
-            </div>
-          </div>
-
-          {/* Milestones Section — visible on all screens */}
+          {/* Milestones Section — right after stats, shows chip tier progression */}
           <div className="space-y-3 lg:space-y-1">
             <h3 className="text-sm lg:text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
               <Award className="w-4 h-4 lg:w-3 lg:h-3 text-amber-400" /> Chip Milestones
@@ -1205,6 +1179,33 @@ function ProfileContent({
               </div>
             )}
           </div>
+
+          {/* Tournament Guardrails — DB-backed */}
+          <TournamentGuardrailsSection
+            tournamentStats={tournamentStats}
+            tournamentLoading={tournamentLoading}
+          />
+
+          {/* Security Settings — Change Password & PIN */}
+          <SecuritySettingsCard player={player} onToast={onToast} />
+
+          {/* Delete Account Section */}
+          <DeleteAccountSection
+            onConfirm={handleDeleteAccount}
+            deleting={deletingAccount}
+          />
+
+          {/* Identity Change Policy Banner — hidden on desktop (info is in identity editor) */}
+          <div className="p-4 lg:p-2.5 rounded-xl border border-slate-900 bg-slate-900/10 flex items-center gap-4 lg:gap-2 lg:hidden">
+            <Shield className="w-8 h-8 lg:w-5 lg:h-5 text-indigo-500 shrink-0" />
+            <div className="text-xs leading-relaxed text-slate-400">
+              <span className="font-bold text-slate-200 uppercase block mb-0.5">
+                IDENTITY LOCK POLICY
+              </span>
+              Your <strong className="text-slate-200">Challenger Handle</strong> can only be changed once every <strong className="text-amber-400">30 days</strong> and your <strong className="text-slate-200">Faction Region</strong> once every <strong className="text-amber-400">7 days</strong>. This protects leaderboard integrity and prevents identity confusion. Your permanent VENOM-XXXX tag never changes.
+            </div>
+          </div>
+
         </div>
       )}
 
