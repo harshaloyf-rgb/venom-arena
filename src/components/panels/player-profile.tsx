@@ -62,7 +62,6 @@ import { renderProfileCard, renderMilestoneCard, downloadBlob, shareBlob, copyBl
 
 // Sub-components
 import { StatCard, CapCard } from './player-profile/stat-card';
-import { ProfilePictureAndAppearance, CosmeticsShowcase } from './player-profile/appearance';
 import { TournamentGuardrailsSection, type TournamentStats } from './player-profile/tournament-guardrails';
 import { DeleteAccountSection } from './player-profile/delete-account';
 import { IdentityEditor } from './player-profile/identity-editor';
@@ -252,6 +251,10 @@ function ProfileContent({
   const [profileCardPreview, setProfileCardPreview] = useState<string | null>(null);
   const [profileCardCopied, setProfileCardCopied] = useState(false);
   const profileCardBlobRef = useRef<Blob | null>(null);
+
+  // -- Avatar lightbox & character loadout modal
+  const [showAvatarLightbox, setShowAvatarLightbox] = useState(false);
+  const [showLoadoutModal, setShowLoadoutModal] = useState(false);
 
   // -- Milestone Card generation
   const [milestoneCardPreview, setMilestoneCardPreview] = useState<string | null>(null);
@@ -731,7 +734,10 @@ function ProfileContent({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 lg:gap-2 border-b border-slate-900 pb-4 mb-4 lg:pb-2 lg:mb-2">
         <div className="flex items-center gap-4">
           {/* Avatar */}
-          <div className="w-16 h-16 lg:w-9 lg:h-9 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border border-indigo-400/30 relative shadow-md overflow-hidden shrink-0">
+          <div
+            className="w-16 h-16 lg:w-9 lg:h-9 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border border-indigo-400/30 relative shadow-md overflow-hidden shrink-0 cursor-pointer hover:ring-2 hover:ring-indigo-400/50 transition"
+            onClick={() => setShowAvatarLightbox(true)}
+            title="Click to view profile picture"
             {player.avatar ? (
               player.avatar.startsWith('data:') ||
               player.avatar.startsWith('http') ? (
@@ -953,34 +959,20 @@ function ProfileContent({
         </div>
       </div>
 
-      {/* Profile Picture + Character Appearance Row */}
-      <div className="">
-      <ProfilePictureAndAppearance
-        player={player}
-        activeSkin={activeSkin}
-        activeTrail={activeTrail}
-        activeDeath={activeDeath}
-        activeFlagCosmetic={activeFlagCosmetic}
-        activeBanner={activeBanner}
-        activeFlag={activeFlag}
-        onStartEditing={handleStartEditing}
-        onDrop={handleDrop}
-        onFileChange={handleFileChange}
-        isDragging={isDragging}
-        setIsDragging={setIsDragging}
-      />
+      {/* Compact cosmetics — registered only, opens loadout modal */}
+      {player.email && (
+      <div className="flex items-center gap-2 mb-2 lg:mb-1">
+        <button
+          type="button"
+          onClick={() => setShowLoadoutModal(true)}
+          className="flex items-center gap-1.5 bg-slate-950/40 border border-slate-900 hover:border-slate-800 rounded-lg px-2.5 py-1.5 lg:py-1 transition cursor-pointer group"
+          title="View your character loadout"
+        >
+          <span className="text-sm lg:text-xs">{activeSkin?.emoji || '🐍'}</span>
+          <span className="text-[11px] font-bold text-slate-300 group-hover:text-white transition">View Loadout</span>
+        </button>
       </div>
-
-      {/* Cosmetics Showcase Row */}
-      <div className="">
-      <CosmeticsShowcase
-        activeSkin={activeSkin}
-        activeTrail={activeTrail}
-        activeDeath={activeDeath}
-        activeFlagCosmetic={activeFlagCosmetic}
-        activeBanner={activeBanner}
-      />
-      </div>
+      )}
 
       {/* Generate Profile Card Button */}
       <button
@@ -1488,6 +1480,91 @@ function ProfileContent({
                 {milestoneCardCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                 {milestoneCardCopied ? 'Copied!' : 'Copy'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* AVATAR LIGHTBOX — click header avatar to enlarge */}
+      {showAvatarLightbox && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm" onClick={() => setShowAvatarLightbox(false)}>
+          <div className="relative w-full max-w-xs rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-5 text-center" onClick={(e) => e.stopPropagation()}>
+            <button type="button" onClick={() => setShowAvatarLightbox(false)} className="absolute top-3 right-3 p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer">
+              <X className="h-4 w-4" />
+            </button>
+            <h3 className="text-sm font-bold text-white mb-3">Profile Picture</h3>
+            <div className="w-40 h-40 mx-auto rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border-2 border-indigo-400/30 shadow-lg overflow-hidden">
+              {player.avatar ? (
+                player.avatar.startsWith('data:') || player.avatar.startsWith('http') ? (
+                  <img src={player.avatar} alt={player.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <span className="text-7xl select-none">{player.avatar}</span>
+                )
+              ) : (
+                <span className="text-7xl select-none">{activeSkin?.emoji || '🐍'}</span>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-3 font-sans">{player.name} · Lvl {player.level} · {player.userTag}</p>
+          </div>
+        </div>
+      )}
+
+      {/* CHARACTER LOADOUT MODAL — registered users only */}
+      {showLoadoutModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm" onClick={() => setShowLoadoutModal(false)}>
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
+            <button type="button" onClick={() => setShowLoadoutModal(false)} className="absolute top-3 right-3 p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer">
+              <X className="h-4 w-4" />
+            </button>
+            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+              <Gamepad2 className="w-4 h-4 text-indigo-400" /> Character Loadout
+            </h3>
+
+            {/* Snake visual preview */}
+            <div className="relative w-full h-44 rounded-xl bg-slate-950/60 border border-slate-800 overflow-hidden mb-4">
+              <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle, #475569 1px, transparent 1px)', backgroundSize: '12px 12px' }} />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="relative">
+                  <div className="absolute -inset-6 rounded-full opacity-30 blur-xl" style={{ backgroundColor: activeTrail?.color || '#a855f7' }} />
+                  <svg width="200" height="140" viewBox="0 0 200 140" className="relative z-10">
+                    <defs>
+                      <filter id="modal-glow"><feGaussianBlur stdDeviation="3" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+                    </defs>
+                    <path d="M 30 110 Q 60 110 80 85 Q 100 60 125 55 Q 150 50 170 40" fill="none" stroke={activeSkin?.color || '#10b981'} strokeWidth="14" strokeLinecap="round" filter="url(#modal-glow)" opacity="0.5" />
+                    <path d="M 30 110 Q 60 110 80 85 Q 100 60 125 55 Q 150 50 170 40" fill="none" stroke={activeSkin?.color || '#10b981'} strokeWidth="10" strokeLinecap="round" />
+                    <circle cx="170" cy="40" r="10" fill={activeSkin?.color || '#10b981'} filter="url(#modal-glow)" />
+                    <circle cx="170" cy="40" r="8" fill={activeSkin?.color || '#10b981'} />
+                    <circle cx="175" cy="36" r="3" fill="white" />
+                    <circle cx="175" cy="36" r="1.5" fill="#0f172a" />
+                    {/* Trail particles */}
+                    <circle cx="22" cy="114" r="3" fill={activeTrail?.color || '#a855f7'} opacity="0.5" className="animate-pulse" />
+                    <circle cx="12" cy="118" r="2" fill={activeTrail?.color || '#a855f7'} opacity="0.3" className="animate-pulse" />
+                    <circle cx="28" cy="105" r="1.5" fill={activeTrail?.color || '#a855f7'} opacity="0.4" className="animate-pulse" />
+                  </svg>
+                  <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 text-lg">{activeDeath?.emoji || '💥'}</div>
+                </div>
+              </div>
+              <div className="absolute top-2 right-2 flex items-center gap-1 bg-slate-950/80 rounded-full px-2 py-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[11px] font-mono text-slate-400">EQUIPPED</span>
+              </div>
+            </div>
+
+            {/* Equipped items */}
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: 'Skin', emoji: activeSkin?.emoji || '🐍', name: activeSkin?.name || 'Default', color: activeSkin?.color || '#10b981' },
+                { label: 'Trail', emoji: activeTrail?.emoji || '✨', name: activeTrail?.name || 'Sparks', color: activeTrail?.color || '#a855f7' },
+                { label: 'Death FX', emoji: activeDeath?.emoji || '💥', name: activeDeath?.name || 'Splash', color: activeDeath?.color || '#ef4444' },
+                { label: 'Region', emoji: activeFlag?.flag || '🏴', name: activeFlag?.name || 'Unknown', color: '#475569' },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center gap-2 bg-slate-950/60 rounded-lg p-2 border border-slate-900/60">
+                  <span className="text-lg">{item.emoji}</span>
+                  <div className="min-w-0">
+                    <span className="text-[11px] font-bold text-white block truncate">{item.name}</span>
+                    <div className="w-full h-1 bg-slate-900 rounded-full mt-0.5"><div className="h-full rounded-full" style={{ width: '100%', backgroundColor: item.color }} /></div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
