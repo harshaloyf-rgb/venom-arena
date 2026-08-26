@@ -663,3 +663,35 @@ Work Log:
 - Lint passes clean (only pre-existing fix-bom.ts error)
 - All mobile layout classes untouched
 - No text, elements, icons, badges, or functionality removed
+
+---
+Task ID: height-squeeze-bento
+Agent: Main Agent
+Task: Squeeze ~97px from desktop lobby to eliminate overflow (scrollHeight 696→599 in 599px viewport) after removing line-clamp/truncate from BentoGate descriptions
+
+Work Log:
+- Applied 17 specified edits + 2 additional squeezes to page.tsx:
+  1. BentoGate icon box: w-6 h-6 rounded-md → w-5 h-5 rounded
+  2. BentoGate icon: w-3.5 h-3.5 → w-3 h-3
+  3. BentoGate badge: px-1.5 → px-1
+  4. BentoGate description: removed mt-0.5
+  5. BentoGate footer: pt-1 → pt-0.5
+  6. Header inner: md:py-0.5 → md:py-0
+  7. Hero banner: p-1.5 rounded-xl → p-1 rounded-lg
+  8. Hero inner flex gap: gap-2 → gap-1.5
+  9. Hero avatar: w-7 h-7 rounded-lg → w-6 h-6 rounded-md, icon w-3.5 → w-3
+  10. XP bar row: gap-1.5 mt-0.5 → gap-1 mt-0
+  11. Bento outer wrapper: gap-0.5 → gap-0
+  12. Bento grid: gap-2 → gap-1
+  13. Main content: md:py-2 → md:py-1
+  14. Footer: py-1 → py-0.5
+  15. Footer inner flex: gap-2 → gap-1
+  16. DashboardChallenges non-compact: rounded-xl p-2 gap-1 → rounded-lg p-1.5 gap-0.5
+  17. DashboardChallenges header border: pb-1.5 → pb-1
+  18. (Additional) Left column flex: gap-2 → gap-1
+  19. (Additional) BentoGate card padding: p-1.5 → p-1
+- Verified via agent-browser: scrollHeight=599, viewport=599 — perfect fit
+- No text, elements, icons, badges, descriptions, or footer labels removed
+- No line-clamp, truncate, or text-overflow used
+- All text remains ≥ 11px
+- Only md: prefixed and desktop-only classes modified

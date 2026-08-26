@@ -288,7 +288,7 @@ export default function Home() {
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
       {/* ===================== HEADER ===================== */}
       <header className="sticky top-0 shrink-0 border-b border-slate-900 bg-slate-950/80 backdrop-blur-md z-40">
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-2 h-8 md:px-3 lg:px-4 md:h-auto md:py-0.5">
+        <div className="max-w-7xl mx-auto flex items-center justify-between px-2 h-8 md:px-3 lg:px-4 md:h-auto md:py-0">
           {/* Logo */}
           <button
             onClick={() => { setActiveTab('dashboard'); setMoreMenuOpen(false); }}
@@ -340,7 +340,7 @@ export default function Home() {
                 </div>
                 <div className="text-left leading-none">
                   <span className="text-[11px] text-slate-500 block uppercase font-semibold leading-none">Challenger (Lvl {player.level})</span>
-                  <span className="text-[11px] font-bold font-sans text-white truncate max-w-20 block">{player.name}</span>
+                  <span className="text-[11px] font-bold font-sans text-white block">{player.name}</span>
                 </div>
               </div>
               <button onClick={() => setIsRulesOpen(true)} className="bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 px-1.5 py-0.5 rounded-lg transition duration-200 cursor-pointer flex items-center gap-1 shadow" title="Official Guide, Rules & FAQ">
@@ -382,7 +382,7 @@ export default function Home() {
       </header>
 
       {/* ===================== MAIN ===================== */}
-      <main className="flex-1 flex flex-col w-full max-w-7xl mx-auto md:px-3 lg:px-4 md:py-2">
+      <main className="flex-1 flex flex-col w-full max-w-7xl mx-auto md:px-3 lg:px-4 md:py-1">
 
         {/* ====== DASHBOARD TAB ====== */}
         {activeTab === 'dashboard' && (
@@ -474,18 +474,18 @@ export default function Home() {
             {/* ---- Desktop Dashboard (bento grid, current layout) ---- */}
             <div className="hidden md:grid md:grid-cols-12 gap-2 items-start w-full va-fade-in">
               {/* LEFT COLUMN */}
-              <div className="md:col-span-8 flex flex-col gap-2">
+              <div className="md:col-span-8 flex flex-col gap-1">
                 {/* Hero banner */}
-                <div className="p-1.5 rounded-xl bg-gradient-to-r from-slate-900 to-indigo-950/80 border border-indigo-500/10 shadow-2xl relative overflow-hidden flex items-center justify-between gap-2">
+                <div className="p-1 rounded-lg bg-gradient-to-r from-slate-900 to-indigo-950/80 border border-indigo-500/10 shadow-2xl relative overflow-hidden flex items-center justify-between gap-1.5">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-                  <div className="flex items-center gap-2 relative">
-                    <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-950/40 border border-indigo-400/20 shrink-0">
-                      <Award className="w-3.5 h-3.5 text-white animate-pulse" />
+                  <div className="flex items-center gap-1.5 relative">
+                    <div className="w-6 h-6 rounded-md bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-950/40 border border-indigo-400/20 shrink-0">
+                      <Award className="w-3 h-3 text-white animate-pulse" />
                     </div>
                     <div>
                       <span className="text-[11px] text-indigo-400 font-mono font-bold tracking-widest uppercase">Lobby Headquarters</span>
                       <h2 className="text-[11px] font-bold text-white font-sans tracking-tight">WELCOME BACK, {player.name.toUpperCase()}</h2>
-                      <div className="flex items-center gap-1.5 mt-0.5">
+                      <div className="flex items-center gap-1 mt-0">
                         <span className="text-[11px] font-mono text-slate-400">LVL {player.level}</span>
                         <div className="w-20 h-1 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
                           <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${xpPercent}%` }} />
@@ -500,9 +500,9 @@ export default function Home() {
                 </div>
 
                 {/* Bento grid */}
-                <div className="flex flex-col gap-0.5">
+                <div className="flex flex-col gap-0">
                   <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Lobby Stations</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">
                     <BentoGate onClick={() => setActiveTab('arena')} icon={Compass} accent="indigo" badge="Battle Gate" title="Play Endless Arenas" desc="Risk chips to compete in simulated multiplayer shards. Harvest dropping stars and escape safely." footLeft="STAKES FROM: 10 chips" footRight="Enter" />
                     <BentoGate onClick={() => setActiveTab('shop')} icon={ShoppingBag} accent="purple" badge="Customize Lab" title="Identity Workshop & Shop" desc="Unlock glowing skins, trials, death burst novas, or design a custom repeating body segment sequence." footLeft={`EQUIPPED: ${player.currentSkin ? 'Custom DNA' : 'Gallery Skin'}`} footRight="Modify" />
                     <BentoGate onClick={() => setActiveTab('profile')} icon={User} accent="blue" badge="My Record" title="Agent Profile" desc="Examine your records, high scores, total banked wealth, and change your operative callsign." footLeft={`HIGH SCORE: ${(player.biggestExtract || 0).toLocaleString()}`} footRight="Inspect" />
@@ -589,8 +589,8 @@ export default function Home() {
       </main>
 
       {/* ===================== FOOTER (desktop only) ===================== */}
-      <footer className="hidden md:block shrink-0 border-t border-slate-900/60 bg-slate-950/40 py-1 mt-auto text-center text-[11px] text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+      <footer className="hidden md:block shrink-0 border-t border-slate-900/60 bg-slate-950/40 py-0.5 mt-auto text-center text-[11px] text-slate-500">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-1">
           <p className="font-sans">&copy; 2026 Project Venom Arena. All Rights Reserved. Fully store-safe, non-gambling gameplay edition.</p>
           <div className="flex gap-4 font-mono text-[11px] text-slate-400">
             <span>APP_VERSION: 1.0.0-MVP</span>
@@ -639,9 +639,9 @@ function DashboardChallenges({
   compact?: boolean;
 }) {
   return (
-    <section className={`${compact ? 'flex-1 flex flex-col min-h-0' : 'bg-slate-900/60 border border-slate-800/80 rounded-xl p-2 shadow-lg flex flex-col gap-1'}`} aria-label="Tactical challenges">
+    <section className={`${compact ? 'flex-1 flex flex-col min-h-0' : 'bg-slate-900/60 border border-slate-800/80 rounded-lg p-1.5 shadow-lg flex flex-col gap-0.5'}`} aria-label="Tactical challenges">
       {/* Header */}
-      <div className={`${compact ? 'shrink-0 flex items-center justify-between px-1' : 'flex items-center justify-between border-b border-slate-800 pb-1.5'}`}>
+      <div className={`${compact ? 'shrink-0 flex items-center justify-between px-1' : 'flex items-center justify-between border-b border-slate-800 pb-1'}`}>
         <div className="flex items-center gap-2">
           <ListTodo className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
           <span className="text-[11px] font-bold text-white font-sans uppercase tracking-wider">Tactical Challenges</span>
@@ -797,19 +797,19 @@ const ACCENT_CLASSES: Record<BentoGateProps['accent'], { iconBg: string; badgeBg
 function BentoGate({ icon: Icon, accent, badge, title, desc, footLeft, footRight, onClick, wide }: BentoGateProps) {
   const c = ACCENT_CLASSES[accent];
   return (
-    <button onClick={onClick} className={`p-2 bg-slate-900/60 hover:bg-slate-900 border border-slate-800/80 ${c.borderHover} rounded-xl cursor-pointer transition-all duration-300 group shadow-sm flex flex-col justify-between text-left`}>
+    <button onClick={onClick} className={`p-1 bg-slate-900/60 hover:bg-slate-900 border border-slate-800/80 ${c.borderHover} rounded-lg cursor-pointer transition-all duration-300 group shadow-sm flex flex-col justify-between text-left`}>
       <div className="flex items-start justify-between">
-        <div className={`w-6 h-6 rounded-md ${c.iconBg} border flex items-center justify-center group-hover:scale-110 transition-transform`}>
-          <Icon className="w-3.5 h-3.5" />
+        <div className={`w-5 h-5 rounded ${c.iconBg} border flex items-center justify-center group-hover:scale-110 transition-transform`}>
+          <Icon className="w-3 h-3" />
         </div>
-        <span className={`text-[11px] px-1.5 py-0 ${c.badgeBg} border font-bold font-sans rounded-full uppercase`}>{badge}</span>
+        <span className={`text-[11px] px-1 py-0 ${c.badgeBg} border font-bold font-sans rounded-full uppercase`}>{badge}</span>
       </div>
       <div>
         <h3 className={`text-[11px] font-bold text-white ${c.textHover} transition-colors`}>{title}</h3>
-        <p className="text-[11px] text-slate-400 font-sans mt-0.5 line-clamp-1 leading-tight">{desc}</p>
+        <p className="text-[11px] text-slate-400 font-sans leading-tight">{desc}</p>
       </div>
-      <div className="text-[11px] font-mono text-slate-500 border-t border-slate-800/40 pt-1 flex justify-between">
-        <span className="truncate pr-2">{footLeft}</span>
+      <div className="text-[11px] font-mono text-slate-500 border-t border-slate-800/40 pt-0.5 flex justify-between">
+        <span className="pr-2">{footLeft}</span>
         <span className={`${c.arrow} group-hover:translate-x-1 transition-transform shrink-0`}>{footRight} →</span>
       </div>
     </button>
