@@ -876,3 +876,23 @@ Stage Summary:
 - Single CSS change: `lg:min-h-[34px]` on description paragraph
 - All desktop tier cards now have identical height regardless of description length
 - No mobile impact (only lg: prefix used)
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix Agent Profile desktop overflow (1365x599)
+
+Work Log:
+- Audited Agent Profile panel: identified 1983px content in 599px viewport with md:overflow-visible preventing scroll
+- Chose light compression: added inner scrollable wrapper with lg:max-h-[calc(100dvh-120px)] lg:overflow-y-auto
+- Moved p-4 sm:p-6 from root div to new inner wrapper (root keeps overflow-hidden for glow effects)
+- Modals (Profile Card, Milestone Card) kept outside scroll wrapper since they use fixed positioning
+- Verified desktop: scroll container 479px max-height, 1927px scrollable content, footer at 577px, no page-level scrollbar
+- Verified mobile: lg: breakpoint not triggered (390px), max-height: none, footer visible, behavior unchanged
+- Lint clean (pre-existing error unrelated)
+
+Stage Summary:
+- File changed: src/components/panels/player-profile.tsx
+- Fix: Inner scroll wrapper div with lg:max-h + lg:overflow-y-auto, desktop-only constraint
+- Mobile: Zero impact
+

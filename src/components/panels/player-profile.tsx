@@ -717,11 +717,13 @@ function ProfileContent({
   // =========================================================================
   return (
     <TooltipProvider>
-    <div className="w-full max-w-6xl mx-auto p-4 sm:p-6 bg-slate-950/60 border border-slate-900 rounded-2xl shadow-xl relative overflow-hidden backdrop-blur-md">
+    <div className="w-full max-w-6xl mx-auto bg-slate-950/60 border border-slate-900 rounded-2xl shadow-xl relative overflow-hidden backdrop-blur-md">
       {/* Glow */}
       <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
 
+      {/* Scrollable content — desktop constrained to viewport */}
+      <div className="p-4 sm:p-6 lg:max-h-[calc(100dvh-120px)] lg:overflow-y-auto va-scroll">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-900 pb-6 mb-6">
         <div className="flex items-center gap-4">
@@ -1393,6 +1395,8 @@ function ProfileContent({
           )}
         </div>
       )}
+
+      </div>
 
       {/* PROFILE CARD MODAL */}
       {profileCardPreview && (
