@@ -112,66 +112,66 @@ function AuthScreen() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-6">
+    <div className="min-h-dvh flex items-center justify-center px-3 py-1">
+      <div className="w-full max-w-sm space-y-1" style={{ zoom: 0.93 }}>
         {/* Logo / Title */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/15 border border-primary/30 va-neon-border">
-            <Skull className="w-9 h-9 text-primary va-neon-text" />
+        <div className="text-center space-y-0.5">
+          <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-primary/15 border border-primary/30 va-neon-border">
+            <Skull className="w-5 h-5 text-primary va-neon-text" />
           </div>
-          <h1 className="text-4xl font-black tracking-tight va-neon-text">VENOM ARENA</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-xl font-black tracking-tight va-neon-text">VENOM ARENA</h1>
+          <p className="text-xs text-muted-foreground">
             Hunt. Harvest. Extract. <span className="text-primary font-semibold">Don&apos;t get caught.</span>
           </p>
         </div>
 
-        <Card className="border-primary/20 bg-card/80 backdrop-blur">
-          <CardHeader>
-            <CardTitle className="text-lg">Enter the arena</CardTitle>
-            <CardDescription>Sign in or create an account to play.</CardDescription>
+        <Card className="border-primary/20 bg-card/80 backdrop-blur py-2 gap-1">
+          <CardHeader className="px-4 pb-0">
+            <CardTitle className="text-xs">Enter the arena</CardTitle>
+            <CardDescription className="text-[10px]">Sign in or create an account to play.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-4">
             <Tabs defaultValue="login" className="w-full" onValueChange={handleTabChange}>
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-2 h-7">
                 <TabsTrigger value="login">
-                  <LogIn className="w-4 h-4 mr-2" />
-                  Login
+                  <LogIn className="w-3 h-3 mr-1" />
+                  <span className="text-xs">Login</span>
                 </TabsTrigger>
                 <TabsTrigger value="register">
-                  <UserPlus className="w-4 h-4 mr-2" />
-                  Register
+                  <UserPlus className="w-3 h-3 mr-1" />
+                  <span className="text-xs">Register</span>
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="login" className="mt-4">
+              <TabsContent value="login" className="mt-1">
                 <LoginForm busy={busy} error={error} onSubmit={callApi} onForgotPassword={() => { setError(null); setForgotOpen(true); }} />
               </TabsContent>
 
-              <TabsContent value="register" className="mt-4">
+              <TabsContent value="register" className="mt-1">
                 <RegisterForm busy={busy} error={error} onSubmit={callApi} />
               </TabsContent>
             </Tabs>
 
             {/* Divider */}
-            <div className="relative my-4">
+            <div className="relative my-1.5">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center">
-                <span className="bg-card px-2 text-xs text-muted-foreground">or continue with</span>
+                <span className="bg-card px-2 text-[10px] text-muted-foreground">or continue with</span>
               </div>
             </div>
 
             {/* Social Login Buttons */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-1.5">
               <Button
                 variant="outline"
-                className="w-full text-xs"
+                className="w-full text-[11px] h-7"
                 disabled={busy}
                 onClick={() => handleSocialLogin('google')}
               >
-                {busy ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : (
-                  <svg className="w-4 h-4 mr-1" viewBox="0 0 24 24">
+                {busy ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : (
+                  <svg className="w-3 h-3 mr-1" viewBox="0 0 24 24">
                     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
                     <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
                     <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
@@ -182,12 +182,12 @@ function AuthScreen() {
               </Button>
               <Button
                 variant="outline"
-                className="w-full text-xs"
+                className="w-full text-[11px] h-7"
                 disabled={busy}
                 onClick={() => handleSocialLogin('facebook')}
               >
-                {busy ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : (
-                  <svg className="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="#1877F2">
+                {busy ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : (
+                  <svg className="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="#1877F2">
                     <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                   </svg>
                 )}
@@ -195,12 +195,12 @@ function AuthScreen() {
               </Button>
               <Button
                 variant="outline"
-                className="w-full text-xs"
+                className="w-full text-[11px] h-7"
                 disabled={busy}
                 onClick={() => handleSocialLogin('apple')}
               >
-                {busy ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : (
-                  <svg className="w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor">
+                {busy ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : (
+                  <svg className="w-3 h-3 mr-1" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
                   </svg>
                 )}
@@ -209,34 +209,35 @@ function AuthScreen() {
             </div>
 
             {/* Divider */}
-            <div className="relative my-4">
+            <div className="relative my-1.5">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center">
-                <span className="bg-card px-2 text-xs text-muted-foreground">or</span>
+                <span className="bg-card px-2 text-[10px] text-muted-foreground">or</span>
               </div>
             </div>
 
             {/* Guest Play */}
             <Button
               variant="secondary"
-              className="w-full"
+              size="sm"
+              className="w-full text-xs"
               disabled={busy}
               onClick={async () => {
                 await callApi('/api/auth/guest', {});
               }}
             >
               {busy ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
               ) : (
-                <Ghost className="w-4 h-4 mr-2" />
+                <Ghost className="w-3 h-3 mr-1" />
               )}
               Play as Guest
             </Button>
 
             {/* Bottom info */}
-            <div className="mt-3 space-y-2">
+            <div className="mt-1 space-y-0.5">
               <p className="text-[11px] text-muted-foreground text-center">
                 <Zap className="w-3 h-3 inline mr-1" />
                 Guests get 150 starter chips. Register to keep your progress.
@@ -312,12 +313,12 @@ function LoginForm({
         e.preventDefault();
         await onSubmit('/api/auth/login', { email, password, remember });
       }}
-      className="space-y-3"
+      className="space-y-1.5"
     >
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         <Label htmlFor="l-email" className="text-xs">Email</Label>
         <div className="relative">
-          <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Mail className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
           <Input
             id="l-email"
             type="email"
@@ -326,14 +327,14 @@ function LoginForm({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@arena.gg"
-            className="pl-8 text-sm"
+            className="pl-7 text-xs h-7"
           />
         </div>
       </div>
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         <Label htmlFor="l-pass" className="text-xs">Password</Label>
         <div className="relative">
-          <KeyRound className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <KeyRound className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
           <Input
             id="l-pass"
             type={showPassword ? 'text' : 'password'}
@@ -342,21 +343,21 @@ function LoginForm({
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
-            className="pl-8 pr-9 text-sm"
+            className="pl-7 pr-8 text-xs h-7"
           />
           <button
             type="button"
             tabIndex={-1}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
             onClick={() => setShowPassword(!showPassword)}
           >
-            {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            {showPassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
           </button>
         </div>
       </div>
 
       {/* Remember me */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <input
           type="checkbox"
           id="l-remember"
@@ -371,8 +372,8 @@ function LoginForm({
 
       {error && <p className="text-xs text-destructive flex items-center gap-1"><Shield className="w-3 h-3" /> {error}</p>}
 
-      <Button type="submit" className="w-full" disabled={busy}>
-        {busy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+      <Button type="submit" size="sm" className="w-full text-xs" disabled={busy}>
+        {busy && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
         Login
       </Button>
 
@@ -441,15 +442,15 @@ function RegisterForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      <div className="space-y-1.5">
+    <form onSubmit={handleSubmit} className="space-y-1">
+      <div className="space-y-1">
         <Label htmlFor="r-name" className="text-xs">Display name (up to 20 chars)</Label>
-        <Input id="r-name" required maxLength={20} value={name} onChange={(e) => setName(e.target.value)} placeholder="ViperStrike" className="text-sm" />
+        <Input id="r-name" required maxLength={20} value={name} onChange={(e) => setName(e.target.value)} placeholder="ViperStrike" className="text-xs h-7" />
       </div>
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         <Label htmlFor="r-email" className="text-xs">Email</Label>
         <div className="relative">
-          <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Mail className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
           <Input
             id="r-email"
             type="email"
@@ -458,14 +459,14 @@ function RegisterForm({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@arena.gg"
-            className="pl-8 text-sm"
+            className="pl-7 text-xs h-7"
           />
         </div>
       </div>
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         <Label htmlFor="r-pass" className="text-xs">Password (min 6 chars)</Label>
         <div className="relative">
-          <KeyRound className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <KeyRound className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
           <Input
             id="r-pass"
             type={showPassword ? 'text' : 'password'}
@@ -475,20 +476,20 @@ function RegisterForm({
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
-            className="pl-8 pr-9 text-sm"
+            className="pl-7 pr-8 text-xs h-7"
           />
           <button
             type="button"
             tabIndex={-1}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
             onClick={() => setShowPassword(!showPassword)}
           >
-            {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            {showPassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
           </button>
         </div>
         {/* Password strength indicator */}
         {password.length > 0 && (
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
               <div className={`h-full ${strength.color} ${strength.width} rounded-full transition-all duration-300`} />
             </div>
@@ -498,10 +499,10 @@ function RegisterForm({
           </div>
         )}
       </div>
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         <Label htmlFor="r-confirm" className="text-xs">Confirm Password</Label>
         <div className="relative">
-          <KeyRound className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <KeyRound className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
           <Input
             id="r-confirm"
             type={showConfirm ? 'text' : 'password'}
@@ -516,19 +517,19 @@ function RegisterForm({
               if (errEl && e.target.value === password) errEl.textContent = '';
             }}
             placeholder="••••••••"
-            className="pl-8 pr-9 text-sm"
+            className="pl-7 pr-8 text-xs h-7"
           />
           <button
             type="button"
             tabIndex={-1}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
             onClick={() => setShowConfirm(!showConfirm)}
           >
-            {showConfirm ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            {showConfirm ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
           </button>
         </div>
       </div>
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         <Label htmlFor="r-pin" className="text-xs">Security PIN (4 digits, optional)</Label>
         <Input
           id="r-pin"
@@ -540,7 +541,7 @@ function RegisterForm({
           value={pin}
           onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
           placeholder="e.g. 1234"
-          className="text-sm"
+          className="text-xs h-7"
         />
         <p className="text-[10px] text-muted-foreground">
           Required for password recovery. Keep it safe!
@@ -553,11 +554,11 @@ function RegisterForm({
         </p>
       )}
       {!error && (
-        <p className="text-xs text-destructive" data-register-error />
+        <span data-register-error />
       )}
 
-      <Button type="submit" className="w-full" disabled={busy}>
-        {busy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+      <Button type="submit" size="sm" className="w-full text-xs" disabled={busy}>
+        {busy && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
         Create Account
       </Button>
 
