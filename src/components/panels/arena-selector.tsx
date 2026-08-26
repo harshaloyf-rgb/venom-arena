@@ -256,7 +256,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                     setSelectedTierId(tier.id);
                     setMobileExpandedId(prev => prev === tier.id ? null : tier.id);
                   }}
-                  className={`relative flex items-center justify-between p-2 lg:w-full lg:grid lg:grid-cols-[auto_1fr_5rem_4rem_auto] lg:items-center lg:p-1.5 rounded-xl border transition-all text-left group ${
+                  className={`relative flex items-center justify-between p-2 lg:w-full lg:grid lg:grid-cols-[auto_1fr_5rem_7rem_auto] lg:items-center lg:p-1.5 rounded-xl border transition-all text-left group ${
                     active
                       ? 'bg-slate-800/50 border-indigo-500 shadow-md shadow-indigo-950/20'
                       : 'bg-slate-900 border-slate-800/80 hover:border-slate-700/80'
@@ -285,7 +285,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                           {tier.difficulty}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-400 font-sans mt-0 lg:text-[11px] lg:mt-0">
+                      <p className="text-[11px] text-slate-400 font-sans mt-0 lg:text-[11px] lg:mt-0 lg:min-h-[34px]">
                         {tier.description}
                       </p>
                     </div>
@@ -305,7 +305,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                         </span>
                       </div>
                     )}
-                    <div className="text-right lg:w-16">
+                    <div className="text-right lg:w-28">
                       <span className="text-[11px] lg:text-[11px] text-slate-500 block uppercase font-mono tracking-wider">
                         Buy-In
                       </span>
@@ -314,8 +314,13 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                           unaffordable ? 'text-red-400' : 'text-emerald-400'
                         }`}
                       >
-                        {tier.buyIn === 0 ? 'FREE' : chipShort(tier.buyIn)}
+                        {tier.buyIn === 0 ? 'FREE' : `${tier.buyIn.toLocaleString()}c`}
                       </span>
+                      {tier.buyIn >= 1_000 && (
+                        <span className={`text-[11px] lg:text-[11px] font-mono block mt-0 lg:mt-0 ${unaffordable ? 'text-red-400/50' : 'text-emerald-400/50'}`}>
+                          {chipShort(tier.buyIn)}
+                        </span>
+                      )}
                     </div>
                     <ChevronRight
                       className={`w-3 h-3 lg:w-3 lg:h-3 text-slate-500 transition-transform ${
