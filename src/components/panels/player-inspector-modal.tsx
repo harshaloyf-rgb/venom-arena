@@ -205,7 +205,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
 
   const highestExtraction = p.biggestExtract ? `${p.biggestExtract.toLocaleString('en-IN')} c` : '\u2014';
   const successRate =
-    p.lifetimeExtracts != null && p.lifetimeDeaths != null
+    (p.lifetimeExtracts != null && p.lifetimeDeaths != null && (p.lifetimeExtracts + p.lifetimeDeaths) > 0)
       ? `${((p.lifetimeExtracts / (p.lifetimeExtracts + p.lifetimeDeaths)) * 100).toFixed(1)}%`
       : '\u2014';
   const totalKills = p.lifetimeKills != null ? `${p.lifetimeKills.toLocaleString()} Kills` : '\u2014';
