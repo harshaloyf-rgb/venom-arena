@@ -240,3 +240,31 @@ Stage Summary:
 - No logic/state/effects/fetching changed, no imports changed, no text/icons/badges removed
 ---
 Session start: 2026-08-27 12:33:51 UTC, git: 65accb7
+---
+Task ID: 1
+Agent: main
+Task: Fix SWC parse error in player-inspector-modal.tsx + implement all popup improvements
+
+Work Log:
+- Diagnosed SWC/Turbopack parse error at line 361: box-drawing Unicode chars (U+2500) in JSX comments caused SWC to fail (TypeScript parser handled them fine)
+- Rewrote entire player-inspector-modal.tsx with ASCII-only comments to fix SWC parse error
+- Added avatar field to PublicProfile interface and avatar display: shows actual player avatar image with flag badge overlaid, falls back to flag emoji
+- Added Following count to social counts row (was fetched but never displayed)
+- Added Last Seen as relative time (e.g. "2h ago") next to Since date
+- Added Clan Rank display next to clan tag: [TAG] Leader/Member
+- Replaced computed badges with real DB milestones (from profile.milestones array with achievement dates shown on hover)
+- Removed redundant 'Banked' stat cell (already shown in header as bankedChips)
+- Changed loadout from 4-line box to single inline row (Skin: x, Trail: x, Kill FX: x, Emote: x)
+- Changed badges from multi-line grid to compact inline chips with count (e.g. "Milestones (4/7)")
+- Reduced modal width from max-w-xl (576px) to max-w-md (448px) for better fit
+- Added relativeTime helper function
+- Removed unused imports (Trophy, Award, Zap, Globe, Image, Shield, ArrowRight)
+- Removed dead MilestoneHistorySection component from leaderboards.tsx (151 lines)
+- Turbopack compiled both files with zero errors, all routes returned 200
+- Lint passes cleanly (only pre-existing fix-bom.ts error)
+
+Stage Summary:
+- SWC parse error fixed by rewriting file with ASCII-only comments
+- 6 missing data points added: avatar, following count, last seen, clan rank, real milestones, milestone dates
+- Popup made ~30-40% more compact: inline loadout, compact badges, smaller modal width, no redundant banked stat
+- 2 commits pushed: dead code removal + full popup rewrite
