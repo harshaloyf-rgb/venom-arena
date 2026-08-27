@@ -13,6 +13,7 @@ datasource db {
 model Player {
   id              String   @id @default(cuid())
   email           String?  @unique // null for guest accounts
+  emailVerified   Boolean  @default(false)
   passwordHash    String?  // null for guests
   securityPin     String?  // optional 4-digit PIN for password recovery
   userTag         String   @unique // e.g. VENOM-8291
@@ -580,4 +581,16 @@ model CraftingTransaction {
   timestamp        Int      @default(0)
 
   player           Player   @relation(fields: [playerId], references: [id])
+}
+
+model VerificationToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  email     String
+  playerId  String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([token])
 }

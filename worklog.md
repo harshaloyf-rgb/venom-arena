@@ -87,3 +87,63 @@ Stage Summary:
 - Both modals (avatar lightbox + skin demo) use top-alignment (pt-[15vh]/pt-[12vh]) to avoid scrolling
 - Guest upgrade form now has referral code input field with API support
 - All changes lint-clean, browser-verified
+---
+Task ID: 2-b
+Agent: main
+Task: Implement email verification system for Venom Arena game
+
+Work Log:
+- Added `emailVerified Boolean @default(false)` field to Player model in prisma/schema.prisma
+- Added new `VerificationToken` model with id, token (unique), email, playerId, expiresAt, createdAt, and indexes on email and token
+- Ran `bun run db:push` to sync schema to SQLite and regenerate Prisma Client
+- Added `emailVerified: boolean` to PlayerProfile interface in src/lib/types.ts
+- Updated `toProfile()` in src/lib/player-helpers.ts to include `emailVerified: p.emailVerified ?? false`
+- Created /api/auth/send-verification/route.ts: POST endpoint requiring auth, rate-limited 1 req/60s per player, generates 32-char hex token, deletes old tokens, stores new with 24h expiry, returns `{ sent: true, token }` for dev testing
+- Created /api/auth/verify-email/route.ts: POST endpoint accepting `{ token }`, looks up token, checks expiry, finds player by email, sets emailVerified=true, deletes used token
+- Added EmailVerificationBanner component to player-profile.tsx (inline, above main export) with:
+  - Amber/warning color scheme for unverified state
+  - "Send Verification" button calling /api/auth/send-verification
+  - After sending: shows token input + "Verify" button for dev testing
+  - Dev helper: displays copyable token in non-production environments
+  - Emerald/green state for verified confirmation
+  - Compact styling matching existing profile style (lg:text-[11px])
+- Imported MailWarning icon from lucide-react
+- Placed banner in stats tab right after GuestUpgradeBanner, only shown for registered users with !player.emailVerified
+- Lint passes cleanly for all changed files
+
+Stage Summary:
+- Database schema extended with emailVerified on Player and new VerificationToken model
+- Two API routes: send-verification (auth + rate-limited) and verify-email (token-based)
+- Frontend: compact amber verification banner in profile stats tab with send → paste token → verify flow
+- Dev token helper shown in non-production for easy testing
+- All changes lint-clean (only pre-existing fix-bom.ts error)
+---
+Task ID: 2-a,2-b,2-c,2-d
+Agent: main
+Task: Fix guest referral display, email verification, social login buttons, social handle validation
+
+Work Log:
+- Hid referral code in header for guest users (added player.email && condition)
+- Implemented email verification via subagent:
+  - Added emailVerified Boolean to Player model in Prisma schema
+  - Added VerificationToken model (id, token, email, playerId, expiresAt)
+  - Created /api/auth/send-verification (POST, rate-limited 1/60s, 24h token expiry)
+  - Created /api/auth/verify-email (POST, validates token, sets emailVerified=true)
+  - Added emailVerified to PlayerProfile type and toProfile helper
+  - Added EmailVerificationBanner in profile (amber for unverified, emerald for verified)
+- Added Google/Facebook/Apple social login buttons to guest upgrade form
+  - Buttons redirect to /api/auth/social-login?provider=xxx
+  - Clear warning that social login creates new account, guest progress won't carry over
+- Added social handle validation in identity editor:
+  - Instagram: only alphanumeric+dot+underscore, max 30 chars, strips @, warns on URL input
+  - Twitch: only alphanumeric+underscore, max 25 chars
+  - YouTube: accepts handle or URL, max 100 chars
+  - Each field has a "Verify" link that opens the profile in new tab
+  - Added warning banner: "Only link your own accounts" with impersonation notice
+- All changes lint-clean
+
+Stage Summary:
+- Guests no longer see referral code in header
+- Full email verification infrastructure in place (DB + API + UI)
+- Guest upgrade form now has Google/Facebook/Apple quick sign-up options
+- Social handles have format validation + ownership verification links

@@ -52,6 +52,8 @@ export interface PlayerProfile {
   nameChangedAt: string | null;
   countryChangedAt: string | null;
 
+  emailVerified: boolean;
+
   createdAt: string;
   lastSeenAt: string;
 }

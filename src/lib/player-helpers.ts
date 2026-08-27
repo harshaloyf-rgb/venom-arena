@@ -91,6 +91,7 @@ export function toProfile(p: Player): PlayerProfile {
     twitch: p.twitch,
     nameChangedAt: p.nameChangedAt?.toISOString() ?? null,
     countryChangedAt: p.countryChangedAt?.toISOString() ?? null,
+    emailVerified: p.emailVerified ?? false,
     createdAt: p.createdAt.toISOString(),
     lastSeenAt: p.lastSeenAt.toISOString(),
   };

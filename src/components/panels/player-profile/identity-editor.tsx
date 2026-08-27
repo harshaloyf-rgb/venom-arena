@@ -1,7 +1,7 @@
 'use client';
 
 import { COUNTRIES } from '@/lib/game-config';
-import { Check, Globe, Lock, Shield, Timer, Trash2, Upload } from 'lucide-react';
+import { Check, ExternalLink, Globe, Lock, Shield, Timer, Trash2, Upload, AlertTriangle } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // FACTION_COUNTRIES
@@ -274,41 +274,92 @@ export function IdentityEditor(props: IdentityEditorProps) {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-2">
             <div className="flex flex-col gap-1.5 lg:gap-0.5">
-              <label className="text-[11px] font-bold text-pink-400 font-sans uppercase">
-                📸 Instagram Handle
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-pink-400 font-sans uppercase">
+                  📸 Instagram Handle
+                </label>
+                {instagram && (
+                  <a
+                    href={`https://instagram.com/${instagram.replace('@', '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-pink-400 hover:text-pink-300 flex items-center gap-0.5 transition"
+                    title="Open profile to verify ownership"
+                  >
+                    Verify <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                )}
+              </div>
               <input
                 type="text"
                 value={instagram}
-                onChange={(e) => setInstagram(e.target.value)}
-                placeholder="@username"
+                onChange={(e) => setInstagram(e.target.value.replace(/[^a-zA-Z0-9._]/g, ''))}
+                placeholder="username (no @)"
+                maxLength={30}
                 className="bg-slate-900 border border-slate-800 text-white font-sans text-xs px-3 lg:px-2 py-2 lg:py-1 rounded-xl focus:outline-none focus:border-pink-500"
               />
+              {instagram && (instagram.startsWith('http') || instagram.includes('/')) && (
+                <span className="text-[10px] text-amber-400 flex items-center gap-0.5"><AlertTriangle className="w-2.5 h-2.5" /> Enter only the username, not a full URL</span>
+              )}
             </div>
             <div className="flex flex-col gap-1.5 lg:gap-0.5">
-              <label className="text-[11px] font-bold text-red-400 font-sans uppercase">
-                🎥 YouTube Channel
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-red-400 font-sans uppercase">
+                  🎥 YouTube Channel
+                </label>
+                {youtube && (
+                  <a
+                    href={youtube.startsWith('http') ? youtube : `https://youtube.com/@${youtube.replace('@', '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-red-400 hover:text-red-300 flex items-center gap-0.5 transition"
+                    title="Open channel to verify ownership"
+                  >
+                    Verify <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                )}
+              </div>
               <input
                 type="text"
                 value={youtube}
                 onChange={(e) => setYoutube(e.target.value)}
                 placeholder="@channel or URL"
+                maxLength={100}
                 className="bg-slate-900 border border-slate-800 text-white font-sans text-xs px-3 lg:px-2 py-2 lg:py-1 rounded-xl focus:outline-none focus:border-red-500"
               />
             </div>
             <div className="flex flex-col gap-1.5 lg:gap-0.5">
-              <label className="text-[11px] font-bold text-purple-400 font-sans uppercase">
-                📱 Twitch Handle
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-purple-400 font-sans uppercase">
+                  📱 Twitch Handle
+                </label>
+                {twitch && (
+                  <a
+                    href={`https://twitch.tv/${twitch}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-0.5 transition"
+                    title="Open channel to verify ownership"
+                  >
+                    Verify <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                )}
+              </div>
               <input
                 type="text"
                 value={twitch}
-                onChange={(e) => setTwitch(e.target.value)}
-                placeholder="twitch_username"
+                onChange={(e) => setTwitch(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                placeholder="username"
+                maxLength={25}
                 className="bg-slate-900 border border-slate-800 text-white font-sans text-xs px-3 lg:px-2 py-2 lg:py-1 rounded-xl focus:outline-none focus:border-purple-500"
               />
             </div>
+          </div>
+          <div className="flex items-start gap-1.5 p-2 lg:p-1 rounded-lg bg-amber-500/5 border border-amber-500/10">
+            <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0 mt-0.5" />
+            <span className="text-[11px] text-slate-500 leading-relaxed">
+              <strong className="text-amber-400">Only link your own accounts.</strong> Click "Verify" to confirm ownership. Impersonating other creators may result in account restrictions.
+            </span>
           </div>
         </div>
       </div>

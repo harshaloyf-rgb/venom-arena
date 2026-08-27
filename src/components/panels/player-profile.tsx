@@ -16,6 +16,7 @@ import {
   Landmark,
   Link as LinkIcon,
   LogOut,
+  MailWarning,
   RefreshCw,
   Shield,
   Skull,
@@ -168,6 +169,130 @@ function writeJSON(key: string, value: unknown) {
 // ---------------------------------------------------------------------------
 type ProfileTab = 'stats' | 'history';
 
+// ---------------------------------------------------------------------------
+// Email Verification Banner
+// ---------------------------------------------------------------------------
+function EmailVerificationBanner({ onRefresh, onToast }: { onRefresh: () => void; onToast?: ToastFn }) {
+  const [step, setStep] = useState<'idle' | 'sent' | 'verifying' | 'verified' | 'error'>('idle');
+  const [devToken, setDevToken] = useState('');
+  const [tokenInput, setTokenInput] = useState('');
+  const [errMsg, setErrMsg] = useState('');
+
+  const handleSend = useCallback(async () => {
+    setErrMsg('');
+    try {
+      const res = await fetch('/api/auth/send-verification', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        setErrMsg(data.error || 'Failed to send.');
+        return;
+      }
+      // In sandbox, API returns the token directly for dev testing
+      if (data.token) setDevToken(data.token);
+      setStep('sent');
+      if (onToast) onToast('Verification token sent!', 'success');
+    } catch {
+      setErrMsg('Network error.');
+    }
+  }, [onToast]);
+
+  const handleVerify = useCallback(async () => {
+    const t = tokenInput.trim();
+    if (!t) return;
+    setErrMsg('');
+    setStep('verifying');
+    try {
+      const res = await fetch('/api/auth/verify-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: t }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setErrMsg(data.error || 'Verification failed.');
+        setStep('sent');
+        return;
+      }
+      setStep('verified');
+      if (onToast) onToast('Email verified!', 'success');
+      onRefresh();
+    } catch {
+      setErrMsg('Network error.');
+      setStep('sent');
+    }
+  }, [tokenInput, onToast, onRefresh]);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(devToken);
+    if (onToast) onToast('Token copied!', 'success');
+  }, [devToken, onToast]);
+
+  if (step === 'verified') {
+    return (
+      <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 py-2 lg:py-1.5 flex items-center gap-2">
+        <Check className="w-4 h-4 lg:w-3.5 lg:h-3.5 text-emerald-400 shrink-0" />
+        <span className="text-[11px] lg:text-[11px] text-emerald-300 font-medium">Email verified — full account features unlocked.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2 lg:py-1.5 space-y-2">
+      <div className="flex items-center gap-2">
+        <MailWarning className="w-4 h-4 lg:w-3.5 lg:h-3.5 text-amber-400 shrink-0" />
+        <span className="text-[11px] lg:text-[11px] text-amber-300 font-medium">
+          Email not verified. Verify now to unlock full account features.
+        </span>
+      </div>
+
+      {step === 'idle' && (
+        <button
+          onClick={handleSend}
+          className="ml-6 text-[11px] lg:text-[11px] font-semibold text-amber-400 hover:text-amber-300 underline underline-offset-2 transition"
+        >
+          Send Verification
+        </button>
+      )}
+
+      {step === 'sent' && (
+        <div className="ml-6 space-y-1.5">
+          <p className="text-[11px] text-slate-400">Check your email! (or paste the token below for dev testing)</p>
+          <div className="flex items-center gap-1.5">
+            <input
+              type="text"
+              value={tokenInput}
+              onChange={(e) => setTokenInput(e.target.value)}
+              placeholder="Paste token here…"
+              className="flex-1 min-w-0 bg-slate-950 border border-slate-800 rounded-md px-2 py-1 text-[11px] text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/50 font-mono"
+            />
+            <button
+              onClick={handleVerify}
+              disabled={step === 'verifying'}
+              className="shrink-0 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 rounded-md px-2.5 py-1 text-[11px] font-semibold text-amber-300 transition disabled:opacity-50"
+            >
+              {step === 'verifying' ? '…' : 'Verify'}
+            </button>
+          </div>
+          {/* Dev helper — show token in non-production */}
+          {devToken && process.env.NODE_ENV !== 'production' && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-slate-600 font-mono">dev token:</span>
+              <button
+                onClick={handleCopy}
+                className="text-[10px] text-slate-500 hover:text-slate-300 font-mono bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 transition cursor-pointer"
+                title="Click to copy"
+              >
+                {devToken}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {errMsg && <p className="ml-6 text-[11px] text-red-400">{errMsg}</p>}
+    </div>
+  );
+}
 
 
 export function PlayerProfilePanel({ onToast }: PlayerProfilePanelProps) {
@@ -873,8 +998,8 @@ function ProfileContent({
               </span>
             </p>
 
-            {/* Referral code */}
-            {player.referralCode && (
+            {/* Referral code — registered only */}
+            {player.email && player.referralCode && (
               <div className="flex items-center gap-1.5 mt-1.5 ">
                 <LinkIcon className="w-3 h-3 text-emerald-400" />
                 <span className="text-[11px] text-slate-400 font-sans">
@@ -1054,6 +1179,11 @@ function ProfileContent({
         <div className="space-y-6 lg:space-y-1.5">
           {/* Guest Upgrade Banner */}
           {!player.email && <GuestUpgradeBanner onRefresh={onRefresh} onToast={onToast} />}
+
+          {/* Email Verification Banner — registered users with unverified email */}
+          {player.email && !player.emailVerified && (
+            <EmailVerificationBanner onRefresh={onRefresh} onToast={onToast} />
+          )}
 
           {/* Identity editor */}
           {isEditing && (
