@@ -36,7 +36,6 @@ interface ChampionshipsProps {
 // Constants
 // ============================================================================
 
-const MAX_GAMES = 10000;
 const CHAMPIONSHIP_END_DATE = new Date('2027-01-01T00:00:00Z');
 
 // ============================================================================
@@ -85,9 +84,6 @@ export function Championships({ onToast }: ChampionshipsProps) {
   const [hasRealData, setHasRealData] = useState(false);
   const [playerStatus, setPlayerStatus] = useState<PlayerStatus | null>(null);
   const [archives, setArchives] = useState<ArchiveEntry[]>([]);
-
-  const warning_level = gamesPlayed >= 9900 ? 'critical' : gamesPlayed >= 9500 ? 'danger' : gamesPlayed >= 9000 ? 'warning' : 'safe';
-  const remaining = MAX_GAMES - gamesPlayed;
 
   // ── Data loading helper (called from handlers, not directly in effects) ──
   const fetchStandings = useCallback(async (silent = false) => {
@@ -220,28 +216,6 @@ export function Championships({ onToast }: ChampionshipsProps) {
     }
   }
 
-  async function handlePlayMatch() {
-    if (!registered) { notify('Register first to play championship matches!', 'error', onToast); return; }
-    if (remaining <= 0) { notify('You have reached the 10,000 championship match cap for this year!', 'error', onToast); return; }
-    try {
-      const res = await fetch('/api/championship/play', { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        setGamesPlayed(data.gamesPlayed);
-        notify('Entering Championship High-Stakes Arena match...', 'info', onToast);
-        void refresh();
-        setTimeout(() => { fetchStandings(true); fetchClans(); }, 2000);
-      } else {
-        const err = await res.json();
-        notify(err.error || 'Failed to start match.', 'error', onToast);
-      }
-    } catch {
-      setGamesPlayed(g => g + 1);
-      notify('Entering Championship High-Stakes Arena match...', 'info', onToast);
-      void refresh();
-    }
-  }
-
   function handleFindMe() {
     setFindMeResult(null);
     if (!registered || !player) { notify('Register for the championship first!', 'error', onToast); return; }
@@ -315,7 +289,6 @@ export function Championships({ onToast }: ChampionshipsProps) {
         player={player}
         gamesPlayed={gamesPlayed}
         onRegister={handleRegister}
-        onPlayMatch={handlePlayMatch}
       />
 
       {/* ═══ STANDINGS TABLE ═══ */}

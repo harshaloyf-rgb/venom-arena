@@ -12,7 +12,6 @@ import {
   Sparkles,
   Award,
   Swords,
-  Play,
   AlertTriangle,
 } from 'lucide-react';
 
@@ -83,10 +82,9 @@ interface PlayerStatusCardProps {
   player: { bankedChips: number };
   gamesPlayed: number;
   onRegister: () => void;
-  onPlayMatch: () => void;
 }
 
-export function PlayerStatusCard({ registered, mySummary, player, gamesPlayed, onRegister, onPlayMatch }: PlayerStatusCardProps) {
+export function PlayerStatusCard({ registered, mySummary, player, gamesPlayed, onRegister }: PlayerStatusCardProps) {
   const warning = matchCapWarning(gamesPlayed);
   const remaining = MAX_GAMES - gamesPlayed;
 
@@ -178,11 +176,7 @@ export function PlayerStatusCard({ registered, mySummary, player, gamesPlayed, o
             <div className="text-sm font-bold text-white mt-1 lg:text-[11px]">{registered ? '✅ Registered & Active in 2026 Championship' : 'Free Entry | Join Anytime'}</div>
           </div>
           <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/60 flex items-center justify-center gap-2 lg:p-1.5">
-            {!registered ? (
-              <button type="button" onClick={onRegister} className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-110 text-slate-950 font-black text-xs uppercase tracking-wider transition flex items-center justify-center gap-1.5 lg:px-2 lg:py-1"><Trophy className="w-4 h-4 lg:w-3 lg:h-3" /> JOIN 2026 CHAMPIONSHIP NOW</button>
-            ) : (
-              <button type="button" onClick={onPlayMatch} className="w-full px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider transition flex items-center justify-center gap-1.5 lg:px-2 lg:py-1"><Play className="w-3.5 h-3.5 fill-current lg:w-3 lg:h-3" /> PLAY CHAMPIONSHIP MATCH</button>
-            )}
+            <button type="button" onClick={onRegister} className="w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-110 text-slate-950 font-black text-xs uppercase tracking-wider transition flex items-center justify-center gap-1.5 lg:px-2 lg:py-1"><Trophy className="w-4 h-4 lg:w-3 lg:h-3" /> {registered ? 'REGISTERED — PLAY GAMES TO CLIMB RANKS' : 'JOIN 2026 CHAMPIONSHIP NOW'}</button>
           </div>
         </div>
       </div>
