@@ -855,11 +855,8 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
       {/* Live Ticker */}
       {tickerMessages.length > 0 && <LiveTicker messages={tickerMessages} />}
 
-      {/* Find Me Card — always visible once data is loaded */}
+      {/* Find Me Card — always visible once data is loaded (includes milestones) */}
       {myRankData && <FindMeCard myRank={myRankData} activeTab={activeTab} selectedCountry={selectedCountry} selectedRegion={selectedRegion} onClose={() => setShowFindMe(false)} />}
-
-      {/* Milestone History Section — only when player has real milestones */}
-      {!milestonesLoading && milestones.length > 0 && <MilestoneHistorySection milestones={milestones} isDemo={false} />}
 
       {/* Tab Description */}
       <TabDescription tab={activeTab} />
