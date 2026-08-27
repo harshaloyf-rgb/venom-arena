@@ -738,6 +738,7 @@ function ProfileContent({
             className="w-16 h-16 lg:w-9 lg:h-9 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border border-indigo-400/30 relative shadow-md overflow-hidden shrink-0 cursor-pointer hover:ring-2 hover:ring-indigo-400/50 transition"
             onClick={() => setShowAvatarLightbox(true)}
             title="Click to view profile picture"
+          >
             {player.avatar ? (
               player.avatar.startsWith('data:') ||
               player.avatar.startsWith('http') ? (
