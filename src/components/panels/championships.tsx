@@ -335,35 +335,35 @@ export function Championships({ onToast }: ChampionshipsProps) {
   // ── Render ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 overflow-hidden">
-      <GlowBlob color="bg-amber-500/10" className="-top-12 -right-12 w-64 h-64" />
+    <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 lg:p-2 overflow-hidden">
+      <GlowBlob color="bg-amber-500/10" className="-top-12 -right-12 w-64 h-64 lg:w-32 lg:h-32" />
 
       {/* ═══ HERO BANNER ═══ */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-950/40 via-slate-900 to-indigo-950/40 p-5 sm:p-7 border border-amber-500/30 shadow-md mb-6">
-        <div className="absolute top-0 right-0 w-72 h-72 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" aria-hidden />
-        <div className="flex items-center gap-2 flex-wrap mb-3">
-          <span className="bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[9px] font-mono font-bold px-2.5 py-1 rounded uppercase tracking-widest">OFFICIAL 1-YEAR TOURNAMENT</span>
-          <span className="inline-flex items-center gap-1 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[9px] font-mono font-bold px-2.5 py-1 rounded uppercase tracking-widest">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-950/40 via-slate-900 to-indigo-950/40 p-5 sm:p-7 lg:p-2 border border-amber-500/30 shadow-md mb-6 lg:mb-1">
+        <div className="absolute top-0 right-0 w-72 h-72 bg-amber-500/10 rounded-full blur-3xl pointer-events-none lg:w-32 lg:h-32" aria-hidden />
+        <div className="flex items-center gap-2 flex-wrap mb-3 lg:mb-0.5">
+          <span className="bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[11px] font-mono font-bold px-2.5 py-1 rounded uppercase tracking-widest">OFFICIAL 1-YEAR TOURNAMENT</span>
+          <span className="inline-flex items-center gap-1 bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[11px] font-mono font-bold px-2.5 py-1 rounded uppercase tracking-widest">
             <Activity className="w-3 h-3" /> DB-BACKED REGISTRATION
           </span>
-          <span className="inline-flex items-center gap-1 bg-indigo-500/15 border border-indigo-500/40 text-indigo-300 text-[9px] font-mono font-bold px-2.5 py-1 rounded uppercase tracking-widest">
+          <span className="inline-flex items-center gap-1 bg-indigo-500/15 border border-indigo-500/40 text-indigo-300 text-[11px] font-mono font-bold px-2.5 py-1 rounded uppercase tracking-widest">
             <Sparkles className="w-3 h-3" /> JAN 1 HALL OF FAME PAYOUT
           </span>
         </div>
-        <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">2026 ANNUAL VENOM WORLD CHAMPIONSHIP</h1>
-        <p className="text-xs sm:text-sm text-slate-300 mt-2 max-w-3xl leading-relaxed">
+        <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight lg:text-sm">2026 ANNUAL VENOM WORLD CHAMPIONSHIP</h1>
+        <p className="text-xs sm:text-sm text-slate-300 mt-2 lg:text-[11px] max-w-3xl leading-relaxed">
           Join anytime during the year! Play up to 10,000 games. When the year ends, players with the maximum wallet chips across Global, Regional, and Country leaderboards will be awarded massive chip prizes and permanently inducted into the Hall of Fame on January 1st!
         </p>
-        <div className="mt-5 p-4 rounded-xl bg-slate-950/70 border border-amber-500/30">
-          <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-            <span className="inline-flex items-center gap-1.5 text-[10px] font-mono font-bold uppercase tracking-widest text-amber-300"><Timer className="w-4 h-4" /> YEAR-END FINALE &amp; JAN 1 PAYOUT IN:</span>
-            <span className="text-[10px] font-mono text-slate-500">Payout Date: Midnight UTC, 01 January 2027</span>
+        <div className="mt-5 p-4 rounded-xl bg-slate-950/70 border border-amber-500/30 lg:mt-1 lg:p-1.5">
+          <div className="flex items-center justify-between mb-2 flex-wrap gap-2 lg:mb-0.5 lg:gap-1">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-mono font-bold uppercase tracking-widest text-amber-300"><Timer className="w-4 h-4 lg:w-3 lg:h-3" /> YEAR-END FINALE &amp; JAN 1 PAYOUT IN:</span>
+            <span className="text-[11px] font-mono text-slate-500">Payout Date: Midnight UTC, 01 January 2027</span>
           </div>
-          <div className="grid grid-cols-4 gap-2 sm:gap-3">
+          <div className="grid grid-cols-4 gap-2 sm:gap-3 lg:gap-1">
             {[{ v: cd.days, l: 'Days' }, { v: cd.hours, l: 'Hours' }, { v: cd.minutes, l: 'Mins' }, { v: cd.seconds, l: 'Secs' }].map((t) => (
-              <div key={t.l} className="text-center bg-slate-900 border border-slate-800 rounded-lg py-2.5">
-                <div className="text-2xl sm:text-3xl font-black font-mono text-amber-400 tabular-nums">{pad2(t.v)}</div>
-                <div className="text-[9px] font-mono uppercase text-slate-500 mt-0.5">{t.l}</div>
+              <div key={t.l} className="text-center bg-slate-900 border border-slate-800 rounded-lg py-2.5 lg:py-1">
+                <div className="text-2xl sm:text-3xl font-black font-mono text-amber-400 tabular-nums lg:text-sm">{pad2(t.v)}</div>
+                <div className="text-[11px] font-mono uppercase text-slate-500 mt-0.5">{t.l}</div>
               </div>
             ))}
           </div>
