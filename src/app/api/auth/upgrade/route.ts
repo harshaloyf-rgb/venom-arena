@@ -10,7 +10,7 @@ import { toProfile } from '@/lib/player-helpers';
  * Upgrades a guest account to a registered account.
  * Preserves ALL existing progress (chips, stats, cosmetics, friends, etc.)
  *
- * Body: { name, email, password, pin? }
+ * Body: { name, email, password, pin?, referralCode? }
  *
  * Rules & Guide Section 0:
  *   "Guest accounts can upgrade to registered later (in Profile panel).
@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
     const password = String(body.password || '');
     const name = String(body.name || '').trim().slice(0, 20);
     const pin = String(body.pin || '').trim();
+    const referralCodeInput = String(body.referralCode || '').trim().toUpperCase();
 
     // Validate inputs
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -60,6 +61,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Email already registered. Try a different email.' }, { status: 409 });
     }
 
+    // Validate referral code if provided
+    let referrerId: string | null = null;
+    if (referralCodeInput) {
+      const referrer = await db.player.findUnique({ where: { referralCode: referralCodeInput } });
+      if (!referrer) {
+        return NextResponse.json({ error: 'Invalid referral code.' }, { status: 400 });
+      }
+      // Can't refer yourself
+      if (referrer.id === session.playerId) {
+        return NextResponse.json({ error: 'You cannot use your own referral code.' }, { status: 400 });
+      }
+      referrerId = referrer.id;
+    }
+
     // Upgrade: set email, password, name, PIN — keep everything else
     const passwordHash = await hashPassword(password);
     const upgraded = await db.player.update({
@@ -71,6 +86,17 @@ export async function POST(req: NextRequest) {
         securityPin: pin || null,
       },
     });
+
+    // Link referral if code was provided
+    if (referrerId) {
+      await db.referral.create({
+        data: {
+          referrerId,
+          referredId: session.playerId,
+          status: 'pending',
+        },
+      });
+    }
 
     // Issue a fresh session token
     const token = await signSession({

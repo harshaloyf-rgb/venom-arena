@@ -456,11 +456,6 @@ function ProfileContent({
   const activeSkin = getCosmeticById(player.currentSkin);
   const activeTrail = getCosmeticById(player.currentTrail);
   const activeDeath = getCosmeticById(player.currentDeath);
-  const activeFlagCosmetic = getCosmeticById(player.currentFlag || '');
-  const activeBanner = getCosmeticById(player.currentBanner || '');
-  const activeFlag = FACTION_COUNTRIES.find(
-    (c) => c.code === (player.country || 'US'),
-  );
 
   // Account age in days
   const accountAgeDays = Math.floor(
@@ -825,14 +820,14 @@ function ProfileContent({
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-xl lg:text-[13px] font-bold text-white font-sans tracking-tight flex items-center gap-2">
                 <span>{player.name}</span>
-                <span className="text-[11px] text-slate-400 font-mono">
-                  country - {(activeFlag?.name || 'United States').toUpperCase()}
-                </span>
                 {player.clanTag && (
                   <span className="text-[11px] text-indigo-300 font-mono">
                     clan - {player.clanTag}{player.clanRank ? ` (${player.clanRank})` : ''}
                   </span>
                 )}
+                <span className="text-[11px] text-slate-400 font-mono">
+                  country - {(player.country || 'US').toUpperCase()}
+                </span>
               </h2>
               {/* Hide Edit Identity for guest accounts */}
               {player.email && (
@@ -1242,57 +1237,7 @@ function ProfileContent({
             )}
           </div>
 
-          {/* Milestones Section — right after stats, shows chip tier progression */}
-          <div className="space-y-3 lg:space-y-1">
-            <h3 className="text-sm lg:text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-              <Award className="w-4 h-4 lg:w-3 lg:h-3 text-amber-400" /> Chip Milestones
-            </h3>
-            {milestonesLoading ? (
-              <PanelSkeleton count={2} height="h-16" />
-            ) : milestones.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-800 p-4 lg:p-2 text-center">
-                <Trophy className="w-6 h-6 lg:w-4 lg:h-4 text-slate-600 mx-auto mb-1" />
-                <p className="text-xs lg:text-[11px] text-slate-400">No chip milestones achieved yet.</p>
-                <p className="text-[11px] text-slate-600 mt-0.5">
-                  Banked: {player.bankedChips.toLocaleString()}c — Next milestone: Bronze at 100,000c. Keep extracting!
-                </p>
-              </div>
-            ) : (
-              <div className="grid gap-2">
-                {milestones.map((ms) => {
-                  const tier = MILESTONE_TIERS.find(t => t.id === ms.tierId);
-                  if (!tier || tier.id === 'all') return null;
-                  return (
-                    <div
-                      key={ms.id}
-                      className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 lg:px-2 lg:py-1.5"
-                    >
-                      <div className="flex items-center gap-3 lg:gap-1.5">
-                        <span className="text-2xl lg:text-base" title={tier.name}>{tier.badge.split(' ')[0]}</span>
-                        <div className="lg:leading-tight">
-                          <div className="text-xs lg:text-[11px] font-bold text-white">{tier.name}</div>
-                          <div className="text-[11px] text-slate-500 font-mono">
-                            {ms.chipsAtMilestone.toLocaleString('en-IN')} chips • {new Date(ms.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleGenerateMilestoneCard(ms)}
-                        disabled={milestoneCardLoading}
-                        className="flex items-center gap-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 lg:px-2 py-1.5 lg:py-1 text-[11px] font-bold text-amber-300 hover:bg-amber-500/20 transition disabled:opacity-50 cursor-pointer"
-                      >
-                        <Share2 className="w-3 h-3 lg:w-2.5 lg:h-2.5" />
-                        Share
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Referral Section — registered only */}
+          {/* Referral Section — registered only — ABOVE milestones */}
           {player.email && (
           <div className="rounded-xl border border-slate-900 bg-slate-950/40 overflow-hidden">
             <button
@@ -1408,6 +1353,56 @@ function ProfileContent({
             )}
           </div>
           )}
+
+          {/* Milestones Section — chip tier progression */}
+          <div className="space-y-3 lg:space-y-1">
+            <h3 className="text-sm lg:text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+              <Award className="w-4 h-4 lg:w-3 lg:h-3 text-amber-400" /> Chip Milestones
+            </h3>
+            {milestonesLoading ? (
+              <PanelSkeleton count={2} height="h-16" />
+            ) : milestones.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-800 p-4 lg:p-2 text-center">
+                <Trophy className="w-6 h-6 lg:w-4 lg:h-4 text-slate-600 mx-auto mb-1" />
+                <p className="text-xs lg:text-[11px] text-slate-400">No chip milestones achieved yet.</p>
+                <p className="text-[11px] text-slate-600 mt-0.5">
+                  Banked: {player.bankedChips.toLocaleString()}c — Next milestone: Bronze at 100,000c. Keep extracting!
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                {milestones.map((ms) => {
+                  const tier = MILESTONE_TIERS.find(t => t.id === ms.tierId);
+                  if (!tier || tier.id === 'all') return null;
+                  return (
+                    <div
+                      key={ms.id}
+                      className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 lg:px-2 lg:py-1.5"
+                    >
+                      <div className="flex items-center gap-3 lg:gap-1.5">
+                        <span className="text-2xl lg:text-base" title={tier.name}>{tier.badge.split(' ')[0]}</span>
+                        <div className="lg:leading-tight">
+                          <div className="text-xs lg:text-[11px] font-bold text-white">{tier.name}</div>
+                          <div className="text-[11px] text-slate-500 font-mono">
+                            {ms.chipsAtMilestone.toLocaleString('en-IN')} chips • {new Date(ms.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateMilestoneCard(ms)}
+                        disabled={milestoneCardLoading}
+                        className="flex items-center gap-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 lg:px-2 py-1.5 lg:py-1 text-[11px] font-bold text-amber-300 hover:bg-amber-500/20 transition disabled:opacity-50 cursor-pointer"
+                      >
+                        <Share2 className="w-3 h-3 lg:w-2.5 lg:h-2.5" />
+                        Share
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Tournament Guardrails — DB-backed */}
           <TournamentGuardrailsSection
@@ -1721,34 +1716,34 @@ function ProfileContent({
           </div>
         </div>
       )}
-      {/* AVATAR LIGHTBOX — click profile pic to enlarge */}
+      {/* AVATAR LIGHTBOX — compact, top-aligned, no scroll needed */}
       {showAvatarLightbox && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/90 backdrop-blur-sm" onClick={() => setShowAvatarLightbox(false)}>
-          <div className="relative rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-4 text-center" onClick={(e) => e.stopPropagation()}>
-            <button type="button" onClick={() => setShowAvatarLightbox(false)} className="absolute top-2.5 right-2.5 p-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer">
+        <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[15vh] bg-slate-950/90 backdrop-blur-sm" onClick={() => setShowAvatarLightbox(false)}>
+          <div className="relative rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-3 text-center" onClick={(e) => e.stopPropagation()}>
+            <button type="button" onClick={() => setShowAvatarLightbox(false)} className="absolute -top-2.5 -right-2.5 p-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer z-10">
               <X className="h-4 w-4" />
             </button>
-            <div className="w-32 h-32 mx-auto rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border-2 border-indigo-400/30 shadow-lg overflow-hidden">
+            <div className="w-28 h-28 mx-auto rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border-2 border-indigo-400/30 shadow-lg overflow-hidden">
               {player.avatar ? (
                 player.avatar.startsWith('data:') || player.avatar.startsWith('http') ? (
                   <img src={player.avatar} alt={player.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 ) : (
-                  <span className="text-6xl select-none">{player.avatar}</span>
+                  <span className="text-5xl select-none">{player.avatar}</span>
                 )
               ) : (
-                <span className="text-6xl select-none">{activeSkin?.emoji || '🐍'}</span>
+                <span className="text-5xl select-none">{activeSkin?.emoji || '🐍'}</span>
               )}
             </div>
-            <p className="text-[11px] text-slate-400 mt-2 font-sans">{player.name} · Lvl {player.level} · {player.userTag}</p>
+            <p className="text-[11px] text-slate-400 mt-1.5 font-sans">{player.name} · Lvl {player.level} · #{player.userTag}</p>
           </div>
         </div>
       )}
 
-      {/* LIVE SNAKE SKIN DEMO MODAL — registered users only */}
+      {/* LIVE SNAKE SKIN DEMO MODAL — compact, top-aligned, no scroll needed */}
       {showSkinDemoModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/90 backdrop-blur-sm" onClick={() => setShowSkinDemoModal(false)}>
-          <div className="relative w-full max-w-lg mx-4 rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-4" onClick={(e) => e.stopPropagation()}>
-            <button type="button" onClick={() => setShowSkinDemoModal(false)} className="absolute top-2.5 right-2.5 p-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer">
+        <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[12vh] bg-slate-950/90 backdrop-blur-sm" onClick={() => setShowSkinDemoModal(false)}>
+          <div className="relative w-full max-w-md mx-4 rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-3" onClick={(e) => e.stopPropagation()}>
+            <button type="button" onClick={() => setShowSkinDemoModal(false)} className="absolute -top-2.5 -right-2.5 p-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer z-10">
               <X className="h-4 w-4" />
             </button>
             <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
@@ -1761,7 +1756,7 @@ function ProfileContent({
               <GameSnakePreview
                 skinId={player.currentSkin}
                 width={480}
-                height={180}
+                height={150}
                 segments={28}
                 speed={1.2}
               />

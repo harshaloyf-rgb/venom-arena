@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Lock, Shield, UserPlus, X } from 'lucide-react';
+import { Lock, Shield, UserPlus, X, Link as LinkIcon } from 'lucide-react';
 import { notify, type ToastFn } from '../_panel-primitives';
 
 function GuestUpgradeBanner({
@@ -18,6 +18,7 @@ function GuestUpgradeBanner({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [pin, setPin] = useState('');
+  const [referralCode, setReferralCode] = useState('');
 
   if (!open) {
     return (
@@ -57,7 +58,7 @@ function GuestUpgradeBanner({
       const res = await fetch('/api/auth/upgrade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, pin }),
+        body: JSON.stringify({ name, email, password, pin, referralCode: referralCode.trim() || undefined }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -96,7 +97,7 @@ function GuestUpgradeBanner({
       </div>
 
       <form onSubmit={handleUpgrade} className="space-y-3 lg:space-y-1.5">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-2">
           <div className="space-y-1 lg:space-y-0">
             <label htmlFor="ug-name" className="text-[11px] uppercase tracking-wider text-slate-500 font-bold font-sans">
               Display Name
@@ -154,6 +155,20 @@ function GuestUpgradeBanner({
               onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
               placeholder="e.g. 1234"
               className="w-full px-3 lg:px-2 py-2 lg:py-1 rounded-lg bg-slate-950/60 border border-slate-700/60 text-sm lg:text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50 transition"
+            />
+          </div>
+          <div className="space-y-1 lg:space-y-0">
+            <label htmlFor="ug-referral" className="text-[11px] uppercase tracking-wider text-slate-500 font-bold font-sans flex items-center gap-1">
+              <LinkIcon className="w-3 h-3 text-emerald-400" /> Referral Code (optional)
+            </label>
+            <input
+              id="ug-referral"
+              type="text"
+              maxLength={20}
+              value={referralCode}
+              onChange={(e) => setReferralCode(e.target.value.trim().toUpperCase())}
+              placeholder="e.g. VIP-ABC123"
+              className="w-full px-3 lg:px-2 py-2 lg:py-1 rounded-lg bg-slate-950/60 border border-slate-700/60 text-sm lg:text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50 transition font-mono"
             />
           </div>
         </div>

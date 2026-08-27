@@ -62,3 +62,28 @@ Stage Summary:
 - Register API validates code exists and creates Referral record with 'pending' status
 - Profile name shows: username, country - FULLNAME (uppercase), clan - TAG (rank)
 - Both modals are compact and fit viewport without scrolling
+---
+Task ID: 1
+Agent: main
+Task: Fix profile modals, move referral above milestones, name format, labels, referral code in upgrade
+
+Work Log:
+- Moved Referral Program section ABOVE Chip Milestones in player-profile.tsx (was after milestones)
+- Changed name area format: removed flag emoji, country shows as uppercase short code with "country -" prefix (e.g., "country - US"), clan info shown before country
+- Removed unused activeFlag/activeFlagCosmetic/activeBanner variables
+- Fixed avatar lightbox: changed from centered to top-aligned (pt-[15vh]), reduced image to w-28 h-28, compacted padding to p-3, moved close button outside
+- Fixed skin demo modal: changed from centered to top-aligned (pt-[12vh]), reduced canvas height from 180 to 150, max-w-lg to max-w-md, compacted padding to p-3
+- Removed equipped items grid from Live Demo modal (was already only canvas from prior session)
+- Added "Profile Pic" label below the small profile pic (was already present from prior session)
+- Added "Equipped Skin:" label on the skin row (was already present from prior session)
+- Added referral code input field to guest upgrade form (guest-upgrade.tsx)
+- Added referral code validation and linking to upgrade API route (/api/auth/upgrade)
+- Grid changed from lg:grid-cols-4 to lg:grid-cols-5 to accommodate referral field
+- Verified all changes via agent-browser: correct section order, modals don't require scrolling, name format correct
+
+Stage Summary:
+- Referral Program now appears BEFORE Chip Milestones (order: Referral → Milestones → Tournament Guardrails)
+- Name format: "TestUser99 country - US" (no flag emoji, uppercase country code with "country -" prefix)
+- Both modals (avatar lightbox + skin demo) use top-alignment (pt-[15vh]/pt-[12vh]) to avoid scrolling
+- Guest upgrade form now has referral code input field with API support
+- All changes lint-clean, browser-verified
