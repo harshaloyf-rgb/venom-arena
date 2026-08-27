@@ -41,3 +41,24 @@ Stage Summary:
 - Registered view: compact pic+skin row, social cards, referral section all present
 - Country shows full name, tags use new VM-xxxxxx format
 - Live snake demo uses real GameSnakePreview canvas (480x200)
+---
+Task ID: 1-6-followup
+Agent: Main
+Task: 6 follow-up fixes per user feedback
+
+Work Log:
+- Removed equipped items grid from Live Demo modal (kept only canvas + title)
+- Changed name area format: removed flag emoji, now shows "username, country - FULLNAME, clan - TAG (rank)"
+- Added "Profile Pic" label below the small profile picture
+- Added "Equipped Skin:" label before skin name in the compact row
+- Made avatar lightbox compact (no padding, no title, smaller 32x32 area, auto-fit)
+- Made skin demo modal compact (removed p-5 outer padding, reduced canvas height to 180px, removed mx-4)
+- Added optional Referral Code field to registration form with helper text
+- Updated /api/auth/register to validate and link referral codes on registration
+
+Stage Summary:
+- All 6 follow-up items implemented
+- Registration form now has Referral Code (optional) input field
+- Register API validates code exists and creates Referral record with 'pending' status
+- Profile name shows: username, country - FULLNAME (uppercase), clan - TAG (rank)
+- Both modals are compact and fit viewport without scrolling

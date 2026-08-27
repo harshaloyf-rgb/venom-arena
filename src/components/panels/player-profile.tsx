@@ -824,17 +824,14 @@ function ProfileContent({
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-xl lg:text-[13px] font-bold text-white font-sans tracking-tight flex items-center gap-2">
-                <span className="text-xl lg:text-[13px]" title="Region flag">
-                  {activeFlag?.flag || '🇺🇸'}
-                </span>
                 <span>{player.name}</span>
-                <span className="text-[11px] font-mono font-bold bg-slate-950 border border-slate-800 text-indigo-400 px-1.5 py-0.5 rounded uppercase">
-                  {activeFlag?.name || 'United States'}
+                <span className="text-[11px] text-slate-400 font-mono">
+                  country - {(activeFlag?.name || 'United States').toUpperCase()}
                 </span>
                 {player.clanTag && (
-                  <Badge className="bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-[11px] font-mono font-bold px-2 py-0.5">
-                    [{player.clanTag}]{player.clanRank ? ` ${player.clanRank}` : ''}
-                  </Badge>
+                  <span className="text-[11px] text-indigo-300 font-mono">
+                    clan - {player.clanTag}{player.clanRank ? ` (${player.clanRank})` : ''}
+                  </span>
                 )}
               </h2>
               {/* Hide Edit Identity for guest accounts */}
@@ -1094,20 +1091,23 @@ function ProfileContent({
           {player.email && (
           <div className="flex items-center gap-3 lg:gap-2">
             {/* Small profile picture — click to enlarge */}
-            <div
-              className="w-12 h-12 lg:w-10 lg:h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border border-indigo-400/30 shrink-0 cursor-pointer hover:ring-2 hover:ring-indigo-400/50 transition overflow-hidden"
-              onClick={() => setShowAvatarLightbox(true)}
-              title="Click to enlarge profile picture"
-            >
-              {player.avatar ? (
-                player.avatar.startsWith('data:') || player.avatar.startsWith('http') ? (
-                  <img src={player.avatar} alt={player.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            <div className="flex flex-col items-center gap-1">
+              <div
+                className="w-12 h-12 lg:w-10 lg:h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border border-indigo-400/30 shrink-0 cursor-pointer hover:ring-2 hover:ring-indigo-400/50 transition overflow-hidden"
+                onClick={() => setShowAvatarLightbox(true)}
+                title="Click to enlarge profile picture"
+              >
+                {player.avatar ? (
+                  player.avatar.startsWith('data:') || player.avatar.startsWith('http') ? (
+                    <img src={player.avatar} alt={player.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <span className="text-xl lg:text-lg select-none">{player.avatar}</span>
+                  )
                 ) : (
-                  <span className="text-xl lg:text-lg select-none">{player.avatar}</span>
-                )
-              ) : (
-                <span className="text-xl lg:text-lg select-none">{activeSkin?.emoji || '🐍'}</span>
-              )}
+                  <span className="text-xl lg:text-lg select-none">{activeSkin?.emoji || '🐍'}</span>
+                )}
+              </div>
+              <span className="text-[11px] text-slate-500 font-mono">Profile Pic</span>
             </div>
             {/* Equipped snake skin — click for live demo */}
             <div
@@ -1119,7 +1119,10 @@ function ProfileContent({
                 <span className="text-base lg:text-sm">{activeSkin?.emoji || '🐍'}</span>
               </div>
               <div className="min-w-0">
-                <div className="text-[11px] font-bold text-slate-200 group-hover:text-white transition truncate">{activeSkin?.name || 'Default Viper'}</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-slate-500">Equipped Skin:</span>
+                  <span className="text-[11px] font-bold text-slate-200 group-hover:text-white transition truncate">{activeSkin?.name || 'Default Viper'}</span>
+                </div>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <div className="w-3 h-3 rounded-full border border-slate-700" style={{ backgroundColor: activeSkin?.color || '#22c55e' }} />
                   <span className="text-[11px] text-slate-500 font-mono">{activeSkin?.pattern || 'solid'}</span>
@@ -1718,48 +1721,47 @@ function ProfileContent({
           </div>
         </div>
       )}
-      {/* AVATAR LIGHTBOX — click header avatar to enlarge */}
+      {/* AVATAR LIGHTBOX — click profile pic to enlarge */}
       {showAvatarLightbox && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm" onClick={() => setShowAvatarLightbox(false)}>
-          <div className="relative w-full max-w-xs rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-5 text-center" onClick={(e) => e.stopPropagation()}>
-            <button type="button" onClick={() => setShowAvatarLightbox(false)} className="absolute top-3 right-3 p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/90 backdrop-blur-sm" onClick={() => setShowAvatarLightbox(false)}>
+          <div className="relative rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-4 text-center" onClick={(e) => e.stopPropagation()}>
+            <button type="button" onClick={() => setShowAvatarLightbox(false)} className="absolute top-2.5 right-2.5 p-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer">
               <X className="h-4 w-4" />
             </button>
-            <h3 className="text-sm font-bold text-white mb-3">Profile Picture</h3>
-            <div className="w-40 h-40 mx-auto rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border-2 border-indigo-400/30 shadow-lg overflow-hidden">
+            <div className="w-32 h-32 mx-auto rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border-2 border-indigo-400/30 shadow-lg overflow-hidden">
               {player.avatar ? (
                 player.avatar.startsWith('data:') || player.avatar.startsWith('http') ? (
                   <img src={player.avatar} alt={player.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 ) : (
-                  <span className="text-7xl select-none">{player.avatar}</span>
+                  <span className="text-6xl select-none">{player.avatar}</span>
                 )
               ) : (
-                <span className="text-7xl select-none">{activeSkin?.emoji || '🐍'}</span>
+                <span className="text-6xl select-none">{activeSkin?.emoji || '🐍'}</span>
               )}
             </div>
-            <p className="text-[11px] text-slate-400 mt-3 font-sans">{player.name} · Lvl {player.level} · {player.userTag}</p>
+            <p className="text-[11px] text-slate-400 mt-2 font-sans">{player.name} · Lvl {player.level} · {player.userTag}</p>
           </div>
         </div>
       )}
 
       {/* LIVE SNAKE SKIN DEMO MODAL — registered users only */}
       {showSkinDemoModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm" onClick={() => setShowSkinDemoModal(false)}>
-          <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
-            <button type="button" onClick={() => setShowSkinDemoModal(false)} className="absolute top-3 right-3 p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/90 backdrop-blur-sm" onClick={() => setShowSkinDemoModal(false)}>
+          <div className="relative w-full max-w-lg mx-4 rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-4" onClick={(e) => e.stopPropagation()}>
+            <button type="button" onClick={() => setShowSkinDemoModal(false)} className="absolute top-2.5 right-2.5 p-1 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer">
               <X className="h-4 w-4" />
             </button>
             <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
-              <Gamepad2 className="w-4 h-4 text-indigo-400" /> Equipped Skin — Live Demo
+              <Gamepad2 className="w-4 h-4 text-indigo-400" /> {activeSkin?.name || 'Default Viper'} — Live Demo
             </h3>
-            <p className="text-[11px] text-slate-500 mb-3">{activeSkin?.name || 'Default Viper'} · {activeTrail?.name || 'No Trail'}</p>
+            <p className="text-[11px] text-slate-500 mb-2">Trail: {activeTrail?.name || 'None'}</p>
 
             {/* Canvas-based live snake animation */}
-            <div className="relative w-full rounded-xl bg-slate-950/60 border border-slate-800 overflow-hidden mb-4">
+            <div className="relative w-full rounded-xl bg-slate-950/60 border border-slate-800 overflow-hidden">
               <GameSnakePreview
                 skinId={player.currentSkin}
                 width={480}
-                height={200}
+                height={180}
                 segments={28}
                 speed={1.2}
               />
@@ -1767,24 +1769,6 @@ function ProfileContent({
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <span className="text-[11px] font-mono text-slate-400">LIVE</span>
               </div>
-            </div>
-
-            {/* Equipped items grid */}
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { label: 'Skin', emoji: activeSkin?.emoji || '🐍', name: activeSkin?.name || 'Default', color: activeSkin?.color || '#10b981' },
-                { label: 'Trail', emoji: activeTrail?.emoji || '✨', name: activeTrail?.name || 'Sparks', color: activeTrail?.color || '#a855f7' },
-                { label: 'Death FX', emoji: activeDeath?.emoji || '💥', name: activeDeath?.name || 'Splash', color: activeDeath?.color || '#ef4444' },
-                { label: 'Region', emoji: activeFlag?.flag || '🏴', name: activeFlag?.name || 'Unknown', color: '#475569' },
-              ].map((item) => (
-                <div key={item.label} className="flex items-center gap-2 bg-slate-950/60 rounded-lg p-2 border border-slate-900/60">
-                  <span className="text-lg">{item.emoji}</span>
-                  <div className="min-w-0">
-                    <span className="text-[11px] font-bold text-white block truncate">{item.name}</span>
-                    <div className="w-full h-1 bg-slate-900 rounded-full mt-0.5"><div className="h-full rounded-full" style={{ width: '100%', backgroundColor: item.color }} /></div>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
         </div>

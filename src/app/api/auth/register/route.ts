@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
     const password = String(body.password || '');
     const name = String(body.name || '').trim().slice(0, 20);
     const pin = String(body.pin || '').trim();
+    const referralCodeInput = String(body.referralCode || '').trim().toUpperCase();
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: 'Valid email is required.' }, { status: 400 });
@@ -39,6 +40,16 @@ export async function POST(req: NextRequest) {
     const existing = await db.player.findUnique({ where: { email } });
     if (existing) {
       return NextResponse.json({ error: 'Email already registered. Try logging in.' }, { status: 409 });
+    }
+
+    // Validate referral code if provided
+    let referrerId: string | null = null;
+    if (referralCodeInput) {
+      const referrer = await db.player.findUnique({ where: { referralCode: referralCodeInput } });
+      if (!referrer) {
+        return NextResponse.json({ error: 'Invalid referral code.' }, { status: 400 });
+      }
+      referrerId = referrer.id;
     }
 
     const passwordHash = await hashPassword(password);
@@ -59,6 +70,17 @@ export async function POST(req: NextRequest) {
         referralCode,
       },
     });
+
+    // Link referral if code was provided
+    if (referrerId) {
+      await db.referral.create({
+        data: {
+          referrerId,
+          referredId: player.id,
+          status: 'pending',
+        },
+      });
+    }
 
     const token = await signSession({
       playerId: player.id,

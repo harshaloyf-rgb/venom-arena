@@ -423,21 +423,20 @@ function RegisterForm({
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [pin, setPin] = useState('');
+  const [referralCode, setReferralCode] = useState('');
 
   const strength = getPasswordStrength(password);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (password !== confirmPassword) {
-      // Manually set error through parent — we can't call setError from here
-      // so we use a temporary approach
       const errEl = document.querySelector('[data-register-error]');
       if (errEl) errEl.textContent = 'Passwords do not match.';
       return;
     }
     const errEl = document.querySelector('[data-register-error]');
     if (errEl) errEl.textContent = '';
-    onSubmit('/api/auth/register', { name, email, password, pin });
+    onSubmit('/api/auth/register', { name, email, password, pin, referralCode: referralCode.trim() || undefined });
   }
 
   return (
@@ -542,6 +541,20 @@ function RegisterForm({
           placeholder="e.g. 1234"
           className="text-xs h-6"
         />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="r-referral" className="text-xs">Referral Code (optional)</Label>
+        <Input
+          id="r-referral"
+          type="text"
+          maxLength={12}
+          autoComplete="off"
+          value={referralCode}
+          onChange={(e) => setReferralCode(e.target.value.toUpperCase().trim())}
+          placeholder="e.g. VIPER-A7X2"
+          className="text-xs h-6 font-mono"
+        />
+        <p className="text-[11px] text-muted-foreground">Enter a friend's code to earn 2,500 bonus chips each!</p>
       </div>
 
       {error && (
