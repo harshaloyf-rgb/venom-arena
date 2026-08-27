@@ -48,6 +48,9 @@ export interface PlayerProfile {
   instagram: string | null;
   youtube: string | null;
   twitch: string | null;
+  instagramVerified: boolean;
+  youtubeVerified: boolean;
+  twitchVerified: boolean;
 
   nameChangedAt: string | null;
   countryChangedAt: string | null;

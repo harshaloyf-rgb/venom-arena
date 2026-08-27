@@ -81,6 +81,9 @@ model Player {
   instagram       String?
   youtube         String?
   twitch          String?
+  instagramVerified  Boolean  @default(false)
+  youtubeVerified    Boolean  @default(false)
+  twitchVerified     Boolean  @default(false)
 
   // Crafting & Inventory
   skinPieces           SkinPiece[]

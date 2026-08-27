@@ -348,6 +348,11 @@ export const SPIN_COST = 200; // chips for extra spins
 export const REFERRAL_REWARD = 2_500; // chips both players get when referred player completes 5 matches
 export const REFERRAL_MATCH_THRESHOLD = 5; // matches the referred player must play
 
+// Email verification
+export const REGISTERED_STARTER_CHIPS = 150; // chips given on registration (before email verification)
+export const EMAIL_VERIFY_BONUS = 850; // bonus chips after email verification (total = 1000)
+export const REGISTERED_TOTAL_CHIPS = REGISTERED_STARTER_CHIPS + EMAIL_VERIFY_BONUS; // 1000
+
 // Seasonal bonus days (UTC date strings → multiplier)
 // In production, this would come from admin/game-config DB. Hardcoded for now.
 export const SEASONAL_BONUS_DAYS: Record<string, { multiplier: number; label: string }> = {
