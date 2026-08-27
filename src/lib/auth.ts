@@ -75,10 +75,14 @@ export async function verifyPassword(plain: string, hash: string): Promise<boole
   return bcrypt.compare(plain, hash);
 }
 
-// Generate a unique user tag like VENOM-8291
+// Generate a unique alphanumeric user tag like VM-ha45462
 export function generateUserTag(): string {
-  const n = Math.floor(1000 + Math.random() * 9000);
-  return `VENOM-${n}`;
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return `VM-${code}`;
 }
 
 export async function generateUniqueUserTag(): Promise<string> {
@@ -88,6 +92,9 @@ export async function generateUniqueUserTag(): Promise<string> {
     const existing = await db.player.findUnique({ where: { userTag: tag } });
     if (!existing) return tag;
   }
-  // Fallback: use a longer random
-  return `VENOM-${Math.floor(Math.random() * 10000000)}`;
+  // Fallback: add extra random chars
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let extra = '';
+  for (let i = 0; i < 4; i++) extra += chars[Math.floor(Math.random() * chars.length)];
+  return `VM-${Math.random().toString(36).slice(2, 8)}${extra}`;
 }

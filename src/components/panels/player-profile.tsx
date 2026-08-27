@@ -9,11 +9,9 @@ import {
   Clock,
   Compass,
   Copy,
-  Crown,
   Edit2,
   Filter,
   Gamepad2,
-  Globe,
   History,
   Landmark,
   Link as LinkIcon,
@@ -22,17 +20,23 @@ import {
   Shield,
   Skull,
   Sparkles,
-  Star,
   Target,
   Timer,
   Trophy,
   UserCircle,
+  Users,
+  UserPlus,
+  UserMinus,
+  Swords,
   Share2,
   X,
   Download,
+  Gift,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
-import { COUNTRIES, getCosmeticById, MILESTONE_TIERS, milestoneTierForChips } from '@/lib/game-config';
+import { COUNTRIES, getCosmeticById, MILESTONE_TIERS, milestoneTierForChips, REFERRAL_REWARD, REFERRAL_MATCH_THRESHOLD } from '@/lib/game-config';
 import type { PlayerProfile } from '@/lib/types';
 import {
   PanelSkeleton,
@@ -59,6 +63,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { renderProfileCard, renderMilestoneCard, downloadBlob, shareBlob, copyBlobToClipboard, type MilestoneCardData } from '@/lib/share-card';
+import { GameSnakePreview } from './cosmetics/game-snake-preview';
 
 // Sub-components
 import { StatCard, CapCard } from './player-profile/stat-card';
@@ -254,7 +259,22 @@ function ProfileContent({
 
   // -- Avatar lightbox & character loadout modal
   const [showAvatarLightbox, setShowAvatarLightbox] = useState(false);
-  const [showLoadoutModal, setShowLoadoutModal] = useState(false);
+  const [showSkinDemoModal, setShowSkinDemoModal] = useState(false);
+
+  // -- Social counts
+  const [socialCounts, setSocialCounts] = useState({ friendsCount: 0, followersCount: 0, followingCount: 0, rivalsCount: 0 });
+  const [socialLoading, setSocialLoading] = useState(true);
+
+  // -- Referral data
+  const [referralData, setReferralData] = useState<{
+    referralCode: string;
+    hasReferrer: boolean;
+    referrerName: string | null;
+    referrerCode: string | null;
+    referrals: Array<{ id: string; referredName: string; status: string; matchesPlayed: number; createdAt: string }>;
+  } | null>(null);
+  const [referralLoading, setReferralLoading] = useState(true);
+  const [referralExpanded, setReferralExpanded] = useState(false);
 
   // -- Milestone Card generation
   const [milestoneCardPreview, setMilestoneCardPreview] = useState<string | null>(null);
@@ -317,6 +337,37 @@ function ProfileContent({
     }
   }, []);
 
+  // -- Fetch social counts
+  const fetchSocialCounts = useCallback(async () => {
+    setSocialLoading(true);
+    try {
+      const res = await fetch('/api/player/social-counts');
+      if (res.ok) {
+        const data = await res.json();
+        if (mountedRef.current) setSocialCounts(data);
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      if (mountedRef.current) setSocialLoading(false);
+    }
+  }, []);
+
+  // -- Fetch referral data
+  const fetchReferralData = useCallback(async () => {
+    setReferralLoading(true);
+    try {
+      const res = await fetch('/api/player/referral');
+      if (res.ok) {
+        const data = await res.json();
+        if (mountedRef.current) setReferralData(data);
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      if (mountedRef.current) setReferralLoading(false);
+    }
+  }, []);
 
   // -- Fetch DB match history
   const fetchDbMatches = useCallback(async (filter: 'all' | 'EXTRACTED' | 'COLLIDED') => {
@@ -373,7 +424,12 @@ function ProfileContent({
     fetchTournamentStats();
     // Fetch milestones
     fetchMilestones();
-  }, [player.name, player.country, player.instagram, player.youtube, player.twitch, fetchTournamentStats, fetchMilestones]);
+    // Fetch social counts (registered only)
+    if (player.email) {
+      fetchSocialCounts();
+      fetchReferralData();
+    }
+  }, [player.name, player.country, player.instagram, player.youtube, player.twitch, player.email, fetchTournamentStats, fetchMilestones, fetchSocialCounts, fetchReferralData]);
 
   // Fetch DB matches when switching to history tab or changing filter
   useEffect(() => {
@@ -773,7 +829,7 @@ function ProfileContent({
                 </span>
                 <span>{player.name}</span>
                 <span className="text-[11px] font-mono font-bold bg-slate-950 border border-slate-800 text-indigo-400 px-1.5 py-0.5 rounded uppercase">
-                  {player.country || 'US'}
+                  {activeFlag?.name || 'United States'}
                 </span>
                 {player.clanTag && (
                   <Badge className="bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-[11px] font-mono font-bold px-2 py-0.5">
@@ -960,21 +1016,6 @@ function ProfileContent({
         </div>
       </div>
 
-      {/* Compact cosmetics — registered only, opens loadout modal */}
-      {player.email && (
-      <div className="flex items-center gap-2 mb-2 lg:mb-1">
-        <button
-          type="button"
-          onClick={() => setShowLoadoutModal(true)}
-          className="flex items-center gap-1.5 bg-slate-950/40 border border-slate-900 hover:border-slate-800 rounded-lg px-2.5 py-1.5 lg:py-1 transition cursor-pointer group"
-          title="View your character loadout"
-        >
-          <span className="text-sm lg:text-xs">{activeSkin?.emoji || '🐍'}</span>
-          <span className="text-[11px] font-bold text-slate-300 group-hover:text-white transition">View Loadout</span>
-        </button>
-      </div>
-      )}
-
       {/* Generate Profile Card Button */}
       <button
         type="button"
@@ -1049,7 +1090,49 @@ function ProfileContent({
             />
           )}
 
-          {/* Statistics grid — now 10 cards (8 original + Total Matches + Account Age) */}
+          {/* Compact Profile Pic + Equipped Skin — registered only */}
+          {player.email && (
+          <div className="flex items-center gap-3 lg:gap-2">
+            {/* Small profile picture — click to enlarge */}
+            <div
+              className="w-12 h-12 lg:w-10 lg:h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border border-indigo-400/30 shrink-0 cursor-pointer hover:ring-2 hover:ring-indigo-400/50 transition overflow-hidden"
+              onClick={() => setShowAvatarLightbox(true)}
+              title="Click to enlarge profile picture"
+            >
+              {player.avatar ? (
+                player.avatar.startsWith('data:') || player.avatar.startsWith('http') ? (
+                  <img src={player.avatar} alt={player.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <span className="text-xl lg:text-lg select-none">{player.avatar}</span>
+                )
+              ) : (
+                <span className="text-xl lg:text-lg select-none">{activeSkin?.emoji || '🐍'}</span>
+              )}
+            </div>
+            {/* Equipped snake skin — click for live demo */}
+            <div
+              className="flex-1 flex items-center gap-2 bg-slate-950/50 border border-slate-900 hover:border-slate-800 rounded-xl px-3 py-2 lg:py-1.5 cursor-pointer transition group"
+              onClick={() => setShowSkinDemoModal(true)}
+              title="Click to see live snake demo"
+            >
+              <div className="w-8 h-8 lg:w-7 lg:h-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: (activeSkin?.color || '#22c55e') + '20' }}>
+                <span className="text-base lg:text-sm">{activeSkin?.emoji || '🐍'}</span>
+              </div>
+              <div className="min-w-0">
+                <div className="text-[11px] font-bold text-slate-200 group-hover:text-white transition truncate">{activeSkin?.name || 'Default Viper'}</div>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <div className="w-3 h-3 rounded-full border border-slate-700" style={{ backgroundColor: activeSkin?.color || '#22c55e' }} />
+                  <span className="text-[11px] text-slate-500 font-mono">{activeSkin?.pattern || 'solid'}</span>
+                  <span className="text-[11px] text-slate-600">•</span>
+                  <span className="text-[11px] text-slate-500">Trail: {activeTrail?.name || 'None'}</span>
+                </div>
+              </div>
+              <span className="text-[11px] text-indigo-400 ml-auto shrink-0 hidden sm:inline">Live Demo →</span>
+            </div>
+          </div>
+          )}
+
+          {/* Statistics grid — 10 stat cards + 4 social cards for registered */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 lg:gap-1.5">
             <StatCard
               label="Banked Wallet"
@@ -1121,6 +1204,39 @@ function ProfileContent({
               icon={<Calendar className="w-4 h-4 lg:w-3 lg:h-3 text-emerald-400" />}
               valueClass="text-emerald-300"
             />
+            {/* Social stat cards — registered only */}
+            {player.email && (
+              <>
+                <StatCard
+                  label="Friends"
+                  subLabel="Accepted Allies"
+                  value={socialLoading ? '…' : String(socialCounts.friendsCount)}
+                  icon={<Users className="w-4 h-4 lg:w-3 lg:h-3 text-blue-400" />}
+                  valueClass="text-blue-400"
+                />
+                <StatCard
+                  label="Followers"
+                  subLabel="Tracking You"
+                  value={socialLoading ? '…' : String(socialCounts.followersCount)}
+                  icon={<UserPlus className="w-4 h-4 lg:w-3 lg:h-3 text-violet-400" />}
+                  valueClass="text-violet-400"
+                />
+                <StatCard
+                  label="Following"
+                  subLabel="You Track"
+                  value={socialLoading ? '…' : String(socialCounts.followingCount)}
+                  icon={<UserMinus className="w-4 h-4 lg:w-3 lg:h-3 text-cyan-400" />}
+                  valueClass="text-cyan-400"
+                />
+                <StatCard
+                  label="Rivals"
+                  subLabel="Nemesis List"
+                  value={socialLoading ? '…' : String(socialCounts.rivalsCount)}
+                  icon={<Swords className="w-4 h-4 lg:w-3 lg:h-3 text-rose-400" />}
+                  valueClass="text-rose-400"
+                />
+              </>
+            )}
           </div>
 
           {/* Milestones Section — right after stats, shows chip tier progression */}
@@ -1173,6 +1289,123 @@ function ProfileContent({
             )}
           </div>
 
+          {/* Referral Section — registered only */}
+          {player.email && (
+          <div className="rounded-xl border border-slate-900 bg-slate-950/40 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setReferralExpanded(!referralExpanded)}
+              className="w-full flex items-center justify-between px-4 py-3 lg:px-2.5 lg:py-1.5 cursor-pointer hover:bg-slate-900/30 transition"
+            >
+              <div className="flex items-center gap-2">
+                <Gift className="w-4 h-4 lg:w-3.5 lg:h-3.5 text-emerald-400" />
+                <h3 className="text-sm lg:text-[11px] font-bold uppercase tracking-wider text-slate-300">Referral Program</h3>
+                {!referralLoading && referralData && (
+                  <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
+                    +{REFERRAL_REWARD.toLocaleString()}c each
+                  </span>
+                )}
+              </div>
+              {referralExpanded ? (
+                <ChevronUp className="w-4 h-4 text-slate-500" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-slate-500" />
+              )}
+            </button>
+
+            {referralExpanded && (
+              <div className="px-4 pb-4 lg:px-2.5 lg:pb-2.5 space-y-3 lg:space-y-1.5 border-t border-slate-900 pt-3 lg:pt-1.5">
+                {referralLoading ? (
+                  <PanelSkeleton count={1} height="h-24" />
+                ) : referralData ? (
+                  <>
+                    {/* How it works */}
+                    <div className="rounded-lg bg-slate-950/60 border border-slate-900/60 p-3 lg:p-2">
+                      <h4 className="text-[11px] font-bold text-white mb-1.5 flex items-center gap-1.5">
+                        <Sparkles className="w-3 h-3 text-amber-400" /> How Referrals Work
+                      </h4>
+                      <ul className="text-[11px] text-slate-400 space-y-1 leading-relaxed">
+                        <li className="flex items-start gap-1.5">
+                          <span className="text-emerald-400 mt-0.5 shrink-0">1.</span>
+                          <span>Share your referral code with friends. They enter it when they join.</span>
+                        </li>
+                        <li className="flex items-start gap-1.5">
+                          <span className="text-emerald-400 mt-0.5 shrink-0">2.</span>
+                          <span>Your referred friend must play <strong className="text-amber-400">{REFERRAL_MATCH_THRESHOLD} matches</strong> to activate the reward.</span>
+                        </li>
+                        <li className="flex items-start gap-1.5">
+                          <span className="text-emerald-400 mt-0.5 shrink-0">3.</span>
+                          <span>Once activated, <strong className="text-emerald-400">both of you earn {REFERRAL_REWARD.toLocaleString()} chips</strong> automatically!</span>
+                        </li>
+                      </ul>
+                    </div>
+
+                    {/* Referral code + copy */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-slate-400 font-sans">Your Code:</span>
+                      <span className="font-mono text-[11px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
+                        {referralData.referralCode}
+                      </span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => copyToClipboard(referralData.referralCode, setCopiedReferral)}
+                            className="text-slate-500 hover:text-emerald-400 transition cursor-pointer"
+                            aria-label="Copy referral code"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="bg-slate-800 text-white border-slate-700 text-xs">
+                          {copiedReferral ? 'Copied!' : 'Copy code'}
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+
+                    {/* Referred by */}
+                    {referralData.hasReferrer && referralData.referrerName && (
+                      <div className="text-[11px] text-slate-500">
+                        Referred by <strong className="text-slate-300">{referralData.referrerName}</strong> ({referralData.referrerCode})
+                      </div>
+                    )}
+
+                    {/* Referral history */}
+                    {referralData.referrals.length > 0 ? (
+                      <div className="space-y-1.5">
+                        <h4 className="text-[11px] font-bold text-slate-300 uppercase">Referral History ({referralData.referrals.length})</h4>
+                        <div className="max-h-32 overflow-y-auto va-scroll space-y-1">
+                          {referralData.referrals.map((r) => (
+                            <div key={r.id} className="flex items-center justify-between rounded-lg bg-slate-950/40 border border-slate-900/40 px-3 py-1.5 lg:px-2 lg:py-1">
+                              <div className="min-w-0">
+                                <span className="text-[11px] font-bold text-slate-200 block truncate">{r.referredName}</span>
+                                <span className="text-[11px] text-slate-600 font-mono">{r.matchesPlayed}/{REFERRAL_MATCH_THRESHOLD} matches</span>
+                              </div>
+                              <Badge className={`text-[11px] font-mono font-bold border shrink-0 ml-2 ${
+                                r.status === 'claimed'
+                                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                  : r.status === 'active'
+                                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                                  : 'bg-slate-800 border-slate-700 text-slate-400'
+                              }`}>
+                                {r.status === 'claimed' ? 'Claimed' : r.status === 'active' ? 'Active' : 'Pending'}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-600 text-center py-2">No referrals yet. Share your code to start earning!</p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-[11px] text-slate-500 text-center py-2">Could not load referral data.</p>
+                )}
+              </div>
+            )}
+          </div>
+          )}
+
           {/* Tournament Guardrails — DB-backed */}
           <TournamentGuardrailsSection
             tournamentStats={tournamentStats}
@@ -1195,7 +1428,7 @@ function ProfileContent({
               <span className="font-bold text-slate-200 uppercase block mb-0.5">
                 IDENTITY LOCK POLICY
               </span>
-              Your <strong className="text-slate-200">Challenger Handle</strong> can only be changed once every <strong className="text-amber-400">30 days</strong> and your <strong className="text-slate-200">Faction Region</strong> once every <strong className="text-amber-400">7 days</strong>. This protects leaderboard integrity and prevents identity confusion. Your permanent VENOM-XXXX tag never changes.
+              Your <strong className="text-slate-200">Challenger Handle</strong> can only be changed once every <strong className="text-amber-400">30 days</strong> and your <strong className="text-slate-200">Faction Region</strong> once every <strong className="text-amber-400">7 days</strong>. This protects leaderboard integrity and prevents identity confusion. Your permanent Ledger Tag never changes.
             </div>
           </div>
 
@@ -1509,48 +1742,34 @@ function ProfileContent({
         </div>
       )}
 
-      {/* CHARACTER LOADOUT MODAL — registered users only */}
-      {showLoadoutModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm" onClick={() => setShowLoadoutModal(false)}>
-          <div className="relative w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
-            <button type="button" onClick={() => setShowLoadoutModal(false)} className="absolute top-3 right-3 p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer">
+      {/* LIVE SNAKE SKIN DEMO MODAL — registered users only */}
+      {showSkinDemoModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm" onClick={() => setShowSkinDemoModal(false)}>
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
+            <button type="button" onClick={() => setShowSkinDemoModal(false)} className="absolute top-3 right-3 p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 cursor-pointer">
               <X className="h-4 w-4" />
             </button>
-            <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
-              <Gamepad2 className="w-4 h-4 text-indigo-400" /> Character Loadout
+            <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
+              <Gamepad2 className="w-4 h-4 text-indigo-400" /> Equipped Skin — Live Demo
             </h3>
+            <p className="text-[11px] text-slate-500 mb-3">{activeSkin?.name || 'Default Viper'} · {activeTrail?.name || 'No Trail'}</p>
 
-            {/* Snake visual preview */}
-            <div className="relative w-full h-44 rounded-xl bg-slate-950/60 border border-slate-800 overflow-hidden mb-4">
-              <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle, #475569 1px, transparent 1px)', backgroundSize: '12px 12px' }} />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="relative">
-                  <div className="absolute -inset-6 rounded-full opacity-30 blur-xl" style={{ backgroundColor: activeTrail?.color || '#a855f7' }} />
-                  <svg width="200" height="140" viewBox="0 0 200 140" className="relative z-10">
-                    <defs>
-                      <filter id="modal-glow"><feGaussianBlur stdDeviation="3" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
-                    </defs>
-                    <path d="M 30 110 Q 60 110 80 85 Q 100 60 125 55 Q 150 50 170 40" fill="none" stroke={activeSkin?.color || '#10b981'} strokeWidth="14" strokeLinecap="round" filter="url(#modal-glow)" opacity="0.5" />
-                    <path d="M 30 110 Q 60 110 80 85 Q 100 60 125 55 Q 150 50 170 40" fill="none" stroke={activeSkin?.color || '#10b981'} strokeWidth="10" strokeLinecap="round" />
-                    <circle cx="170" cy="40" r="10" fill={activeSkin?.color || '#10b981'} filter="url(#modal-glow)" />
-                    <circle cx="170" cy="40" r="8" fill={activeSkin?.color || '#10b981'} />
-                    <circle cx="175" cy="36" r="3" fill="white" />
-                    <circle cx="175" cy="36" r="1.5" fill="#0f172a" />
-                    {/* Trail particles */}
-                    <circle cx="22" cy="114" r="3" fill={activeTrail?.color || '#a855f7'} opacity="0.5" className="animate-pulse" />
-                    <circle cx="12" cy="118" r="2" fill={activeTrail?.color || '#a855f7'} opacity="0.3" className="animate-pulse" />
-                    <circle cx="28" cy="105" r="1.5" fill={activeTrail?.color || '#a855f7'} opacity="0.4" className="animate-pulse" />
-                  </svg>
-                  <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 text-lg">{activeDeath?.emoji || '💥'}</div>
-                </div>
-              </div>
+            {/* Canvas-based live snake animation */}
+            <div className="relative w-full rounded-xl bg-slate-950/60 border border-slate-800 overflow-hidden mb-4">
+              <GameSnakePreview
+                skinId={player.currentSkin}
+                width={480}
+                height={200}
+                segments={28}
+                speed={1.2}
+              />
               <div className="absolute top-2 right-2 flex items-center gap-1 bg-slate-950/80 rounded-full px-2 py-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[11px] font-mono text-slate-400">EQUIPPED</span>
+                <span className="text-[11px] font-mono text-slate-400">LIVE</span>
               </div>
             </div>
 
-            {/* Equipped items */}
+            {/* Equipped items grid */}
             <div className="grid grid-cols-2 gap-2">
               {[
                 { label: 'Skin', emoji: activeSkin?.emoji || '🐍', name: activeSkin?.name || 'Default', color: activeSkin?.color || '#10b981' },
