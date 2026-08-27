@@ -177,9 +177,9 @@ interface MyRankData {
 
 function EmptyState({ message }: { message?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-slate-500">
-      <Inbox className="w-10 h-10 mb-3 text-slate-600" />
-      <p className="text-sm font-medium">{message || 'No entries yet'}</p>
+    <div className="flex flex-col items-center justify-center py-16 lg:py-4 text-slate-500">
+      <Inbox className="w-10 h-10 mb-3 lg:w-5 lg:h-5 lg:mb-1 text-slate-600" />
+      <p className="text-sm lg:text-[11px] font-medium">{message || 'No entries yet'}</p>
     </div>
   );
 }
@@ -197,14 +197,14 @@ function TabBtn({
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition border whitespace-nowrap ${
+      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition border whitespace-nowrap lg:gap-1 lg:px-1.5 lg:py-0.5 lg:text-[11px] ${
         active
           ? `border ${color}/40 ${color.replace('#', 'text-')}`
           : 'text-slate-500 hover:text-slate-300 border-transparent'
       }`}
       style={active ? { borderColor: color, color: color, backgroundColor: color + '1a' } : undefined}
     >
-      <Icon className="w-3.5 h-3.5" />
+      <Icon className="w-3.5 h-3.5 lg:w-2.5 lg:h-2.5" />
       {label}
     </button>
   );
@@ -213,22 +213,22 @@ function TabBtn({
 // Rank change indicator
 function RankChangeIndicator({ change }: { change: number }) {
   if (change === 0) return <Minus className="w-3 h-3 text-slate-600" />;
-  if (change > 0) return <span className="inline-flex items-center gap-0.5 text-emerald-400 font-mono text-[10px] font-bold"><TrendingUp className="w-3 h-3" />+{change}</span>;
-  return <span className="inline-flex items-center gap-0.5 text-red-400 font-mono text-[10px] font-bold"><TrendingDown className="w-3 h-3" />{change}</span>;
+  if (change > 0) return <span className="inline-flex items-center gap-0.5 text-emerald-400 font-mono text-[11px] font-bold"><TrendingUp className="w-3 h-3" />+{change}</span>;
+  return <span className="inline-flex items-center gap-0.5 text-red-400 font-mono text-[11px] font-bold"><TrendingDown className="w-3 h-3" />{change}</span>;
 }
 
 // Tie-break badge — shows WHY this player is ranked here when chips are tied
 function TieBreakBadge({ reason }: { reason: 'level' | 'joinDate' }) {
   if (reason === 'level') {
     return (
-      <span className="inline-flex items-center gap-0.5 text-[9px] font-mono text-amber-400/80 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded" title="Ranked lower because of lower level. Tie-break: chips \u2192 level \u2192 join date.">
-        <Swords className="w-2.5 h-2.5" /> Lower Lv
+      <span className="inline-flex items-center gap-0.5 text-[11px] font-mono text-amber-400/80 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded" title="Ranked lower because of lower level. Tie-break: chips \u2192 level \u2192 join date.">
+        <Swords className="w-3 h-3" /> Lower Lv
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-0.5 text-[9px] font-mono text-slate-400/80 bg-slate-500/10 border border-slate-500/20 px-1.5 py-0.5 rounded" title="Same level \u2014 ranked lower because joined later. Tie-break: chips \u2192 level \u2192 join date.">
-      <Clock className="w-2.5 h-2.5" /> Joined Later
+    <span className="inline-flex items-center gap-0.5 text-[11px] font-mono text-slate-400/80 bg-slate-500/10 border border-slate-500/20 px-1.5 py-0.5 rounded" title="Same level \u2014 ranked lower because joined later. Tie-break: chips \u2192 level \u2192 join date.">
+      <Clock className="w-3 h-3" /> Joined Later
     </span>
   );
 }
@@ -239,28 +239,28 @@ function GlobalPodium({ entries, onInspect }: { entries: EnrichedEntry[]; onInsp
   const top3 = entries.slice(0, 3);
   const order = [top3[1], top3[0], top3[2]];
   const heights = ['h-28', 'h-36', 'h-22'];
-  const sizes = ['text-base', 'text-2xl', 'text-sm'];
+  const sizes = ['text-base lg:text-[11px]', 'text-2xl lg:text-[11px]', 'text-sm lg:text-[11px]'];
   const chipColors = ['text-slate-300', 'text-amber-400', 'text-amber-600'];
   const borderColors = ['border-slate-500/40', 'border-amber-500/60', 'border-amber-700/40'];
 
   return (
-    <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-5">
+    <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-5 lg:gap-1 lg:mb-1">
       {order.map((p, i) => (
         <button
           key={p.userTag}
           type="button"
           onClick={() => onInspect(p)}
-          className={`relative flex flex-col items-center justify-end rounded-2xl border ${borderColors[i]} bg-slate-950/80 p-3 pb-4 transition hover:brightness-125 cursor-pointer`}
+          className={`relative flex flex-col items-center justify-end rounded-2xl border ${borderColors[i]} bg-slate-950/80 p-3 pb-4 lg:p-1.5 lg:pb-1.5 transition hover:brightness-125 cursor-pointer`}
         >
           <div className={`absolute top-2 ${sizes[i]} font-bold`}>{RANK_MEDALS[p.rank]}</div>
-          <div className={`w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 border-2 ${borderColors[i]} flex items-center justify-center text-lg sm:text-xl mb-2`}>
+          <div className={`w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 border-2 ${borderColors[i]} flex items-center justify-center text-lg sm:text-xl mb-2 lg:w-6 lg:h-6 lg:mb-1 lg:text-[11px]`}>
             {countryFlag(p.country)}
           </div>
-          <div className="font-bold text-white text-xs sm:text-sm truncate max-w-full text-center">{p.name}</div>
-          <div className="text-[10px] font-mono text-slate-500">{p.userTag}</div>
-          <div className={`font-mono font-black ${chipColors[i]} text-xs sm:text-sm mt-1`}>{p.bankedChips.toLocaleString()}c</div>
+          <div className="font-bold text-white text-xs sm:text-sm lg:text-[11px] max-w-full text-center">{p.name}</div>
+          <div className="text-[10px] lg:text-[11px] font-mono text-slate-500">{p.userTag}</div>
+          <div className={`font-mono font-black ${chipColors[i]} text-xs sm:text-sm mt-1 lg:text-[11px] lg:mt-0`}>{p.bankedChips.toLocaleString()}c</div>
           {p.clanTag && (
-            <span className="text-[9px] font-mono text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded mt-1">[{p.clanTag}]</span>
+            <span className="text-[9px] lg:text-[11px] font-mono text-slate-500 bg-slate-900 px-1.5 py-0.5 lg:px-1 lg:py-0 rounded mt-1 lg:mt-0">[{p.clanTag}]</span>
           )}
           {/* isDemo badge hidden from podium — podium only shown for real data */}
         </button>
@@ -286,12 +286,12 @@ function LiveTicker({ messages }: { messages: { id: string; ts: string; text: st
   const msg = messages[currentIndex];
 
   return (
-    <div className="relative mb-4 rounded-xl border border-rose-500/20 bg-rose-950/10 p-2.5 flex items-center gap-3 overflow-hidden">
-      <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold text-rose-300 uppercase tracking-widest px-2 py-0.5 bg-rose-500/15 border border-rose-500/30 rounded shrink-0">
-        <Radio className="w-2.5 h-2.5 animate-pulse" /> LIVE
+    <div className="relative mb-4 p-2.5 flex items-center gap-3 overflow-hidden lg:mb-1 lg:p-1 lg:gap-1.5">
+      <span className="inline-flex items-center gap-1 text-[9px] lg:text-[11px] font-mono font-bold text-rose-300 uppercase tracking-widest px-2 py-0.5 bg-rose-500/15 border border-rose-500/30 rounded shrink-0">
+        <Radio className="w-2.5 h-2.5 lg:w-2 lg:h-2 animate-pulse" /> LIVE
       </span>
-      <div ref={tickerRef} className="text-xs text-rose-200/90 truncate flex-1">{msg.text}</div>
-      <span className="text-[9px] font-mono text-slate-600 shrink-0">{msg.ts}</span>
+      <div ref={tickerRef} className="text-xs lg:text-[11px] text-rose-200/90 flex-1">{msg.text}</div>
+      <span className="text-[9px] lg:text-[11px] font-mono text-slate-600 shrink-0">{msg.ts}</span>
     </div>
   );
 }
@@ -322,35 +322,35 @@ function FindMeCard({ myRank, activeTab, selectedCountry, selectedRegion, onClos
   };
 
   return (
-    <div className="relative rounded-xl p-4 mb-4 border border-amber-500/40 bg-amber-950/20 animate-in fade-in slide-in-from-top-2 duration-300">
-      <button type="button" onClick={onClose} className="absolute top-2 right-2 text-slate-500 hover:text-white transition"><X className="w-4 h-4" /></button>
-      <div className="flex items-center gap-2 mb-3">
-        <Crosshair className="w-4 h-4 text-amber-400" />
-        <span className="text-xs font-bold text-amber-300 uppercase tracking-widest font-mono">Your Rank Summary</span>
+    <div className="relative rounded-xl p-4 mb-4 lg:p-1.5 lg:mb-1 border border-amber-500/40 bg-amber-950/20 animate-in fade-in slide-in-from-top-2 duration-300">
+      <button type="button" onClick={onClose} className="absolute top-2 right-2 lg:top-0.5 lg:right-0.5 text-slate-500 hover:text-white transition"><X className="w-4 h-4 lg:w-2.5 lg:h-2.5" /></button>
+      <div className="flex items-center gap-2 mb-3 lg:gap-1 lg:mb-0.5">
+        <Crosshair className="w-4 h-4 lg:w-2.5 lg:h-2.5 text-amber-400" />
+        <span className="text-xs lg:text-[11px] font-bold text-amber-300 uppercase tracking-widest font-mono">Your Rank Summary</span>
       </div>
 
-      <div className="rounded-lg bg-slate-950/60 p-3 mb-3 border border-slate-800">
-        <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">Your rank in this view</div>
-        <div className={`text-2xl font-black tabular-nums ${cr.color}`}>#{cr.rank}<span className="text-[10px] text-slate-500 font-normal ml-1">/ {cr.total}</span></div>
-        <div className="text-[10px] text-slate-400">{cr.label}</div>
+      <div className="rounded-lg bg-slate-950/60 p-3 mb-3 lg:p-1 lg:mb-0.5 border border-slate-800">
+        <div className="text-[10px] lg:text-[11px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">Your rank in this view</div>
+        <div className={`text-2xl lg:text-[11px] font-black tabular-nums ${cr.color}`}>#{cr.rank}<span className="text-[10px] lg:text-[11px] text-slate-500 font-normal ml-1">/ {cr.total}</span></div>
+        <div className="text-[10px] lg:text-[11px] text-slate-400">{cr.label}</div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 mb-3">
+      <div className="grid grid-cols-3 gap-3 mb-3 lg:gap-1 lg:mb-0.5">
         <div>
-          <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">Global</div>
-          <div className="text-sm font-black text-amber-400 tabular-nums">#{myRank.globalRank}<span className="text-[9px] text-slate-500 font-normal ml-1">/ {myRank.totalGlobal}</span></div>
+          <div className="text-[10px] lg:text-[11px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">Global</div>
+          <div className="text-sm lg:text-[11px] font-black text-amber-400 tabular-nums">#{myRank.globalRank}<span className="text-[9px] lg:text-[11px] text-slate-500 font-normal ml-1">/ {myRank.totalGlobal}</span></div>
         </div>
         <div>
-          <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">National</div>
-          <div className="text-sm font-black text-emerald-400 tabular-nums">#{myRank.nationalRank}<span className="text-[9px] text-slate-500 font-normal ml-1">/ {myRank.totalNational}</span></div>
+          <div className="text-[10px] lg:text-[11px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">National</div>
+          <div className="text-sm lg:text-[11px] font-black text-emerald-400 tabular-nums">#{myRank.nationalRank}<span className="text-[9px] lg:text-[11px] text-slate-500 font-normal ml-1">/ {myRank.totalNational}</span></div>
         </div>
         <div>
-          <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">Regional</div>
-          <div className="text-sm font-black text-pink-400 tabular-nums">#{myRank.regionalRank}<span className="text-[9px] text-slate-500 font-normal ml-1">/ {myRank.totalRegional}</span></div>
+          <div className="text-[10px] lg:text-[11px] font-mono text-slate-500 uppercase tracking-wider mb-0.5">Regional</div>
+          <div className="text-sm lg:text-[11px] font-black text-pink-400 tabular-nums">#{myRank.regionalRank}<span className="text-[9px] lg:text-[11px] text-slate-500 font-normal ml-1">/ {myRank.totalRegional}</span></div>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 text-[10px] font-mono text-slate-400 mb-3">
+      <div className="flex items-center gap-3 text-[10px] lg:gap-1 lg:text-[11px] font-mono text-slate-400 mb-3">
         <span>Chips: <span className="text-emerald-400 font-bold">{myRank.bankedChips.toLocaleString()}c</span></span>
         <span>\u00b7</span>
         <span>Level: <span className="text-white font-bold">{myRank.level}</span></span>
@@ -359,14 +359,14 @@ function FindMeCard({ myRank, activeTab, selectedCountry, selectedRegion, onClos
 
       {/* Milestones in Find Me card */}
       {myRank.milestones.length > 0 && (
-        <div className="border-t border-slate-800 pt-2 mt-2">
-          <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-1.5">Milestone History</div>
-          <div className="flex flex-wrap gap-2">
+        <div className="border-t border-slate-800 pt-2 mt-2 lg:pt-0.5 lg:mt-0.5">
+          <div className="text-[10px] lg:text-[11px] font-mono text-slate-500 uppercase tracking-wider mb-1.5">Milestone History</div>
+          <div className="flex flex-wrap gap-2 lg:gap-1">
             {myRank.milestones.map((m) => (
-              <div key={m.tier} className="rounded-md bg-slate-900 border border-slate-800 px-2 py-1 flex flex-col">
-                <span className="text-[10px] font-bold" style={{ color: m.color }}>{m.badge}</span>
-                <span className="text-[9px] font-mono text-slate-400">{m.chips.toLocaleString()}c</span>
-                <span className="text-[8px] font-mono text-slate-500">{fmtDate(m.achievedAt)}</span>
+              <div key={m.tier} className="rounded-md bg-slate-900 border border-slate-800 px-2 py-1 lg:px-1 lg:py-0.5 flex flex-col">
+                <span className="text-[10px] lg:text-[11px] font-bold" style={{ color: m.color }}>{m.badge}</span>
+                <span className="text-[9px] lg:text-[11px] font-mono text-slate-400">{m.chips.toLocaleString()}c</span>
+                <span className="text-[8px] lg:text-[11px] font-mono text-slate-500">{fmtDate(m.achievedAt)}</span>
               </div>
             ))}
           </div>
@@ -380,13 +380,13 @@ function FindMeCard({ myRank, activeTab, selectedCountry, selectedRegion, onClos
 function TabDescription({ tab }: { tab: TopTab }) {
   const info = TAB_DESCRIPTIONS[tab];
   return (
-    <div className="rounded-xl border border-slate-700/50 bg-slate-950/40 p-3">
-      <div className="flex items-start gap-2">
-        <Info className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-        <div>
-          <div className="text-xs font-bold text-white mb-1">{info.title}</div>
+    <div className="rounded-xl border border-slate-700/50 bg-slate-950/40 p-3 lg:p-1">
+      <div className="flex items-start gap-2 lg:items-center lg:gap-1">
+        <Info className="w-4 h-4 lg:w-2.5 lg:h-2.5 text-slate-400 mt-0.5 lg:mt-0 shrink-0" />
+        <div className="lg:flex lg:items-center lg:gap-2 lg:flex-1 lg:min-w-0">
+          <div className="text-xs lg:text-[11px] font-bold text-white mb-1 lg:mb-0 shrink-0">{info.title}</div>
           <p className="text-[11px] text-slate-400 leading-relaxed">{info.desc}</p>
-          <div className="mt-1.5 inline-flex items-center gap-1.5 text-[10px] font-mono text-slate-500 bg-slate-900 px-2 py-0.5 rounded">
+          <div className="mt-1.5 lg:mt-0 inline-flex items-center gap-1.5 text-[11px] lg:text-[11px] font-mono text-slate-500 bg-slate-900 px-2 py-0.5 lg:px-1 lg:py-0 rounded">
             <span className="text-slate-400">Scope:</span> {info.scope}
           </div>
         </div>
@@ -424,35 +424,35 @@ function MilestoneHistorySection({ milestones, isDemo }: { milestones: Milestone
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between p-3 hover:bg-slate-900/30 transition"
+        className="w-full flex items-center justify-between p-3 lg:p-1.5 hover:bg-slate-900/30 transition"
       >
-        <div className="flex items-center gap-2">
-          <Medal className="w-4 h-4 text-amber-400" />
-          <span className="text-xs font-bold text-white">Milestone History</span>
-          {isDemo && <span className="text-[9px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded font-bold">DEMO</span>}
-          <span className="text-[10px] font-mono text-slate-500">{sorted.length} / {allTiers.length} achieved</span>
+        <div className="flex items-center gap-2 lg:gap-1">
+          <Medal className="w-4 h-4 lg:w-3 lg:h-3 text-amber-400" />
+          <span className="text-xs lg:text-[11px] font-bold text-white">Milestone History</span>
+          {isDemo && <span className="text-[9px] lg:text-[11px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded font-bold">DEMO</span>}
+          <span className="text-[10px] lg:text-[11px] font-mono text-slate-500">{sorted.length} / {allTiers.length} achieved</span>
         </div>
         <div className="flex items-center gap-2">
           {currentTier && (
-            <span className="text-[10px] font-bold" style={{ color: currentTier.color }}>{currentTier.badge}</span>
+            <span className="text-[10px] lg:text-[11px] font-bold" style={{ color: currentTier.color }}>{currentTier.badge}</span>
           )}
           <span className={`text-slate-500 transition-transform ${expanded ? 'rotate-180' : ''}`}>
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            <svg className="w-3.5 h-3.5 lg:w-2.5 lg:h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
           </span>
         </div>
       </button>
 
       {/* Expanded timeline */}
       {expanded && (
-        <div className="border-t border-slate-800 p-3 space-y-2">
+        <div className="border-t border-slate-800 p-3 space-y-2 lg:p-1.5 lg:space-y-1">
           {/* Achievement progress bar */}
-          <div className="flex items-center gap-1 mb-3">
+          <div className="flex items-center gap-1 mb-3 lg:mb-1 lg:gap-0.5">
             {allTiers.map((t) => {
               const achieved = achievedMap.has(t.id);
               return (
                 <div
                   key={t.id}
-                  className="h-2 flex-1 rounded-full transition-all"
+                  className="h-2 lg:h-1 flex-1 rounded-full transition-all"
                   style={{
                     backgroundColor: achieved ? t.color + '60' : '#1e293b',
                     border: achieved ? `1px solid ${t.color}40` : '1px solid #334155',
@@ -465,8 +465,8 @@ function MilestoneHistorySection({ milestones, isDemo }: { milestones: Milestone
 
           {/* Timeline entries */}
           {sorted.length === 0 ? (
-            <div className="text-center py-6 text-slate-500 text-xs">
-              <Shield className="w-6 h-6 mx-auto mb-2 text-slate-600" />
+            <div className="text-center py-6 text-slate-500 text-xs lg:py-3 lg:text-[11px]">
+              <Shield className="w-6 h-6 lg:w-5 lg:h-5 lg:mb-1 mx-auto mb-2 text-slate-600" />
               <p>No milestones achieved yet.</p>
               <p className="text-[10px] text-slate-600 mt-1">Bank 100,000+ chips to unlock Bronze tier!</p>
             </div>
@@ -477,7 +477,7 @@ function MilestoneHistorySection({ milestones, isDemo }: { milestones: Milestone
                 return (
                   <div
                     key={m.tier}
-                    className={`flex items-center gap-3 p-2.5 rounded-lg border transition ${
+                    className={`flex items-center gap-3 p-2.5 rounded-lg border transition lg:gap-1.5 lg:p-1 ${
                       isLatest
                         ? 'bg-slate-900/60 border-slate-700/50'
                         : 'bg-slate-950/40 border-slate-800/50'
@@ -486,7 +486,7 @@ function MilestoneHistorySection({ milestones, isDemo }: { milestones: Milestone
                     {/* Connector line */}
                     <div className="flex flex-col items-center">
                       <div
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-sm border-2"
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-sm lg:w-4 lg:h-4 lg:text-[11px] border-2"
                         style={{
                           borderColor: m.color,
                           backgroundColor: m.color + '20',
@@ -496,25 +496,25 @@ function MilestoneHistorySection({ milestones, isDemo }: { milestones: Milestone
                         {isLatest ? '\u{1F525}' : '\u2713'}
                       </div>
                       {idx < sorted.length - 1 && (
-                        <div className="w-px h-4 bg-slate-700 mt-1" />
+                        <div className="w-px h-4 lg:h-2 bg-slate-700 mt-1" />
                       )}
                     </div>
 
                     {/* Content */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold" style={{ color: m.color }}>{m.badge}</span>
-                        {isLatest && <span className="text-[8px] font-bold text-orange-400 bg-orange-500/15 px-1.5 py-0.5 rounded uppercase tracking-wider">Current</span>}
+                        <span className="text-xs lg:text-[11px] font-bold" style={{ color: m.color }}>{m.badge}</span>
+                        {isLatest && <span className="text-[8px] lg:text-[11px] font-bold text-orange-400 bg-orange-500/15 px-1.5 py-0.5 rounded uppercase tracking-wider">Current</span>}
                       </div>
-                      <div className="text-[10px] font-mono text-slate-400 mt-0.5">
+                      <div className="text-[10px] lg:text-[11px] font-mono text-slate-400 mt-0.5">
                         {m.chips.toLocaleString()} chips banked
                       </div>
                     </div>
 
                     {/* Timestamp */}
                     <div className="text-right shrink-0">
-                      <div className="flex items-center gap-1 text-[10px] font-mono text-slate-400">
-                        <Clock className="w-3 h-3 text-slate-500" />
+                      <div className="flex items-center gap-1 text-[10px] lg:text-[11px] font-mono text-slate-400">
+                        <Clock className="w-3 h-3 lg:w-2 lg:h-2 text-slate-500" />
                         {fmtDate(m.achievedAt)}
                       </div>
                     </div>
@@ -529,9 +529,9 @@ function MilestoneHistorySection({ milestones, isDemo }: { milestones: Milestone
             const nextTier = allTiers.find(t => t.minChips > (currentTier?.chips || 0));
             if (!nextTier) return null;
             return (
-              <div className="flex items-center gap-2 mt-3 p-2 rounded-lg bg-slate-900/40 border border-slate-800/50">
-                <ArrowRight className="w-3.5 h-3.5 text-slate-500" />
-                <span className="text-[10px] text-slate-400">
+              <div className="flex items-center gap-2 mt-3 p-2 rounded-lg bg-slate-900/40 border border-slate-800/50 lg:mt-1 lg:p-1 lg:gap-1">
+                <ArrowRight className="w-3.5 h-3.5 lg:w-2.5 lg:h-2.5 text-slate-500" />
+                <span className="text-[10px] lg:text-[11px] text-slate-400">
                   Next: <span className="font-bold" style={{ color: nextTier.color }}>{nextTier.badge}</span>
                   {' '}at <span className="text-emerald-400 font-bold font-mono">{nextTier.minChips.toLocaleString()}c</span>
                 </span>
@@ -563,6 +563,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
   const [isRealData, setIsRealData] = useState(false);
   const [milestones, setMilestones] = useState<MilestoneRecord[]>([]);
   const [milestonesLoading, setMilestonesLoading] = useState(true);
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const listRef = useRef<HTMLOListElement>(null);
 
   const playerTag = player?.userTag;
@@ -813,16 +814,16 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
   // Reusable per-tab toolbar (count + Find Me + tie-break info)
   function TabToolbar({ countLabel, tabColor }: { countLabel: string; tabColor: string }) {
     return (
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <span className="text-[10px] font-mono text-slate-500">{countLabel}</span>
-        <div className="flex items-center gap-2">
-          <span className="text-[9px] font-mono text-slate-600 hidden sm:inline" title={TIE_BREAK_EXPLANATION}>
+      <div className="flex items-center justify-between flex-wrap gap-2 lg:gap-1">
+        <span className="text-[10px] lg:text-[11px] font-mono text-slate-500">{countLabel}</span>
+        <div className="flex items-center gap-2 lg:gap-1">
+          <span className="text-[9px] lg:text-[11px] font-mono text-slate-600 hidden sm:inline" title={TIE_BREAK_EXPLANATION}>
             Tie-break: chips \u2192 level \u2192 join date
           </span>
           <button
             type="button"
             onClick={() => { void handleFindMe(); }}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition border"
+            className="inline-flex items-center gap-1 px-2.5 py-1 lg:px-1.5 lg:py-0.5 rounded-lg text-[10px] lg:text-[11px] font-bold transition border"
             style={{
               borderColor: tabColor + '40',
               color: tabColor,
@@ -831,7 +832,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
             onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = tabColor + '25'; }}
             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = tabColor + '15'; }}
           >
-            <Crosshair className="w-3 h-3" /> Find Me
+            <Crosshair className="w-3 h-3 lg:w-2.5 lg:h-2.5" /> Find Me
           </button>
         </div>
       </div>
@@ -839,29 +840,29 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
   }
 
   return (
-    <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 overflow-hidden">
-      <GlowBlob color="bg-amber-500/10" className="-top-12 -right-12 w-56 h-56" />
+    <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 lg:p-1.5 lg:pt-1 overflow-hidden lg:overflow-visible">
+      <GlowBlob color="bg-amber-500/10" className="-top-12 -right-12 w-56 h-56 lg:hidden" />
 
       {/* Header */}
-      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-4 border-b border-slate-800">
+      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-4 lg:gap-1 lg:mb-0.5 lg:pb-0.5 border-b border-slate-800">
         <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[9px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-widest">
+          <div className="flex items-center gap-2 lg:gap-1 flex-wrap">
+            <span className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[9px] lg:text-[11px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-widest">
               2026 CONCURRENT TOURNAMENT
             </span>
-            <span className="inline-flex items-center gap-1 text-[9px] font-mono text-amber-400 font-bold px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 rounded">
+            <span className="inline-flex items-center gap-1 text-[9px] lg:text-[11px] font-mono text-amber-400 font-bold px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 rounded">
               <Zap className="w-3 h-3" /> LIVE \u00b7 30min updates
             </span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-sans font-black text-white tracking-tight flex items-center gap-2.5 mt-2">
-            <Trophy className="w-5.5 h-5.5 text-amber-400" />
+          <h2 className="text-xl sm:text-2xl lg:text-[11px] font-sans font-black text-white tracking-tight flex items-center gap-2.5 mt-2">
+            <Trophy className="w-5.5 h-5.5 lg:w-3 lg:h-3 text-amber-400" />
             Official World Tournament Leaderboards
           </h2>
-          <p className="text-xs text-slate-400 mt-1 max-w-3xl">
+          <p className="text-xs lg:text-[11px] lg:mt-0 text-slate-400 mt-1 max-w-3xl lg:hidden">
             Real-time player standings. Tap any tab to see its description.
           </p>
           {lastUpdated && (
-            <MicroLabel className="mt-1.5 inline-block">
+            <MicroLabel className="mt-1.5 lg:mt-0 inline-block !text-[11px]">
               Last sync: {lastUpdated.toLocaleTimeString('en-US', { hour12: false })} UTC
               {!isRealData && isAdmin && <span className="text-amber-400 ml-2">\u00b7 Showing demo data</span>}
             </MicroLabel>
@@ -872,9 +873,9 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
             type="button"
             onClick={() => { void fetchBoard(); void fetchMilestones(); setShowFindMe(false); notify('Leaderboard refreshed.', 'info', onToast); }}
             disabled={loading}
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white font-bold rounded-xl text-[11px] uppercase tracking-wider transition disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 lg:px-1.5 lg:py-0.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white font-bold rounded-xl text-[11px] uppercase tracking-wider transition disabled:opacity-50"
           >
-            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            {loading ? <Loader2 className="w-3.5 h-3.5 lg:w-2.5 lg:h-2.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 lg:w-2.5 lg:h-2.5" />}
             Refresh
           </button>
         </div>
@@ -893,33 +894,33 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
       <TabDescription tab={activeTab} />
 
       {/* Tabs + Search */}
-      <div className="relative flex flex-col sm:flex-row sm:items-center gap-3 mt-4 mb-4">
-        <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800/60 flex-1">
+      <div className="relative flex flex-col sm:flex-row sm:items-center gap-3 mt-4 mb-4 lg:gap-1 lg:mt-1 lg:mb-1">
+        <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 lg:p-0.5 rounded-xl border border-slate-800/60 flex-1">
           {tabs.map((tab) => (
-            <TabBtn key={tab.id} active={activeTab === tab.id} onClick={() => { setActiveTab(tab.id); setSearchQuery(''); setShowFindMe(false); }} icon={tab.icon} label={tab.label} color={tab.color} />
+            <TabBtn key={tab.id} active={activeTab === tab.id} onClick={() => { setActiveTab(tab.id); setSearchQuery(''); setShowFindMe(false); setExpandedRow(null); }} icon={tab.icon} label={tab.label} color={tab.color} />
           ))}
         </div>
         <div className="relative shrink-0">
-          <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-3.5 h-3.5 lg:w-2.5 lg:h-2.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search player, tag, clan..."
-            className="bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50 w-full sm:w-52"
+            className="bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 lg:py-0.5 text-xs lg:text-[11px] text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50 w-full sm:w-52"
           />
         </div>
       </div>
 
       {/* ====== SUMMIT TAB ====== */}
       {activeTab === 'summit' && (
-        <div className="space-y-4">
+        <div className="space-y-4 lg:space-y-1">
           <TabToolbar
             countLabel={isRealData ? `${filteredEntries.length} Country Champions` : (isAdmin ? 'Demo data \u2014 real champions appear when players compete' : 'No country champions yet. Be the first!')}
             tabColor="#f59e0b"
           />
-          <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-            <div className="grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+          <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden lg:overflow-visible">
+            <div className="hidden lg:grid lg:grid-cols-12 lg:gap-0.5 lg:px-1.5 lg:py-1 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] lg:text-[11px] font-bold uppercase tracking-wider">
               <div className="col-span-1">#</div>
               <div className="col-span-1">Move</div>
               <div className="col-span-3">Country Champion</div>
@@ -928,10 +929,10 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
               <div className="col-span-2 text-right">Chips</div>
               <div className="col-span-1 text-right">Status</div>
             </div>
-            <ol ref={listRef} className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll">
+            <ol ref={listRef} className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll lg:max-h-none lg:overflow-visible">
               {loading ? (
-                <li className="p-4 text-center text-slate-500 text-xs flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-amber-400" /> Loading summit data&hellip;
+                <li className="p-4 lg:p-2 text-center text-slate-500 text-xs lg:text-[11px] flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 lg:w-3 lg:h-3 animate-spin text-amber-400" /> Loading summit data&hellip;
                 </li>
               ) : filteredEntries.length === 0 ? <EmptyState message="No country champions yet. Be the first!" /> : (
                 filteredEntries.map((c, i) => {
@@ -940,32 +941,61 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                     <li
                       key={c.country + c.userTag}
                       data-is-me={isMe || undefined}
-                      onClick={() => inspectPlayer(c)}
-                      className={`grid grid-cols-12 gap-2 items-center px-4 py-3 text-sm cursor-pointer transition-colors ${isMe ? 'bg-amber-500/10 border-l-2 border-amber-500' : 'hover:bg-slate-900/40'}`}
+                      className={`cursor-pointer transition-colors ${isMe ? 'bg-amber-500/10 border-l-2 border-amber-500' : 'hover:bg-slate-900/40'}`}
                     >
-                      <div className="col-span-1 font-mono">
-                        {RANK_MEDALS[i + 1] ? <span className="text-lg">{RANK_MEDALS[i + 1]}</span> : <span className="text-slate-400 font-bold">#{i + 1}</span>}
-                        {c.tieBreakReason && <TieBreakBadge reason={c.tieBreakReason} />}
-                      </div>
-                      <div className="col-span-1"><RankChangeIndicator change={c.rankChange || 0} /></div>
-                      <div className="col-span-3 min-w-0">
-                        <div className="font-bold text-white truncate flex items-center gap-1.5">
-                          {c.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
-                          {c.name}
-                          {isMe && <span className="text-[9px] bg-amber-500 text-black px-1 rounded font-bold">YOU</span>}
-                          {c.isDemo && isAdmin && <span className="text-[9px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                      {/* Mobile card layout (hidden on desktop) */}
+                      <div className="lg:hidden px-3 py-2" onClick={() => setExpandedRow(expandedRow === c.userTag ? null : c.userTag)}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {RANK_MEDALS[i + 1] ? <span className="text-base shrink-0">{RANK_MEDALS[i + 1]}</span> : <span className="text-slate-400 font-bold shrink-0">#{i + 1}</span>}
+                            {c.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
+                            <span className="font-bold text-white min-w-0">{c.name}</span>
+                            {isMe && <span className="text-[11px] bg-amber-500 text-black px-1 rounded font-bold shrink-0">YOU</span>}
+                            {c.isDemo && isAdmin && <span className="text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic shrink-0">DEMO</span>}
+                          </div>
+                          <div className="font-mono font-bold text-emerald-400 shrink-0 ml-2">{c.bankedChips.toLocaleString()}c</div>
                         </div>
-                        <div className="text-[10px] font-mono text-slate-500 truncate">{c.userTag}</div>
+                        <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                          <span className="font-mono">{c.userTag}</span>
+                          {c.clanTag && <span className="font-mono text-cyan-400">[{c.clanTag}]</span>}
+                          <span className="flex items-center gap-1"><span aria-hidden>{countryFlag(c.country)}</span>{countryName(c.country)}</span>
+                        </div>
+                        {expandedRow === c.userTag && (
+                          <div className="mt-1 pt-1 border-t border-slate-800 text-[11px]">
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <span className="flex items-center gap-1"><span aria-hidden>{countryFlag(c.country)}</span>{countryName(c.country)}</span>
+                              {c.clanTag && <span className="font-mono text-cyan-400">[{c.clanTag}]</span>}
+                              {c.championshipPrize && <span className="font-mono font-bold" style={{ color: c.championshipPrize.color }}>{c.championshipPrize.label}</span>}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="col-span-2">
-                        {c.clanTag ? <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 rounded">[{c.clanTag}]</span> : <span className="text-slate-700 text-[10px]">\u2014</span>}
-                      </div>
-                      <div className="col-span-2 text-xs text-slate-300 flex items-center gap-1.5">
-                        <span aria-hidden>{countryFlag(c.country)}</span> {countryName(c.country)}
-                      </div>
-                      <div className="col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">{c.bankedChips.toLocaleString()}c</div>
-                      <div className="col-span-1 text-right">
-                        {c.championshipPrize && <span className="text-[8px] font-mono font-bold px-1 py-0.5 rounded" style={{ color: c.championshipPrize.color, backgroundColor: c.championshipPrize.color + '15' }}>{c.championshipPrize.label.split(' ').slice(0, 2).join(' ')}</span>}
+                      {/* Desktop grid layout (hidden on mobile) */}
+                      <div className="hidden lg:grid lg:grid-cols-12 lg:gap-0.5 lg:items-center lg:px-1.5 lg:py-1 lg:text-[11px]" onClick={() => inspectPlayer(c)}>
+                        <div className="lg:col-span-1 font-mono">
+                          {RANK_MEDALS[i + 1] ? <span className="text-lg lg:text-[11px]">{RANK_MEDALS[i + 1]}</span> : <span className="text-slate-400 font-bold">#{i + 1}</span>}
+                          {c.tieBreakReason && <TieBreakBadge reason={c.tieBreakReason} />}
+                        </div>
+                        <div className="lg:col-span-1"><RankChangeIndicator change={c.rankChange || 0} /></div>
+                        <div className="lg:col-span-3 min-w-0">
+                          <div className="font-bold text-white flex items-center gap-1.5">
+                            {c.isHOF && <Award className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-yellow-400 shrink-0" />}
+                            {c.name}
+                            {isMe && <span className="text-[9px] lg:text-[11px] bg-amber-500 text-black px-1 rounded font-bold">YOU</span>}
+                            {c.isDemo && isAdmin && <span className="text-[9px] lg:text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                          </div>
+                          <div className="text-[10px] lg:text-[11px] font-mono text-slate-500">{c.userTag}</div>
+                        </div>
+                        <div className="lg:col-span-2">
+                          {c.clanTag ? <span className="text-[10px] lg:text-[11px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 lg:px-1 lg:py-0 rounded">[{c.clanTag}]</span> : <span className="text-slate-700 text-[10px] lg:text-[11px]">\u2014</span>}
+                        </div>
+                        <div className="lg:col-span-2 text-xs lg:text-[11px] text-slate-300 flex items-center gap-1.5">
+                          <span aria-hidden>{countryFlag(c.country)}</span> {countryName(c.country)}
+                        </div>
+                        <div className="lg:col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">{c.bankedChips.toLocaleString()}c</div>
+                        <div className="lg:col-span-1 text-right">
+                          {c.championshipPrize && <span className="text-[8px] lg:text-[11px] font-mono font-bold px-1 py-0.5 rounded" style={{ color: c.championshipPrize.color, backgroundColor: c.championshipPrize.color + '15' }}>{c.championshipPrize.label.split(' ').slice(0, 2).join(' ')}</span>}
+                        </div>
                       </div>
                     </li>
                   );
@@ -978,7 +1008,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
 
       {/* ====== GLOBAL TAB ====== */}
       {activeTab === 'global' && (
-        <div className="space-y-4">
+        <div className="space-y-4 lg:space-y-1">
           <TabToolbar
             countLabel={isRealData ? `Total Players: ${filteredEntries.length}` : (isAdmin ? 'Demo data \u2014 real rankings appear when players compete' : 'No players ranked yet. Play matches to appear here!')}
             tabColor="#06b6d4"
@@ -987,8 +1017,8 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
           {/* Top 3 Podium (only for real data with 3+ entries) */}
           {!searchQuery.trim() && isRealData && entries.length >= 3 && <GlobalPodium entries={entries} onInspect={inspectPlayer} />}
 
-          <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-            <div className="grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+          <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden lg:overflow-visible">
+            <div className="hidden lg:grid lg:grid-cols-12 lg:gap-0.5 lg:px-1.5 lg:py-1 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] lg:text-[11px] font-bold uppercase tracking-wider">
               <div className="col-span-1">#</div>
               <div className="col-span-1">Move</div>
               <div className="col-span-3">Player</div>
@@ -997,10 +1027,10 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
               <div className="col-span-2 text-right">Chips</div>
               <div className="col-span-1 text-right">Status</div>
             </div>
-            <ol ref={listRef} className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll">
+            <ol ref={listRef} className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll lg:max-h-none lg:overflow-visible">
               {loading ? (
-                <li className="p-4 text-center text-slate-500 text-xs flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-amber-400" /> Loading global ranks&hellip;
+                <li className="p-4 lg:p-2 text-center text-slate-500 text-xs lg:text-[11px] flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 lg:w-3 lg:h-3 animate-spin text-amber-400" /> Loading global ranks&hellip;
                 </li>
               ) : filteredEntries.length === 0 ? <EmptyState message="No players ranked yet. Play matches to appear here!" /> : (
                 filteredEntries.map((e) => {
@@ -1012,33 +1042,65 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                     <li
                       key={e.userTag + e.rank}
                       data-is-me={isMe || undefined}
-                      onClick={() => inspectPlayer(e)}
-                      className={`grid grid-cols-12 gap-2 items-center px-4 py-3 text-sm cursor-pointer transition-colors ${isMe ? 'bg-amber-500/10 border-l-2 border-amber-500' : 'hover:bg-slate-900/40'}`}
+                      className={`cursor-pointer transition-colors ${isMe ? 'bg-amber-500/10 border-l-2 border-amber-500' : 'hover:bg-slate-900/40'}`}
                     >
-                      <div className="col-span-1 flex items-center gap-1.5 font-mono">
-                        {RANK_MEDALS[e.rank] ? <span className="text-lg">{RANK_MEDALS[e.rank]}</span> : <span className="text-slate-400 font-bold">#{e.rank}</span>}
-                        {e.tieBreakReason && <TieBreakBadge reason={e.tieBreakReason} />}
-                      </div>
-                      <div className="col-span-1"><RankChangeIndicator change={e.rankChange || 0} /></div>
-                      <div className="col-span-3 min-w-0">
-                        <div className="font-bold text-white truncate flex items-center gap-1.5">
-                          <span aria-hidden>{countryFlag(e.country)}</span>
-                          {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
-                          {e.name}
-                          {isMe && <span className="text-[9px] bg-amber-500 text-black px-1 rounded font-bold">YOU</span>}
-                          {e.isDemo && isAdmin && <span className="text-[9px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                      {/* Mobile card layout (hidden on desktop) */}
+                      <div className="lg:hidden px-3 py-2" onClick={() => setExpandedRow(expandedRow === e.userTag ? null : e.userTag)}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {RANK_MEDALS[e.rank] ? <span className="text-base shrink-0">{RANK_MEDALS[e.rank]}</span> : <span className="text-slate-400 font-bold shrink-0">#{e.rank}</span>}
+                            <span aria-hidden className="shrink-0">{countryFlag(e.country)}</span>
+                            {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
+                            <span className="font-bold text-white min-w-0">{e.name}</span>
+                            {isMe && <span className="text-[11px] bg-amber-500 text-black px-1 rounded font-bold shrink-0">YOU</span>}
+                            {e.isDemo && isAdmin && <span className="text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic shrink-0">DEMO</span>}
+                          </div>
+                          <div className="font-mono font-bold text-emerald-400 shrink-0 ml-2">{e.bankedChips.toLocaleString()}c</div>
                         </div>
-                        <div className="text-[10px] font-mono text-slate-500 truncate">{e.userTag}</div>
+                        <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                          <span className="font-mono">{e.userTag}</span>
+                          {e.clanTag && <span className="font-mono text-cyan-400">[{e.clanTag}]</span>}
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 font-mono" style={{ color: tier.color }}>{tier.badge}</span>
+                        </div>
+                        {expandedRow === e.userTag && (
+                          <div className="mt-1 pt-1 border-t border-slate-800 text-[11px]">
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <span className="flex items-center gap-1"><span aria-hidden>{countryFlag(e.country)}</span>{countryName(e.country)}</span>
+                              {e.clanTag && <span className="font-mono text-cyan-400">[{e.clanTag}]</span>}
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 font-mono" style={{ color: tier.color }}>{tier.badge}</span>
+                              <span>Level: <span className="font-bold text-white">{e.level}</span></span>
+                              {e.championshipPrize && <span className="font-mono font-bold" style={{ color: e.championshipPrize.color }}>{e.championshipPrize.label}</span>}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="col-span-2">
-                        {e.clanTag ? <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 rounded">[{e.clanTag}]</span> : <span className="text-slate-700 text-[10px]">\u2014</span>}
-                      </div>
-                      <div className="col-span-2 text-xs">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-[10px] font-mono" style={{ color: tier.color }}>{tier.badge}</span>
-                      </div>
-                      <div className="col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">{e.bankedChips.toLocaleString()}c</div>
-                      <div className="col-span-1 text-right">
-                        {e.championshipPrize && <span className="text-[8px] font-mono font-bold px-1 py-0.5 rounded" style={{ color: e.championshipPrize.color, backgroundColor: e.championshipPrize.color + '15' }}>{e.championshipPrize.label.split(' ').slice(0, 2).join(' ')}</span>}
+                      {/* Desktop grid layout (hidden on mobile) */}
+                      <div className="hidden lg:grid lg:grid-cols-12 lg:gap-0.5 lg:items-center lg:px-1.5 lg:py-1 lg:text-[11px]" onClick={() => inspectPlayer(e)}>
+                        <div className="lg:col-span-1 flex items-center gap-1.5 font-mono">
+                          {RANK_MEDALS[e.rank] ? <span className="text-lg lg:text-[11px]">{RANK_MEDALS[e.rank]}</span> : <span className="text-slate-400 font-bold">#{e.rank}</span>}
+                          {e.tieBreakReason && <TieBreakBadge reason={e.tieBreakReason} />}
+                        </div>
+                        <div className="lg:col-span-1"><RankChangeIndicator change={e.rankChange || 0} /></div>
+                        <div className="lg:col-span-3 min-w-0">
+                          <div className="font-bold text-white flex items-center gap-1.5">
+                            <span aria-hidden>{countryFlag(e.country)}</span>
+                            {e.isHOF && <Award className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-yellow-400 shrink-0" />}
+                            {e.name}
+                            {isMe && <span className="text-[9px] lg:text-[11px] bg-amber-500 text-black px-1 rounded font-bold">YOU</span>}
+                            {e.isDemo && isAdmin && <span className="text-[9px] lg:text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                          </div>
+                          <div className="text-[10px] lg:text-[11px] font-mono text-slate-500">{e.userTag}</div>
+                        </div>
+                        <div className="lg:col-span-2">
+                          {e.clanTag ? <span className="text-[10px] lg:text-[11px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 lg:px-1 lg:py-0 rounded">[{e.clanTag}]</span> : <span className="text-slate-700 text-[10px] lg:text-[11px]">\u2014</span>}
+                        </div>
+                        <div className="lg:col-span-2 text-xs lg:text-[11px]">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-[10px] lg:text-[11px] font-mono" style={{ color: tier.color }}>{tier.badge}</span>
+                        </div>
+                        <div className="lg:col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">{e.bankedChips.toLocaleString()}c</div>
+                        <div className="lg:col-span-1 text-right">
+                          {e.championshipPrize && <span className="text-[8px] lg:text-[11px] font-mono font-bold px-1 py-0.5 rounded" style={{ color: e.championshipPrize.color, backgroundColor: e.championshipPrize.color + '15' }}>{e.championshipPrize.label.split(' ').slice(0, 2).join(' ')}</span>}
+                        </div>
                       </div>
                     </li>
                   );
@@ -1051,12 +1113,12 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
 
       {/* ====== NATIONAL TAB ====== */}
       {activeTab === 'national' && (
-        <div className="space-y-4">
+        <div className="space-y-4 lg:space-y-1">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-violet-400" />
-              <span className="text-xs font-bold text-white">Country:</span>
-              <select value={selectedCountry} onChange={(e) => setSelectedCountry(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-violet-500/50">
+              <MapPin className="w-4 h-4 lg:w-2.5 lg:h-2.5 text-violet-400" />
+              <span className="text-xs lg:text-[11px] font-bold text-white">Country:</span>
+              <select value={selectedCountry} onChange={(e) => setSelectedCountry(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 lg:px-1.5 lg:py-0.5 text-xs lg:text-[11px] text-white font-mono focus:outline-none focus:border-violet-500/50">
                 {COUNTRIES.map((c) => <option key={c.code} value={c.code}>{c.flag} {c.name}</option>)}
               </select>
             </div>
@@ -1066,8 +1128,8 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
             />
           </div>
 
-          <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-            <div className="grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+          <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden lg:overflow-visible">
+            <div className="hidden lg:grid lg:grid-cols-12 lg:gap-0.5 lg:px-1.5 lg:py-1 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] lg:text-[11px] font-bold uppercase tracking-wider">
               <div className="col-span-1">#</div>
               <div className="col-span-1">Move</div>
               <div className="col-span-3">Challenger</div>
@@ -1076,10 +1138,10 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
               <div className="col-span-2 text-right">Chips</div>
               <div className="col-span-2 text-right">Status</div>
             </div>
-            <ol ref={listRef} className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll">
+            <ol ref={listRef} className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll lg:max-h-none lg:overflow-visible">
               {loading ? (
-                <li className="p-4 text-center text-slate-500 text-xs flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-violet-400" /> Loading national ranks&hellip;
+                <li className="p-4 lg:p-2 text-center text-slate-500 text-xs lg:text-[11px] flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 lg:w-3 lg:h-3 animate-spin text-violet-400" /> Loading national ranks&hellip;
                 </li>
               ) : filteredEntries.length === 0 ? <EmptyState message={`No players ranked in ${countryName(selectedCountry)} yet`} /> : (
                 filteredEntries.map((e) => {
@@ -1088,30 +1150,60 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                     <li
                       key={e.userTag + e.rank}
                       data-is-me={isMe || undefined}
-                      onClick={() => inspectPlayer(e)}
-                      className={`grid grid-cols-12 gap-2 items-center px-4 py-3 text-sm cursor-pointer transition-colors ${isMe ? 'bg-violet-500/10 border-l-2 border-violet-500' : 'hover:bg-slate-900/40'}`}
+                      className={`cursor-pointer transition-colors ${isMe ? 'bg-violet-500/10 border-l-2 border-violet-500' : 'hover:bg-slate-900/40'}`}
                     >
-                      <div className="col-span-1 flex items-center gap-1.5 font-mono">
-                        {RANK_MEDALS[e.rank] ? <span className="text-lg">{RANK_MEDALS[e.rank]}</span> : <span className="text-slate-400 font-bold">#{e.rank}</span>}
-                        {e.tieBreakReason && <TieBreakBadge reason={e.tieBreakReason} />}
-                      </div>
-                      <div className="col-span-1"><RankChangeIndicator change={e.rankChange || 0} /></div>
-                      <div className="col-span-3 min-w-0">
-                        <div className="font-bold text-white truncate flex items-center gap-1.5">
-                          {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
-                          {e.name}
-                          {isMe && <span className="text-[9px] bg-violet-500 text-black px-1 rounded font-bold">YOU</span>}
-                          {e.isDemo && isAdmin && <span className="text-[9px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                      {/* Mobile card layout (hidden on desktop) */}
+                      <div className="lg:hidden px-3 py-2" onClick={() => setExpandedRow(expandedRow === e.userTag ? null : e.userTag)}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {RANK_MEDALS[e.rank] ? <span className="text-base shrink-0">{RANK_MEDALS[e.rank]}</span> : <span className="text-slate-400 font-bold shrink-0">#{e.rank}</span>}
+                            {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
+                            <span className="font-bold text-white min-w-0">{e.name}</span>
+                            {isMe && <span className="text-[11px] bg-violet-500 text-black px-1 rounded font-bold shrink-0">YOU</span>}
+                            {e.isDemo && isAdmin && <span className="text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic shrink-0">DEMO</span>}
+                          </div>
+                          <div className="font-mono font-bold text-emerald-400 shrink-0 ml-2">{e.bankedChips.toLocaleString()}c</div>
                         </div>
-                        <div className="text-[10px] font-mono text-slate-500 truncate">{e.userTag}</div>
+                        <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                          <span className="font-mono">{e.userTag}</span>
+                          {e.clanTag && <span className="font-mono text-cyan-400">[{e.clanTag}]</span>}
+                          <span>Level: <span className="text-amber-400 font-bold font-mono">{e.level}</span></span>
+                        </div>
+                        {expandedRow === e.userTag && (
+                          <div className="mt-1 pt-1 border-t border-slate-800 text-[11px]">
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <span className="flex items-center gap-1"><span aria-hidden>{countryFlag(e.country)}</span>{countryName(e.country)}</span>
+                              {e.clanTag && <span className="font-mono text-cyan-400">[{e.clanTag}]</span>}
+                              <span>Level: <span className="font-bold text-white">{e.level}</span></span>
+                              {e.championshipPrize && <span className="font-mono font-bold" style={{ color: e.championshipPrize.color }}>{e.championshipPrize.label}</span>}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="col-span-2">
-                        {e.clanTag ? <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 rounded">[{e.clanTag}]</span> : <span className="text-slate-700 text-[10px]">\u2014</span>}
-                      </div>
-                      <div className="col-span-1 text-right text-xs text-amber-400 font-mono">{e.level}</div>
-                      <div className="col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">{e.bankedChips.toLocaleString()}c</div>
-                      <div className="col-span-2 text-right">
-                        {e.championshipPrize && <span className="text-[8px] font-mono font-bold px-1 py-0.5 rounded" style={{ color: e.championshipPrize.color, backgroundColor: e.championshipPrize.color + '15' }}>{e.championshipPrize.label.split(' ').slice(0, 2).join(' ')}</span>}
+                      {/* Desktop grid layout (hidden on mobile) */}
+                      <div className="hidden lg:grid lg:grid-cols-12 lg:gap-0.5 lg:items-center lg:px-1.5 lg:py-1 lg:text-[11px]" onClick={() => inspectPlayer(e)}>
+                        <div className="lg:col-span-1 flex items-center gap-1.5 font-mono">
+                          {RANK_MEDALS[e.rank] ? <span className="text-lg lg:text-[11px]">{RANK_MEDALS[e.rank]}</span> : <span className="text-slate-400 font-bold">#{e.rank}</span>}
+                          {e.tieBreakReason && <TieBreakBadge reason={e.tieBreakReason} />}
+                        </div>
+                        <div className="lg:col-span-1"><RankChangeIndicator change={e.rankChange || 0} /></div>
+                        <div className="lg:col-span-3 min-w-0">
+                          <div className="font-bold text-white flex items-center gap-1.5">
+                            {e.isHOF && <Award className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-yellow-400 shrink-0" />}
+                            {e.name}
+                            {isMe && <span className="text-[9px] lg:text-[11px] bg-violet-500 text-black px-1 rounded font-bold">YOU</span>}
+                            {e.isDemo && isAdmin && <span className="text-[9px] lg:text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                          </div>
+                          <div className="text-[10px] lg:text-[11px] font-mono text-slate-500">{e.userTag}</div>
+                        </div>
+                        <div className="lg:col-span-2">
+                          {e.clanTag ? <span className="text-[10px] lg:text-[11px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 lg:px-1 lg:py-0 rounded">[{e.clanTag}]</span> : <span className="text-slate-700 text-[10px] lg:text-[11px]">\u2014</span>}
+                        </div>
+                        <div className="lg:col-span-1 text-right text-xs lg:text-[11px] text-amber-400 font-mono">{e.level}</div>
+                        <div className="lg:col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">{e.bankedChips.toLocaleString()}c</div>
+                        <div className="lg:col-span-2 text-right">
+                          {e.championshipPrize && <span className="text-[8px] lg:text-[11px] font-mono font-bold px-1 py-0.5 rounded" style={{ color: e.championshipPrize.color, backgroundColor: e.championshipPrize.color + '15' }}>{e.championshipPrize.label.split(' ').slice(0, 2).join(' ')}</span>}
+                        </div>
                       </div>
                     </li>
                   );
@@ -1124,17 +1216,17 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
 
       {/* ====== REGIONAL TAB ====== */}
       {activeTab === 'regional' && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="space-y-4 lg:space-y-1">
+          <div className="flex items-center gap-2 lg:gap-1 flex-wrap">
             {REGIONS.map((r) => (
               <button
                 key={r.code}
                 type="button"
                 onClick={() => setSelectedRegion(r.code)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition border ${selectedRegion === r.code ? 'bg-pink-500/15 border-pink-500/40 text-pink-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
+                className={`px-3 py-1.5 lg:px-1.5 lg:py-0.5 rounded-lg text-xs lg:text-[11px] font-bold flex items-center gap-1.5 lg:gap-1 transition border ${selectedRegion === r.code ? 'bg-pink-500/15 border-pink-500/40 text-pink-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
               >
                 <span>{r.flag}</span> {r.name}
-                <span className="text-[9px] font-mono opacity-70">({filteredEntries.length})</span>
+                <span className="text-[9px] lg:text-[11px] font-mono opacity-70">({filteredEntries.length})</span>
               </button>
             ))}
           </div>
@@ -1144,8 +1236,8 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
             tabColor="#ec4899"
           />
 
-          <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-            <div className="grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+          <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden lg:overflow-visible">
+            <div className="hidden lg:grid lg:grid-cols-12 lg:gap-0.5 lg:px-1.5 lg:py-1 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] lg:text-[11px] font-bold uppercase tracking-wider">
               <div className="col-span-1">#</div>
               <div className="col-span-1">Move</div>
               <div className="col-span-3">Player</div>
@@ -1154,10 +1246,10 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
               <div className="col-span-2 text-right">Chips</div>
               <div className="col-span-1 text-right">Status</div>
             </div>
-            <ol ref={listRef} className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll">
+            <ol ref={listRef} className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll lg:max-h-none lg:overflow-visible">
               {loading ? (
-                <li className="p-4 text-center text-slate-500 text-xs flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-pink-400" /> Loading regional ranks&hellip;
+                <li className="p-4 lg:p-2 text-center text-slate-500 text-xs lg:text-[11px] flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 lg:w-3 lg:h-3 animate-spin text-pink-400" /> Loading regional ranks&hellip;
                 </li>
               ) : filteredEntries.length === 0 ? <EmptyState message={`No players found in ${REGIONS.find((r) => r.code === selectedRegion)?.name || selectedRegion}`} /> : (
                 filteredEntries.map((e) => {
@@ -1166,32 +1258,62 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                     <li
                       key={e.userTag + e.rank}
                       data-is-me={isMe || undefined}
-                      onClick={() => inspectPlayer(e)}
-                      className={`grid grid-cols-12 gap-2 items-center px-4 py-3 text-sm cursor-pointer transition-colors ${isMe ? 'bg-pink-500/10 border-l-2 border-pink-500' : 'hover:bg-slate-900/40'}`}
+                      className={`cursor-pointer transition-colors ${isMe ? 'bg-pink-500/10 border-l-2 border-pink-500' : 'hover:bg-slate-900/40'}`}
                     >
-                      <div className="col-span-1 flex items-center gap-1.5 font-mono">
-                        {RANK_MEDALS[e.rank] ? <span className="text-lg">{RANK_MEDALS[e.rank]}</span> : <span className="text-slate-400 font-bold">#{e.rank}</span>}
-                        {e.tieBreakReason && <TieBreakBadge reason={e.tieBreakReason} />}
-                      </div>
-                      <div className="col-span-1"><RankChangeIndicator change={e.rankChange || 0} /></div>
-                      <div className="col-span-3 min-w-0">
-                        <div className="font-bold text-white truncate flex items-center gap-1.5">
-                          {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
-                          {e.name}
-                          {isMe && <span className="text-[9px] bg-pink-500 text-black px-1 rounded font-bold">YOU</span>}
-                          {e.isDemo && isAdmin && <span className="text-[9px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                      {/* Mobile card layout (hidden on desktop) */}
+                      <div className="lg:hidden px-3 py-2" onClick={() => setExpandedRow(expandedRow === e.userTag ? null : e.userTag)}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {RANK_MEDALS[e.rank] ? <span className="text-base shrink-0">{RANK_MEDALS[e.rank]}</span> : <span className="text-slate-400 font-bold shrink-0">#{e.rank}</span>}
+                            {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
+                            <span className="font-bold text-white min-w-0">{e.name}</span>
+                            {isMe && <span className="text-[11px] bg-pink-500 text-black px-1 rounded font-bold shrink-0">YOU</span>}
+                            {e.isDemo && isAdmin && <span className="text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic shrink-0">DEMO</span>}
+                          </div>
+                          <div className="font-mono font-bold text-emerald-400 shrink-0 ml-2">{e.bankedChips.toLocaleString()}c</div>
                         </div>
-                        <div className="text-[10px] font-mono text-slate-500 truncate">{e.userTag}</div>
+                        <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                          <span className="font-mono">{e.userTag}</span>
+                          {e.clanTag && <span className="font-mono text-cyan-400">[{e.clanTag}]</span>}
+                          <span className="flex items-center gap-1"><span aria-hidden>{countryFlag(e.country)}</span>{countryName(e.country)}</span>
+                        </div>
+                        {expandedRow === e.userTag && (
+                          <div className="mt-1 pt-1 border-t border-slate-800 text-[11px]">
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <span className="flex items-center gap-1"><span aria-hidden>{countryFlag(e.country)}</span>{countryName(e.country)}</span>
+                              {e.clanTag && <span className="font-mono text-cyan-400">[{e.clanTag}]</span>}
+                              <span>Level: <span className="font-bold text-white">{e.level}</span></span>
+                              {e.championshipPrize && <span className="font-mono font-bold" style={{ color: e.championshipPrize.color }}>{e.championshipPrize.label}</span>}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="col-span-2">
-                        {e.clanTag ? <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 rounded">[{e.clanTag}]</span> : <span className="text-slate-700 text-[10px]">\u2014</span>}
-                      </div>
-                      <div className="col-span-2 text-xs text-slate-300 flex items-center gap-1.5">
-                        <span aria-hidden>{countryFlag(e.country)}</span> {countryName(e.country)}
-                      </div>
-                      <div className="col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">{e.bankedChips.toLocaleString()}c</div>
-                      <div className="col-span-1 text-right">
-                        {e.championshipPrize && <span className="text-[8px] font-mono font-bold px-1 py-0.5 rounded" style={{ color: e.championshipPrize.color, backgroundColor: e.championshipPrize.color + '15' }}>{e.championshipPrize.label.split(' ').slice(0, 2).join(' ')}</span>}
+                      {/* Desktop grid layout (hidden on mobile) */}
+                      <div className="hidden lg:grid lg:grid-cols-12 lg:gap-0.5 lg:items-center lg:px-1.5 lg:py-1 lg:text-[11px]" onClick={() => inspectPlayer(e)}>
+                        <div className="lg:col-span-1 flex items-center gap-1.5 font-mono">
+                          {RANK_MEDALS[e.rank] ? <span className="text-lg lg:text-[11px]">{RANK_MEDALS[e.rank]}</span> : <span className="text-slate-400 font-bold">#{e.rank}</span>}
+                          {e.tieBreakReason && <TieBreakBadge reason={e.tieBreakReason} />}
+                        </div>
+                        <div className="lg:col-span-1"><RankChangeIndicator change={e.rankChange || 0} /></div>
+                        <div className="lg:col-span-3 min-w-0">
+                          <div className="font-bold text-white flex items-center gap-1.5">
+                            {e.isHOF && <Award className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-yellow-400 shrink-0" />}
+                            {e.name}
+                            {isMe && <span className="text-[9px] lg:text-[11px] bg-pink-500 text-black px-1 rounded font-bold">YOU</span>}
+                            {e.isDemo && isAdmin && <span className="text-[9px] lg:text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                          </div>
+                          <div className="text-[10px] lg:text-[11px] font-mono text-slate-500">{e.userTag}</div>
+                        </div>
+                        <div className="lg:col-span-2">
+                          {e.clanTag ? <span className="text-[10px] lg:text-[11px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 lg:px-1 lg:py-0 rounded">[{e.clanTag}]</span> : <span className="text-slate-700 text-[10px] lg:text-[11px]">\u2014</span>}
+                        </div>
+                        <div className="lg:col-span-2 text-xs lg:text-[11px] text-slate-300 flex items-center gap-1.5">
+                          <span aria-hidden>{countryFlag(e.country)}</span> {countryName(e.country)}
+                        </div>
+                        <div className="lg:col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">{e.bankedChips.toLocaleString()}c</div>
+                        <div className="lg:col-span-1 text-right">
+                          {e.championshipPrize && <span className="text-[8px] lg:text-[11px] font-mono font-bold px-1 py-0.5 rounded" style={{ color: e.championshipPrize.color, backgroundColor: e.championshipPrize.color + '15' }}>{e.championshipPrize.label.split(' ').slice(0, 2).join(' ')}</span>}
+                        </div>
                       </div>
                     </li>
                   );
@@ -1204,14 +1326,14 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
 
       {/* ====== TIERS TAB ====== */}
       {activeTab === 'tiers' && (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-1.5">
+        <div className="space-y-4 lg:space-y-1">
+          <div className="flex flex-wrap items-center gap-1.5 lg:gap-1">
             {ALL_MILESTONE_TIERS.map((t) => (
               <button
                 key={t.id}
                 type="button"
                 onClick={() => setSelectedTierId(t.id)}
-                className={`px-2.5 py-1 rounded-full text-xs font-bold transition ${selectedTierId === t.id ? 'border' : 'border border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200'}`}
+                className={`px-2.5 py-1 lg:px-1.5 lg:py-0.5 rounded-full text-xs lg:text-[11px] font-bold transition ${selectedTierId === t.id ? 'border' : 'border border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200'}`}
                 style={selectedTierId === t.id ? { borderColor: t.color, color: t.color, backgroundColor: t.color + '1a' } : undefined}
                 title={t.name}
               >
@@ -1228,8 +1350,8 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
             tabColor="#eab308"
           />
 
-          <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-            <div className="grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+          <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden lg:overflow-visible">
+            <div className="hidden lg:grid lg:grid-cols-12 lg:gap-0.5 lg:px-1.5 lg:py-1 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] lg:text-[11px] font-bold uppercase tracking-wider">
               <div className="col-span-1">#</div>
               <div className="col-span-1">Move</div>
               <div className="col-span-3">Player</div>
@@ -1237,10 +1359,10 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
               <div className="col-span-3">Country</div>
               <div className="col-span-2 text-right">Chips</div>
             </div>
-            <ol ref={listRef} className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll">
+            <ol ref={listRef} className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll lg:max-h-none lg:overflow-visible">
               {loading ? (
-                <li className="p-4 text-center text-slate-500 text-xs flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-yellow-400" /> Loading tier data&hellip;
+                <li className="p-4 lg:p-2 text-center text-slate-500 text-xs lg:text-[11px] flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 lg:w-3 lg:h-3 animate-spin text-yellow-400" /> Loading tier data&hellip;
                 </li>
               ) : filteredEntries.length === 0 ? <EmptyState message="No players in this tier yet" /> : (
                 filteredEntries.map((e) => {
@@ -1249,31 +1371,61 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                     <li
                       key={e.userTag + e.rank}
                       data-is-me={isMe || undefined}
-                      onClick={() => inspectPlayer(e)}
-                      className={`grid grid-cols-12 gap-2 items-center px-4 py-3 text-sm cursor-pointer transition-colors ${isMe ? 'bg-yellow-500/10 border-l-2 border-yellow-500' : 'hover:bg-slate-900/40'}`}
+                      className={`cursor-pointer transition-colors ${isMe ? 'bg-yellow-500/10 border-l-2 border-yellow-500' : 'hover:bg-slate-900/40'}`}
                     >
-                      <div className="col-span-1 flex items-center gap-1.5 font-mono">
-                        {RANK_MEDALS[e.rank] ? <span className="text-lg">{RANK_MEDALS[e.rank]}</span> : <span className="text-slate-400 font-bold">#{e.rank}</span>}
-                        {e.rank === 1 && selectedTierId !== 'all' && selectedTierId !== 'rookie' && <span className="text-[9px] text-yellow-400 font-bold ml-1">{'\u{1F451}'} FIRST</span>}
-                        {e.tieBreakReason && <TieBreakBadge reason={e.tieBreakReason} />}
-                      </div>
-                      <div className="col-span-1"><RankChangeIndicator change={e.rankChange || 0} /></div>
-                      <div className="col-span-3 min-w-0">
-                        <div className="font-bold text-white truncate flex items-center gap-1.5">
-                          {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
-                          {e.name}
-                          {isMe && <span className="text-[9px] bg-yellow-500 text-black px-1 rounded font-bold">YOU</span>}
-                          {e.isDemo && isAdmin && <span className="text-[9px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                      {/* Mobile card layout (hidden on desktop) */}
+                      <div className="lg:hidden px-3 py-2" onClick={() => setExpandedRow(expandedRow === e.userTag ? null : e.userTag)}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {RANK_MEDALS[e.rank] ? <span className="text-base shrink-0">{RANK_MEDALS[e.rank]}</span> : <span className="text-slate-400 font-bold shrink-0">#{e.rank}</span>}
+                            {e.rank === 1 && selectedTierId !== 'all' && selectedTierId !== 'rookie' && <span className="text-[11px] text-yellow-400 font-bold shrink-0">{'\u{1F451}'} FIRST</span>}
+                            {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
+                            <span className="font-bold text-white min-w-0">{e.name}</span>
+                            {isMe && <span className="text-[11px] bg-yellow-500 text-black px-1 rounded font-bold shrink-0">YOU</span>}
+                            {e.isDemo && isAdmin && <span className="text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic shrink-0">DEMO</span>}
+                          </div>
+                          <div className="font-mono font-bold text-emerald-400 shrink-0 ml-2">{e.bankedChips.toLocaleString()}c</div>
                         </div>
-                        <div className="text-[10px] font-mono text-slate-500 truncate">{e.userTag}</div>
+                        <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                          <span className="font-mono">{e.userTag}</span>
+                          {e.clanTag && <span className="font-mono text-cyan-400">[{e.clanTag}]</span>}
+                          <span className="flex items-center gap-1"><span aria-hidden>{countryFlag(e.country)}</span>{countryName(e.country)}</span>
+                        </div>
+                        {expandedRow === e.userTag && (
+                          <div className="mt-1 pt-1 border-t border-slate-800 text-[11px]">
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <span className="flex items-center gap-1"><span aria-hidden>{countryFlag(e.country)}</span>{countryName(e.country)}</span>
+                              {e.clanTag && <span className="font-mono text-cyan-400">[{e.clanTag}]</span>}
+                              <span>Level: <span className="font-bold text-white">{e.level}</span></span>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="col-span-2">
-                        {e.clanTag ? <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 rounded">[{e.clanTag}]</span> : <span className="text-slate-700 text-[10px]">\u2014</span>}
+                      {/* Desktop grid layout (hidden on mobile) */}
+                      <div className="hidden lg:grid lg:grid-cols-12 lg:gap-0.5 lg:items-center lg:px-1.5 lg:py-1 lg:text-[11px]" onClick={() => inspectPlayer(e)}>
+                        <div className="lg:col-span-1 flex items-center gap-1.5 font-mono">
+                          {RANK_MEDALS[e.rank] ? <span className="text-lg lg:text-[11px]">{RANK_MEDALS[e.rank]}</span> : <span className="text-slate-400 font-bold">#{e.rank}</span>}
+                          {e.rank === 1 && selectedTierId !== 'all' && selectedTierId !== 'rookie' && <span className="text-[9px] lg:text-[11px] text-yellow-400 font-bold ml-1">{'\u{1F451}'} FIRST</span>}
+                          {e.tieBreakReason && <TieBreakBadge reason={e.tieBreakReason} />}
+                        </div>
+                        <div className="lg:col-span-1"><RankChangeIndicator change={e.rankChange || 0} /></div>
+                        <div className="lg:col-span-3 min-w-0">
+                          <div className="font-bold text-white flex items-center gap-1.5">
+                            {e.isHOF && <Award className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-yellow-400 shrink-0" />}
+                            {e.name}
+                            {isMe && <span className="text-[9px] lg:text-[11px] bg-yellow-500 text-black px-1 rounded font-bold">YOU</span>}
+                            {e.isDemo && isAdmin && <span className="text-[9px] lg:text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                          </div>
+                          <div className="text-[10px] lg:text-[11px] font-mono text-slate-500">{e.userTag}</div>
+                        </div>
+                        <div className="lg:col-span-2">
+                          {e.clanTag ? <span className="text-[10px] lg:text-[11px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 lg:px-1 lg:py-0 rounded">[{e.clanTag}]</span> : <span className="text-slate-700 text-[10px] lg:text-[11px]">\u2014</span>}
+                        </div>
+                        <div className="lg:col-span-3 text-xs lg:text-[11px] text-slate-300 flex items-center gap-1.5">
+                          <span aria-hidden>{countryFlag(e.country)}</span> {countryName(e.country)}
+                        </div>
+                        <div className="lg:col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">{e.bankedChips.toLocaleString()}c</div>
                       </div>
-                      <div className="col-span-3 text-xs text-slate-300 flex items-center gap-1.5">
-                        <span aria-hidden>{countryFlag(e.country)}</span> {countryName(e.country)}
-                      </div>
-                      <div className="col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">{e.bankedChips.toLocaleString()}c</div>
                     </li>
                   );
                 })

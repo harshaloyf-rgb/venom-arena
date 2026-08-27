@@ -198,3 +198,43 @@ Stage Summary:
 
 ---
 Session start: 2026-08-27 08:57:36 UTC, git: ab4049f
+---
+Task ID: leaderboard-compress
+Agent: main
+Task: Compress leaderboards.tsx to fit 1365x599px desktop viewport (no scrollbar) + optimize mobile view
+
+Work Log:
+- Added expandedRow state (string | null) for mobile accordion
+- TieBreakBadge: bumped base text-[9px] -> text-[11px], icons w-2.5 h-2.5 -> w-3 h-3 (mobile rule)
+- RankChangeIndicator: bumped base text-[10px] -> text-[11px] (mobile rule)
+- EmptyState: added lg:py-4, lg:w-5 lg:h-5 lg:mb-1, lg:text-[11px]
+- TabBtn: added lg:gap-1 lg:px-1.5 lg:py-0.5 lg:text-[11px], icon lg:w-2.5 lg:h-2.5
+- GlobalPodium: added lg:gap-1 lg:mb-1, lg:p-1.5 lg:pb-1.5, all text lg:text-[11px], avatars lg:w-6 lg:h-6, clan lg:text-[11px] lg:mt-0 lg:px-1 lg:py-0
+- LiveTicker: removed truncate from message, added lg:mb-1 lg:p-1 lg:gap-1.5, all text lg:text-[11px], icons lg:w-2 lg:h-2
+- FindMeCard: added lg:p-1.5 lg:mb-1, close btn lg:top-0.5 lg:right-0.5, all sections compressed with lg: overrides
+- TabDescription: added lg:p-1.5, icon lg:w-2.5 lg:h-2.5, title lg:text-[11px] lg:mb-0, scope lg:mt-0.5 lg:text-[11px] lg:px-1 lg:py-0
+- MilestoneHistorySection: added lg: compression to all text, icons, padding, gaps, progress bars, timeline entries, next milestone
+- Main header: added lg:p-1.5 lg:pt-1, flex lg:gap-1 lg:mb-1 lg:pb-1, badges lg:text-[11px], h2 lg:text-[11px], trophy lg:w-3 lg:h-3, subtitle lg:text-[11px] lg:mt-0, refresh lg:px-1.5 lg:py-0.5
+- Tab bar + search: added lg:gap-1 lg:mt-1 lg:mb-1, pill container lg:p-0.5, search lg:py-0.5 lg:text-[11px]
+- TabToolbar: added lg:gap-1, count lg:text-[11px], tie-break lg:text-[11px], Find Me btn lg:px-1.5 lg:py-0.5 lg:text-[11px]
+- ALL 5 tab tables restructured:
+  - Table headers: added hidden lg:grid, all text lg:text-[11px], lg:gap-0.5 lg:px-1.5 lg:py-1
+  - Each row: split into mobile card (lg:hidden) + desktop grid (hidden lg:grid lg:grid-cols-12)
+  - Mobile card: compact 2-line view (name+chips, tag+clan+country), clickable to expand/collapse
+  - Expanded detail (lg:hidden): shows country, clan, level, tier, championship status
+  - Desktop grid: all text lg:text-[11px], rank medals lg:text-[11px], HOF icons lg:w-2.5 lg:h-2.5, YOU/DEMO badges lg:text-[11px], clan lg:text-[11px] lg:px-1 lg:py-0, championship badges lg:text-[11px]
+  - Removed ALL 10 instances of truncate from player names and userTags
+  - Loading states: lg:p-2, spinner lg:w-3 lg:h-3, text lg:text-[11px]
+- Regional buttons: added lg:gap-1, btn lg:px-1.5 lg:py-0.5 lg:text-[11px] lg:gap-1, count lg:text-[11px]
+- Tier filter buttons: added lg:gap-1, btn lg:px-1.5 lg:py-0.5 lg:text-[11px]
+- National selector: added lg:gap-1, MapPin lg:w-2.5 lg:h-2.5, label lg:text-[11px], select lg:px-1.5 lg:py-0.5 lg:text-[11px]
+- All <ol> elements: added lg:max-h-none lg:overflow-visible (kept base max-h-[55vh] overflow-y-auto for mobile)
+- Tab containers: added lg:space-y-1 to all space-y-4 wrappers
+- Reset expandedRow on tab change
+
+Stage Summary:
+- Desktop: All text ≥ 11px via lg: overrides, all padding/gaps/icons compressed to fit 1365x599px
+- Mobile: Card-based layout with accordion expand for details, no truncation, all text ≥ 11px
+- Zero truncate/line-clamp/ellipsis instances remaining
+- Lint passes cleanly (only pre-existing fix-bom.ts error)
+- No logic/state/effects/fetching changed, no imports changed, no text/icons/badges removed
