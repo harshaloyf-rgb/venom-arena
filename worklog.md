@@ -341,3 +341,23 @@ Stage Summary:
 - Clan rankings sum ALL members' chips (docs incorrectly claim top-10 cap)
 - Multiple documentation/code mismatches found (prizes, clan top-10, match cap weights, live indicators)
 ---
+---
+Task ID: 1-7
+Agent: main
+Task: Fix 7 championship lobby issues
+
+Work Log:
+- Issue 7: Removed ensureDemoArchives() from archives/route.ts, deleted 2 fake 2024/2025 archives from DB
+- Issue 5: Removed LIVE_SET, markLive() from standings API; removed isLive from ApiEntry interface; removed all live dot JSX (3 locations) from standings-table.tsx
+- Issue 1: Removed INITIAL_CONTENDERS and ChampionshipContender from game-config.ts; replaced 45-line demo fallback in championships.tsx with simple empty array; removed all DEMO badges and demo banners from standings-table.tsx; cleaned unused imports
+- Issue 2: Added filtered.slice(0, 100) to standings API after rank assignment but before response mapping
+- Issue 4: Updated rules page prize amounts: 500K->2.5M, 100K->1M, 25K->250K to match actual code
+- Issue 6: Updated rules clan ranking docs from "top 10 members" to "all clan members"
+- Also removed Live Activity Indicators and Demo Data sections from rules page since those features no longer exist
+- Fixed missing </div> and missing flag span caused by sed-based line deletions
+- Cleaned fake archives from DB, verified archives API returns 0
+
+Stage Summary:
+- 7 files changed, 15 insertions, 192 deletions
+- Committed: 9a7d81d
+- All 7 issues resolved, lint clean, browser verified
