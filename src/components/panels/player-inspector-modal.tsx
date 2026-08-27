@@ -6,7 +6,6 @@ import {
   UserPlus,
   Swords,
   Ban,
-  Shield,
   Trophy,
   Award,
   Crown,
@@ -18,7 +17,6 @@ import {
   Users,
   Loader2,
   Heart,
-  UserCheck,
   Unlock,
   Crosshair,
   Eye,
@@ -38,8 +36,6 @@ interface PlayerInspectorModalProps {
   onClose: () => void;
   onToast?: ToastFn;
 }
-
-type Tab = 'overview' | 'stats' | 'loadout';
 
 /** Fetched public profile data */
 interface PublicProfile {
@@ -71,7 +67,6 @@ interface PublicProfile {
 }
 
 export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspectorModalProps) {
-  const [tab, setTab] = useState<Tab>('overview');
   const [friendRequested, setFriendRequested] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [blockLoading, setBlockLoading] = useState(false);
@@ -79,10 +74,8 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   const [isRival, setIsRival] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [rivalLoading, setRivalLoading] = useState(false);
-
   const [rivalToFriendLoading, setRivalToFriendLoading] = useState(false);
 
-  // Real public profile data
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
 
@@ -94,10 +87,8 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
     if (blocked) setBlocked(false);
     if (isFollowing) setIsFollowing(false);
     if (isRival) setIsRival(false);
-    if (tab !== 'overview') setTab('overview');
     setProfile(null);
     setRivalToFriendLoading(false);
-    // Check if player is already blocked/friend/following/rival
     if (player) {
       fetch('/api/friends/list')
         .then((r) => r.json())
@@ -112,12 +103,10 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
           if (isFrnd) setFriendRequested(true);
         })
         .catch(() => {/* ignore */});
-      // Check follow status
       fetch(`/api/player/follow?tag=${encodeURIComponent(player.userTag)}`)
         .then(r => r.json())
         .then(d => { if (d.following) setIsFollowing(true); })
         .catch(() => {});
-      // Check rival status
       fetch(`/api/rivals?check=${encodeURIComponent(player.userTag)}`)
         .then(r => r.json())
         .then(d => { if (d.isRival) setIsRival(true); })
@@ -125,7 +114,6 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
     }
   }
 
-  // Fetch public profile for real data
   const fetchPublicProfile = useCallback(async (tag: string) => {
     setProfileLoading(true);
     try {
@@ -140,16 +128,11 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   }, []);
 
   useEffect(() => {
-    if (player) {
-      fetchPublicProfile(player.userTag);
-    }
+    if (player) fetchPublicProfile(player.userTag);
   }, [player, fetchPublicProfile]);
 
-  // Close on Escape
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
     if (player) window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [player, onClose]);
@@ -158,7 +141,6 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
 
   const p = {
     ...player,
-    // Enrich with public profile data (no prop mutation)
     ...(profile ? {
       lifetimeKills: profile.lifetimeKills ?? player.lifetimeKills,
       lifetimeDeaths: profile.lifetimeDeaths ?? player.lifetimeDeaths,
@@ -178,19 +160,15 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   const clanTag = profile?.clanTag || p.clanTag;
   const clanName = p.clanName;
 
-  // Fallback ranks
   const globalRank = p.globalRank ?? Math.max(1, 15 - Math.floor(p.level / 3));
   const countryRank = p.countryRank ?? Math.max(1, Math.floor(globalRank / 1.4));
   const regionalRank = p.regionalRank ?? Math.max(1, Math.floor(globalRank / 2));
   const achievedAt = p.achievedAt || '26 Jul 2026, 05:42 PM UTC';
 
-  // Real counts from API
   const friendsCount = profile?.friendsCount ?? null;
   const followersCount = profile?.followersCount ?? 0;
-  const followingCount = profile?.followingCount ?? 0;
   const rivalsCount = profile?.rivalsCount ?? 0;
 
-  // Real social links from API
   const socialLinks = [
     { platform: 'Instagram', handle: profile?.instagram, color: '#E4405F', icon: '\uD83D\uDCF8', url: 'https://instagram.com/' },
     { platform: 'YouTube', handle: profile?.youtube, color: '#FF0000', icon: '\u25B6', url: 'https://youtube.com/' },
@@ -198,42 +176,23 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   ];
   const activeSocials = socialLinks.filter(s => s.handle);
 
-  // Badges derived from chip milestones
   const milestone = milestoneTierForChips(p.bankedChips);
-  const earnedBadges = MILESTONE_TIERS.filter(
-    (t) => t.id !== 'all' && p.bankedChips >= t.minChips,
-  );
-
-  // Real milestones and HOF entries
-  const realMilestones = profile?.milestones ?? [];
+  const earnedBadges = MILESTONE_TIERS.filter(t => t.id !== 'all' && p.bankedChips >= t.minChips);
   const realHofEntries = profile?.hofEntries ?? [];
-  const hasAchievements = earnedBadges.length > 0 || realMilestones.length > 0 || realHofEntries.length > 0;
 
-  // Loadout from player cosmetics
   const skinItem = p.currentSkin ? getCosmeticById(p.currentSkin) : undefined;
   const trailItem = p.currentTrail ? getCosmeticById(p.currentTrail) : undefined;
   const deathItem = p.currentDeath ? getCosmeticById(p.currentDeath) : undefined;
   const flagItem = p.currentFlag ? getCosmeticById(p.currentFlag) : undefined;
   const bannerItem = p.currentBanner ? getCosmeticById(p.currentBanner) : undefined;
 
-  const loadoutEntries = [
-    { label: 'Snake DNA Skin:', value: skinItem ? `${skinItem.emoji || '\uD83D\uDC0D'} ${skinItem.name}` : 'Not visible' },
-    { label: 'Tail Trail FX:', value: trailItem ? `${trailItem.emoji || '\u2728'} ${trailItem.name}` : 'Not visible' },
-    { label: 'Kill Sound Effect:', value: deathItem ? `${deathItem.emoji || '\uD83D\uDCA5'} ${deathItem.name}` : 'Not visible' },
-    { label: 'Victory Emote:', value: flagItem ? `${flagItem.emoji || '\uD83C\uDFF4'} ${flagItem.name}` : bannerItem ? `${bannerItem.emoji || '\uD83C\uDFC6'} ${bannerItem.name}` : 'Not visible' },
-  ];
-
-  // Career stats
-  const highestExtraction = p.biggestExtract
-    ? `${p.biggestExtract.toLocaleString('en-IN')} c`
-    : '\u2014';
+  const highestExtraction = p.biggestExtract ? `${p.biggestExtract.toLocaleString('en-IN')} c` : '\u2014';
   const successRate =
     p.lifetimeExtracts != null && p.lifetimeDeaths != null
       ? `${((p.lifetimeExtracts / (p.lifetimeExtracts + p.lifetimeDeaths)) * 100).toFixed(1)}%`
       : '\u2014';
   const totalKills = p.lifetimeKills != null ? `${p.lifetimeKills.toLocaleString()} Kills` : '\u2014';
 
-  // Member since
   const memberSince = profile?.createdAt
     ? new Date(profile.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
     : null;
@@ -241,18 +200,13 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   function handleAddFriend() {
     if (friendRequested) return;
     fetch('/api/friends/request', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userTag: p.userTag }),
     })
       .then((res) => res.json())
       .then((data) => {
-        if (data.ok) {
-          setFriendRequested(true);
-          notify(`Friend request sent to ${p.name}!`, 'success', onToast);
-        } else {
-          notify(data.error || 'Failed to send request.', 'error', onToast);
-        }
+        if (data.ok) { setFriendRequested(true); notify(`Friend request sent to ${p.name}!`, 'success', onToast); }
+        else notify(data.error || 'Failed to send request.', 'error', onToast);
       })
       .catch(() => notify('Network error.', 'error', onToast));
   }
@@ -261,14 +215,12 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
     setFollowLoading(true);
     try {
       const res = await fetch('/api/player/follow', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tag: p.userTag }),
       });
       const data = await res.json();
       if (data.following !== undefined) {
         setIsFollowing(data.following);
-        // Update local profile count
         if (profile) setProfile({ ...profile, followersCount: data.followersCount });
       }
     } catch { /* silent */ } finally { setFollowLoading(false); }
@@ -278,19 +230,14 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
     setRivalLoading(true);
     try {
       const res = await fetch('/api/rivals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tag: p.userTag, name: p.name, action: isRival ? 'remove' : 'add' }),
       });
       const data = await res.json();
       if (data.isRival !== undefined) {
         setIsRival(data.isRival);
         if (profile) setProfile({ ...profile, rivalsCount: data.rivalsCount });
-        notify(
-          data.isRival ? `${p.name} added as rival!` : `${p.name} removed from rivals.`,
-          data.isRival ? 'error' : 'success',
-          onToast,
-        );
+        notify(data.isRival ? `${p.name} added as rival!` : `${p.name} removed from rivals.`, data.isRival ? 'error' : 'success', onToast);
       }
     } catch { /* silent */ } finally { setRivalLoading(false); }
   }
@@ -298,10 +245,8 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   async function handleRivalToFriend() {
     setRivalToFriendLoading(true);
     try {
-      // Step 1: Remove rival
       const rivalRes = await fetch('/api/rivals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tag: p.userTag, name: p.name, action: 'remove' }),
       });
       const rivalData = await rivalRes.json();
@@ -309,29 +254,16 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
         setIsRival(false);
         if (profile) setProfile({ ...profile, rivalsCount: (rivalData.rivalsCount ?? profile.rivalsCount) - 1 });
       }
-
-      // Step 2: Send friend request
       if (!friendRequested) {
         const friendRes = await fetch('/api/friends/request', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userTag: p.userTag }),
         });
         const friendData = await friendRes.json();
-        if (friendData.ok) {
-          setFriendRequested(true);
-          notify(`${p.name} is now a friend! Rivalry removed.`, 'success', onToast);
-        } else {
-          notify(`Rivalry removed, but couldn\u2019t send friend request: ${friendData.error || 'unknown'}`, 'error', onToast);
-        }
-      } else {
-        notify(`${p.name} is no longer a rival.`, 'success', onToast);
-      }
-    } catch {
-      notify('Network error. Try again.', 'error', onToast);
-    } finally {
-      setRivalToFriendLoading(false);
-    }
+        if (friendData.ok) { setFriendRequested(true); notify(`${p.name} is now a friend! Rivalry removed.`, 'success', onToast); }
+        else notify(`Rivalry removed, but couldn't send friend request: ${friendData.error || 'unknown'}`, 'error', onToast);
+      } else { notify(`${p.name} is no longer a rival.`, 'success', onToast); }
+    } catch { notify('Network error. Try again.', 'error', onToast); } finally { setRivalToFriendLoading(false); }
   }
 
   async function handleBlockToggle() {
@@ -354,6 +286,14 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
     } catch { notify('Network error.', 'error', onToast); } finally { setBlockLoading(false); }
   }
 
+  // ── Compact stat cell ──
+  const S = ({ label, value, color = 'text-white' }: { label: string; value: string; color?: string }) => (
+    <div className="bg-slate-950/80 border border-slate-800/60 rounded-lg px-2 py-1">
+      <div className="text-[9px] text-slate-500 font-bold uppercase">{label}</div>
+      <div className={`text-[11px] font-mono font-bold ${color}`}>{value}</div>
+    </div>
+  );
+
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-sm"
@@ -361,339 +301,191 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-2xl max-h-[92vh] rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden flex flex-col"
+        className="relative w-full max-w-xl rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Close */}
-        <button
-          type="button" onClick={onClose}
-          className="absolute top-3 right-3 z-20 p-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-400 hover:text-white transition"
-          aria-label="Close inspector"
-        >
-          <X className="w-4 h-4" />
-        </button>
-
-        {/* Banner */}
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2 text-[11px] text-amber-300 font-mono flex items-center justify-between shrink-0 mx-4 mt-4">
-          <span className="flex items-center gap-1.5 font-bold">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Player Dossier
+        {/* ── Header bar ── */}
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-800 bg-slate-950/60">
+          <span className="flex items-center gap-1.5 text-[11px] font-bold text-amber-300 font-mono">
+            <Sparkles className="w-3 h-3 text-amber-400" /> PLAYER DOSSIER
+            {realHofEntries.length > 0 && <Crown className="w-3 h-3 text-yellow-400 ml-1" />}
           </span>
-          <span className="text-[10px] text-slate-400 flex items-center gap-1">
-            <Zap className="w-3 h-3 text-emerald-400" /> Live Data
-          </span>
+          <button type="button" onClick={onClose} className="p-1 rounded-md hover:bg-slate-800 text-slate-400 hover:text-white transition" aria-label="Close">
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
 
-        {/* Avatar + identity */}
-        <div className="px-4 pt-3 pb-2 flex items-center gap-3 sm:gap-4 shrink-0 pr-12">
-          <div className="w-16 h-16 rounded-2xl bg-slate-950 border-2 border-amber-500/40 flex items-center justify-center text-3xl shadow-inner shrink-0 relative">
-            <span aria-hidden>{flag}</span>
-            <div className="absolute -bottom-1 -right-1 bg-indigo-600 text-white font-mono text-[9px] font-bold px-1.5 py-0.5 rounded border border-indigo-400">
-              Lvl {p.level}
+        <div className="px-3 py-2 space-y-2">
+          {/* ── Identity row ── */
+          <div className="flex items-start gap-2.5">
+            {/* Avatar */}
+            <div className="w-11 h-11 rounded-xl bg-slate-950 border border-amber-500/30 flex items-center justify-center text-xl shrink-0 relative">
+              <span aria-hidden>{flag}</span>
+              <div className="absolute -bottom-0.5 -right-0.5 bg-amber-600 text-white font-mono text-[8px] font-bold px-1 py-px rounded border border-amber-400">
+                L{p.level}
+              </div>
+            </div>
+            {/* Name + meta */}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h2 id="player-inspector-title" className="text-sm font-black text-white tracking-tight truncate">{p.name}</h2>
+                {clanTag && <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[9px] font-mono font-bold px-1 py-px rounded">[{clanTag}]</span>}
+              </div>
+              <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5 flex-wrap">
+                <span className="font-mono text-amber-400">{p.userTag}</span>
+                <span>\u2022</span>
+                <span className="font-mono font-bold text-emerald-400">{p.bankedChips.toLocaleString('en-IN')}c</span>
+                <span>\u2022</span>
+                <span style={{ color: milestone.color }}>{milestone.badge}</span>
+              </div>
+              {/* Rank pills + social count — single row */}
+              <div className="flex items-center gap-1 mt-1 flex-wrap">
+                <span className="text-[9px] font-mono bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-px rounded">🏆 #{globalRank}</span>
+                <span className="text-[9px] font-mono bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-1.5 py-px rounded">{flag} #{countryRank}</span>
+                <span className="text-[9px] font-mono bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-1.5 py-px rounded">🌍 #{regionalRank}</span>
+                <span className="text-[9px] text-slate-600 mx-0.5">|</span>
+                <span className="text-[9px] font-mono text-slate-400">
+                  <Users className="w-2.5 h-2.5 inline text-indigo-400" /> {friendsCount != null ? friendsCount : (profileLoading ? '...' : '\u2014')}
+                </span>
+                <span className="text-[9px] font-mono text-slate-400">
+                  <Heart className="w-2.5 h-2.5 inline text-rose-400" /> {followersCount}
+                </span>
+                <span className="text-[9px] font-mono text-slate-400">
+                  <Swords className="w-2.5 h-2.5 inline text-orange-400" /> {rivalsCount}
+                </span>
+                {memberSince && <span className="text-[9px] font-mono text-slate-600">Since {memberSince}</span>}
+              </div>
             </div>
           </div>
-          <div className="min-w-0">
-            <h2 id="player-inspector-title" className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-1.5">
-              {realHofEntries.length > 0 && <Award className="w-4 h-4 text-yellow-400 shrink-0" title="Hall of Fame Inductee" />}
-              <span className="truncate">{p.name}</span>
-              <span className="text-xl" aria-hidden>{flag}</span>
-            </h2>
-            {clanTag && (
-              <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded inline-block mt-1">
-                [{clanTag}]
-              </span>
-            )}
-            <p className="text-xs text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
-              <span>Ledger Tag: <strong className="font-mono text-amber-400">{p.userTag}</strong></span>
-              <span>\u2022</span>
-              <span className="text-emerald-400 font-mono font-bold">{p.bankedChips.toLocaleString('en-IN')} c Bank</span>
-            </p>
-            <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-400 font-mono mt-1.5">
-              <span className="bg-amber-500/10 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded flex items-center gap-1">
-                <Trophy className="w-3 h-3 text-amber-400" /> Global Rank #{globalRank}
-              </span>
-              <span className="bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.5 rounded flex items-center gap-1">
-                {flag} Country Rank #{countryRank}
-              </span>
-              <span className="bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-indigo-400" /> Region Rank #{regionalRank}
-              </span>
-            </div>
-            <p className="text-[10px] text-slate-500 font-mono mt-1">{memberSince ? `Member since ${memberSince}` : achievedAt}</p>
-          </div>
-        </div>
 
-        {/* Social Stats Bar — REAL counts */}
-        <div className="px-4 pt-1 pb-2 shrink-0">
-          <div className="grid grid-cols-4 gap-3">
-            <div className="bg-slate-950/70 border border-slate-800/60 rounded-xl p-2.5 text-center">
-              <div className="flex items-center justify-center gap-1">
-                <Users className="w-3 h-3 text-indigo-400" />
-                <span className="text-base font-bold font-mono text-indigo-400 block">{friendsCount != null ? friendsCount : profileLoading ? '\u2026' : '\u2014'}</span>
+          {/* ── Body: 2-column grid ── */}
+          <div className="grid grid-cols-2 gap-2">
+            {/* LEFT: Career Stats */}
+            <div className="space-y-1.5">
+              <div className="text-[9px] font-bold uppercase text-slate-500 tracking-wider">Career Stats</div>
+              <div className="grid grid-cols-2 gap-1">
+                <S label="Banked" value={`${(p.bankedChips / 1_000_000).toFixed(1)}M c`} color="text-emerald-400" />
+                <S label="Highest Ext." value={highestExtraction} color="text-amber-400" />
+                <S label="Success Rate" value={successRate} color="text-indigo-400" />
+                <S label="Kills" value={totalKills} color="text-rose-400" />
+                {p.lifetimeExtracts != null && <S label="Extracts" value={String(p.lifetimeExtracts)} color="text-cyan-400" />}
+                {p.bestStreak != null && <S label="Best Streak" value={`${p.bestStreak}W`} color="text-yellow-400" />}
+                {p.totalEarned != null && <S label="Total Earned" value={`${(p.totalEarned / 1_000_000).toFixed(1)}M c`} color="text-emerald-300" />}
+                {p.totalLost != null && <S label="Total Lost" value={`${(p.totalLost / 1_000_000).toFixed(1)}M c`} color="text-red-400" />}
               </div>
-              <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Friends</span>
             </div>
-            <div className="bg-slate-950/70 border border-slate-800/60 rounded-xl p-2.5 text-center">
-              <div className="flex items-center justify-center gap-1">
-                <Heart className={`w-3 h-3 ${isFollowing ? 'text-rose-400 fill-rose-400' : 'text-rose-400'}`} />
-                <span className="text-base font-bold font-mono text-rose-400 block">{profileLoading ? '\u2026' : followersCount}</span>
-              </div>
-              <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Followers</span>
-            </div>
-            <div className="bg-slate-950/70 border border-slate-800/60 rounded-xl p-2.5 text-center">
-              <div className="flex items-center justify-center gap-1">
-                <Swords className="w-3 h-3 text-orange-400" />
-                <span className="text-base font-bold font-mono text-orange-400 block">{rivalsCount}</span>
-              </div>
-              <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Rivals</span>
-            </div>
-            <div className="bg-slate-950/70 border border-slate-800/60 rounded-xl p-2.5 text-center">
-              <div className="flex items-center justify-center gap-1">
-                <UserCheck className="w-3 h-3 text-emerald-400" />
-                <span className="text-base font-bold font-mono text-emerald-400 block">{earnedBadges.length}</span>
-              </div>
-              <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block">Badges</span>
-            </div>
-          </div>
-        </div>
 
-        {/* Tabs */}
-        <div className="px-4 pb-2 shrink-0">
-          <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-bold" role="tablist">
-            {([
-              ['overview', 'Overview'],
-              ['stats', 'Career Stats'],
-              ['loadout', 'Loadout'],
-            ] as const).map(([id, label]) => (
-              <button
-                key={id} type="button" role="tab" aria-selected={tab === id}
-                onClick={() => setTab(id as Tab)}
-                className={`flex-1 py-1.5 rounded-lg transition-all ${tab === id ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Tab content */}
-        <div className="overflow-y-auto va-scroll px-4 pb-4 flex-1 min-h-0">
-          {/* OVERVIEW */}
-          {tab === 'overview' && (
-            <div className="space-y-3">
-              {/* Achievements and Milestones */}
-              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2.5">
-                <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <Award className="w-3.5 h-3.5 text-amber-400" /> Achievements &amp; Milestones
-                  </span>
-                  <span className="text-[9px] text-amber-400/70 font-mono">{earnedBadges.length} Badge{earnedBadges.length !== 1 ? 's' : ''} Earned</span>
-                </div>
-                {hasAchievements ? (
-                  <>
-                    <div className="flex items-center gap-2.5 p-2.5 bg-amber-500/5 rounded-lg border border-amber-500/15">
-                      <span className="text-2xl" aria-hidden>{milestone.badge.split(' ')[0]}</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-bold text-amber-200 text-[11px]">{milestone.badge}</div>
-                        <div className="text-[9px] text-slate-400">Current Tier \u00B7 {p.bankedChips.toLocaleString('en-IN')} chips</div>
-                      </div>
-                    </div>
-                    {realHofEntries.length > 0 && (
-                      <div className="space-y-1.5">
-                        <span className="text-[9px] uppercase font-bold text-yellow-400 tracking-wider flex items-center gap-1">
-                          <Crown className="w-3 h-3" /> Hall of Fame \u2014 {realHofEntries.length} Induction{realHofEntries.length !== 1 ? 's' : ''}
-                        </span>
-                        {realHofEntries.slice(0, 4).map((e) => (
-                          <div key={e.id} className="flex items-center justify-between text-xs p-2 bg-slate-900/80 rounded-lg border border-yellow-500/10">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="text-sm shrink-0" aria-hidden>{e.inductionType === 'championship' ? '\uD83C\uDFC6' : '\u2B50'}</span>
-                              <div className="min-w-0">
-                                <div className="font-bold text-yellow-200 text-[11px] truncate">{e.hofBadge || e.title || 'HOF Inductee'}</div>
-                                <div className="text-[9px] text-slate-400">
-                                  {e.inductionType === 'championship'
-                                    ? `${e.championshipYear} Championship \u00B7 Rank #${e.championshipRank}`
-                                    : 'Milestone Achievement'}
-                                  {' \u00B7 '}{new Date(e.inductedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
-                                </div>
-                              </div>
-                            </div>
-                            <span className="text-[10px] font-mono text-emerald-400 shrink-0">{e.chipsAtInduction.toLocaleString('en-IN')}c</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {earnedBadges.length > 0 && (
-                      <div className="grid grid-cols-2 gap-2">
-                        {earnedBadges.map((t) => (
-                          <div key={t.id} className="p-2 bg-slate-900 rounded-lg border border-slate-800 flex items-center gap-2">
-                            <span className="text-lg" aria-hidden>{t.badge.split(' ')[0]}</span>
-                            <div>
-                              <div className="font-bold text-amber-300 text-[11px]">{t.name.split('(')[0].trim()}</div>
-                              <div className="text-[9px] text-slate-400">{(t.minChips / 100_000).toFixed(0)}L+ Chips</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-center py-3 text-[11px] text-slate-500">No milestones achieved yet. Climb the chip leaderboard to earn badges!</div>
-                )}
-              </div>
-
-              {/* Clan membership */}
-              {clanTag && clanName && (
-                <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-                  <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
-                    <span className="flex items-center gap-1"><Shield className="w-3.5 h-3.5 text-indigo-400" /> Syndicate Clan Membership</span>
-                    <span className="text-[9px] text-emerald-400 font-mono">Active Member</span>
+            {/* RIGHT: Loadout + Badges + Social */}
+            <div className="space-y-1.5">
+              {/* Loadout */}
+              <div className="text-[9px] font-bold uppercase text-slate-500 tracking-wider">Loadout</div>
+              <div className="bg-slate-950/80 border border-slate-800/60 rounded-lg px-2 py-1 space-y-0.5">
+                {[
+                  { label: 'Skin', item: skinItem, fallback: '\uD83D\uDC0D Default' },
+                  { label: 'Trail', item: trailItem, fallback: '\u2728 None' },
+                  { label: 'Kill FX', item: deathItem, fallback: '\uD83D\uDCA5 Default' },
+                  { label: 'Emote', item: flagItem || bannerItem, fallback: '\uD83C\uDFC6 Default' },
+                ].map((l) => (
+                  <div key={l.label} className="flex justify-between text-[10px]">
+                    <span className="text-slate-500">{l.label}</span>
+                    <span className="font-mono font-bold text-slate-300 truncate ml-2 max-w-[60%] text-right">
+                      {l.item ? `${l.item.emoji || ''} ${l.item.name}` : l.fallback}
+                    </span>
                   </div>
-                  <div className="flex items-center justify-between p-2.5 bg-slate-900 rounded-lg border border-slate-800">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-2xl shrink-0" aria-hidden>\uD83D\uDC0D</span>
-                      <div className="min-w-0">
-                        <div className="font-bold text-white text-xs truncate">{clanName}<span className="ml-1.5 bg-indigo-500/20 text-indigo-300 text-[9px] font-mono font-bold px-1 py-0.2 rounded border border-indigo-500/30">[{clanTag}]</span></div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">Member</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+                ))}
+              </div>
 
-              {/* Social and Streaming (real links) */}
-              {activeSocials.length > 0 ? (
-                <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-                  <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between">
-                    <span className="flex items-center gap-1"><Globe className="w-3.5 h-3.5 text-emerald-400" /> Creator Social Channels</span>
-                    <span className="text-[9px] text-emerald-400 font-mono">Verified</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {activeSocials.map((s) => (
-                      <a key={s.platform} href={`${s.url}${encodeURIComponent(s.handle!)}`} target="_blank" rel="noopener noreferrer"
-                        className="p-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-xs font-bold text-white flex items-center gap-2 transition group"
+              {/* Badges */}
+              {earnedBadges.length > 0 && (
+                <>
+                  <div className="text-[9px] font-bold uppercase text-slate-500 tracking-wider">Badges ({earnedBadges.length})</div>
+                  <div className="flex flex-wrap gap-1">
+                    {earnedBadges.map((t) => (
+                      <span
+                        key={t.id}
+                        className="text-[9px] font-mono font-bold px-1.5 py-px rounded border"
+                        style={{ color: t.color, borderColor: t.color + '40', backgroundColor: t.color + '10' }}
+                        title={`${t.name} \u2014 ${t.minChips.toLocaleString()}c+`}
                       >
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0"
-                          style={{ backgroundColor: s.color + '15', border: `1px solid ${s.color}30` }}
-                        >{s.icon}</div>
-                        <div className="min-w-0 flex-1">
-                          <span className="text-[9px] uppercase font-bold block" style={{ color: s.color + 'CC' }}>{s.platform}</span>
-                          <span className="text-[11px] font-mono text-slate-300 block truncate group-hover:text-white transition">{s.handle}</span>
-                        </div>
-                        <ExternalLink className="w-3 h-3 text-slate-600 group-hover:text-slate-400 transition shrink-0" />
-                      </a>
+                        {t.badge.split(' ')[0]} {t.name.split('(')[0].trim()}
+                      </span>
                     ))}
                   </div>
-                </div>
-              ) : (
-                <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-                  <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center gap-1"><Globe className="w-3.5 h-3.5 text-slate-500" /> Creator Social Channels</div>
-                  <div className="text-center py-3 text-[11px] text-slate-500">No social channels linked.</div>
-                </div>
+                </>
               )}
 
-            </div>
-          )}
-
-          {/* CAREER STATS */}
-          {tab === 'stats' && (
-            <div className="space-y-3 text-xs">
-              <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-                <div className="text-[10px] font-bold uppercase text-slate-400 flex items-center justify-between border-b border-slate-900 pb-1.5">
-                  <span className="flex items-center gap-1"><Trophy className="w-3.5 h-3.5 text-amber-400" /> Live Leaderboard Standings</span>
-                  <span className="text-[9px] text-emerald-400 font-mono">Real-Time Sync</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-center font-mono">
-                  <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">
-                    <div className="text-[9px] text-slate-400">Global World Rank</div>
-                    <div className="font-bold text-amber-400 text-sm mt-0.5">#{globalRank}</div>
-                  </div>
-                  <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">
-                    <div className="text-[9px] text-slate-400">{flag} Country Rank</div>
-                    <div className="font-bold text-emerald-400 text-sm mt-0.5">#{countryRank}</div>
-                  </div>
-                  <div className="p-2 bg-slate-900 rounded-lg border border-slate-800">
-                    <div className="text-[9px] text-slate-400">Regional Arena Rank</div>
-                    <div className="font-bold text-indigo-400 text-sm mt-0.5">#{regionalRank}</div>
-                  </div>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <StatCard label="Total Banked Chips" value={`${p.bankedChips.toLocaleString('en-IN')} c`} accent="text-emerald-400" icon={<Trophy className="w-3.5 h-3.5" />} />
-                <StatCard label="Highest Extraction" value={highestExtraction} accent="text-amber-400" icon={<Award className="w-3.5 h-3.5" />} />
-                <StatCard label="Extraction Success Rate" value={successRate} accent="text-indigo-400" icon={<Zap className="w-3.5 h-3.5" />} />
-                <StatCard label="Snake Eliminations" value={totalKills} accent="text-rose-400" icon={<Swords className="w-3.5 h-3.5" />} />
-              </div>
-              {(p.lifetimeExtracts != null || p.bestStreak != null) && (
-                <div className="grid grid-cols-2 gap-3">
-                  {p.lifetimeExtracts != null && <StatCard label="Total Extractions" value={p.lifetimeExtracts.toLocaleString()} accent="text-cyan-400" icon={<Sparkles className="w-3.5 h-3.5" />} />}
-                  {p.bestStreak != null && <StatCard label="Best Streak" value={`${p.bestStreak} Wins`} accent="text-yellow-400" icon={<Trophy className="w-3.5 h-3.5" />} />}
+              {/* Social links */}
+              {activeSocials.length > 0 && (
+                <div className="flex gap-1.5">
+                  {activeSocials.map((s) => (
+                    <a
+                      key={s.platform}
+                      href={`${s.url}${encodeURIComponent(s.handle!)}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-[9px] font-bold px-1.5 py-px rounded border border-slate-800 hover:border-slate-600 transition"
+                      style={{ color: s.color }}
+                    >
+                      {s.icon} {s.handle}
+                      <ExternalLink className="w-2 h-2" />
+                    </a>
+                  ))}
                 </div>
               )}
             </div>
-          )}
+          </div>
 
-          {/* LOADOUT */}
-          {tab === 'loadout' && (
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 text-xs">
-              {loadoutEntries.map((l) => (
-                <div key={l.label} className="flex justify-between py-1.5 border-b border-slate-900 last:border-0">
-                  <span className="text-slate-400">{l.label}</span>
-                  <span className={`font-bold ${l.value === 'Not visible' ? 'text-slate-500 italic' : 'text-white'}`}>{l.value}</span>
+          {/* ── HOF entry (if any) ── */}
+          {realHofEntries.length > 0 && (
+            <div className="bg-yellow-500/5 border border-yellow-500/15 rounded-lg px-2 py-1">
+              <div className="text-[9px] font-bold text-yellow-400 uppercase tracking-wider">👑 Hall of Fame — {realHofEntries.length} Induction{realHofEntries.length !== 1 ? 's' : ''}</div>
+              {realHofEntries.slice(0, 2).map((e) => (
+                <div key={e.id} className="flex justify-between text-[10px] mt-0.5">
+                  <span className="text-yellow-200 font-bold truncate">{e.hofBadge || e.title || 'HOF Inductee'}</span>
+                  <span className="text-emerald-400 font-mono shrink-0 ml-2">{e.chipsAtInduction.toLocaleString('en-IN')}c</span>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* Action buttons — Follow, Rival, Friend, Block */}
-        <div className="space-y-2 p-4 pt-2 border-t border-slate-800 shrink-0">
-          {/* Turn rival to friend — shown when player is a rival */}
+        {/* ── Action buttons — single row ── */}
+        <div className="px-3 py-2 border-t border-slate-800 bg-slate-950/40">
           {isRival && (
             <button type="button" onClick={handleRivalToFriend} disabled={rivalToFriendLoading}
-              className="w-full py-2.5 px-3 border rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all bg-gradient-to-r from-orange-500/20 to-emerald-500/20 text-white border-orange-500/30 hover:border-emerald-500/40 shadow {rivalToFriendLoading ? 'opacity-50' : ''}"
+              className={`w-full mb-1.5 py-1.5 px-2 border rounded-lg text-[10px] font-bold flex items-center justify-center gap-1.5 bg-gradient-to-r from-orange-500/20 to-emerald-500/20 text-white border-orange-500/30 hover:border-emerald-500/40 transition ${rivalToFriendLoading ? 'opacity-50' : ''}`}
             >
-              {rivalToFriendLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Heart className="w-4 h-4 text-rose-400" />}
-              {rivalToFriendLoading ? 'Processing…' : `Turn Rival into Friend`}
+              {rivalToFriendLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Heart className="w-3 h-3 text-rose-400" />}
+              {rivalToFriendLoading ? 'Processing...' : `Turn Rival \u2192 Friend`}
             </button>
           )}
-          <div className="grid grid-cols-2 gap-2">
-          <button type="button" onClick={handleFollowToggle} disabled={followLoading}
-            className={`py-2.5 px-3 border rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${isFollowing ? 'bg-rose-500/20 text-rose-400 border-rose-500/40' : 'bg-rose-600 hover:bg-rose-500 text-white border-rose-500/30 shadow'} ${followLoading ? 'opacity-50' : ''}`}
-          >
-            {followLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : isFollowing ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            {followLoading ? 'Loading' : isFollowing ? 'Unfollow' : 'Follow'}
-          </button>
-          <button type="button" onClick={handleRivalToggle} disabled={rivalLoading}
-            className={`py-2.5 px-3 border rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${isRival ? 'bg-orange-500/20 text-orange-400 border-orange-500/40' : 'bg-orange-600 hover:bg-orange-500 text-white border-orange-500/30 shadow'} ${rivalLoading ? 'opacity-50' : ''}`}
-          >
-            {rivalLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Crosshair className="w-4 h-4" />}
-            {rivalLoading ? 'Loading' : isRival ? 'Remove Rival' : 'Add Rival'}
-          </button>
-          <button type="button" onClick={handleAddFriend} disabled={friendRequested}
-            className={`py-2.5 px-3 border rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${friendRequested ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 cursor-default' : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500/30 shadow'}`}
-          >
-            {friendRequested ? <Check className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
-            {friendRequested ? 'Request Sent' : 'Add Friend'}
-          </button>
-          <button type="button" onClick={handleBlockToggle} disabled={blockLoading}
-            className={`py-2.5 px-3 border rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${blocked ? 'bg-emerald-950/30 hover:bg-emerald-950/50 text-emerald-400 border-emerald-500/30' : 'bg-rose-950/20 hover:bg-rose-950/40 text-rose-400 border-rose-500/20'} ${blockLoading ? 'opacity-50 cursor-wait' : ''}`}
-          >
-            {blockLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : blocked ? <Unlock className="w-3.5 h-3.5" /> : <Ban className="w-3.5 h-3.5" />}
-            {blockLoading ? 'Processing\u2026' : blocked ? `Unblock ${p.name}` : `Block ${p.name}`}
-          </button>
+          <div className="grid grid-cols-4 gap-1.5">
+            <button type="button" onClick={handleFollowToggle} disabled={followLoading}
+              className={`py-1.5 px-1 border rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition ${isFollowing ? 'bg-rose-500/20 text-rose-400 border-rose-500/40' : 'bg-rose-600 hover:bg-rose-500 text-white border-rose-500/30'} ${followLoading ? 'opacity-50' : ''}`}
+            >
+              {followLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : isFollowing ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+              {followLoading ? '...' : isFollowing ? 'Unfollow' : 'Follow'}
+            </button>
+            <button type="button" onClick={handleRivalToggle} disabled={rivalLoading}
+              className={`py-1.5 px-1 border rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition ${isRival ? 'bg-orange-500/20 text-orange-400 border-orange-500/40' : 'bg-orange-600 hover:bg-orange-500 text-white border-orange-500/30'} ${rivalLoading ? 'opacity-50' : ''}`}
+            >
+              {rivalLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Crosshair className="w-3 h-3" />}
+              {rivalLoading ? '...' : isRival ? 'Unrival' : 'Rival'}
+            </button>
+            <button type="button" onClick={handleAddFriend} disabled={friendRequested}
+              className={`py-1.5 px-1 border rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition ${friendRequested ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 cursor-default' : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500/30'}`}
+            >
+              {friendRequested ? <Check className="w-3 h-3" /> : <UserPlus className="w-3 h-3" />}
+              {friendRequested ? 'Sent' : 'Friend'}
+            </button>
+            <button type="button" onClick={handleBlockToggle} disabled={blockLoading}
+              className={`py-1.5 px-1 border rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition ${blocked ? 'bg-emerald-950/30 text-emerald-400 border-emerald-500/30' : 'bg-rose-950/20 text-rose-400 border-rose-500/20'} ${blockLoading ? 'opacity-50' : ''}`}
+            >
+              {blockLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : blocked ? <Unlock className="w-3 h-3" /> : <Ban className="w-3 h-3" />}
+              {blockLoading ? '...' : blocked ? 'Unblock' : 'Block'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
   );
 }
-
-function StatCard({ label, value, accent, icon }: { label: string; value: string; accent: string; icon: React.ReactNode }) {
-  return (
-    <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1">
-      <span className="text-[10px] text-slate-400 font-bold uppercase flex items-center gap-1">{icon} {label}</span>
-      <span className={`font-mono font-bold text-sm block ${accent}`}>{value}</span>
-    </div>
-  );
-}
-
-export default PlayerInspectorModal;
