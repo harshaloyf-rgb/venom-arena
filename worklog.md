@@ -268,3 +268,5 @@ Stage Summary:
 - 6 missing data points added: avatar, following count, last seen, clan rank, real milestones, milestone dates
 - Popup made ~30-40% more compact: inline loadout, compact badges, smaller modal width, no redundant banked stat
 - 2 commits pushed: dead code removal + full popup rewrite
+---
+Session start: 2026-08-27 15:13:53 UTC, git: f42eb3a
