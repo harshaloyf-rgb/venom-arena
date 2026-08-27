@@ -1,10 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Loader2, Search, X, ChevronDown } from 'lucide-react';
 import { countryFlag, fmtChips, fmtDate, badgeIcon } from './_types';
 import type { InducteeEntry } from './_types';
-import type { InspectedPlayer } from '@/lib/game-config';
 
 // ── Champions Wing Tab ────────────────────────────────────────────────────
 
@@ -13,12 +12,10 @@ interface ChampionsTabProps {
   year: number | null;
   years: number[];
   search: string;
-  displayEntries: (InducteeEntry | Record<string, unknown>)[];
-  isDemo: boolean;
+  entries: InducteeEntry[];
   onYearChange: (year: number | null) => void;
   onSearchChange: (search: string) => void;
   onInspectEntry: (entry: InducteeEntry) => void;
-  onInspectDemo: (name: string, userTag: string, country: string, chips: number, level: number) => void;
 }
 
 export function ChampionsTab({
@@ -26,14 +23,24 @@ export function ChampionsTab({
   year,
   years,
   search,
-  displayEntries,
-  isDemo,
+  entries,
   onYearChange,
   onSearchChange,
   onInspectEntry,
-  onInspectDemo,
 }: ChampionsTabProps) {
   const [expanded, setExpanded] = useState<string | null>(null);
+
+  // Client-side search filter
+  const filtered = useMemo(() => {
+    if (!search) return entries;
+    const q = search.toLowerCase();
+    return entries.filter(
+      (e) =>
+        e.playerName.toLowerCase().includes(q) ||
+        e.playerTag.toLowerCase().includes(q) ||
+        e.clanTag?.toLowerCase().includes(q),
+    );
+  }, [entries, search]);
 
   return (
     <div className="space-y-4 lg:space-y-1">
@@ -95,24 +102,16 @@ export function ChampionsTab({
         </div>
       )}
 
-      {/* Empty state for non-admin */}
-      {!loading && displayEntries.length === 0 && (
+      {/* Empty state */}
+      {!loading && filtered.length === 0 && (
         <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-8 lg:p-3 text-center text-xs lg:text-[11px] text-slate-500">
           No championship inductees yet
         </div>
       )}
 
       {/* Table */}
-      {!loading && displayEntries.length > 0 && (
+      {!loading && filtered.length > 0 && (
         <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-          {isDemo && (
-            <div className="px-4 lg:px-1.5 py-2 lg:py-1 bg-slate-900 border-b border-slate-800 flex items-center gap-2">
-              <span className="text-[11px] font-mono font-bold text-slate-400 px-2 py-0.5 bg-slate-800 rounded-full border border-slate-700">
-                DEMO
-              </span>
-              <span className="text-[11px] text-slate-500">No real championship inductees yet. Showing sample data.</span>
-            </div>
-          )}
           {/* Desktop header */}
           <div className="hidden lg:grid lg:grid-cols-12 lg:gap-1 lg:px-1.5 lg:py-1 border-b border-slate-800 bg-slate-950 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
             <div className="lg:col-span-1">Rank</div>
@@ -123,42 +122,13 @@ export function ChampionsTab({
             <div className="lg:col-span-1 text-right">Date</div>
           </div>
           <ol className="divide-y divide-slate-900 max-h-96 lg:max-h-[340px] overflow-y-auto va-scroll">
-            {displayEntries.map((entry, idx) => {
-              const isD = isDemo;
-              const rank = isD
-                ? (entry as unknown as { rank: number }).rank
-                : (entry as InducteeEntry).championshipRank ?? idx + 1;
-              const name = isD
-                ? (entry as unknown as { name: string }).name
-                : (entry as InducteeEntry).playerName;
-              const tag = isD
-                ? (entry as unknown as { userTag: string }).userTag
-                : (entry as InducteeEntry).playerTag;
-              const country = isD
-                ? (entry as unknown as { country: string }).country
-                : (entry as InducteeEntry).country;
-              const badge = isD
-                ? (entry as unknown as { badge: string }).badge
-                : (entry as InducteeEntry).hofBadge;
-              const title = isD
-                ? (entry as unknown as { title: string }).title
-                : (entry as InducteeEntry).title;
-              const chips = isD
-                ? (entry as unknown as { chips: number }).chips
-                : (entry as InducteeEntry).chipsAtInduction;
-              const date = isD
-                ? (entry as unknown as { date: string }).date
-                : fmtDate((entry as InducteeEntry).inductedAt);
-
-              const key = isD ? `${(entry as unknown as { name: string }).name}-${rank}` : (entry as InducteeEntry).id;
+            {filtered.map((entry, idx) => {
+              const rank = entry.championshipRank ?? idx + 1;
+              const key = entry.id;
               const isExpanded = expanded === key;
 
               const handleInspect = () => {
-                if (isD) {
-                  onInspectDemo(name, tag, country, chips, 45);
-                } else {
-                  onInspectEntry(entry as InducteeEntry);
-                }
+                onInspectEntry(entry);
               };
 
               const rankDisplay = rank === 1 ? (
@@ -170,10 +140,7 @@ export function ChampionsTab({
               );
 
               return (
-                <li
-                  key={key}
-                  className={`${isD ? 'opacity-60' : ''}`}
-                >
+                <li key={key}>
                   {/* Mobile card */}
                   <button
                     type="button"
@@ -182,14 +149,11 @@ export function ChampionsTab({
                   >
                     <span className="font-mono text-slate-400 font-bold w-8 shrink-0">{rank <= 3 ? ['', '🥇', '🥈', '🥉'][rank] : `#${rank}`}</span>
                     <span className="font-bold text-white flex items-center gap-1 flex-1 min-w-0">
-                      <span className="shrink-0">{countryFlag(country)}</span>
-                      <span>{name}</span>
-                      {isD && (
-                        <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">DEMO</span>
-                      )}
+                      <span className="shrink-0">{countryFlag(entry.country)}</span>
+                      <span>{entry.playerName}</span>
                     </span>
-                    <span className="text-lg shrink-0" aria-label={badge || 'badge'}>{badgeIcon(badge)}</span>
-                    <span className="font-mono font-bold text-emerald-400 tabular-nums shrink-0">{fmtChips(chips)}c</span>
+                    <span className="text-lg shrink-0" aria-label={entry.hofBadge || 'badge'}>{badgeIcon(entry.hofBadge)}</span>
+                    <span className="font-mono font-bold text-emerald-400 tabular-nums shrink-0">{fmtChips(entry.chipsAtInduction)}c</span>
                     <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
                   </button>
                   {/* Mobile expanded detail */}
@@ -197,10 +161,10 @@ export function ChampionsTab({
                     <div className="lg:hidden px-3 pb-3 pt-0">
                       <div className="border-t border-slate-800/50 pt-2 space-y-1 text-[11px]">
                         <div className="flex justify-between">
-                          <span className="font-mono text-slate-500">{tag}</span>
-                          <span className="font-mono text-slate-500">{date}</span>
+                          <span className="font-mono text-slate-500">{entry.playerTag}</span>
+                          <span className="font-mono text-slate-500">{fmtDate(entry.inductedAt)}</span>
                         </div>
-                        <div className="text-slate-300">{title}</div>
+                        <div className="text-slate-300">{entry.title}</div>
                       </div>
                     </div>
                   )}
@@ -213,22 +177,19 @@ export function ChampionsTab({
                     <div className="lg:col-span-1 font-mono">{rankDisplay}</div>
                     <div className="lg:col-span-4 min-w-0">
                       <div className="font-bold text-white flex items-center gap-1.5">
-                        <span aria-hidden>{countryFlag(country)}</span>
-                        {name}
-                        {isD && (
-                          <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">DEMO</span>
-                        )}
+                        <span aria-hidden>{countryFlag(entry.country)}</span>
+                        {entry.playerName}
                       </div>
-                      <div className="text-[11px] font-mono text-slate-500">{tag}</div>
+                      <div className="text-[11px] font-mono text-slate-500">{entry.playerTag}</div>
                     </div>
-                    <div className="lg:col-span-2" aria-label={badge || 'badge'}>{badgeIcon(badge)}</div>
+                    <div className="lg:col-span-2" aria-label={entry.hofBadge || 'badge'}>{badgeIcon(entry.hofBadge)}</div>
                     <div className="lg:col-span-3 min-w-0">
-                      <div className="text-[11px] text-slate-300">{title}</div>
+                      <div className="text-[11px] text-slate-300">{entry.title}</div>
                     </div>
                     <div className="lg:col-span-1 text-right font-mono font-bold text-emerald-400 tabular-nums">
-                      {fmtChips(chips)}c
+                      {fmtChips(entry.chipsAtInduction)}c
                     </div>
-                    <div className="lg:col-span-1 text-right font-mono text-slate-500">{date}</div>
+                    <div className="lg:col-span-1 text-right font-mono text-slate-500">{fmtDate(entry.inductedAt)}</div>
                   </div>
                 </li>
               );

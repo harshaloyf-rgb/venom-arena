@@ -741,15 +741,6 @@ export const HALL_OF_FAME_TIERS: HallOfFameTier[] = [
   },
 ];
 
-// Hall of Fame live commentary seed entries
-export const INITIAL_COMMENTARY = [
-  { id: 'c1', ts: '13:41:02 UTC', text: '🎙️ ESPORTS DESK: Hari from India (#IND-001) locked in a massive extraction in Tier-05 High Stakes Arena!' },
-  { id: 'c2', ts: '13:40:48 UTC', text: '💥 ARENA BLAST: Apex_Viper eliminated Scavenger_Bot and harvested 12 Star Chips on boundary!' },
-  { id: 'c3', ts: '13:39:15 UTC', text: '👑 MILESTONE NOTICE: User K-Snake_Master reached 2,500,000 banked chips & secured Platinum Sovereign Tier!' },
-];
-
-export const COMMENTARY_NAMES = ['Hari', 'Apex_Viper', 'Shadow_Ninja', 'Elysium_God', 'Ronin_JP', 'Brazil_King'];
-
 // ----------------------------------------------------------------------------
 // Championships — prize tiers + 13 mock contenders
 // ----------------------------------------------------------------------------

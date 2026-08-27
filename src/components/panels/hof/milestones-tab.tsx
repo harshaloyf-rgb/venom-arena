@@ -1,7 +1,7 @@
 'use client';
 
 import { Loader2, Search, X, Crosshair } from 'lucide-react';
-import { HALL_OF_FAME_TIERS, DEMO_MILESTONES } from './_types';
+import { HALL_OF_FAME_TIERS } from './_types';
 import { notify, type ToastFn } from '../_panel-primitives';
 import { MilestonesFlatTable } from './milestones-table';
 import type { InducteeEntry } from './_types';
@@ -13,7 +13,6 @@ interface MilestonesTabProps {
   loading: boolean;
   tierFilter: string;
   search: string;
-  isDemo: boolean;
   entries: InducteeEntry[];
   firstAchievers: Record<string, { playerName: string; userTag: string; country: string; inductedAt: string } | null>;
   listRef: React.RefObject<HTMLDivElement | null>;
@@ -28,7 +27,6 @@ export function MilestonesTab({
   loading,
   tierFilter,
   search,
-  isDemo,
   entries,
   firstAchievers,
   listRef,
@@ -124,31 +122,8 @@ export function MilestonesTab({
         </div>
       )}
 
-      {/* Demo data */}
-      {!loading && isDemo && (
-        <MilestonesFlatTable
-          entries={DEMO_MILESTONES}
-          tierFilter={tierFilter}
-          search={search}
-          isDemo
-          firstAchievers={
-            Object.fromEntries(
-              HALL_OF_FAME_TIERS.map((t) => [t.id, {
-                playerName: t.firstAchiever.name,
-                userTag: t.firstAchiever.userTag,
-                country: t.firstAchiever.country,
-                inductedAt: t.firstAchiever.dateStr,
-              }])
-            )
-          }
-          listRef={listRef}
-          myPlayerTag={myPlayerTag}
-          onInspectPlayer={onInspectPlayer}
-        />
-      )}
-
       {/* Real data */}
-      {!loading && !isDemo && entries.length > 0 && (
+      {!loading && entries.length > 0 && (
         <MilestonesFlatTable
           entries={entries}
           tierFilter={tierFilter}
@@ -160,8 +135,8 @@ export function MilestonesTab({
         />
       )}
 
-      {/* Empty state for non-admin */}
-      {!loading && !isDemo && entries.length === 0 && (
+      {/* Empty state */}
+      {!loading && entries.length === 0 && (
         <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-8 lg:p-3 text-center text-xs lg:text-[11px] text-slate-500">
           No milestone inductees yet
         </div>

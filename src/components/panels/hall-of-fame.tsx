@@ -2,11 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
-import {
-  COUNTRIES,
-  countryFlag,
-  type InspectedPlayer,
-} from '@/lib/game-config';
+import { countryFlag, type InspectedPlayer } from '@/lib/game-config';
 import {
   GlowBlob,
   MicroLabel,
@@ -14,21 +10,17 @@ import {
   type ToastFn,
 } from './_panel-primitives';
 import { PanelTabBtn } from '@/components/ui/panel-tab-btn';
-import { Crown, Radio, Trophy, Sparkles, Star } from 'lucide-react';
+import { Crown, Trophy, Sparkles, Star } from 'lucide-react';
 
 // ── HOF sub-modules ──────────────────────────────────────────────────────
 import {
   type Tab,
-  type CommentaryFilter,
   type InducteeEntry,
   type MyEntry,
   type NextMilestone,
   type HofStats,
-  INITIAL_COMMENTARY,
-  COMMENTARY_NAMES,
   fmtChips,
   fmtDate,
-  DEMO_CHAMPIONS,
 } from './hof/_types';
 import { MyHofTab } from './hof/my-hof-tab';
 import { ChampionsTab } from './hof/champions-tab';
@@ -43,18 +35,9 @@ interface HallOfFameProps {
 
 export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
   const { player } = useAuth();
-  const isAdmin = player?.role === 'admin';
 
   // ── Shared state ──
   const [tab, setTab] = useState<Tab>('my-hof');
-  const [commentary, setCommentary] = useState(INITIAL_COMMENTARY);
-
-  // Clear fake commentary for non-admin users
-  useEffect(() => {
-    if (!isAdmin) setCommentary([]);
-  }, [isAdmin]);
-
-  const [tickerFilter, setTickerFilter] = useState<CommentaryFilter>('all');
 
   // ── Stats bar state ──
   const [stats, setStats] = useState<HofStats | null>(null);
@@ -220,59 +203,14 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
     }
   }, [stats]);
 
-  // Live commentary ticker
-  useEffect(() => {
-    if (tab !== 'ticker' || !isAdmin) return;
-    const id = setInterval(() => {
-      const name = COMMENTARY_NAMES[Math.floor(Math.random() * COMMENTARY_NAMES.length)];
-      const country = COUNTRIES[Math.floor(Math.random() * COUNTRIES.length)];
-      const chips = 50_000 + Math.floor(Math.random() * 5_000_000);
-      const templates = [
-        `🎙️ LIVE EXTRACTION: ${name} from ${country.name} ${country.flag} successfully extracted ${fmtChips(chips)} chips in Tier-05 Arena!`,
-        `💥 ARENA ELIMINATION: ${name} ${country.flag} trapped a rival viper and claimed ${fmtChips(Math.floor(chips / 2))} star chips!`,
-        `👑 MILESTONE UPDATE: ${name} ${country.flag} reached a new milestone tier with ${fmtChips(chips)} chips!`,
-        `🔥 HIGH STAKES ACTION: Room #04 is boiling as ${name} ${country.flag} enters extraction zone holding ${fmtChips(chips)} chips!`,
-      ];
-      const text = templates[Math.floor(Math.random() * templates.length)];
-      const ts = new Date().toLocaleTimeString('en-US', { hour12: false, timeZone: 'UTC' }) + ' UTC';
-      setCommentary((prev) => [{ id: `c-${Date.now()}`, ts, text }, ...prev].slice(0, 30));
-    }, 5000);
-    return () => clearInterval(id);
-  }, [tab]);
-
   // ── Derived ──
-
-  const filteredCommentary = useMemo(() => {
-    if (tickerFilter === 'all') return commentary;
-    const filters: Record<Exclude<CommentaryFilter, 'all'>, RegExp> = {
-      extractions: /EXTRACTION/i,
-      eliminations: /ELIMINATION/i,
-      milestones: /MILESTONE/i,
-    };
-    return commentary.filter((c) =>
-      filters[tickerFilter as Exclude<CommentaryFilter, 'all'>].test(c.text),
-    );
-  }, [commentary, tickerFilter]);
 
   const champYears = useMemo(() => {
     if (stats?.championshipYears && stats.championshipYears.length > 0) {
       return stats.championshipYears.map((y) => y.year).sort((a, b) => b - a);
     }
-    if (!isAdmin) return [];
-    return [2026, 2025, 2024];
-  }, [stats, isAdmin]);
-
-  const champDisplayEntries = useMemo(() => {
-    if (champEntries.length > 0) return champEntries;
-    if (!isAdmin) return [];
-    // Fallback to demo data (admin only)
-    let demo = [...DEMO_CHAMPIONS];
-    if (champYear) demo = demo.filter((d) => d.date.includes(String(champYear)));
-    return demo;
-  }, [champEntries, champYear, isAdmin]);
-
-  const champIsDemo = champEntries.length === 0 && isAdmin;
-  const mileIsDemo = mileEntries.length === 0 && isAdmin;
+    return [];
+  }, [stats]);
 
   // ── Inspect helper ──
   function inspectEntry(entry: InducteeEntry) {
@@ -286,21 +224,6 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
       level: entry.level,
       clanTag: entry.clanTag || undefined,
       achievedAt: fmtDate(entry.inductedAt),
-    });
-  }
-
-  function inspectDemo(name: string, userTag: string, country: string, chips: number, level: number) {
-    if (!onInspectPlayer) return;
-    onInspectPlayer({
-      name,
-      userTag,
-      country,
-      flag: countryFlag(country),
-      bankedChips: chips,
-      level,
-      clanTag: 'APEX',
-      clanName: 'Viper Apex Syndicate',
-      achievedAt: '01 Jan 2026',
     });
   }
 
@@ -328,7 +251,6 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
         <PanelTabBtn active={tab === 'my-hof'} onClick={() => setTab('my-hof')} icon={Star} label="My HOF Profile" color="yellow" />
         <PanelTabBtn active={tab === 'champions'} onClick={() => setTab('champions')} icon={Trophy} label="Champions Wing" color="yellow" />
         <PanelTabBtn active={tab === 'milestones'} onClick={() => setTab('milestones')} icon={Sparkles} label="Milestones Wing" color="yellow" />
-        <PanelTabBtn active={tab === 'ticker'} onClick={() => setTab('ticker')} icon={Radio} label="Live Ticker" color="yellow" />
       </div>
 
       {/* Stats bar */}
@@ -353,18 +275,6 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
         </div>
       )}
 
-      {/* Live broadcast marquee - hidden for non-admin */}
-      {isAdmin && (
-      <div className="relative mb-5 lg:mb-1 rounded-xl border border-rose-500/30 bg-rose-950/20 p-3 lg:p-1.5 flex items-center gap-3 lg:gap-1 overflow-hidden">
-        <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-rose-300 uppercase tracking-widest px-2 lg:px-1.5 py-1 bg-rose-500/20 border border-rose-500/40 rounded shrink-0">
-          <Radio className="w-3 h-3 lg:w-3 lg:h-3 animate-pulse" /> LIVE BROADCAST
-        </span>
-        <div className="text-xs lg:text-[11px] text-rose-200">
-          {commentary[0]?.text || (isAdmin ? '🎙️ ESPORTS COMMENTARY ACTIVE: Welcome to Project Venom World Arena Championship!' : 'No live commentary at this time.')}
-        </div>
-      </div>
-      )}
-
       {/* ═══════════════════ TAB: My HOF Profile ═══════════════════ */}
       {tab === 'my-hof' && (
         <MyHofTab
@@ -385,12 +295,10 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
           year={champYear}
           years={champYears}
           search={champSearch}
-          displayEntries={champDisplayEntries}
-          isDemo={champIsDemo}
+          entries={champEntries}
           onYearChange={setChampYear}
           onSearchChange={setChampSearch}
           onInspectEntry={inspectEntry}
-          onInspectDemo={inspectDemo}
         />
       )}
 
@@ -400,7 +308,6 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
           loading={mileLoading}
           tierFilter={mileTierFilter}
           search={mileSearch}
-          isDemo={mileIsDemo}
           entries={mileEntries}
           firstAchievers={mileFirstAchievers}
           listRef={mileListRef}
@@ -410,46 +317,6 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
           onSearchChange={setMileSearch}
           onInspectPlayer={onInspectPlayer}
         />
-      )}
-
-      {/* ═══════════════════ TAB: Live Esports Ticker ═══════════════════ */}
-      {tab === 'ticker' && (
-        <div className="space-y-4 lg:space-y-1">
-          <div className="flex flex-wrap items-center gap-2 lg:gap-1">
-            <Radio className="w-4 h-4 lg:w-3 lg:h-3 text-rose-400" />
-            <span className="text-xs lg:text-[11px] font-bold text-white">Channel Filter:</span>
-            {([
-              { id: 'all', label: '🌐 All Arena Events' },
-              { id: 'extractions', label: '💰 High Stakes Extractions' },
-              { id: 'eliminations', label: '💥 Viper Eliminations' },
-              { id: 'milestones', label: '👑 Milestone Breakers' },
-            ] as const).map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setTickerFilter(f.id)}
-                className={`px-2.5 lg:px-1.5 py-1 rounded-full text-[11px] font-bold transition border ${tickerFilter === f.id ? 'bg-rose-500/20 border-rose-500/40 text-rose-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-            <ol className="divide-y divide-slate-900 max-h-96 lg:max-h-[340px] overflow-y-auto va-scroll">
-              {filteredCommentary.length === 0 ? (
-                <li className="p-6 lg:p-3 text-center text-xs lg:text-[11px] text-slate-500">No events in this channel yet…</li>
-              ) : (
-                filteredCommentary.map((c) => (
-                  <li key={c.id} className="px-4 lg:px-1.5 py-3 lg:py-1 text-sm lg:text-[11px] flex items-start gap-3 lg:gap-1 hover:bg-slate-900/40 transition-colors">
-                    <span className="text-[11px] font-mono text-slate-500 mt-0.5 shrink-0">{c.ts}</span>
-                    <span className="text-slate-200 leading-relaxed">{c.text}</span>
-                  </li>
-                ))
-              )}
-            </ol>
-          </div>
-        </div>
       )}
     </div>
   );

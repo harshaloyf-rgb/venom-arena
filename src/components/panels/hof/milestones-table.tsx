@@ -12,14 +12,13 @@ interface MilestonesFlatTableProps {
   entries: InducteeEntry[];
   tierFilter: string;
   search: string;
-  isDemo?: boolean;
   firstAchievers: Record<string, { playerName: string; userTag: string; country: string; inductedAt: string } | null>;
   listRef: React.RefObject<HTMLDivElement | null>;
   myPlayerTag: string | null;
   onInspectPlayer?: (p: InspectedPlayer) => void;
 }
 
-export function MilestonesFlatTable({ entries, tierFilter, search, isDemo, firstAchievers, listRef, myPlayerTag, onInspectPlayer }: MilestonesFlatTableProps) {
+export function MilestonesFlatTable({ entries, tierFilter, search, firstAchievers, listRef, myPlayerTag, onInspectPlayer }: MilestonesFlatTableProps) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const tierMap = useMemo(() => {
@@ -54,12 +53,6 @@ export function MilestonesFlatTable({ entries, tierFilter, search, isDemo, first
 
   return (
     <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-      {isDemo && (
-        <div className="px-4 lg:px-1.5 py-2 lg:py-1 bg-slate-900 border-b border-slate-800 flex items-center gap-2">
-          <span className="text-[11px] font-mono font-bold text-slate-400 px-2 py-0.5 bg-slate-800 rounded-full border border-slate-700">DEMO</span>
-          <span className="text-[11px] text-slate-500">No real milestone inductees yet. Showing sample data.</span>
-        </div>
-      )}
       {/* Desktop header */}
       <div className="hidden lg:grid lg:grid-cols-12 lg:gap-1 lg:px-1.5 lg:py-1 border-b border-slate-800 bg-slate-950 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
         <div className="lg:col-span-1">Rank</div>
@@ -103,7 +96,7 @@ export function MilestonesFlatTable({ entries, tierFilter, search, isDemo, first
             <li
               key={entry.id}
               data-is-me={isMe ? 'true' : undefined}
-              className={`${isDemo ? 'opacity-60' : ''} ${isMe && !isExpanded ? 'bg-yellow-500/10' : ''}`}
+              className={`${isMe && !isExpanded ? 'bg-yellow-500/10' : ''}`}
             >
               {/* Mobile card */}
               <button
