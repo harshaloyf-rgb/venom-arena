@@ -6,14 +6,10 @@ import {
   UserPlus,
   Swords,
   Ban,
-  Trophy,
-  Award,
   Crown,
-  Zap,
   Sparkles,
   Check,
   ExternalLink,
-  Globe,
   Users,
   Loader2,
   Heart,
@@ -21,6 +17,7 @@ import {
   Crosshair,
   Eye,
   EyeOff,
+  Clock,
 } from 'lucide-react';
 import {
   countryFlag,
@@ -37,14 +34,18 @@ interface PlayerInspectorModalProps {
   onToast?: ToastFn;
 }
 
-/** Fetched public profile data */
 interface PublicProfile {
+  avatar?: string | null;
   friendsCount: number;
   followersCount: number;
   followingCount: number;
   rivalsCount: number;
   milestones: Array<{ id: string; tierId: string; chipsAtMilestone: number; createdAt: string }>;
-  hofEntries: Array<{ id: string; inductionType: string; hofBadge: string | null; title: string | null; championshipYear: number | null; championshipRank: number | null; chipsAtInduction: number; inductedAt: string }>;
+  hofEntries: Array<{
+    id: string; inductionType: string; hofBadge: string | null; title: string | null;
+    championshipYear: number | null; championshipRank: number | null;
+    chipsAtInduction: number; inductedAt: string;
+  }>;
   instagram: string | null;
   youtube: string | null;
   twitch: string | null;
@@ -63,7 +64,20 @@ interface PublicProfile {
   clanTag?: string | null;
   clanRank?: string | null;
   createdAt?: string;
-  lastSeenAt?: string;
+  lastSeenAt?: string | null;
+}
+
+function relativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
 }
 
 export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspectorModalProps) {
@@ -102,7 +116,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
           );
           if (isFrnd) setFriendRequested(true);
         })
-        .catch(() => {/* ignore */});
+        .catch(() => { /* ignore */ });
       fetch(`/api/player/follow?tag=${encodeURIComponent(player.userTag)}`)
         .then(r => r.json())
         .then(d => { if (d.following) setIsFollowing(true); })
@@ -156,28 +170,31 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
       currentBanner: profile.currentBanner ?? player.currentBanner,
     } : {}),
   };
+
   const flag = p.flag || countryFlag(p.country);
   const clanTag = profile?.clanTag || p.clanTag;
-  const clanName = p.clanName;
+  const clanRank = profile?.clanRank || null;
+  const avatarSrc = profile?.avatar || null;
 
   const globalRank = p.globalRank ?? Math.max(1, 15 - Math.floor(p.level / 3));
   const countryRank = p.countryRank ?? Math.max(1, Math.floor(globalRank / 1.4));
   const regionalRank = p.regionalRank ?? Math.max(1, Math.floor(globalRank / 2));
-  const achievedAt = p.achievedAt || '26 Jul 2026, 05:42 PM UTC';
 
   const friendsCount = profile?.friendsCount ?? null;
   const followersCount = profile?.followersCount ?? 0;
+  const followingCount = profile?.followingCount ?? 0;
   const rivalsCount = profile?.rivalsCount ?? 0;
 
   const socialLinks = [
-    { platform: 'Instagram', handle: profile?.instagram, color: '#E4405F', icon: '\uD83D\uDCF8', url: 'https://instagram.com/' },
-    { platform: 'YouTube', handle: profile?.youtube, color: '#FF0000', icon: '\u25B6', url: 'https://youtube.com/' },
-    { platform: 'Twitch', handle: profile?.twitch, color: '#9146FF', icon: '\uD83C\uDFAE', url: 'https://twitch.tv/' },
+    { platform: 'Instagram', handle: profile?.instagram, color: '#E4405F', icon: '📸', url: 'https://instagram.com/' },
+    { platform: 'YouTube', handle: profile?.youtube, color: '#FF0000', icon: '▶', url: 'https://youtube.com/' },
+    { platform: 'Twitch', handle: profile?.twitch, color: '#9146FF', icon: '🎮', url: 'https://twitch.tv/' },
   ];
   const activeSocials = socialLinks.filter(s => s.handle);
 
   const milestone = milestoneTierForChips(p.bankedChips);
-  const earnedBadges = MILESTONE_TIERS.filter(t => t.id !== 'all' && p.bankedChips >= t.minChips);
+  const allTiers = MILESTONE_TIERS.filter(t => t.id !== 'all');
+  const realMilestones = profile?.milestones ?? [];
   const realHofEntries = profile?.hofEntries ?? [];
 
   const skinItem = p.currentSkin ? getCosmeticById(p.currentSkin) : undefined;
@@ -196,6 +213,27 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   const memberSince = profile?.createdAt
     ? new Date(profile.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
     : null;
+  const lastSeen = profile?.lastSeenAt ? relativeTime(profile.lastSeenAt) : null;
+
+  // Inline loadout items
+  const loadoutItems = [
+    { label: 'Skin', item: skinItem, fallback: '\uD83D\uDC0D Default' },
+    { label: 'Trail', item: trailItem, fallback: '\u2728 None' },
+    { label: 'Kill FX', item: deathItem, fallback: '\uD83D\uDCA5 Default' },
+    { label: 'Emote', item: flagItem || bannerItem, fallback: '\uD83C\uDFC6 Default' },
+  ];
+
+  // Milestone badges (from DB, compact)
+  const milestoneChips = realMilestones.length > 0
+    ? realMilestones.map(m => {
+        const tier = allTiers.find(t => t.id === m.tierId);
+        return tier
+          ? { name: tier.badge.split(' ')[0], color: tier.color, date: m.createdAt }
+          : null;
+      }).filter(Boolean) as Array<{ name: string; color: string; date: string }>
+    : allTiers.filter(t => p.bankedChips >= t.minChips).map(t => ({
+        name: t.badge.split(' ')[0], color: t.color, date: '',
+      }));
 
   function handleAddFriend() {
     if (friendRequested) return;
@@ -286,12 +324,23 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
     } catch { notify('Network error.', 'error', onToast); } finally { setBlockLoading(false); }
   }
 
-  // ── Compact stat cell ──
+  // Compact stat cell
   const S = ({ label, value, color = 'text-white' }: { label: string; value: string; color?: string }) => (
     <div className="bg-slate-950/80 border border-slate-800/60 rounded-lg px-2 py-1">
       <div className="text-[9px] text-slate-500 font-bold uppercase">{label}</div>
       <div className={`text-[11px] font-mono font-bold ${color}`}>{value}</div>
     </div>
+  );
+
+  // Avatar render: actual avatar image or flag fallback
+  const avatarEl = avatarSrc ? (
+    (avatarSrc.startsWith('data:') || avatarSrc.startsWith('http')) ? (
+      <img src={avatarSrc} alt={p.name} className="w-full h-full object-cover rounded-[10px]" />
+    ) : (
+      <span className="text-xl select-none">{avatarSrc}</span>
+    )
+  ) : (
+    <span className="text-xl select-none">{flag}</span>
   );
 
   return (
@@ -301,10 +350,10 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-xl rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden"
+        className="relative w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* ── Header bar ── */}
+        {/* Header bar */}
         <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-800 bg-slate-950/60">
           <span className="flex items-center gap-1.5 text-[11px] font-bold text-amber-300 font-mono">
             <Sparkles className="w-3 h-3 text-amber-400" /> PLAYER DOSSIER
@@ -315,13 +364,16 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
           </button>
         </div>
 
-        <div className="px-3 py-2 space-y-2">
-          {/* ── Identity row ── */
+        <div className="px-3 py-2 space-y-1.5">
+          {/* Identity row: avatar + name + meta + counts */}
           <div className="flex items-start gap-2.5">
-            {/* Avatar */}
-            <div className="w-11 h-11 rounded-xl bg-slate-950 border border-amber-500/30 flex items-center justify-center text-xl shrink-0 relative">
-              <span aria-hidden>{flag}</span>
-              <div className="absolute -bottom-0.5 -right-0.5 bg-amber-600 text-white font-mono text-[8px] font-bold px-1 py-px rounded border border-amber-400">
+            {/* Avatar with flag badge */}
+            <div className="w-11 h-11 rounded-xl bg-slate-950 border border-amber-500/30 flex items-center justify-center shrink-0 relative overflow-hidden">
+              {avatarEl}
+              {avatarSrc && (
+                <span className="absolute bottom-0 right-0 text-[10px] leading-none">{flag}</span>
+              )}
+              <div className="absolute -top-0.5 -right-0.5 bg-amber-600 text-white font-mono text-[8px] font-bold px-1 py-px rounded border border-amber-400">
                 L{p.level}
               </div>
             </div>
@@ -329,7 +381,11 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <h2 id="player-inspector-title" className="text-sm font-black text-white tracking-tight truncate">{p.name}</h2>
-                {clanTag && <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[9px] font-mono font-bold px-1 py-px rounded">[{clanTag}]</span>}
+                {clanTag && (
+                  <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[9px] font-mono font-bold px-1 py-px rounded">
+                    [{clanTag}]{clanRank ? ` ${clanRank}` : ''}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5 flex-wrap">
                 <span className="font-mono text-amber-400">{p.userTag}</span>
@@ -338,12 +394,18 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                 <span>\u2022</span>
                 <span style={{ color: milestone.color }}>{milestone.badge}</span>
               </div>
-              {/* Rank pills + social count — single row */}
+              {/* Rank pills + social counts + timeline - single row */}
               <div className="flex items-center gap-1 mt-1 flex-wrap">
-                <span className="text-[9px] font-mono bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-px rounded">🏆 #{globalRank}</span>
-                <span className="text-[9px] font-mono bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-1.5 py-px rounded">{flag} #{countryRank}</span>
-                <span className="text-[9px] font-mono bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-1.5 py-px rounded">🌍 #{regionalRank}</span>
-                <span className="text-[9px] text-slate-600 mx-0.5">|</span>
+                <span className="text-[9px] font-mono bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-px rounded">
+                  \uD83C\uDFC6 #{globalRank}
+                </span>
+                <span className="text-[9px] font-mono bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-1.5 py-px rounded">
+                  {flag} #{countryRank}
+                </span>
+                <span className="text-[9px] font-mono bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 px-1.5 py-px rounded">
+                  \uD83C\uDF0D #{regionalRank}
+                </span>
+                <span className="text-[9px] text-slate-700 mx-0.5">|</span>
                 <span className="text-[9px] font-mono text-slate-400">
                   <Users className="w-2.5 h-2.5 inline text-indigo-400" /> {friendsCount != null ? friendsCount : (profileLoading ? '...' : '\u2014')}
                 </span>
@@ -351,63 +413,73 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                   <Heart className="w-2.5 h-2.5 inline text-rose-400" /> {followersCount}
                 </span>
                 <span className="text-[9px] font-mono text-slate-400">
+                  <Users className="w-2.5 h-2.5 inline text-emerald-400" /> {followingCount}
+                </span>
+                <span className="text-[9px] font-mono text-slate-400">
                   <Swords className="w-2.5 h-2.5 inline text-orange-400" /> {rivalsCount}
                 </span>
-                {memberSince && <span className="text-[9px] font-mono text-slate-600">Since {memberSince}</span>}
+              </div>
+              {/* Timeline: Since + Last Seen */}
+              <div className="flex items-center gap-2 text-[9px] text-slate-600 font-mono mt-0.5">
+                {memberSince && <span>Since {memberSince}</span>}
+                {memberSince && lastSeen && <span>\u2022</span>}
+                {lastSeen && (
+                  <span className="flex items-center gap-0.5">
+                    <Clock className="w-2 h-2" /> {lastSeen}
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
-          {/* ── Body: 2-column grid ── */}
+          {/* Body: 2-column grid - Career Stats | Loadout + Milestones + Social */}
           <div className="grid grid-cols-2 gap-2">
-            {/* LEFT: Career Stats */}
-            <div className="space-y-1.5">
+            {/* LEFT: Career Stats (no redundant Banked) */}
+            <div className="space-y-1">
               <div className="text-[9px] font-bold uppercase text-slate-500 tracking-wider">Career Stats</div>
               <div className="grid grid-cols-2 gap-1">
-                <S label="Banked" value={`${(p.bankedChips / 1_000_000).toFixed(1)}M c`} color="text-emerald-400" />
                 <S label="Highest Ext." value={highestExtraction} color="text-amber-400" />
-                <S label="Success Rate" value={successRate} color="text-indigo-400" />
+                <S label="Success Rate" value={successRate} color="text-cyan-400" />
                 <S label="Kills" value={totalKills} color="text-rose-400" />
-                {p.lifetimeExtracts != null && <S label="Extracts" value={String(p.lifetimeExtracts)} color="text-cyan-400" />}
+                {p.lifetimeExtracts != null && <S label="Extracts" value={String(p.lifetimeExtracts)} color="text-emerald-400" />}
                 {p.bestStreak != null && <S label="Best Streak" value={`${p.bestStreak}W`} color="text-yellow-400" />}
                 {p.totalEarned != null && <S label="Total Earned" value={`${(p.totalEarned / 1_000_000).toFixed(1)}M c`} color="text-emerald-300" />}
                 {p.totalLost != null && <S label="Total Lost" value={`${(p.totalLost / 1_000_000).toFixed(1)}M c`} color="text-red-400" />}
               </div>
             </div>
 
-            {/* RIGHT: Loadout + Badges + Social */}
-            <div className="space-y-1.5">
-              {/* Loadout */}
+            {/* RIGHT: Loadout + Milestones + Social */}
+            <div className="space-y-1">
+              {/* Inline loadout - single line */}
               <div className="text-[9px] font-bold uppercase text-slate-500 tracking-wider">Loadout</div>
-              <div className="bg-slate-950/80 border border-slate-800/60 rounded-lg px-2 py-1 space-y-0.5">
-                {[
-                  { label: 'Skin', item: skinItem, fallback: '\uD83D\uDC0D Default' },
-                  { label: 'Trail', item: trailItem, fallback: '\u2728 None' },
-                  { label: 'Kill FX', item: deathItem, fallback: '\uD83D\uDCA5 Default' },
-                  { label: 'Emote', item: flagItem || bannerItem, fallback: '\uD83C\uDFC6 Default' },
-                ].map((l) => (
-                  <div key={l.label} className="flex justify-between text-[10px]">
-                    <span className="text-slate-500">{l.label}</span>
-                    <span className="font-mono font-bold text-slate-300 truncate ml-2 max-w-[60%] text-right">
-                      {l.item ? `${l.item.emoji || ''} ${l.item.name}` : l.fallback}
+              <div className="bg-slate-950/80 border border-slate-800/60 rounded-lg px-2 py-1">
+                <div className="flex flex-wrap gap-x-1.5 gap-y-0.5 text-[9px]">
+                  {loadoutItems.map((l) => (
+                    <span key={l.label} className="inline-flex items-center gap-0.5">
+                      <span className="text-slate-600">{l.label}:</span>
+                      <span className="font-mono font-bold text-slate-300">
+                        {l.item ? `${l.item.emoji || ''} ${l.item.name}` : l.fallback}
+                      </span>
                     </span>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
 
-              {/* Badges */}
-              {earnedBadges.length > 0 && (
+              {/* Milestones: compact inline chips */}
+              {milestoneChips.length > 0 && (
                 <>
-                  <div className="text-[9px] font-bold uppercase text-slate-500 tracking-wider">Badges ({earnedBadges.length})</div>
+                  <div className="text-[9px] font-bold uppercase text-slate-500 tracking-wider">
+                    Milestones ({milestoneChips.length}/{allTiers.length})
+                  </div>
                   <div className="flex flex-wrap gap-1">
-                    {earnedBadges.map((t) => (
+                    {milestoneChips.map((m, i) => (
                       <span
-                        key={t.id}
+                        key={`${m.name}-${i}`}
                         className="text-[9px] font-mono font-bold px-1.5 py-px rounded border"
-                        style={{ color: t.color, borderColor: t.color + '40', backgroundColor: t.color + '10' }}
-                        title={`${t.name} \u2014 ${t.minChips.toLocaleString()}c+`}
+                        style={{ color: m.color, borderColor: m.color + '40', backgroundColor: m.color + '10' }}
+                        title={m.date ? `Achieved ${new Date(m.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}` : undefined}
                       >
-                        {t.badge.split(' ')[0]} {t.name.split('(')[0].trim()}
+                        {m.name}
                       </span>
                     ))}
                   </div>
@@ -434,10 +506,12 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
             </div>
           </div>
 
-          {/* ── HOF entry (if any) ── */}
+          {/* HOF entry (if any) */}
           {realHofEntries.length > 0 && (
             <div className="bg-yellow-500/5 border border-yellow-500/15 rounded-lg px-2 py-1">
-              <div className="text-[9px] font-bold text-yellow-400 uppercase tracking-wider">👑 Hall of Fame — {realHofEntries.length} Induction{realHofEntries.length !== 1 ? 's' : ''}</div>
+              <div className="text-[9px] font-bold text-yellow-400 uppercase tracking-wider">
+                \uD83D\uDC51 Hall of Fame - {realHofEntries.length} Induction{realHofEntries.length !== 1 ? 's' : ''}
+              </div>
               {realHofEntries.slice(0, 2).map((e) => (
                 <div key={e.id} className="flex justify-between text-[10px] mt-0.5">
                   <span className="text-yellow-200 font-bold truncate">{e.hofBadge || e.title || 'HOF Inductee'}</span>
@@ -448,14 +522,14 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
           )}
         </div>
 
-        {/* ── Action buttons — single row ── */}
+        {/* Action buttons - single row */}
         <div className="px-3 py-2 border-t border-slate-800 bg-slate-950/40">
           {isRival && (
             <button type="button" onClick={handleRivalToFriend} disabled={rivalToFriendLoading}
               className={`w-full mb-1.5 py-1.5 px-2 border rounded-lg text-[10px] font-bold flex items-center justify-center gap-1.5 bg-gradient-to-r from-orange-500/20 to-emerald-500/20 text-white border-orange-500/30 hover:border-emerald-500/40 transition ${rivalToFriendLoading ? 'opacity-50' : ''}`}
             >
               {rivalToFriendLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Heart className="w-3 h-3 text-rose-400" />}
-              {rivalToFriendLoading ? 'Processing...' : `Turn Rival \u2192 Friend`}
+              {rivalToFriendLoading ? 'Processing...' : 'Turn Rival -> Friend'}
             </button>
           )}
           <div className="grid grid-cols-4 gap-1.5">
