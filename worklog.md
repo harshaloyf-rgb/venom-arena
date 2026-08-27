@@ -176,3 +176,22 @@ Stage Summary:
 - OAuth users get 1000 chips immediately (email pre-verified by provider)
 - Guest users stay at 150 chips, no referral code shown
 - All changes verified via browser and API testing
+
+---
+Task ID: 1
+Agent: main
+Task: Restore admin account (harshpawar57@gmail.com) + add Milestone Tiers Roadmap
+
+Work Log:
+- Diagnosed: admin account lost due to db:push --force-reset wiping custom.db data
+- Recreated admin account in custom.db with bcrypt-hashed password, role=admin, 1B chips, emailVerified=true
+- Backfilled 6 PlayerMilestone records (Bronze/Silver/Gold/Platinum/Diamond/Omega) for admin
+- Added "Milestone Tiers Roadmap" UI section in player-profile.tsx showing all 7 tiers (Rookie→Omega) with progress bars, achieved checkmarks, and chip thresholds
+- Updated empty-state message to dynamically show next milestone tier instead of hardcoded "Bronze at 100K"
+- Browser verified: login works, roadmap shows all tiers with green bars + ✓ for achieved ones
+
+Stage Summary:
+- Admin account restored: harshpawar57@gmail.com / 123456 / 1B chips / admin role
+- Milestone Tiers Roadmap now visible in profile showing full progression with thresholds
+- Players can now see all tier names, chip requirements, and their progress toward each
+

@@ -1524,6 +1524,41 @@ function ProfileContent({
             <h3 className="text-sm lg:text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
               <Award className="w-4 h-4 lg:w-3 lg:h-3 text-amber-400" /> Chip Milestones
             </h3>
+
+            {/* Milestone Tiers Roadmap */}
+            <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3 lg:p-2">
+              <p className="text-[10px] lg:text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-2 lg:mb-1.5">Milestone Tiers Roadmap</p>
+              <div className="space-y-1.5">
+                {MILESTONE_TIERS.filter(t => t.id !== 'all').reverse().map((tier) => {
+                  const achieved = milestones.some(ms => ms.tierId === tier.id);
+                  const progress = Math.min(100, (player.bankedChips / tier.minChips) * 100);
+                  return (
+                    <div key={tier.id} className="flex items-center gap-2 lg:gap-1.5">
+                      <span className={`text-sm lg:text-xs w-5 text-center shrink-0 ${achieved ? '' : 'grayscale opacity-40'}`}>
+                        {tier.badge.split(' ')[0]}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className={`text-[11px] lg:text-[10px] font-semibold truncate ${achieved ? 'text-white' : 'text-slate-500'}`}>
+                            {tier.name}
+                          </span>
+                          <span className={`text-[10px] lg:text-[9px] font-mono shrink-0 ml-2 ${achieved ? 'text-emerald-400' : 'text-slate-600'}`}>
+                            {tier.minChips.toLocaleString('en-IN')}c {achieved ? '✓' : ''}
+                          </span>
+                        </div>
+                        <div className="h-1 lg:h-0.5 rounded-full bg-slate-800 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${achieved ? 'bg-emerald-500' : progress > 75 ? 'bg-amber-500/60' : 'bg-slate-600/50'}`}
+                            style={{ width: `${Math.min(progress, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             {milestonesLoading ? (
               <PanelSkeleton count={2} height="h-16" />
             ) : milestones.length === 0 ? (
@@ -1531,7 +1566,10 @@ function ProfileContent({
                 <Trophy className="w-6 h-6 lg:w-4 lg:h-4 text-slate-600 mx-auto mb-1" />
                 <p className="text-xs lg:text-[11px] text-slate-400">No chip milestones achieved yet.</p>
                 <p className="text-[11px] text-slate-600 mt-0.5">
-                  Banked: {player.bankedChips.toLocaleString()}c — Next milestone: Bronze at 100,000c. Keep extracting!
+                  Banked: {player.bankedChips.toLocaleString()}c — Next: {(() => {
+                    const next = MILESTONE_TIERS.filter(t => t.id !== 'all' && t.id !== 'rookie').find(t => player.bankedChips < t.minChips);
+                    return next ? `${next.badge.split(' ')[0]} ${next.name} at ${next.minChips.toLocaleString('en-IN')}c` : 'All tiers unlocked!';
+                  })()}. Keep extracting!
                 </p>
               </div>
             ) : (
