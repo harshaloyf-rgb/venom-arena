@@ -238,3 +238,5 @@ Stage Summary:
 - Zero truncate/line-clamp/ellipsis instances remaining
 - Lint passes cleanly (only pre-existing fix-bom.ts error)
 - No logic/state/effects/fetching changed, no imports changed, no text/icons/badges removed
+---
+Session start: 2026-08-27 12:33:51 UTC, git: 65accb7
