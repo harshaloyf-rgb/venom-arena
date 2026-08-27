@@ -43,12 +43,6 @@ function rankCat(rank: number): string {
   return 'rank51_100';
 }
 
-// In-memory set of live player tags (could be updated by game-server heartbeats)
-const LIVE_SET = new Set<string>();
-export function markLive(tag: string, on: boolean) {
-  if (on) LIVE_SET.add(tag); else LIVE_SET.delete(tag);
-}
-
 export async function GET(req: NextRequest) {
   const session = await getSession();
   const u = new URL(req.url);
@@ -79,7 +73,6 @@ export async function GET(req: NextRequest) {
       clanTag: r.player.clanTag || '',
       gamesPlayed: r.gamesPlayed,
       createdAt: r.player.createdAt.toISOString(),
-      isLive: LIVE_SET.has(r.player.userTag),
       isPlayer: session?.userTag === r.player.userTag,
     }))
     .sort((a, b) => {
@@ -119,6 +112,9 @@ export async function GET(req: NextRequest) {
     filtered = filtered.filter(c =>
       c.name.toLowerCase().includes(q) || c.userTag.toLowerCase().includes(q) || c.clanTag.toLowerCase().includes(q));
   }
+
+  // Cap at 100 entries to match prize tiers
+  filtered = filtered.slice(0, 100);
 
   const entries = filtered.map(c => {
     const p = prizeForRank(c.rank);

@@ -50,19 +50,19 @@ export function Section13_Championships() {
                 <tr className="border-b border-slate-900">
                   <td className="py-1 pr-2 font-bold" style={{ color: '#a1a1aa' }}>#2–10</td>
                   <td className="py-1 pr-2" style={{ color: '#a1a1aa' }}>🥈 Elite 10</td>
-                  <td className="py-1 pr-2 text-slate-400">500,000c each</td>
+                  <td className="py-1 pr-2 text-slate-400">2,500,000c each</td>
                   <td className="py-1 text-slate-400">Silver HOF badge + title</td>
                 </tr>
                 <tr className="border-b border-slate-900">
                   <td className="py-1 pr-2 font-bold" style={{ color: '#cd7f32' }}>#11–50</td>
                   <td className="py-1 pr-2" style={{ color: '#cd7f32' }}>🥉 Masters 50</td>
-                  <td className="py-1 pr-2 text-slate-400">100,000c each</td>
+                  <td className="py-1 pr-2 text-slate-400">1,000,000c each</td>
                   <td className="py-1 text-slate-400">Bronze HOF badge</td>
                 </tr>
                 <tr>
                   <td className="py-1 pr-2 font-bold" style={{ color: '#64748b' }}>#51–100</td>
                   <td className="py-1 pr-2" style={{ color: '#64748b' }}>🛡️ Qualifier 100</td>
-                  <td className="py-1 pr-2 text-slate-400">25,000c each</td>
+                  <td className="py-1 pr-2 text-slate-400">250,000c each</td>
                   <td className="py-1 text-slate-400">Qualifier badge + next-year priority</td>
                 </tr>
               </tbody>
@@ -101,18 +101,7 @@ export function Section13_Championships() {
             <li><strong>NATIONAL</strong> — Players from your country only</li>
             <li><strong>CLAN</strong> — Clan-based rankings: aggregates all clan members&apos; championship scores into a clan total, then ranks clans against each other</li>
           </ul>
-          <p className="mt-1">Clan rankings use the <strong>sum of top 10 members&apos; scores</strong> to prevent single-player clan exploits. A &quot;Clan Members&quot; count shows active participants.</p>
-        </InfoCard>
-
-        <InfoCard title="🟢 Live Activity Indicators" accent="text-green-400">
-          <p className="mb-1">On the championship standings, some player rows display a <strong>green pulsing dot</strong> next to their name:</p>
-          <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong>Green pulsing dot = currently online</strong> — that player is in an active match right now</li>
-            <li><strong>No dot = offline</strong> — the player is not currently in a match</li>
-            <li>The dot updates in real-time via the server&apos;s presence system</li>
-            <li>It adds a competitive edge — you can see if your rivals are grinding!</li>
-          </ul>
-          <p className="mt-1">The pulsing animation uses a smooth CSS animation (scale + opacity) on a 2-second loop.</p>
+          <p className="mt-1">Clan rankings use the <strong>sum of all clan members&apos; scores</strong>. A &quot;Clan Members&quot; count shows active participants.</p>
         </InfoCard>
 
         <InfoCard title="🔍 Find Me in Championship" accent="text-violet-300">
@@ -122,17 +111,6 @@ export function Section13_Championships() {
             <li>If you&apos;re on the current page, it scrolls to your row and highlights it</li>
             <li>If you&apos;re not visible (e.g., viewing a different region), a <strong>Rank Summary Card</strong> appears showing your position across all 4 scopes</li>
             <li>The summary includes: rank, score, matches played, and projected HOF tier</li>
-          </ul>
-        </InfoCard>
-
-        <InfoCard title="🧪 Demo Data &amp; Real Standings" accent="text-slate-300">
-          <p className="mb-1">Before enough real match data accumulates, the championship page shows <strong>demo data</strong>:</p>
-          <ul className="list-disc pl-4 space-y-0.5">
-            <li>Demo rows have a grey <strong>&quot;DEMO&quot; badge</strong> on each entry</li>
-            <li>The header displays &quot;· Showing demo data&quot;</li>
-            <li>Once you&apos;ve played real matches, your actual data replaces demo entries</li>
-            <li>Demo data is identical in structure to real data — same columns, same sorting</li>
-            <li>At least <strong>10 real players</strong> must have championship scores before demo data is fully retired</li>
           </ul>
         </InfoCard>
 

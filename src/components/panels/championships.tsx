@@ -3,12 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
 import {
-  CHAMPIONSHIP_PRIZE_TIERS,
-  INITIAL_CONTENDERS,
-  countryFlag,
-  type ChampionshipContender,
-} from '@/lib/game-config';
-import {
   GlowBlob,
   NotSignedIn,
   notify,
@@ -23,8 +17,6 @@ import { PlayerStatusCard, type PlayerStatus } from './championships/player-stat
 import {
   StandingsTable,
   PastChampionships,
-  prizeForRank,
-  fmtINR,
   type Scope,
   type RankFilter,
   type ApiEntry,
@@ -50,13 +42,6 @@ const CHAMPIONSHIP_END_DATE = new Date('2027-01-01T00:00:00Z');
 // ============================================================================
 // Helpers
 // ============================================================================
-
-function rankCategoryOf(rank: number): Exclude<RankFilter, 'all'> {
-  if (rank === 1) return 'rank1';
-  if (rank <= 10) return 'rank2_10';
-  if (rank <= 50) return 'rank11_50';
-  return 'rank51_100';
-}
 
 function pad2(n: number) { return String(n).padStart(2, '0'); }
 
@@ -182,66 +167,16 @@ export function Championships({ onToast }: ChampionshipsProps) {
     return () => { cancelled = true; };
   }, [scope, region, country, rankFilter, search]);
 
-  // ── Demo fallback: merge real data with demo contenders (admin-only) ─────────
+  // ── Display entries: use real data or empty ─────────────────────────────
   const displayEntries = useMemo<ApiEntry[]>(() => {
     if (hasRealData) return entries;
-    if (!isAdmin) return [];
-    const demo: ApiEntry[] = INITIAL_CONTENDERS.map((c, i) => {
-      const rank = i + 1;
-      const prize = prizeForRank(rank);
-      return {
-        rank,
-        userTag: c.userTag,
-        name: c.name,
-        country: c.country,
-        region: c.region,
-        bankedChips: c.walletChips,
-        level: 0,
-        clanTag: c.clanTag,
-        gamesPlayed: c.gamesPlayed,
-        createdAt: '',
-        isLive: false,
-        isPlayer: false,
-        prize: prize ? { chipsReward: prize.chipsReward, crownTitle: prize.crownTitle } : null,
-        efficiency: c.gamesPlayed > 0 ? Math.round(c.walletChips / c.gamesPlayed) : 0,
-        flag: countryFlag(c.country),
-      };
-    });
-    if (registered && player) {
-      const exists = demo.find((d) => d.isPlayer);
-      if (!exists) {
-        const regionOf = (cc: string) => {
-          if (['IN','JP','KR','SG','AU','CN','TW','TH','VN','PH','ID','MY'].includes(cc)) return 'APAC';
-          if (['US','CA','MX'].includes(cc)) return 'NA';
-          if (['GB','DE','FR','IT','ES','NL','PL','SE','NO','FI','DK','PT','AT','CH','BE','IE','CZ','GR'].includes(cc)) return 'EU';
-          return 'LATAM';
-        };
-        demo.push({
-          rank: 999, userTag: `#${player.userTag}`, name: player.name, country: player.country,
-          region: regionOf(player.country), bankedChips: player.bankedChips, level: player.level,
-          clanTag: player.clanTag || 'VPR', gamesPlayed, createdAt: '', isLive: false, isPlayer: true,
-          prize: null, efficiency: gamesPlayed > 0 ? Math.round(player.bankedChips / gamesPlayed) : 0, flag: countryFlag(player.country),
-        });
-      }
-    }
-    return demo
-      .sort((a, b) => b.bankedChips - a.bankedChips)
-      .map((c, i) => ({ ...c, rank: i + 1 }));
-  }, [hasRealData, isAdmin, entries, registered, player, gamesPlayed]);
+    return [];
+  }, [hasRealData, entries]);
 
-  // ── Filtered entries (for client-side filtering of demo data) ─────────────
+  // ── Filtered entries ──────────────────────────────────────────────────────
   const filteredEntries = useMemo(() => {
-    if (hasRealData) return displayEntries;
-    let result = displayEntries;
-    if (scope === 'REGIONAL' && region !== 'ALL') result = result.filter(c => c.region === region);
-    else if (scope === 'NATIONAL' && country !== 'ALL') result = result.filter(c => c.country === country);
-    if (rankFilter !== 'all') result = result.filter(c => rankCategoryOf(c.rank) === rankFilter);
-    if (search.trim()) {
-      const q = search.toLowerCase().trim();
-      result = result.filter(c => c.name.toLowerCase().includes(q) || c.userTag.toLowerCase().includes(q) || c.clanTag.toLowerCase().includes(q));
-    }
-    return result;
-  }, [hasRealData, displayEntries, scope, region, country, rankFilter, search]);
+    return displayEntries;
+  }, [displayEntries]);
 
   const top3 = useMemo(() => (scope === 'CLAN' ? [] : filteredEntries.slice(0, 3)), [scope, filteredEntries]);
 

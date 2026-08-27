@@ -38,7 +38,6 @@ export interface ApiEntry {
   clanTag: string;
   gamesPlayed: number;
   createdAt: string;
-  isLive: boolean;
   isPlayer: boolean;
   prize: { chipsReward: number; crownTitle: string } | null;
   efficiency: number;
@@ -143,9 +142,7 @@ export function ChampionshipPodium({ entries }: { entries: ApiEntry[] }) {
           <div className="relative text-center">
             <div className="text-3xl sm:text-4xl mb-1 lg:text-lg lg:mb-0">{styles[i].medal}</div>
             <div className={`text-[11px] font-mono font-bold ${styles[i].accent} uppercase tracking-widest`}>{styles[i].place} PLACE</div>
-            {/* P3-5: Live dot */}
             <div className="flex items-center justify-center gap-1.5 mt-1">
-              {c.isLive && <span className="relative flex h-2 w-2 lg:h-1.5 lg:w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex rounded-full h-2 w-2 lg:h-1.5 lg:w-1.5 bg-emerald-500" /></span>}
               <div className="text-xs sm:text-sm font-bold text-white lg:text-[11px] lg:truncate">{c.flag} {c.name}</div>
             </div>
             <div className="text-[11px] font-mono text-slate-500 mt-0.5">{c.userTag} · [{c.clanTag}]</div>
@@ -234,9 +231,6 @@ export function ClanRankingsTable({ clans, hasRealData, isAdmin }: { clans: Clan
   }
   return (
     <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-      {!hasRealData && isAdmin && (
-        <div className="px-4 py-1.5 bg-amber-500/10 border-b border-amber-500/20 text-[11px] font-mono text-amber-300">· Showing demo data</div>
-      )}
       <div className="overflow-x-auto lg:overflow-visible">
         <div className="min-w-[500px] lg:min-w-0">
           <div className="hidden lg:grid lg:grid-cols-12 lg:gap-1 lg:px-1.5 lg:py-1 border-b border-slate-800 bg-slate-950 text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -411,12 +405,10 @@ export function StandingsTable({
               2026 Championship Standings
               {scope === 'REGIONAL' && region !== 'ALL' && ` · ${region}`}
               {scope === 'NATIONAL' && country !== 'ALL' && ` · ${country}`}
-              {!hasRealData && isAdmin && ' · Showing demo data'}
             </h3>
             <span className="text-[11px] font-mono text-slate-500">{filteredEntries.length} contender{filteredEntries.length !== 1 ? 's' : ''}</span>
           </div>
           <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-            {!hasRealData && isAdmin && <div className="px-4 py-1.5 bg-amber-500/10 border-b border-amber-500/20 text-[11px] font-mono text-amber-300">· Showing demo data — register and play to appear in real standings</div>}
             <div className="overflow-x-auto lg:overflow-visible">
               <div className="min-w-[680px] lg:min-w-0">
                 {/* Header */}
@@ -434,10 +426,9 @@ export function StandingsTable({
                   {loading ? (
                     <li className="p-8 lg:p-3 text-center text-xs lg:text-[11px] text-slate-500 animate-pulse">Loading standings...</li>
                   ) : filteredEntries.length === 0 ? (
-                    <li className="p-6 lg:p-3 text-center text-xs lg:text-[11px] text-slate-500">{!hasRealData && !isAdmin ? 'No championship contenders yet. Register and play to appear in the standings!' : 'No contenders match the current filters.'}</li>
+                    <li className="p-6 lg:p-3 text-center text-xs lg:text-[11px] text-slate-500">{!hasRealData ? 'No championship contenders yet. Register and play to appear in the standings!' : 'No contenders match the current filters.'}</li>
                   ) : filteredEntries.map((c) => {
                     const isMe = c.isPlayer;
-                    const isDemo = isAdmin && !hasRealData && !isMe;
                     const prize = c.prize ?? prizeForRank(c.rank);
                     return (
                       <li key={c.userTag + c.rank} data-champ-me={isMe ? 'true' : undefined} className={`${isMe && findMeHighlight ? 'bg-amber-500/20 ring-1 ring-inset ring-amber-400/40' : isMe ? 'bg-amber-500/10' : ''}`}>
@@ -448,11 +439,9 @@ export function StandingsTable({
                               <span className="font-mono text-slate-400 font-bold w-8 shrink-0">
                                 {c.rank === 1 ? <span className="text-[11px]">🥇</span> : c.rank === 2 ? <span className="text-[11px]">🥈</span> : c.rank === 3 ? <span className="text-[11px]">🥉</span> : <span>#{c.rank}</span>}
                               </span>
-                              {c.isLive && <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" /></span>}
                               <span className="font-bold text-white flex items-center gap-1 flex-1 min-w-0">
                                 <span className="shrink-0">{c.flag}</span>
                                 <span>{c.name}</span>
-                                {isDemo && <span className="text-[11px] font-mono text-slate-500 bg-slate-800 px-1 py-px rounded shrink-0">DEMO</span>}
                                 {isMe && <span className="text-[11px] bg-amber-500 text-black px-1 rounded font-bold ml-0.5">YOU</span>}
                               </span>
                               <span className="font-mono font-bold text-emerald-400 tabular-nums shrink-0">{fmtINR(c.bankedChips)}c</span>
@@ -481,15 +470,13 @@ export function StandingsTable({
                             {/* Rank */}
                             <div className="lg:col-span-1 font-mono flex items-center gap-0.5">
                               {c.rank === 1 ? <span className="text-[11px]">🥇</span> : c.rank === 2 ? <span className="text-[11px]">🥈</span> : c.rank === 3 ? <span className="text-[11px]">🥉</span> : <span className="text-slate-400 font-bold">#{c.rank}</span>}
-                              {c.isLive && <span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" /></span>}
                               {isMe && <span className="text-[11px] bg-amber-500 text-black px-1 rounded font-bold ml-0.5">YOU</span>}
                             </div>
-                            {/* Name + DEMO badge */}
+                            {/* Name */}
                             <div className="lg:col-span-3 lg:min-w-0">
                               <div className="font-bold text-white lg:truncate flex items-center gap-1.5">
                                 <span aria-hidden className="shrink-0">{c.flag}</span>
                                 <span className="lg:truncate">{c.name}</span>
-                                {isDemo && <span className="text-[11px] font-mono text-slate-500 bg-slate-800 px-1 py-px rounded shrink-0">DEMO</span>}
                               </div>
                               <div className="text-[11px] font-mono text-slate-500 lg:truncate">[{c.clanTag}] · {c.region}</div>
                             </div>
