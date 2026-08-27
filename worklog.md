@@ -270,3 +270,74 @@ Stage Summary:
 - 2 commits pushed: dead code removal + full popup rewrite
 ---
 Session start: 2026-08-27 15:13:53 UTC, git: f42eb3a
+---
+Task ID: audit-championship
+Agent: Explore
+Task: Audit championship lobby code — read-only investigation of demo data, pagination, column meanings, and clan rankings
+
+AUDIT FINDINGS:
+
+1. WHY DEMO DATA IS SHOWN:
+   - Root cause: The API at /api/championship/standings returns hasRealData: regs.length > 0 (line 155)
+   - If no ChampionshipRegistration records exist for year 2026, hasRealData is false
+   - Client-side in championships.tsx lines 186-230: displayEntries useMemo checks hasRealData first.
+     If false AND user is admin, it falls back to INITIAL_CONTENDERS (hardcoded mock array)
+     If false AND user is NOT admin, it returns empty array (shows 'No contenders' message)
+   - Demo data source: /src/lib/game-config.ts lines 817-832 — INITIAL_CONTENDERS array with 14 hardcoded players
+   - Demo archive data also seeded on first API call: /src/app/api/championship/archives/route.ts lines 11-49 (ensureDemoArchives creates fake 2024 and 2025 archives if table is empty)
+
+2. WHY 'ALL' FILTER DOES NOT SHOW 100 RANKS:
+   - The demo data (INITIAL_CONTENDERS) only has 14 entries (ranks 1,2,3,4,5,6,7,8,9,10,11,12,15,52)
+   - When hasRealData is false, displayEntries is built from INITIAL_CONTENDERS (line 189), which only has 14 items
+   - The rank filter buttons (All/rank1/rank2_10/rank11_50/rank51_100) only filter these 14 demo entries client-side (lines 233-244)
+   - There is NO server-side pagination in the championship standings API — it returns ALL registered players
+   - When real data exists (hasRealData=true), the API returns all ChampionshipRegistration records with no limit, so all ranks appear
+   - The 'All' filter with real data WOULD show all registered players (not capped at 100)
+
+3. CHAMPIONSHIP vs GLOBAL LEADERBOARD PAGINATION COMPARISON:
+   - Global Leaderboard (leaderboards.tsx):
+     * Mobile: max-h-[55vh] overflow-y-auto (scroll container, line 749)
+     * Desktop (lg): lg:max-h-none lg:overflow-visible (NO scroll, ALL rows visible)
+     * API: /api/leaderboard has a limit parameter (default 1000 for global, 100 for other views)
+     * Non-global tabs send limit=100
+   - Championship Leaderboard (standings-table.tsx):
+     * Mobile: max-h-[60vh] overflow-y-auto (slightly taller scroll container, line 433)
+     * Desktop (lg): lg:max-h-none lg:overflow-visible (same approach — NO scroll on desktop)
+     * API: /api/championship/standings has NO limit parameter — returns ALL registered players
+   - Key difference: The global leaderboard caps non-global views at 100 rows server-side. The championship has NO server-side limit at all. Both use the same desktop strategy (no scroll, render all rows). The championship has a slightly taller mobile scroll container (60vh vs 55vh).
+   - Neither has client-side pagination — both render all rows.
+
+4. COLUMN DEFINITIONS in '2026 Championship Standings':
+   - Header defined at standings-table.tsx lines 423-431 (desktop grid: 12-column layout)
+   - 'Rank' (col-span-1): Player's championship rank (#1, #2, etc.)
+   - 'Contender' (col-span-3): Player name + clan tag + region. Shows flag emoji, name, [CLAN_TAG], and region text
+   - 'Tag' (col-span-2): The player's unique userTag (e.g., '#VM-abc123'). Defined in ApiEntry.userTag (line 32). In the DB this is Player.userTag.
+   - 'Games' (col-span-1): Championship games played count. From ApiEntry.gamesPlayed (line 39). Sourced from ChampionshipRegistration.gamesPlayed in DB.
+   - 'c/game' (col-span-1): Chips-per-game efficiency = Math.round(bankedChips / gamesPlayed). From ApiEntry.efficiency (line 44). Calculated in API at standings/route.ts line 128.
+   - 'Wallet Chips' (col-span-2): Player's current bankedChips balance (the ranking metric). From ApiEntry.bankedChips (line 36).
+   - 'Projected Prize' (col-span-2): The prize the player would receive if standings were finalized now. Based on rank position using prizeForRank(). Shows chip reward + crown title. Null for ranks > 100.
+
+5. CLAN CHAMPIONSHIP RANKINGS:
+   - Description: Aggregates championship-registered players by clan tag, ranks clans by total combined chips
+   - Scope tab: 'CLAN' tab in the standings toolbar (standings-table.tsx line 345)
+   - Data source: /api/championship/standings?clanView=true (standings/route.ts lines 93-110)
+   - Ranking logic: Sums ALL registered clan members' bankedChips into totalChips, counts members, tracks top member. Sorted by totalChips descending.
+   - Columns: Rank, Clan (tag), Members (count), Total Chips (sum), Avg Chips (totalChips/count), Top Member (name + chips)
+   - DOCUMENTATION BUG: Rules (Section13_Championships.tsx line 104) says 'Clan rankings use the sum of top 10 members' scores' — but the API implementation sums ALL members with NO top-10 cap.
+   - The /api/championship/clan-rankings route (lines 1-21) is a simple proxy that forwards to /standings?clanView=true via internal fetch.
+   - Clan data is also fetched on mount in championships.tsx (line 146) and shared via clanEntries state.
+
+ADDITIONAL FINDINGS:
+- PRIZE AMOUNT MISMATCH: Rules (Section13_Championships.tsx lines 47-65) show #2-10: 500,000c, #11-50: 100,000c, #51-100: 25,000c. But actual code (game-config.ts lines 766-803) has #2-10: 2,500,000c, #11-50: 1,000,000c, #51-100: 250,000c. Rules are 5x lower than actual prizes.
+- ARCHIVE DEMO DATA: /api/championship/archives seeds fake 2024/2025 championship winners (CobraKing_AU and Hari) on first call if table is empty.
+- LIVE SET is an in-memory Set in standings/route.ts (line 47) — not connected to actual game-server heartbeats. markLive() is exported but never called anywhere in the codebase.
+- MATCH CAP RULES vs CODE: Rules describe weight reduction at 9K/9.5K/9.9K thresholds (25%-75% scoring weight), but the API code has no weight reduction logic — it just hard-stops at 10,000.
+
+Stage Summary:
+- Demo data shown because no ChampionshipRegistration records exist (hasRealData = false triggers INITIAL_CONTENDERS fallback for admins only)
+- 'All' filter limited to 14 entries because INITIAL_CONTENDERS only has 14 hardcoded players
+- Both leaderboards use same no-scroll desktop approach; championship has no server-side limit while global caps at 100/1000
+- Columns: Tag=userTag, Games=championship games played, c/game=efficiency (bankedChips/gamesPlayed)
+- Clan rankings sum ALL members' chips (docs incorrectly claim top-10 cap)
+- Multiple documentation/code mismatches found (prizes, clan top-10, match cap weights, live indicators)
+---
