@@ -37,7 +37,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
-import { COUNTRIES, getCosmeticById, MILESTONE_TIERS, milestoneTierForChips, REFERRAL_REWARD, REFERRAL_MATCH_THRESHOLD, EMAIL_VERIFY_BONUS } from '@/lib/game-config';
+import { COUNTRIES, countryFlag, getCosmeticById, MILESTONE_TIERS, milestoneTierForChips, REFERRAL_REWARD, REFERRAL_MATCH_THRESHOLD, EMAIL_VERIFY_BONUS } from '@/lib/game-config';
 import type { PlayerProfile } from '@/lib/types';
 import {
   PanelSkeleton,
@@ -82,6 +82,11 @@ interface PlayerProfilePanelProps {
 // FACTION_COUNTRIES
 // ---------------------------------------------------------------------------
 const FACTION_COUNTRIES = COUNTRIES;
+
+function countryFullName(code: string): string {
+  const c = COUNTRIES.find((x) => x.code === code);
+  return c ? c.name : code.toUpperCase();
+}
 
 // ---------------------------------------------------------------------------
 // Match history type
@@ -407,6 +412,7 @@ function ProfileContent({
   } | null>(null);
   const [referralLoading, setReferralLoading] = useState(true);
   const [referralExpanded, setReferralExpanded] = useState(false);
+  const [milestonesExpanded, setMilestonesExpanded] = useState(false);
 
   // -- Milestone Card generation
   const [milestoneCardPreview, setMilestoneCardPreview] = useState<string | null>(null);
@@ -965,13 +971,17 @@ function ProfileContent({
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-xl lg:text-[13px] font-bold text-white font-sans tracking-tight flex items-center gap-2">
                 <span>{player.name}</span>
-                {player.clanTag && (
-                  <span className="text-[11px] text-indigo-300 font-mono">
-                    clan - {player.clanTag}{player.clanRank ? ` (${player.clanRank})` : ''}
-                  </span>
+                {player.clanTag ? (
+                  <Badge className="bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-[11px] font-mono font-bold px-2 py-0.5">
+                    [{player.clanTag}]{player.clanRank ? ` ${player.clanRank}` : ''}
+                  </Badge>
+                ) : (
+                  <Badge className="bg-slate-800/60 border border-slate-700/50 text-slate-500 text-[11px] font-mono px-2 py-0.5">
+                    No Clan
+                  </Badge>
                 )}
                 <span className="text-[11px] text-slate-400 font-mono">
-                  country - {(player.country || 'US').toUpperCase()}
+                  {countryFlag(player.country || 'US')} {countryFullName(player.country || 'US')}
                 </span>
               </h2>
               {/* Hide Edit Identity for guest accounts */}
@@ -1519,90 +1529,111 @@ function ProfileContent({
           </div>
           )}
 
-          {/* Milestones Section — chip tier progression */}
-          <div className="space-y-3 lg:space-y-1">
-            <h3 className="text-sm lg:text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-              <Award className="w-4 h-4 lg:w-3 lg:h-3 text-amber-400" /> Chip Milestones
-            </h3>
-
-            {/* Milestone Tiers Roadmap */}
-            <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3 lg:p-2">
-              <p className="text-[10px] lg:text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-2 lg:mb-1.5">Milestone Tiers Roadmap</p>
-              <div className="space-y-1.5">
-                {MILESTONE_TIERS.filter(t => t.id !== 'all').reverse().map((tier) => {
-                  const achieved = milestones.some(ms => ms.tierId === tier.id);
-                  const progress = Math.min(100, (player.bankedChips / tier.minChips) * 100);
-                  return (
-                    <div key={tier.id} className="flex items-center gap-2 lg:gap-1.5">
-                      <span className={`text-sm lg:text-xs w-5 text-center shrink-0 ${achieved ? '' : 'grayscale opacity-40'}`}>
-                        {tier.badge.split(' ')[0]}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-0.5">
-                          <span className={`text-[11px] lg:text-[10px] font-semibold truncate ${achieved ? 'text-white' : 'text-slate-500'}`}>
-                            {tier.name}
-                          </span>
-                          <span className={`text-[10px] lg:text-[9px] font-mono shrink-0 ml-2 ${achieved ? 'text-emerald-400' : 'text-slate-600'}`}>
-                            {tier.minChips.toLocaleString('en-IN')}c {achieved ? '✓' : ''}
-                          </span>
-                        </div>
-                        <div className="h-1 lg:h-0.5 rounded-full bg-slate-800 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ${achieved ? 'bg-emerald-500' : progress > 75 ? 'bg-amber-500/60' : 'bg-slate-600/50'}`}
-                            style={{ width: `${Math.min(progress, 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+          {/* Milestones Section — chip tier progression — collapsible */}
+          <div className="rounded-xl border border-slate-900 bg-slate-950/40 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setMilestonesExpanded(!milestonesExpanded)}
+              className="w-full flex items-center justify-between px-4 py-3 lg:px-2.5 lg:py-1.5 cursor-pointer hover:bg-slate-900/30 transition"
+            >
+              <div className="flex items-center gap-2">
+                <Award className="w-4 h-4 lg:w-3.5 lg:h-3.5 text-amber-400" />
+                <h3 className="text-sm lg:text-[11px] font-bold uppercase tracking-wider text-slate-300">Chip Milestones</h3>
+                {!milestonesLoading && milestones.length > 0 && (
+                  <span className="text-[11px] font-mono text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
+                    {milestones.length} achieved
+                  </span>
+                )}
               </div>
-            </div>
+              {milestonesExpanded ? (
+                <ChevronUp className="w-4 h-4 text-slate-500" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-slate-500" />
+              )}
+            </button>
 
-            {milestonesLoading ? (
-              <PanelSkeleton count={2} height="h-16" />
-            ) : milestones.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-800 p-4 lg:p-2 text-center">
-                <Trophy className="w-6 h-6 lg:w-4 lg:h-4 text-slate-600 mx-auto mb-1" />
-                <p className="text-xs lg:text-[11px] text-slate-400">No chip milestones achieved yet.</p>
-                <p className="text-[11px] text-slate-600 mt-0.5">
-                  Banked: {player.bankedChips.toLocaleString()}c — Next: {(() => {
-                    const next = MILESTONE_TIERS.filter(t => t.id !== 'all' && t.id !== 'rookie').find(t => player.bankedChips < t.minChips);
-                    return next ? `${next.badge.split(' ')[0]} ${next.name} at ${next.minChips.toLocaleString('en-IN')}c` : 'All tiers unlocked!';
-                  })()}. Keep extracting!
-                </p>
-              </div>
-            ) : (
-              <div className="grid gap-2">
-                {milestones.map((ms) => {
-                  const tier = MILESTONE_TIERS.find(t => t.id === ms.tierId);
-                  if (!tier || tier.id === 'all') return null;
-                  return (
-                    <div
-                      key={ms.id}
-                      className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 lg:px-2 lg:py-1.5"
-                    >
-                      <div className="flex items-center gap-3 lg:gap-1.5">
-                        <span className="text-2xl lg:text-base" title={tier.name}>{tier.badge.split(' ')[0]}</span>
-                        <div className="lg:leading-tight">
-                          <div className="text-xs lg:text-[11px] font-bold text-white">{tier.name}</div>
-                          <div className="text-[11px] text-slate-500 font-mono">
-                            {ms.chipsAtMilestone.toLocaleString('en-IN')} chips • {new Date(ms.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+            {milestonesExpanded && (
+              <div className="px-4 pb-4 lg:px-2.5 lg:pb-2.5 space-y-3 lg:space-y-1 border-t border-slate-900">
+                {/* Milestone Tiers Roadmap */}
+                <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3 lg:p-2">
+                  <p className="text-[10px] lg:text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-2 lg:mb-1.5">Milestone Tiers Roadmap</p>
+                  <div className="space-y-1.5">
+                    {MILESTONE_TIERS.filter(t => t.id !== 'all').reverse().map((tier) => {
+                      const achieved = milestones.some(ms => ms.tierId === tier.id);
+                      const progress = Math.min(100, (player.bankedChips / tier.minChips) * 100);
+                      return (
+                        <div key={tier.id} className="flex items-center gap-2 lg:gap-1.5">
+                          <span className={`text-sm lg:text-xs w-5 text-center shrink-0 ${achieved ? '' : 'grayscale opacity-40'}`}>
+                            {tier.badge.split(' ')[0]}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-0.5">
+                              <span className={`text-[11px] lg:text-[10px] font-semibold truncate ${achieved ? 'text-white' : 'text-slate-500'}`}>
+                                {tier.name}
+                              </span>
+                              <span className={`text-[10px] lg:text-[9px] font-mono shrink-0 ml-2 ${achieved ? 'text-emerald-400' : 'text-slate-600'}`}>
+                                {tier.minChips.toLocaleString('en-IN')}c {achieved ? '✓' : ''}
+                              </span>
+                            </div>
+                            <div className="h-1 lg:h-0.5 rounded-full bg-slate-800 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${achieved ? 'bg-emerald-500' : progress > 75 ? 'bg-amber-500/60' : 'bg-slate-600/50'}`}
+                                style={{ width: `${Math.min(progress, 100)}%` }}
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleGenerateMilestoneCard(ms)}
-                        disabled={milestoneCardLoading}
-                        className="flex items-center gap-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 lg:px-2 py-1.5 lg:py-1 text-[11px] font-bold text-amber-300 hover:bg-amber-500/20 transition disabled:opacity-50 cursor-pointer"
-                      >
-                        <Share2 className="w-3 h-3 lg:w-2.5 lg:h-2.5" />
-                        Share
-                      </button>
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {milestonesLoading ? (
+                  <PanelSkeleton count={2} height="h-16" />
+                ) : milestones.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-800 p-4 lg:p-2 text-center">
+                    <Trophy className="w-6 h-6 lg:w-4 lg:h-4 text-slate-600 mx-auto mb-1" />
+                    <p className="text-xs lg:text-[11px] text-slate-400">No chip milestones achieved yet.</p>
+                    <p className="text-[11px] text-slate-600 mt-0.5">
+                      Banked: {player.bankedChips.toLocaleString()}c — Next: {(() => {
+                        const next = MILESTONE_TIERS.filter(t => t.id !== 'all' && t.id !== 'rookie').find(t => player.bankedChips < t.minChips);
+                        return next ? `${next.badge.split(' ')[0]} ${next.name} at ${next.minChips.toLocaleString('en-IN')}c` : 'All tiers unlocked!';
+                      })()}. Keep extracting!
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid gap-2">
+                    {milestones.map((ms) => {
+                      const tier = MILESTONE_TIERS.find(t => t.id === ms.tierId);
+                      if (!tier || tier.id === 'all') return null;
+                      return (
+                        <div
+                          key={ms.id}
+                          className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 lg:px-2 lg:py-1.5"
+                        >
+                          <div className="flex items-center gap-3 lg:gap-1.5">
+                            <span className="text-2xl lg:text-base" title={tier.name}>{tier.badge.split(' ')[0]}</span>
+                            <div className="lg:leading-tight">
+                              <div className="text-xs lg:text-[11px] font-bold text-white">{tier.name}</div>
+                              <div className="text-[11px] text-slate-500 font-mono">
+                                {ms.chipsAtMilestone.toLocaleString('en-IN')} chips • {new Date(ms.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleGenerateMilestoneCard(ms)}
+                            disabled={milestoneCardLoading}
+                            className="flex items-center gap-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 lg:px-2 py-1.5 lg:py-1 text-[11px] font-bold text-amber-300 hover:bg-amber-500/20 transition disabled:opacity-50 cursor-pointer"
+                          >
+                            <Share2 className="w-3 h-3 lg:w-2.5 lg:h-2.5" />
+                            Share
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
