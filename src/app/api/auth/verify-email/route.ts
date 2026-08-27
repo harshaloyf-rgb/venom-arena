@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getSession } from '@/lib/auth';
+import { EMAIL_VERIFY_BONUS } from '@/lib/game-config';
 
 export async function POST(request: Request) {
   let body: { token?: string };
@@ -29,20 +31,37 @@ export async function POST(request: Request) {
   // Find the player by email and mark verified
   const player = await db.player.findUnique({
     where: { email: record.email },
-    select: { id: true },
+    select: { id: true, emailVerified: true },
   });
 
   if (!player) {
     return NextResponse.json({ error: 'Player not found for this email.' }, { status: 400 });
   }
 
-  await db.player.update({
+  // Already verified — idempotent
+  if (player.emailVerified) {
+    await db.verificationToken.delete({ where: { id: record.id } });
+    return NextResponse.json({ verified: true, bonusGranted: false, message: 'Email already verified.' });
+  }
+
+  // Mark verified AND grant chip bonus
+  const updated = await db.player.update({
     where: { id: player.id },
-    data: { emailVerified: true },
+    data: {
+      emailVerified: true,
+      bankedChips: { increment: EMAIL_VERIFY_BONUS },
+      totalEarned: { increment: EMAIL_VERIFY_BONUS },
+    },
   });
 
   // Delete the used token
   await db.verificationToken.delete({ where: { id: record.id } });
 
-  return NextResponse.json({ verified: true });
+  return NextResponse.json({
+    verified: true,
+    bonusGranted: true,
+    bonusChips: EMAIL_VERIFY_BONUS,
+    newBankedChips: updated.bankedChips,
+    message: `Email verified! You earned +${EMAIL_VERIFY_BONUS} chips as a verification bonus.`,
+  });
 }

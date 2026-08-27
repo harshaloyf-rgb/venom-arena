@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 import { getSession, signSession, setSessionCookie, hashPassword } from '@/lib/auth';
 import { toProfile } from '@/lib/player-helpers';
+import { REGISTERED_STARTER_CHIPS } from '@/lib/game-config';
 
 /**
  * POST /api/auth/upgrade
@@ -33,6 +34,19 @@ export async function POST(req: NextRequest) {
     // Validate inputs
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: 'Valid email is required.' }, { status: 400 });
+    }
+
+    // Block disposable email domains
+    const domain = email.split('@')[1]?.toLowerCase() || '';
+    const DISPOSABLE_DOMAINS = [
+      'mailinator.com','guerrillamail.com','tempmail.com','throwaway.email',
+      'yopmail.com','sharklasers.com','guerrillamailblock.com','grr.la',
+      'dispostable.com','maildrop.cc','mailnesia.com','tempail.com',
+      'fakeinbox.com','trashmail.com','tempinbox.com','mohmal.com',
+      'burpcollaborator.net','10minutemail.com','tempmail.io','burnermail.io',
+    ];
+    if (DISPOSABLE_DOMAINS.some(d => domain === d || domain.endsWith('.' + d))) {
+      return NextResponse.json({ error: 'Disposable/temporary email addresses are not allowed. Please use a real email.' }, { status: 400 });
     }
     if (password.length < 6) {
       return NextResponse.json({ error: 'Password must be at least 6 characters.' }, { status: 400 });
@@ -76,7 +90,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Upgrade: set email, password, name, PIN — keep everything else
+    // Grant chip bonus so total = REGISTERED_STARTER_CHIPS (they had 150 as guest = same)
     const passwordHash = await hashPassword(password);
+    const currentChips = player.bankedChips || 0;
+    const chipBonus = Math.max(0, REGISTERED_STARTER_CHIPS - currentChips);
     const upgraded = await db.player.update({
       where: { id: session.playerId },
       data: {
@@ -84,6 +101,8 @@ export async function POST(req: NextRequest) {
         passwordHash,
         name,
         securityPin: pin || null,
+        emailVerified: false,
+        ...(chipBonus > 0 ? { bankedChips: { increment: chipBonus }, totalEarned: { increment: chipBonus } } : {}),
       },
     });
 

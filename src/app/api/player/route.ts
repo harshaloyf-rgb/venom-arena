@@ -77,15 +77,19 @@ export async function PUT(req: NextRequest) {
     if (typeof body.avatar === 'string' && body.avatar.length <= 8) {
       data.avatar = body.avatar;
     }
-    // Social links
-    if (typeof body.instagram === 'string') {
-      data.instagram = body.instagram.trim().slice(0, 60) || null;
+    // Social links — can only be cleared here, NOT set.
+    // Setting social links requires the /api/player/social-verify verification flow.
+    if (body.instagram === '' || body.instagram === null) {
+      data.instagram = null;
+      data.instagramVerified = false;
     }
-    if (typeof body.youtube === 'string') {
-      data.youtube = body.youtube.trim().slice(0, 100) || null;
+    if (body.youtube === '' || body.youtube === null) {
+      data.youtube = null;
+      data.youtubeVerified = false;
     }
-    if (typeof body.twitch === 'string') {
-      data.twitch = body.twitch.trim().slice(0, 60) || null;
+    if (body.twitch === '' || body.twitch === null) {
+      data.twitch = null;
+      data.twitchVerified = false;
     }
     // Equip cosmetics — must be in unlockedSkins
     const unlocked = (() => {

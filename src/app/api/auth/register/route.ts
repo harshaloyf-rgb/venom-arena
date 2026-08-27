@@ -9,6 +9,7 @@ import {
 } from '@/lib/auth';
 import { toProfile, encodeSkins, generateReferralCode } from '@/lib/player-helpers';
 import { DEFAULT_UNLOCKED_SKINS } from '@/lib/constants';
+import { REGISTERED_STARTER_CHIPS } from '@/lib/game-config';
 import { rateLimit } from '@/lib/api-helpers';
 
 export async function POST(req: NextRequest) {
@@ -26,6 +27,19 @@ export async function POST(req: NextRequest) {
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: 'Valid email is required.' }, { status: 400 });
+    }
+
+    // Block disposable email domains
+    const domain = email.split('@')[1]?.toLowerCase() || '';
+    const DISPOSABLE_DOMAINS = [
+      'mailinator.com','guerrillamail.com','tempmail.com','throwaway.email',
+      'yopmail.com','sharklasers.com','guerrillamailblock.com','grr.la',
+      'dispostable.com','maildrop.cc','mailnesia.com','tempail.com',
+      'fakeinbox.com','trashmail.com','tempinbox.com','mohmal.com',
+      'burpcollaborator.net','10minutemail.com','tempmail.io','burnermail.io',
+    ];
+    if (DISPOSABLE_DOMAINS.some(d => domain === d || domain.endsWith('.' + d))) {
+      return NextResponse.json({ error: 'Disposable/temporary email addresses are not allowed. Please use a real email.' }, { status: 400 });
     }
     if (password.length < 6) {
       return NextResponse.json({ error: 'Password must be at least 6 characters.' }, { status: 400 });
@@ -65,8 +79,9 @@ export async function POST(req: NextRequest) {
         name,
         country: 'US',
         unlockedSkins: encodeSkins(DEFAULT_UNLOCKED_SKINS),
-        bankedChips: 150,
-        totalEarned: 150,
+        bankedChips: REGISTERED_STARTER_CHIPS,
+        totalEarned: REGISTERED_STARTER_CHIPS,
+        emailVerified: false,
         referralCode,
       },
     });

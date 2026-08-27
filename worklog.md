@@ -147,3 +147,32 @@ Stage Summary:
 - Full email verification infrastructure in place (DB + API + UI)
 - Guest upgrade form now has Google/Facebook/Apple quick sign-up options
 - Social handles have format validation + ownership verification links
+
+---
+Task ID: 2
+Agent: main
+Task: Social account verification, email verification enforcement, chip reward fix
+
+Work Log:
+- Added instagramVerified, youtubeVerified, twitchVerified fields to Player schema + types + toProfile
+- Created /api/player/social-verify with actions: check (existence), generate (bio code), confirm (verify bio), remove
+- Social verification uses z-ai-web-dev-sdk web-reader to check if accounts exist and verify bio codes
+- Modified PUT /api/player to block direct social link saving — only clearing allowed, setting requires verification
+- Fixed chip rewards: register=150 starter, verify-email=+850 bonus (total 1000), OAuth=1000+verified, guest=150
+- Added disposable email domain blocking (20+ domains) to register and upgrade routes
+- Guest upgrade now sets emailVerified=false, no chip bonus until email verified
+- OAuth social-callback now gives 1000 chips + emailVerified=true
+- Rewrote identity-editor.tsx with SocialVerifyField component: 3-step flow (Check Account → Get Verification Code → Confirm Ownership)
+- Updated player-profile.tsx: removed social links from save body, added verification state management
+- Email verification banner now shows "+850 chip bonus" incentive
+- Save button text changed from "Save Handshake" to "Save Handle & Region" (social links managed separately)
+- Instagram detection improved: requires both username in title AND profile signals (followers/following/posts)
+- YouTube detection works correctly: rejects fake channels
+
+Stage Summary:
+- Fake social accounts are now blocked: must prove existence AND ownership via bio code
+- Fake/disposable emails are blocked at registration and upgrade
+- Registered users get 150 chips initially, +850 bonus after email verification (total 1000)
+- OAuth users get 1000 chips immediately (email pre-verified by provider)
+- Guest users stay at 150 chips, no referral code shown
+- All changes verified via browser and API testing

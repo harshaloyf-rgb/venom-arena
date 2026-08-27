@@ -37,7 +37,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
-import { COUNTRIES, getCosmeticById, MILESTONE_TIERS, milestoneTierForChips, REFERRAL_REWARD, REFERRAL_MATCH_THRESHOLD } from '@/lib/game-config';
+import { COUNTRIES, getCosmeticById, MILESTONE_TIERS, milestoneTierForChips, REFERRAL_REWARD, REFERRAL_MATCH_THRESHOLD, EMAIL_VERIFY_BONUS } from '@/lib/game-config';
 import type { PlayerProfile } from '@/lib/types';
 import {
   PanelSkeleton,
@@ -214,7 +214,11 @@ function EmailVerificationBanner({ onRefresh, onToast }: { onRefresh: () => void
         return;
       }
       setStep('verified');
-      if (onToast) onToast('Email verified!', 'success');
+      if (data.bonusGranted && data.bonusChips) {
+        if (onToast) onToast(`Email verified! +${data.bonusChips} chips bonus!`, 'success');
+      } else {
+        if (onToast) onToast('Email verified!', 'success');
+      }
       onRefresh();
     } catch {
       setErrMsg('Network error.');
@@ -241,7 +245,7 @@ function EmailVerificationBanner({ onRefresh, onToast }: { onRefresh: () => void
       <div className="flex items-center gap-2">
         <MailWarning className="w-4 h-4 lg:w-3.5 lg:h-3.5 text-amber-400 shrink-0" />
         <span className="text-[11px] lg:text-[11px] text-amber-300 font-medium">
-          Email not verified. Verify now to unlock full account features.
+          Email not verified. Verify to earn <strong className="text-emerald-400">+{EMAIL_VERIFY_BONUS} chip bonus</strong>.
         </span>
       </div>
 
@@ -354,6 +358,9 @@ function ProfileContent({
   const [instagram, setInstagram] = useState(player.instagram || '');
   const [youtube, setYoutube] = useState(player.youtube || '');
   const [twitch, setTwitch] = useState(player.twitch || '');
+  const [instagramVerified, setInstagramVerified] = useState(player.instagramVerified);
+  const [youtubeVerified, setYoutubeVerified] = useState(player.youtubeVerified);
+  const [twitchVerified, setTwitchVerified] = useState(player.twitchVerified);
   const [isDragging, setIsDragging] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -668,6 +675,9 @@ function ProfileContent({
     setInstagram(player.instagram || '');
     setYoutube(player.youtube || '');
     setTwitch(player.twitch || '');
+    setInstagramVerified(player.instagramVerified);
+    setYoutubeVerified(player.youtubeVerified);
+    setTwitchVerified(player.twitchVerified);
     setIsEditing(true);
   }
 
@@ -694,9 +704,6 @@ function ProfileContent({
             selectedAvatar && selectedAvatar.length <= 8
               ? selectedAvatar
               : undefined,
-          instagram: instagram.trim(),
-          youtube: youtube.trim(),
-          twitch: twitch.trim(),
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -705,9 +712,22 @@ function ProfileContent({
         return;
       }
 
-      // No longer persist socials to localStorage — they are now DB-backed
+      // Social links are now managed via /api/player/social-verify
 
       await onRefresh();
+      // Sync social verification state from refreshed player
+      const meRes = await fetch('/api/auth/me');
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        if (meData.player) {
+          setInstagram(meData.player.instagram || '');
+          setYoutube(meData.player.youtube || '');
+          setTwitch(meData.player.twitch || '');
+          setInstagramVerified(meData.player.instagramVerified);
+          setYoutubeVerified(meData.player.youtubeVerified);
+          setTwitchVerified(meData.player.twitchVerified);
+        }
+      }
       setIsEditing(false);
       notify(
         'Handshake secure! Profile & Social links saved successfully! 🔒',
@@ -1195,11 +1215,11 @@ function ProfileContent({
               selectedAvatar={selectedAvatar}
               setSelectedAvatar={setSelectedAvatar}
               instagram={instagram}
-              setInstagram={setInstagram}
+              instagramVerified={instagramVerified}
               youtube={youtube}
-              setYoutube={setYoutube}
+              youtubeVerified={youtubeVerified}
               twitch={twitch}
-              setTwitch={setTwitch}
+              twitchVerified={twitchVerified}
               isDragging={isDragging}
               setIsDragging={setIsDragging}
               onDrop={handleDrop}
@@ -1209,6 +1229,21 @@ function ProfileContent({
               saving={saving}
               nameCooldownText={nameCooldownText}
               countryCooldownText={countryCooldownText}
+              onSocialChange={async () => {
+                const meRes = await fetch('/api/auth/me');
+                if (meRes.ok) {
+                  const meData = await meRes.json();
+                  if (meData.player) {
+                    setInstagram(meData.player.instagram || '');
+                    setYoutube(meData.player.youtube || '');
+                    setTwitch(meData.player.twitch || '');
+                    setInstagramVerified(meData.player.instagramVerified);
+                    setYoutubeVerified(meData.player.youtubeVerified);
+                    setTwitchVerified(meData.player.twitchVerified);
+                  }
+                }
+                await onRefresh();
+              }}
             />
           )}
 

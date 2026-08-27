@@ -13,6 +13,7 @@ import {
 } from '@/lib/oauth';
 import { encodeSkins, generateReferralCode } from '@/lib/player-helpers';
 import { DEFAULT_UNLOCKED_SKINS } from '@/lib/constants';
+import { REGISTERED_TOTAL_CHIPS } from '@/lib/game-config';
 
 /**
  * GET /api/auth/social-callback?provider=google&code=xxx&state=xxx
@@ -195,8 +196,9 @@ async function handleOAuthLogin(provider: OAuthProvider, userInfo: OAuthUserInfo
         country: 'US',
         avatar: userInfo.avatar,
         unlockedSkins: encodeSkins(DEFAULT_UNLOCKED_SKINS),
-        bankedChips: 150,
-        totalEarned: 150,
+        bankedChips: REGISTERED_TOTAL_CHIPS,
+        totalEarned: REGISTERED_TOTAL_CHIPS,
+        emailVerified: true, // OAuth providers verify email
         oauthProvider: provider,
         oauthProviderId: userInfo.providerId,
         referralCode,
