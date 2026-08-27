@@ -119,19 +119,7 @@ const TAB_DESCRIPTIONS: Record<TopTab, { title: string; desc: string; scope: str
 // ── Tie-break explanation text (shown on every tab) ───────────────
 const TIE_BREAK_EXPLANATION = 'Tie-break: Most chips wins. If tied: higher level wins. If still tied: earlier join date wins (veteran advantage).';
 
-// ── Demo entries (shown only when real data is empty) ─────────────
-const DEMO_ENTRIES: LeaderboardEntry[] = [
-  { name: 'Demo_Player_Alpha', userTag: 'DEMO-001', country: 'IN', bankedChips: 500_000, level: 25, rank: 1 },
-  { name: 'Demo_Player_Beta', userTag: 'DEMO-002', country: 'US', bankedChips: 500_000, level: 22, rank: 2 },
-  { name: 'Demo_Player_Gamma', userTag: 'DEMO-003', country: 'JP', bankedChips: 320_000, level: 14, rank: 3 },
-];
-
-// ── Demo milestones (shown when player has no real milestones) ───
-const DEMO_MILESTONES = [
-  { tier: 'bronze', badge: '\u{1F949} Bronze', color: '#b45309', chips: 105_000, achievedAt: '2026-01-15T10:30:00.000Z' },
-  { tier: 'silver', badge: '\u{1F948} Silver', color: '#cbd5e1', chips: 520_000, achievedAt: '2026-02-20T14:15:00.000Z' },
-  { tier: 'gold', badge: '\u{1F947} Gold', color: '#f59e0b', chips: 1_050_000, achievedAt: '2026-03-10T09:45:00.000Z' },
-];
+// ── No more demo entries — empty state shown instead ──────────
 
 // ── Types ─────────────────────────────────────────────────────────
 interface EnrichedEntry extends LeaderboardEntry {
@@ -558,7 +546,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [tickerMessages, setTickerMessages] = useState<{ id: string; ts: string; text: string }[]>([]);
-  const [showFindMe, setShowFindMe] = useState(false);
+  const [showFindMe, setShowFindMe] = useState(true);
   const [myRankData, setMyRankData] = useState<MyRankData | null>(null);
   const [isRealData, setIsRealData] = useState(false);
   const [milestones, setMilestones] = useState<MilestoneRecord[]>([]);
@@ -638,41 +626,12 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
         setEntries(enriched);
         setIsRealData(true);
       } else {
-        const demo: EnrichedEntry[] = DEMO_ENTRIES.map((e, i) => ({
-          ...e,
-          rank: i + 1,
-          isPlayer: false,
-          isHOF: false,
-          championshipPrize: null,
-          rankChange: 0,
-          region: regionOf(e.country),
-          isDemo: true,
-          clanTag: null,
-        }));
-        // Add tie-break to demo entries 1 and 2 (same chips)
-        if (demo.length >= 2 && demo[0].bankedChips === demo[1].bankedChips) {
-          demo[1].tieBreakReason = 'level'; // Demo Alpha has level 25 vs Beta's 22
-        }
-        setEntries(demo);
+        setEntries([]);
         setIsRealData(false);
       }
       setLastUpdated(new Date());
     } catch {
-      const demo: EnrichedEntry[] = DEMO_ENTRIES.map((e, i) => ({
-        ...e,
-        rank: i + 1,
-        isPlayer: false,
-        isHOF: false,
-        championshipPrize: null,
-        rankChange: 0,
-        region: regionOf(e.country),
-        isDemo: true,
-        clanTag: null,
-      }));
-      if (demo.length >= 2 && demo[0].bankedChips === demo[1].bankedChips) {
-        demo[1].tieBreakReason = 'level';
-      }
-      setEntries(demo);
+      setEntries([]);
       setIsRealData(false);
       setLastUpdated(new Date());
     } finally {
@@ -683,7 +642,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
   // Fetch milestone history for the current player
   const fetchMilestones = useCallback(async () => {
     if (!playerTag) {
-      setMilestones(DEMO_MILESTONES);
+      setMilestones([]);
       setMilestonesLoading(false);
       return;
     }
@@ -692,16 +651,12 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
       const res = await fetch('/api/leaderboard/my-rank', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json() as { milestones?: MilestoneRecord[] };
-        if (data.milestones && data.milestones.length > 0) {
-          setMilestones(data.milestones);
-        } else {
-          setMilestones(DEMO_MILESTONES);
-        }
+        setMilestones(data.milestones || []);
       } else {
-        setMilestones(DEMO_MILESTONES);
+        setMilestones([]);
       }
     } catch {
-      setMilestones(DEMO_MILESTONES);
+      setMilestones([]);
     } finally {
       setMilestonesLoading(false);
     }
@@ -709,9 +664,6 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
 
   // Fetch board when tab/selection changes
   useEffect(() => { void fetchBoard(); }, [fetchBoard]);
-
-  // Fetch milestones on mount
-  useEffect(() => { void fetchMilestones(); }, [fetchMilestones]);
 
   // Auto-refresh every 30 min
   useEffect(() => {
@@ -744,6 +696,26 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
     if (player?.country) setSelectedCountry(player.country);
   }, [player?.country]);
 
+  // Silent rank fetch (no toast, no scroll) — used on mount
+  const handleFindMeSilent = useCallback(async () => {
+    try {
+      const res = await fetch('/api/leaderboard/my-rank', { cache: 'no-store' });
+      const data = await res.json() as { error?: string } & MyRankData;
+      if (res.ok && !data.error) {
+        setMyRankData(data);
+        if (data.milestones && data.milestones.length > 0) {
+          setMilestones(data.milestones);
+        }
+      }
+    } catch { /* silent */ }
+  }, []);
+
+  // Fetch milestones and rank summary on mount
+  useEffect(() => {
+    void fetchMilestones();
+    void handleFindMeSilent();
+  }, [fetchMilestones, handleFindMeSilent]);
+
   // Filter by search
   const filteredEntries = useMemo(() => {
     if (!searchQuery.trim()) return entries;
@@ -769,7 +741,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
     void tier;
   }
 
-  // Per-tab Find Me handler
+  // Per-tab Find Me handler (with toast + scroll)
   async function handleFindMe() {
     try {
       const res = await fetch('/api/leaderboard/my-rank', { cache: 'no-store' });
@@ -864,7 +836,6 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
           {lastUpdated && (
             <MicroLabel className="mt-1.5 lg:mt-0 inline-block !text-[11px]">
               Last sync: {lastUpdated.toLocaleTimeString('en-US', { hour12: false })} UTC
-              {!isRealData && isAdmin && <span className="text-amber-400 ml-2">\u00b7 Showing demo data</span>}
             </MicroLabel>
           )}
         </div>
@@ -884,11 +855,11 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
       {/* Live Ticker */}
       {tickerMessages.length > 0 && <LiveTicker messages={tickerMessages} />}
 
-      {/* Find Me Card (shown when player not in visible list) */}
-      {showFindMe && myRankData && <FindMeCard myRank={myRankData} activeTab={activeTab} selectedCountry={selectedCountry} selectedRegion={selectedRegion} onClose={() => setShowFindMe(false)} />}
+      {/* Find Me Card — always visible once data is loaded */}
+      {myRankData && <FindMeCard myRank={myRankData} activeTab={activeTab} selectedCountry={selectedCountry} selectedRegion={selectedRegion} onClose={() => setShowFindMe(false)} />}
 
-      {/* Milestone History Section — only show for admins when data is demo, or for anyone with real milestones */}
-      {!milestonesLoading && (isAdmin || (isRealData && milestones !== DEMO_MILESTONES)) && <MilestoneHistorySection milestones={milestones} isDemo={!isRealData || milestones === DEMO_MILESTONES} />}
+      {/* Milestone History Section — only when player has real milestones */}
+      {!milestonesLoading && milestones.length > 0 && <MilestoneHistorySection milestones={milestones} isDemo={false} />}
 
       {/* Tab Description */}
       <TabDescription tab={activeTab} />
@@ -1027,7 +998,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
               <div className="col-span-2 text-right">Chips</div>
               <div className="col-span-1 text-right">Status</div>
             </div>
-            <ol ref={listRef} className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll lg:max-h-none lg:overflow-visible">
+            <ol ref={listRef} className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll lg:max-h-[60vh] lg:overflow-y-auto va-scroll">
               {loading ? (
                 <li className="p-4 lg:p-2 text-center text-slate-500 text-xs lg:text-[11px] flex items-center justify-center gap-2">
                   <Loader2 className="w-4 h-4 lg:w-3 lg:h-3 animate-spin text-amber-400" /> Loading global ranks&hellip;

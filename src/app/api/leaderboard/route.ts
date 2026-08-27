@@ -103,9 +103,16 @@ export async function GET(req: NextRequest) {
       createdAt: Date;
       banned: boolean;
     }>>`
-      SELECT p.* FROM Player p INNER JOIN (
-        SELECT country, MAX(bankedChips) as maxChips FROM Player WHERE banned = 0 AND country IS NOT NULL AND country != '' GROUP BY country
-      ) top ON p.country = top.country AND p.bankedChips = top.maxChips WHERE p.banned = 0 ORDER BY p.bankedChips DESC, p.level DESC, p.createdAt ASC
+      SELECT * FROM (
+        SELECT p.*, ROW_NUMBER() OVER (
+          PARTITION BY p.country
+          ORDER BY p.bankedChips DESC, p.level DESC, p.createdAt ASC
+        ) as rn
+        FROM Player p
+        WHERE p.banned = 0 AND p.country IS NOT NULL AND p.country != ''
+      ) ranked
+      WHERE rn = 1
+      ORDER BY bankedChips DESC, level DESC, createdAt ASC
     `;
 
     let summitPlayers = rawRows.map(r => ({
