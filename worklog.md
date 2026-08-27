@@ -361,3 +361,29 @@ Stage Summary:
 - 7 files changed, 15 insertions, 192 deletions
 - Committed: 9a7d81d
 - All 7 issues resolved, lint clean, browser verified
+---
+Task ID: remove-hof-demo
+Agent: main
+Task: Remove all demo data from Hall of Fame panel
+
+Work Log:
+- Investigated why HOF shows demo data: DB has 0 HallOfFameEntry records, code falls back to hardcoded demo for admins only
+- Identified "Your HOF Inductions" = real count of logged-in player's HOF entries (from /api/hof/my-entries), was showing 0 correctly
+- Removed DEMO_CHAMPIONS (7 fake players) and DEMO_MILESTONES (10 fake entries) from hof/_types.ts
+- Removed INITIAL_COMMENTARY (3 fake messages) and COMMENTARY_NAMES (6 fake names) from game-config.ts
+- Removed entire Live Ticker tab (was 100% fake data — seeded commentary + random generation every 5s)
+- Removed isDemo/onInspectDemo props from champions-tab.tsx, simplified to real data only
+- Removed isDemo prop from milestones-tab.tsx and milestones-table.tsx, removed demo rendering paths
+- Removed champDisplayEntries demo fallback, champIsDemo, mileIsDemo, inspectDemo, commentary state, tickerFilter from hall-of-fame.tsx
+- Added client-side search filtering (useMemo) to champions-tab since demo search was removed
+- Fixed missing `}` in JSX comment in champions-tab.tsx (caused parsing error)
+- Verified: lint clean, no JS errors in browser, API returns real 0 entries, no remaining references to removed exports
+
+Stage Summary:
+- 6 files changed, ~297 lines removed, ~50 lines added
+- Committed: 0b0f33c — "Remove all demo data from HOF panel..."
+- Champions Wing: now shows "No championship inductees yet" (real empty state)
+- Milestones Wing: now shows "No milestone inductees yet" (real empty state)
+- My HOF Profile: shows real 0 inductions + next milestone target (was already real data)
+- Live Ticker tab: completely removed
+- "Your HOF Inductions" explained: it's the count of YOUR HOF entries in the DB (was 0, correct)
