@@ -85,26 +85,22 @@ export async function POST(req: Request) {
         if (hofTierId) {
           const hofTier = HALL_OF_FAME_TIERS.find(t => t.id === hofTierId);
           try {
-            await db.hallOfFameEntry.upsert({
-              where: {
-                playerId_inductionType_milestoneTierId_championshipYear: {
+            const existing = await db.hallOfFameEntry.findFirst({
+              where: { playerId: player.id, inductionType: 'milestone', milestoneTierId: hofTierId, championshipYear: null },
+            });
+            if (!existing) {
+              await db.hallOfFameEntry.create({
+                data: {
                   playerId: player.id,
                   inductionType: 'milestone',
                   milestoneTierId: hofTierId,
-                  championshipYear: null,
+                  hofBadge: hofTier?.badge ?? tier.badge,
+                  title: hofTier?.name ?? tier.name,
+                  chipsAtInduction: player.bankedChips,
                 },
-              },
-              create: {
-                playerId: player.id,
-                inductionType: 'milestone',
-                milestoneTierId: hofTierId,
-                hofBadge: hofTier?.badge ?? tier.badge,
-                title: hofTier?.name ?? tier.name,
-                chipsAtInduction: player.bankedChips,
-              },
-              update: {}, // don't overwrite existing
-            });
-            hofInducted = true;
+              });
+              hofInducted = true;
+            }
           } catch {
             // HOF induction is best-effort — don't block milestone recording
           }

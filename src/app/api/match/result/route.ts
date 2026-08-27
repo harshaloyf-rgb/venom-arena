@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { toProfile } from '@/lib/player-helpers';
-import { getArenaById, levelFromXp, MILESTONE_TIERS } from '@/lib/game-config';
+import { getArenaById, levelFromXp, MILESTONE_TIERS, HALL_OF_FAME_TIERS } from '@/lib/game-config';
 import { utcToday, utcMonday } from '@/lib/date-utils';
 
 const TRACKABLE_TIERS = ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'omega'] as const;
+
+// Map PlayerMilestone tier IDs -> HallOfFameEntry milestoneTierId
+const MILESTONE_TO_HOF_TIER: Record<string, string> = {
+  bronze:   't-1lakh',
+  silver:   't-5lakh',
+  gold:     't-10lakh',
+  platinum: 't-25lakh',
+  diamond:  't-50lakh',
+  omega:    't-1crore',
+};
 
 // ---------------------------------------------------------------------------
 // Challenge progress updater (runs inside the caller's Prisma transaction)
@@ -201,17 +211,44 @@ export async function POST(req: NextRequest) {
       durationSeconds,
     });
 
-    // --- Milestone tracking (first time reaching each tier) ---
+    // --- Milestone tracking (first time reaching each tier) + HOF induction ---
     if (outcome === 'extract') {
       const newChips = p.bankedChips + (chipsEarned || 0);
       for (const tierId of TRACKABLE_TIERS) {
         const tier = MILESTONE_TIERS.find(t => t.id === tierId);
         if (tier && newChips >= tier.minChips) {
-          await tx.playerMilestone.upsert({
+          const milestoneCreated = await tx.playerMilestone.upsert({
             where: { playerId_tierId: { playerId: player.id, tierId } },
             create: { playerId: player.id, tierId, chipsAtMilestone: newChips },
             update: {},
           });
+
+          // Auto-induct into Hall of Fame on first-time tier achievement
+          if (milestoneCreated.createdAt.getTime() === milestoneCreated.updatedAt.getTime()) {
+            const hofTierId = MILESTONE_TO_HOF_TIER[tierId];
+            if (hofTierId) {
+              const hofTier = HALL_OF_FAME_TIERS.find(t => t.id === hofTierId);
+              try {
+                const existing = await tx.hallOfFameEntry.findFirst({
+                  where: { playerId: player.id, inductionType: 'milestone', milestoneTierId: hofTierId, championshipYear: null },
+                });
+                if (!existing) {
+                  await tx.hallOfFameEntry.create({
+                    data: {
+                      playerId: player.id,
+                      inductionType: 'milestone',
+                      milestoneTierId: hofTierId,
+                      hofBadge: hofTier?.badge ?? tier.badge,
+                      title: hofTier?.name ?? tier.name,
+                      chipsAtInduction: newChips,
+                    },
+                  });
+                }
+              } catch {
+                // HOF induction is best-effort — don't block match result
+              }
+            }
+          }
         }
       }
     }
