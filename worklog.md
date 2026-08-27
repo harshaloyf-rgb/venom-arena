@@ -195,3 +195,6 @@ Stage Summary:
 - Milestone Tiers Roadmap now visible in profile showing full progression with thresholds
 - Players can now see all tier names, chip requirements, and their progress toward each
 
+
+---
+Session start: 2026-08-27 08:57:36 UTC, git: ab4049f
