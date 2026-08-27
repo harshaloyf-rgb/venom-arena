@@ -307,24 +307,24 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
   if (!player) return <NotSignedIn />;
 
   return (
-    <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 overflow-hidden">
-      <GlowBlob color="bg-yellow-500/10" className="-top-12 -right-12 w-56 h-56" />
+    <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 lg:p-1.5 overflow-hidden">
+      <GlowBlob color="bg-yellow-500/10" className="-top-12 -right-12 w-56 h-56 lg:w-24 lg:h-24" />
 
       {/* Header */}
-      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-4 border-b border-slate-800">
+      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 lg:gap-1 mb-4 lg:mb-1 pb-4 lg:pb-1 border-b border-slate-800">
         <div>
-          <h2 className="text-xl sm:text-2xl font-sans font-black text-white tracking-tight flex items-center gap-2.5">
-            <Crown className="w-5.5 h-5.5 text-yellow-400" />
+          <h2 className="text-xl sm:text-2xl lg:text-[11px] font-sans font-black text-white tracking-tight flex items-center gap-2.5 lg:gap-1">
+            <Crown className="w-5.5 h-5.5 lg:w-3 lg:h-3 text-yellow-400" />
             Project Venom Hall of Fame &amp; Esports Shrine
           </h2>
-          <p className="text-xs text-slate-400 mt-1 max-w-3xl">
+          <p className="text-xs lg:text-[11px] text-slate-400 mt-1 lg:mt-0 max-w-3xl">
             Permanent shrine for milestone achievers and championship legends. DB-backed, immutable, and forever.
           </p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="relative flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800/60 mb-4">
+      <div className="relative flex flex-wrap items-center gap-1.5 lg:gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800/60 mb-4 lg:mb-1">
         <PanelTabBtn active={tab === 'my-hof'} onClick={() => setTab('my-hof')} icon={Star} label="My HOF Profile" color="yellow" />
         <PanelTabBtn active={tab === 'champions'} onClick={() => setTab('champions')} icon={Trophy} label="Champions Wing" color="yellow" />
         <PanelTabBtn active={tab === 'milestones'} onClick={() => setTab('milestones')} icon={Sparkles} label="Milestones Wing" color="yellow" />
@@ -333,33 +333,33 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
 
       {/* Stats bar */}
       {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 p-4 rounded-xl border border-slate-800/60 bg-slate-950/80">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 lg:gap-1 mb-4 lg:mb-1 p-4 lg:p-1.5 rounded-xl border border-slate-800/60 bg-slate-950/80">
           <div className="text-center">
-            <MicroLabel>Total Inducted Players</MicroLabel>
-            <div className="text-lg font-mono font-black text-yellow-400 mt-1">{stats.totalInductedPlayers}</div>
+            <MicroLabel className="text-[11px]">Total Inducted Players</MicroLabel>
+            <div className="text-lg lg:text-[11px] font-mono font-black text-yellow-400 mt-1">{stats.totalInductedPlayers}</div>
           </div>
           <div className="text-center">
-            <MicroLabel>Total Entries</MicroLabel>
-            <div className="text-lg font-mono font-black text-white mt-1">{stats.totalEntries}</div>
+            <MicroLabel className="text-[11px]">Total Entries</MicroLabel>
+            <div className="text-lg lg:text-[11px] font-mono font-black text-white mt-1">{stats.totalEntries}</div>
           </div>
           <div className="text-center">
-            <MicroLabel>Milestone Inductees</MicroLabel>
-            <div className="text-lg font-mono font-black text-emerald-400 mt-1">{stats.byType.milestone ?? 0}</div>
+            <MicroLabel className="text-[11px]">Milestone Inductees</MicroLabel>
+            <div className="text-lg lg:text-[11px] font-mono font-black text-emerald-400 mt-1">{stats.byType.milestone ?? 0}</div>
           </div>
           <div className="text-center">
-            <MicroLabel>Championship Inductees</MicroLabel>
-            <div className="text-lg font-mono font-black text-amber-400 mt-1">{stats.byType.championship ?? 0}</div>
+            <MicroLabel className="text-[11px]">Championship Inductees</MicroLabel>
+            <div className="text-lg lg:text-[11px] font-mono font-black text-amber-400 mt-1">{stats.byType.championship ?? 0}</div>
           </div>
         </div>
       )}
 
       {/* Live broadcast marquee - hidden for non-admin */}
       {isAdmin && (
-      <div className="relative mb-5 rounded-xl border border-rose-500/30 bg-rose-950/20 p-3 flex items-center gap-3 overflow-hidden">
-        <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-rose-300 uppercase tracking-widest px-2 py-1 bg-rose-500/20 border border-rose-500/40 rounded shrink-0">
-          <Radio className="w-3 h-3 animate-pulse" /> LIVE BROADCAST
+      <div className="relative mb-5 lg:mb-1 rounded-xl border border-rose-500/30 bg-rose-950/20 p-3 lg:p-1.5 flex items-center gap-3 lg:gap-1 overflow-hidden">
+        <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-rose-300 uppercase tracking-widest px-2 lg:px-1.5 py-1 bg-rose-500/20 border border-rose-500/40 rounded shrink-0">
+          <Radio className="w-3 h-3 lg:w-3 lg:h-3 animate-pulse" /> LIVE BROADCAST
         </span>
-        <div className="text-xs text-rose-200 truncate">
+        <div className="text-xs lg:text-[11px] text-rose-200">
           {commentary[0]?.text || (isAdmin ? '🎙️ ESPORTS COMMENTARY ACTIVE: Welcome to Project Venom World Arena Championship!' : 'No live commentary at this time.')}
         </div>
       </div>
@@ -414,10 +414,10 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
 
       {/* ═══════════════════ TAB: Live Esports Ticker ═══════════════════ */}
       {tab === 'ticker' && (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Radio className="w-4 h-4 text-rose-400" />
-            <span className="text-xs font-bold text-white">Channel Filter:</span>
+        <div className="space-y-4 lg:space-y-1">
+          <div className="flex flex-wrap items-center gap-2 lg:gap-1">
+            <Radio className="w-4 h-4 lg:w-3 lg:h-3 text-rose-400" />
+            <span className="text-xs lg:text-[11px] font-bold text-white">Channel Filter:</span>
             {([
               { id: 'all', label: '🌐 All Arena Events' },
               { id: 'extractions', label: '💰 High Stakes Extractions' },
@@ -428,7 +428,7 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
                 key={f.id}
                 type="button"
                 onClick={() => setTickerFilter(f.id)}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition border ${tickerFilter === f.id ? 'bg-rose-500/20 border-rose-500/40 text-rose-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
+                className={`px-2.5 lg:px-1.5 py-1 rounded-full text-[11px] font-bold transition border ${tickerFilter === f.id ? 'bg-rose-500/20 border-rose-500/40 text-rose-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
               >
                 {f.label}
               </button>
@@ -436,13 +436,13 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
           </div>
 
           <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
-            <ol className="divide-y divide-slate-900 max-h-96 overflow-y-auto va-scroll">
+            <ol className="divide-y divide-slate-900 max-h-96 lg:max-h-[340px] overflow-y-auto va-scroll">
               {filteredCommentary.length === 0 ? (
-                <li className="p-6 text-center text-xs text-slate-500">No events in this channel yet…</li>
+                <li className="p-6 lg:p-3 text-center text-xs lg:text-[11px] text-slate-500">No events in this channel yet…</li>
               ) : (
                 filteredCommentary.map((c) => (
-                  <li key={c.id} className="px-4 py-3 text-sm flex items-start gap-3 hover:bg-slate-900/40 transition-colors">
-                    <span className="text-[10px] font-mono text-slate-500 mt-0.5 shrink-0">{c.ts}</span>
+                  <li key={c.id} className="px-4 lg:px-1.5 py-3 lg:py-1 text-sm lg:text-[11px] flex items-start gap-3 lg:gap-1 hover:bg-slate-900/40 transition-colors">
+                    <span className="text-[11px] font-mono text-slate-500 mt-0.5 shrink-0">{c.ts}</span>
                     <span className="text-slate-200 leading-relaxed">{c.text}</span>
                   </li>
                 ))

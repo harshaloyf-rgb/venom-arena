@@ -1,6 +1,7 @@
 'use client';
 
-import { Loader2, Search, X } from 'lucide-react';
+import { useState } from 'react';
+import { Loader2, Search, X, ChevronDown } from 'lucide-react';
 import { countryFlag, fmtChips, fmtDate, badgeIcon } from './_types';
 import type { InducteeEntry } from './_types';
 import type { InspectedPlayer } from '@/lib/game-config';
@@ -32,21 +33,23 @@ export function ChampionsTab({
   onInspectEntry,
   onInspectDemo,
 }: ChampionsTabProps) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+
   return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-amber-500/30 bg-amber-950/10 p-3 text-[11px] text-amber-200 leading-relaxed">
+    <div className="space-y-4 lg:space-y-1">
+      <div className="rounded-xl border border-amber-500/30 bg-amber-950/10 p-3 lg:p-1.5 text-[11px] text-amber-200 leading-relaxed">
         <strong>CHAMPIONSHIPS WING</strong>
         <br />
         Players inducted for finishing in the Top 100 of the Annual Venom Arena Championship. Ranks 1–100 earn permanent HOF status with unique badges.
       </div>
 
       {/* Year filter */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[10px] font-mono uppercase tracking-widest text-slate-500">Year:</span>
+      <div className="flex flex-wrap items-center gap-2 lg:gap-1">
+        <span className="text-[11px] font-mono uppercase tracking-widest text-slate-500">Year:</span>
         <button
           type="button"
           onClick={() => onYearChange(null)}
-          className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono transition border ${year === null ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
+          className={`px-2.5 lg:px-1.5 py-1 rounded-full text-[11px] font-bold font-mono transition border ${year === null ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
         >
           All Years
         </button>
@@ -55,7 +58,7 @@ export function ChampionsTab({
             key={y}
             type="button"
             onClick={() => onYearChange(y)}
-            className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono transition border ${year === y ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
+            className={`px-2.5 lg:px-1.5 py-1 rounded-full text-[11px] font-bold font-mono transition border ${year === y ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
           >
             {y}{y === 2026 ? ' (Current)' : ''}
           </button>
@@ -63,14 +66,14 @@ export function ChampionsTab({
       </div>
 
       {/* Search */}
-      <div className="flex items-center gap-2">
-        <Search className="w-4 h-4 text-slate-500 shrink-0" />
+      <div className="flex items-center gap-2 lg:gap-1">
+        <Search className="w-4 h-4 lg:w-3 lg:h-3 text-slate-500 shrink-0" />
         <input
           type="text"
           placeholder="Search by player name…"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white font-mono placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50"
+          className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 lg:px-1.5 py-1.5 lg:py-1 text-xs lg:text-[11px] text-white font-mono placeholder:text-slate-600 focus:outline-none focus:border-amber-500/50"
         />
         {search && (
           <button
@@ -86,15 +89,15 @@ export function ChampionsTab({
 
       {/* Loading */}
       {loading && (
-        <div className="flex items-center justify-center py-10">
-          <Loader2 className="w-5 h-5 text-amber-400 animate-spin" />
-          <span className="ml-2 text-xs text-slate-400">Loading champions…</span>
+        <div className="flex items-center justify-center py-10 lg:py-3">
+          <Loader2 className="w-5 h-5 lg:w-3 lg:h-3 text-amber-400 animate-spin" />
+          <span className="ml-2 text-xs lg:text-[11px] text-slate-400">Loading champions…</span>
         </div>
       )}
 
       {/* Empty state for non-admin */}
       {!loading && displayEntries.length === 0 && (
-        <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-8 text-center text-xs text-slate-500">
+        <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-8 lg:p-3 text-center text-xs lg:text-[11px] text-slate-500">
           No championship inductees yet
         </div>
       )}
@@ -103,22 +106,23 @@ export function ChampionsTab({
       {!loading && displayEntries.length > 0 && (
         <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
           {isDemo && (
-            <div className="px-4 py-2 bg-slate-900 border-b border-slate-800 flex items-center gap-2">
-              <span className="text-[9px] font-mono font-bold text-slate-400 px-2 py-0.5 bg-slate-800 rounded-full border border-slate-700">
+            <div className="px-4 lg:px-1.5 py-2 lg:py-1 bg-slate-900 border-b border-slate-800 flex items-center gap-2">
+              <span className="text-[11px] font-mono font-bold text-slate-400 px-2 py-0.5 bg-slate-800 rounded-full border border-slate-700">
                 DEMO
               </span>
-              <span className="text-[10px] text-slate-500">No real championship inductees yet. Showing sample data.</span>
+              <span className="text-[11px] text-slate-500">No real championship inductees yet. Showing sample data.</span>
             </div>
           )}
-          <div className="grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-slate-800 bg-slate-950 text-slate-500 text-[10px] font-bold uppercase tracking-wider">
-            <div className="col-span-1">Rank</div>
-            <div className="col-span-4">Player</div>
-            <div className="col-span-2">Badge</div>
-            <div className="col-span-3">Title</div>
-            <div className="col-span-1 text-right">Chips</div>
-            <div className="col-span-1 text-right">Date</div>
+          {/* Desktop header */}
+          <div className="hidden lg:grid lg:grid-cols-12 lg:gap-1 lg:px-1.5 lg:py-1 border-b border-slate-800 bg-slate-950 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
+            <div className="lg:col-span-1">Rank</div>
+            <div className="lg:col-span-4">Player</div>
+            <div className="lg:col-span-2">Badge</div>
+            <div className="lg:col-span-3">Title</div>
+            <div className="lg:col-span-1 text-right">Chips</div>
+            <div className="lg:col-span-1 text-right">Date</div>
           </div>
-          <ol className="divide-y divide-slate-900 max-h-96 overflow-y-auto va-scroll">
+          <ol className="divide-y divide-slate-900 max-h-96 lg:max-h-[340px] overflow-y-auto va-scroll">
             {displayEntries.map((entry, idx) => {
               const isD = isDemo;
               const rank = isD
@@ -146,47 +150,86 @@ export function ChampionsTab({
                 ? (entry as unknown as { date: string }).date
                 : fmtDate((entry as InducteeEntry).inductedAt);
 
+              const key = isD ? `${(entry as unknown as { name: string }).name}-${rank}` : (entry as InducteeEntry).id;
+              const isExpanded = expanded === key;
+
+              const handleInspect = () => {
+                if (isD) {
+                  onInspectDemo(name, tag, country, chips, 45);
+                } else {
+                  onInspectEntry(entry as InducteeEntry);
+                }
+              };
+
+              const rankDisplay = rank === 1 ? (
+                <span className="text-yellow-400 font-bold">👑 #1</span>
+              ) : rank <= 3 ? (
+                <span>{['', '🥇', '🥈', '🥉'][rank]}</span>
+              ) : (
+                <span className="text-slate-400 font-bold">#{rank}</span>
+              );
+
               return (
                 <li
-                  key={isD ? `${(entry as unknown as { name: string }).name}-${rank}` : (entry as InducteeEntry).id}
-                  className={`grid grid-cols-12 gap-2 items-center px-4 py-3 text-sm hover:bg-slate-900/40 transition-colors cursor-pointer ${isD ? 'opacity-60' : ''}`}
-                  onClick={() => {
-                    if (isD) {
-                      onInspectDemo(name, tag, country, chips, 45);
-                    } else {
-                      onInspectEntry(entry as InducteeEntry);
-                    }
-                  }}
+                  key={key}
+                  className={`${isD ? 'opacity-60' : ''}`}
                 >
-                  <div className="col-span-1 font-mono">
-                    {rank === 1 ? (
-                      <span className="text-yellow-400 font-bold">👑 #1</span>
-                    ) : rank <= 3 ? (
-                      <span className="text-lg">{['', '🥇', '🥈', '🥉'][rank]}</span>
-                    ) : (
-                      <span className="text-slate-400 font-bold">#{rank}</span>
-                    )}
-                  </div>
-                  <div className="col-span-4 min-w-0">
-                    <div className="font-bold text-white truncate flex items-center gap-1.5">
-                      <span aria-hidden>{countryFlag(country)}</span>
-                      {name}
+                  {/* Mobile card */}
+                  <button
+                    type="button"
+                    onClick={() => { setExpanded(isExpanded ? null : key); handleInspect(); }}
+                    className="w-full flex items-center gap-2 p-3 text-left hover:bg-slate-900/40 transition-colors lg:hidden"
+                  >
+                    <span className="font-mono text-slate-400 font-bold w-8 shrink-0">{rank <= 3 ? ['', '🥇', '🥈', '🥉'][rank] : `#${rank}`}</span>
+                    <span className="font-bold text-white flex items-center gap-1 flex-1 min-w-0">
+                      <span className="shrink-0">{countryFlag(country)}</span>
+                      <span>{name}</span>
                       {isD && (
-                        <span className="text-[9px] font-mono font-bold text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">
-                          DEMO
-                        </span>
+                        <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">DEMO</span>
                       )}
+                    </span>
+                    <span className="text-lg shrink-0" aria-label={badge || 'badge'}>{badgeIcon(badge)}</span>
+                    <span className="font-mono font-bold text-emerald-400 tabular-nums shrink-0">{fmtChips(chips)}c</span>
+                    <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+                  </button>
+                  {/* Mobile expanded detail */}
+                  {isExpanded && (
+                    <div className="lg:hidden px-3 pb-3 pt-0">
+                      <div className="border-t border-slate-800/50 pt-2 space-y-1 text-[11px]">
+                        <div className="flex justify-between">
+                          <span className="font-mono text-slate-500">{tag}</span>
+                          <span className="font-mono text-slate-500">{date}</span>
+                        </div>
+                        <div className="text-slate-300">{title}</div>
+                      </div>
                     </div>
-                    <div className="text-[10px] font-mono text-slate-500 truncate">{tag}</div>
+                  )}
+
+                  {/* Desktop grid row */}
+                  <div
+                    className="hidden lg:grid lg:grid-cols-12 lg:gap-1 lg:items-center lg:px-1.5 lg:py-1 lg:text-[11px] hover:bg-slate-900/40 transition-colors cursor-pointer"
+                    onClick={handleInspect}
+                  >
+                    <div className="lg:col-span-1 font-mono">{rankDisplay}</div>
+                    <div className="lg:col-span-4 min-w-0">
+                      <div className="font-bold text-white flex items-center gap-1.5">
+                        <span aria-hidden>{countryFlag(country)}</span>
+                        {name}
+                        {isD && (
+                          <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">DEMO</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] font-mono text-slate-500">{tag}</div>
+                    </div>
+                    <div className="lg:col-span-2" aria-label={badge || 'badge'}>{badgeIcon(badge)}</div>
+                    <div className="lg:col-span-3 min-w-0">
+                      <div className="text-[11px] text-slate-300">{title}</div>
+                    </div>
+                    <div className="lg:col-span-1 text-right font-mono font-bold text-emerald-400 tabular-nums">
+                      {fmtChips(chips)}c
+                    </div>
+                    <div className="lg:col-span-1 text-right font-mono text-slate-500">{date}</div>
                   </div>
-                  <div className="col-span-2 text-lg" aria-label={badge || 'badge'}>{badgeIcon(badge)}</div>
-                  <div className="col-span-3 min-w-0">
-                    <div className="text-[11px] text-slate-300 truncate">{title}</div>
-                  </div>
-                  <div className="col-span-1 text-right font-mono font-bold text-emerald-400 tabular-nums text-[11px]">
-                    {fmtChips(chips)}c
-                  </div>
-                  <div className="col-span-1 text-right text-[10px] font-mono text-slate-500">{date}</div>
                 </li>
               );
             })}
