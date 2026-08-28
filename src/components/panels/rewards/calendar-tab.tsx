@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Users } from 'lucide-react';
 import { MicroLabel } from '../_panel-primitives';
 import { notify, type ToastFn } from '../_panel-primitives';
 
 interface CalendarDay {
   date: string;
+  dayNum: number;
   claimed: boolean;
+  isFuture: boolean;
 }
 
 interface CalendarTabProps {
@@ -19,9 +21,18 @@ interface CalendarTabProps {
   onToast?: ToastFn;
 }
 
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
 export function CalendarTab({ player, onToast }: CalendarTabProps) {
-  const [calendarDays, setCalendarDays] = useState<CalendarDay[]>([]);
+  const [claimedDates, setClaimedDates] = useState<Set<string>>(new Set());
   const [calendarLoading, setCalendarLoading] = useState(true);
+
+  // Current month info
+  const now = useMemo(() => new Date(), []);
+  const year = now.getFullYear();
+  const month = now.getMonth(); // 0-indexed
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = now.getDate();
 
   // Fetch real calendar data from API
   useEffect(() => {
@@ -31,16 +42,8 @@ export function CalendarTab({ player, onToast }: CalendarTabProps) {
       try {
         const res = await fetch('/api/player/claims/calendar');
         if (res.ok) {
-          const { claimedDates } = await res.json();
-          const claimedSet = new Set<string>(claimedDates);
-          const DAY_MS = 86_400_000;
-          const days: CalendarDay[] = [];
-          for (let i = 89; i >= 0; i--) {
-            const d = new Date(Date.now() - i * DAY_MS);
-            const ds = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-            days.push({ date: ds, claimed: claimedSet.has(ds) });
-          }
-          if (!cancelled) setCalendarDays(days);
+          const { claimedDates: dates } = await res.json();
+          if (!cancelled) setClaimedDates(new Set<string>(dates));
         }
       } catch { /* silent */ }
       if (!cancelled) setCalendarLoading(false);
@@ -49,12 +52,28 @@ export function CalendarTab({ player, onToast }: CalendarTabProps) {
     return () => { cancelled = true; };
   }, []);
 
+  // Build days array for current month
+  const calendarDays: CalendarDay[] = useMemo(() => {
+    const days: CalendarDay[] = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const ds = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      days.push({
+        date: ds,
+        dayNum: d,
+        claimed: claimedDates.has(ds),
+        isFuture: d > today,
+      });
+    }
+    return days;
+  }, [year, month, daysInMonth, today, claimedDates]);
+
+  const claimedCount = calendarDays.filter(d => d.claimed && !d.isFuture).length;
+
   return (
     <div className="space-y-4 lg:space-y-1">
       <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 lg:p-1 text-[11px] text-slate-300 leading-relaxed">
-        <strong>CLAIM CALENDAR</strong><br />
-        Your last 90 days of daily claims. Green = claimed, dark = missed.
-        Keep the grid lit to maintain your streak!
+        <strong>{MONTH_NAMES[month].toUpperCase()} {year} — CLAIM CALENDAR</strong><br />
+        This month's daily claims. Green = claimed, dark = missed, dimmed = upcoming.
       </div>
 
       {/* Stats row */}
@@ -68,36 +87,36 @@ export function CalendarTab({ player, onToast }: CalendarTabProps) {
           <div className="text-lg lg:text-sm font-mono font-black text-sky-400 mt-1 lg:mt-0">{player.streakFreezes}</div>
         </div>
         <div className="text-center p-3 lg:p-1.5 rounded-xl bg-slate-950/60 border border-slate-800">
-          <MicroLabel>Next Milestone</MicroLabel>
-          <div className="text-lg lg:text-sm font-mono font-black text-emerald-400 mt-1 lg:mt-0">
-            {player.dailyStreak < 30 ? `${30 - player.dailyStreak}d` : player.dailyStreak < 60 ? `${60 - player.dailyStreak}d` : player.dailyStreak < 90 ? `${90 - player.dailyStreak}d` : '✅'}
-          </div>
+          <MicroLabel>This Month</MicroLabel>
+          <div className="text-lg lg:text-sm font-mono font-black text-emerald-400 mt-1 lg:mt-0">{claimedCount}/{today}</div>
         </div>
       </div>
 
-      {/* Heatmap grid */}
-      <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 lg:p-1.5 overflow-x-auto">
+      {/* Monthly grid */}
+      <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 lg:p-1.5">
         {calendarLoading ? (
           <div className="flex items-center justify-center py-6 text-[11px] text-slate-500">Loading calendar...</div>
         ) : (
-          <div className="grid grid-cols-10 sm:grid-cols-[repeat(15,minmax(0,1fr))] gap-1 lg:gap-px">
-            {calendarDays.map((d, i) => (
+          <div className="grid grid-cols-7 gap-1 lg:gap-px">
+            {calendarDays.map((d) => (
               <div
                 key={d.date}
-                title={`${d.date}${d.claimed ? ' ✓ Claimed' : ''}`}
-                className={`aspect-square lg:aspect-auto lg:h-3.5 rounded-sm transition-colors ${
-                  d.claimed ? 'bg-emerald-500' :
-                  i < 7 ? 'bg-slate-700' : 'bg-slate-800/60'
+                title={`${d.date}${d.claimed ? ' ✓ Claimed' : d.isFuture ? ' (upcoming)' : ''}`}
+                className={`aspect-square rounded-sm transition-colors flex items-center justify-center text-[10px] lg:text-[9px] font-mono font-bold ${
+                  d.claimed ? 'bg-emerald-500 text-white' :
+                  d.isFuture ? 'bg-slate-900/40 text-slate-600' :
+                  'bg-slate-800/60 text-slate-500'
                 } hover:ring-1 hover:ring-slate-500`}
-              />
+              >
+                {d.dayNum}
+              </div>
             ))}
           </div>
         )}
-        <div className="flex items-center gap-2 mt-3 lg:mt-1 justify-end">
-          <span className="text-[11px] text-slate-500">Less</span>
-          <div className="w-3 h-3 rounded-sm bg-slate-800" />
-          <div className="w-3 h-3 rounded-sm bg-emerald-500" />
-          <span className="text-[11px] text-slate-500">More</span>
+        <div className="flex items-center gap-3 mt-3 lg:mt-1 justify-end">
+          <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm bg-emerald-500" /><span className="text-[11px] text-slate-500">Claimed</span></div>
+          <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm bg-slate-800" /><span className="text-[11px] text-slate-500">Missed</span></div>
+          <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm bg-slate-900/40" /><span className="text-[11px] text-slate-500">Upcoming</span></div>
         </div>
       </div>
 

@@ -315,8 +315,8 @@ export const MAX_DAILY_ADS = 12;
 export const AD_REWARD_CHIPS = 100;
 
 // Hourly micro-claims
-export const HOURLY_REWARD_MIN = 5;
-export const HOURLY_REWARD_MAX = 15;
+export const HOURLY_REWARD_MIN = 10;
+export const HOURLY_REWARD_MAX = 150;
 export const HOURLY_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 
 // Streak milestones
