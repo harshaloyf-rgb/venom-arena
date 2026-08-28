@@ -453,6 +453,7 @@ model Clip {
   arenaName      String   @default("")
   tags           String   @default("[]")
   upvotes        Int      @default(0)
+  downvotes      Int      @default(0)
   featured       Boolean  @default(false)
   cardType       String   @default("user-clip")  // "user-clip" | "match-card"
   matchData      String?                           // JSON: { outcome, chipsLost, snakeLength, durationSec, isOnline }
@@ -474,6 +475,7 @@ model ClipUpvote {
   player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
   playerId String
   clipId   String
+  voteType String @default("like") // "like" | "dislike"
   createdAt DateTime @default(now())
 
   @@unique([playerId, clipId])

@@ -152,6 +152,16 @@ export async function GET(req: NextRequest) {
     db.clip.count({ where }),
   ]);
 
+  // Fetch current user's votes for these clips (if logged in)
+  let myVotes: Record<string, string> = {};
+  if (session) {
+    const votes = await db.clipUpvote.findMany({
+      where: { playerId: session.playerId, clipId: { in: clips.map(c => c.id) } },
+      select: { clipId: true, voteType: true },
+    });
+    for (const v of votes) myVotes[v.clipId] = v.voteType;
+  }
+
   // Backfill: for Instagram clips missing thumbnails, try to fetch og:image
   const backfillPromises = clips
     .filter((c) => !c.thumbnailUrl && c.platform === 'Instagram' && c.url)
@@ -172,6 +182,9 @@ export async function GET(req: NextRequest) {
       tags: JSON.parse(c.tags),
       matchData: c.matchData ? JSON.parse(c.matchData) : null,
       player: c.player,
+      likes: c.upvotes,
+      dislikes: c.downvotes,
+      myVote: (myVotes[c.id] as 'like' | 'dislike' | null) ?? null,
     })),
     total,
   });

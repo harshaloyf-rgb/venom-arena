@@ -24,7 +24,9 @@ import {
   Users,
   Zap,
   Trophy,
-  Heart,
+  ThumbsUp,
+  ThumbsDown,
+  User,
   Clock,
   AlertTriangle,
   Video,
@@ -54,7 +56,8 @@ interface ClipItem {
   kills: number;
   arenaName: string;
   tags: string[];
-  upvotes: number;
+  likes: number;
+  dislikes: number;
   featured: boolean;
   cardType: string;
   matchData: {
@@ -66,7 +69,7 @@ interface ClipItem {
   } | null;
   createdAt: string;
   player: { name: string; userTag: string; country: string; level: number; clanTag: string | null };
-  myUpvote?: boolean;
+  myVote: 'like' | 'dislike' | null;
 }
 
 interface LiveStats {
@@ -203,7 +206,7 @@ function ExpandedView({
   onSearchChange,
   onSortChange,
   onPageChange,
-  onUpvote,
+  onVote,
   onInspect,
   canVote,
 }: {
@@ -218,7 +221,7 @@ function ExpandedView({
   onSearchChange: (v: string) => void;
   onSortChange: (v: SortOption) => void;
   onPageChange: (p: number) => void;
-  onUpvote: (c: ClipItem) => void;
+  onVote: (c: ClipItem, vote: 'like' | 'dislike') => void;
   onInspect: (c: ClipItem) => void;
   canVote: boolean;
 }) {
@@ -319,21 +322,21 @@ function ExpandedView({
         /* Match Cards: vertical feed */
         <div className="space-y-4 lg:space-y-1">
           {clips.map((clip) => (
-            <FeedItem key={clip.id} clip={clip} onUpvote={onUpvote} onInspect={onInspect} canVote={canVote} />
+            <FeedItem key={clip.id} clip={clip} onVote={onVote} onInspect={onInspect} canVote={canVote} />
           ))}
         </div>
       ) : meta.isVertical ? (
         /* Vertical cards (Shorts/Reels): responsive grid */
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 lg:gap-2">
           {clips.map((clip) => (
-            <VideoCardVertical key={clip.id} clip={clip} />
+            <VideoCardVertical key={clip.id} clip={clip} onVote={onVote} onInspect={onInspect} canVote={canVote} />
           ))}
         </div>
       ) : (
         /* Horizontal cards (YouTube): 1-2 col grid */
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 lg:gap-2">
           {clips.map((clip) => (
-            <VideoCardHorizontal key={clip.id} clip={clip} />
+            <VideoCardHorizontal key={clip.id} clip={clip} onVote={onVote} onInspect={onInspect} canVote={canVote} />
           ))}
         </div>
       )}
@@ -601,12 +604,34 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
   // Close expanded view when tab changes
   useEffect(() => { setExpandedSection(null); }, [filterType, myClipsOnly]);
 
-  async function handleUpvote(clip: ClipItem) {
-    if (!isLoggedIn || clip.myUpvote) return;
-    setClips((prev) => prev.map((c) => (c.id === clip.id ? { ...c, upvotes: c.upvotes + 1, myUpvote: true } : c)));
-    if (featured?.id === clip.id) setFeatured((f) => (f ? { ...f, upvotes: f.upvotes + 1, myUpvote: true } : f));
-    try { const r = await fetch('/api/clips/upvote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clipId: clip.id }) }); if (!r.ok) throw new Error(); if (onToast) notify('Upvoted! 🔥', 'success', onToast); }
-    catch { setClips((prev) => prev.map((c) => (c.id === clip.id ? { ...c, upvotes: c.upvotes - 1, myUpvote: false } : c))); if (featured?.id === clip.id) setFeatured((f) => (f ? { ...f, upvotes: f.upvotes - 1, myUpvote: false } : f)); if (onToast) notify('Failed to upvote.', 'error', onToast); }
+  async function handleVote(clip: ClipItem, vote: 'like' | 'dislike') {
+    if (!isLoggedIn) return;
+    const optimistic = (c: ClipItem): ClipItem => {
+      if (c.myVote === vote) {
+        // undo
+        return { ...c, myVote: null, likes: vote === 'like' ? c.likes - 1 : c.likes, dislikes: vote === 'dislike' ? c.dislikes - 1 : c.dislikes };
+      } else if (c.myVote) {
+        // switch
+        const likes = vote === 'like' ? c.likes + 1 : c.likes - 1;
+        const dislikes = vote === 'dislike' ? c.dislikes + 1 : c.dislikes - 1;
+        return { ...c, myVote: vote, likes, dislikes };
+      } else {
+        // new vote
+        return { ...c, myVote: vote, likes: vote === 'like' ? c.likes + 1 : c.likes, dislikes: vote === 'dislike' ? c.dislikes + 1 : c.dislikes };
+      }
+    };
+    setClips(prev => prev.map(c => c.id === clip.id ? optimistic(c) : c));
+    if (featured?.id === clip.id) setFeatured(f => f ? optimistic({ ...f, likes: (f as any).likes ?? f.upvotes, dislikes: (f as any).dislikes ?? 0, myVote: (f as any).myVote ?? null }) : f);
+    setExpandedClips(prev => prev.map(c => c.id === clip.id ? optimistic(c) : c));
+    try {
+      const r = await fetch('/api/clips/vote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clipId: clip.id, vote }) });
+      if (!r.ok) throw new Error();
+    } catch {
+      // rollback
+      setClips(prev => prev.map(c => c.id === clip.id ? clip : c));
+      setExpandedClips(prev => prev.map(c => c.id === clip.id ? clip : c));
+      if (onToast) notify('Failed to vote.', 'error', onToast);
+    }
   }
 
   function handleInspectCreator(clip: ClipItem) {
@@ -752,7 +777,7 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
             onSearchChange={handleExpandedSearch}
             onSortChange={handleExpandedSort}
             onPageChange={handleExpandedPage}
-            onUpvote={handleUpvote}
+            onVote={handleVote}
             onInspect={handleInspectCreator}
             canVote={isLoggedIn}
           />
@@ -764,19 +789,19 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
             {/* YouTube Videos Tab */}
             {filterType === 'youtube' && (
               ytVideos.length > 0
-                ? <ScrollRow title="YouTube Videos" icon={<Youtube className="w-4 h-4 lg:w-3 lg:h-3 text-red-500" />} onViewAll={() => handleViewAll('youtube')} showViewAll={showViewAllTab}>{ytVideos.map((c) => <VideoCardHorizontal key={c.id} clip={c} />)}</ScrollRow>
+                ? <ScrollRow title="YouTube Videos" icon={<Youtube className="w-4 h-4 lg:w-3 lg:h-3 text-red-500" />} onViewAll={() => handleViewAll('youtube')} showViewAll={showViewAllTab}>{ytVideos.map((c) => <VideoCardHorizontal key={c.id} clip={c} onVote={handleVote} onInspect={handleInspectCreator} canVote={isLoggedIn} />)}</ScrollRow>
                 : <PlatformEmpty label="YouTube Videos" />
             )}
             {/* Shorts Tab */}
             {filterType === 'youtube-shorts' && (
               ytShorts.length > 0
-                ? <ScrollRow title="YouTube Shorts" icon={<Smartphone className="w-4 h-4 lg:w-3 lg:h-3 text-red-400" />} onViewAll={() => handleViewAll('youtube-shorts')} showViewAll={showViewAllTab}>{ytShorts.map((c) => <VideoCardVertical key={c.id} clip={c} />)}</ScrollRow>
+                ? <ScrollRow title="YouTube Shorts" icon={<Smartphone className="w-4 h-4 lg:w-3 lg:h-3 text-red-400" />} onViewAll={() => handleViewAll('youtube-shorts')} showViewAll={showViewAllTab}>{ytShorts.map((c) => <VideoCardVertical key={c.id} clip={c} onVote={handleVote} onInspect={handleInspectCreator} canVote={isLoggedIn} />)}</ScrollRow>
                 : <PlatformEmpty label="YouTube Shorts" />
             )}
             {/* Instagram Reels Tab */}
             {filterType === 'instagram' && (
               igReels.length > 0
-                ? <ScrollRow title="Instagram Reels" icon={<Instagram className="w-4 h-4 lg:w-3 lg:h-3 text-pink-400" />} onViewAll={() => handleViewAll('instagram')} showViewAll={showViewAllTab}>{igReels.map((c) => <VideoCardVertical key={c.id} clip={c} />)}</ScrollRow>
+                ? <ScrollRow title="Instagram Reels" icon={<Instagram className="w-4 h-4 lg:w-3 lg:h-3 text-pink-400" />} onViewAll={() => handleViewAll('instagram')} showViewAll={showViewAllTab}>{igReels.map((c) => <VideoCardVertical key={c.id} clip={c} onVote={handleVote} onInspect={handleInspectCreator} canVote={isLoggedIn} />)}</ScrollRow>
                 : <PlatformEmpty label="Instagram Reels" />
             )}
             {/* Matches Tab — vertical feed */}
@@ -784,7 +809,7 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
               matchCards.length > 0
                 ? <>
                     <ScrollRow title="Match Cards" icon={<Trophy className="w-4 h-4 lg:w-3 lg:h-3 text-amber-400" />} onViewAll={() => handleViewAll('match-card')} showViewAll={showViewAllTab}>
-                      {matchCards.slice(0, PREVIEW_LIMIT).map((clip) => <FeedItem key={clip.id} clip={clip} onUpvote={handleUpvote} onInspect={handleInspectCreator} canVote={isLoggedIn} />)}
+                      {matchCards.slice(0, PREVIEW_LIMIT).map((clip) => <FeedItem key={clip.id} clip={clip} onVote={handleVote} onInspect={handleInspectCreator} canVote={isLoggedIn} />)}
                     </ScrollRow>
                     {showViewAllTab && matchCards.length > PREVIEW_LIMIT && (
                       <div className="text-center mt-2">
@@ -811,19 +836,22 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
                 </div>
                 <div className="flex overflow-hidden">
                 {isMatchCard(featured) ? (
-                  <MatchCardVisual title={featured.title} playerName={featured.player.name} userTag={featured.player.userTag} country={featured.player.country} level={featured.player.level} clanTag={featured.player.clanTag} arenaName={featured.arenaName} outcome={(featured.matchData?.outcome as 'extract' | 'death') || 'extract'} chipsEarned={featured.chipsExtracted} chipsLost={featured.matchData?.chipsLost || 0} kills={featured.kills} snakeLength={featured.matchData?.snakeLength || 0} durationSec={featured.matchData?.durationSec || 0} isOnline={featured.matchData?.isOnline || false} upvotes={featured.upvotes} />
+                  <MatchCardVisual title={featured.title} playerName={featured.player.name} userTag={featured.player.userTag} country={featured.player.country} level={featured.player.level} clanTag={featured.player.clanTag} arenaName={featured.arenaName} outcome={(featured.matchData?.outcome as 'extract' | 'death') || 'extract'} chipsEarned={featured.chipsExtracted} chipsLost={featured.matchData?.chipsLost || 0} kills={featured.kills} snakeLength={featured.matchData?.snakeLength || 0} durationSec={featured.matchData?.durationSec || 0} isOnline={featured.matchData?.isOnline || false} upvotes={featured.likes} />
                 ) : featured.platform.toLowerCase().includes('shorts') || featured.platform.toLowerCase().includes('instagram') ? (
-                  <VideoCardVertical clip={featured} />
+                  <VideoCardVertical clip={featured} onVote={handleVote} onInspect={handleInspectCreator} canVote={isLoggedIn} />
                 ) : (
-                  <VideoCardHorizontal clip={featured} />
+                  <VideoCardHorizontal clip={featured} onVote={handleVote} onInspect={handleInspectCreator} canVote={isLoggedIn} />
                 )}
                 </div>
-                <div className="flex items-center gap-4 lg:gap-2 mt-3 lg:mt-0.5 px-1">
-                  <button type="button" onClick={() => handleUpvote(featured)} disabled={!isLoggedIn || featured.myUpvote} className={`flex items-center gap-1.5 lg:gap-1 text-xs lg:text-[11px] font-bold transition ${featured.myUpvote ? 'text-red-400' : 'text-slate-400 hover:text-red-400'} disabled:opacity-40`}>
-                    <Flame className="w-4 h-4 lg:w-3 lg:h-3" /> {featured.upvotes}
+                <div className="flex items-center gap-3 lg:gap-2 mt-3 lg:mt-0.5 px-1">
+                  <button type="button" onClick={() => handleVote(featured, 'like')} disabled={!isLoggedIn} className={`flex items-center gap-1 lg:gap-0.5 text-xs lg:text-[11px] font-bold transition ${featured.myVote === 'like' ? 'text-emerald-400' : 'text-slate-400 hover:text-emerald-400'} disabled:opacity-40`}>
+                    <ThumbsUp className="w-4 h-4 lg:w-3 lg:h-3" /> {featured.likes}
                   </button>
-                  <button type="button" onClick={() => handleInspectCreator(featured)} className="flex items-center gap-1.5 lg:gap-1 text-xs lg:text-[11px] text-slate-500 hover:text-white transition"><Heart className="w-4 h-4 lg:w-3 lg:h-3" /> Profile</button>
-                  {featured.url && <a href={featured.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 lg:gap-1 text-xs lg:text-[11px] text-slate-500 hover:text-white transition ml-auto">Watch <ExternalLink className="w-3.5 h-3.5 lg:w-3 lg:h-3" /></a>}
+                  <button type="button" onClick={() => handleVote(featured, 'dislike')} disabled={!isLoggedIn} className={`flex items-center gap-1 lg:gap-0.5 text-xs lg:text-[11px] font-bold transition ${featured.myVote === 'dislike' ? 'text-red-400' : 'text-slate-400 hover:text-red-400'} disabled:opacity-40`}>
+                    <ThumbsDown className="w-4 h-4 lg:w-3 lg:h-3" /> {featured.dislikes}
+                  </button>
+                  <button type="button" onClick={() => handleInspectCreator(featured)} className="flex items-center gap-1 lg:gap-0.5 text-xs lg:text-[11px] text-slate-500 hover:text-white transition"><User className="w-4 h-4 lg:w-3 lg:h-3" /> Profile</button>
+                  {featured.url && <a href={featured.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 lg:gap-0.5 text-xs lg:text-[11px] text-slate-500 hover:text-white transition ml-auto">Watch <ExternalLink className="w-3.5 h-3.5 lg:w-3 lg:h-3" /></a>}
                 </div>
               </div>
             )}
@@ -831,21 +859,21 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
             {/* YouTube Videos row */}
             {ytVideos.length > 0 && (
               <ScrollRow title="YouTube Videos" icon={<Youtube className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-red-500" />} onViewAll={() => handleViewAll('youtube')} showViewAll={showViewAllYt}>
-                {ytVideos.map((c) => <VideoCardHorizontal key={c.id} clip={c} />)}
+                {ytVideos.map((c) => <VideoCardHorizontal key={c.id} clip={c} onVote={handleVote} onInspect={handleInspectCreator} canVote={isLoggedIn} />)}
               </ScrollRow>
             )}
 
             {/* Shorts row */}
             {ytShorts.length > 0 && (
               <ScrollRow title="Shorts" icon={<Smartphone className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-red-400" />} onViewAll={() => handleViewAll('youtube-shorts')} showViewAll={showViewAllShorts}>
-                {ytShorts.map((c) => <VideoCardVertical key={c.id} clip={c} />)}
+                {ytShorts.map((c) => <VideoCardVertical key={c.id} clip={c} onVote={handleVote} onInspect={handleInspectCreator} canVote={isLoggedIn} />)}
               </ScrollRow>
             )}
 
             {/* Instagram Reels row */}
             {igReels.length > 0 && (
               <ScrollRow title="Instagram Reels" icon={<Instagram className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-pink-400" />} onViewAll={() => handleViewAll('instagram')} showViewAll={showViewAllIg}>
-                {igReels.map((c) => <VideoCardVertical key={c.id} clip={c} />)}
+                {igReels.map((c) => <VideoCardVertical key={c.id} clip={c} onVote={handleVote} onInspect={handleInspectCreator} canVote={isLoggedIn} />)}
               </ScrollRow>
             )}
 
@@ -864,7 +892,7 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
                   )}
                 </div>
                 <div className="space-y-4 lg:space-y-1">
-                  {matchCards.slice(0, PREVIEW_LIMIT).map((clip) => <FeedItem key={clip.id} clip={clip} onUpvote={handleUpvote} onInspect={handleInspectCreator} canVote={isLoggedIn} />)}
+                  {matchCards.slice(0, PREVIEW_LIMIT).map((clip) => <FeedItem key={clip.id} clip={clip} onVote={handleVote} onInspect={handleInspectCreator} canVote={isLoggedIn} />)}
                 </div>
               </div>
             )}
@@ -883,7 +911,7 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
 
 // ── Feed Item (vertical, for match cards) ──
 
-function FeedItem({ clip, onUpvote, onInspect, canVote, showCTA }: { clip: ClipItem; onUpvote: (c: ClipItem) => void; onInspect: (c: ClipItem) => void; canVote: boolean; showCTA?: boolean }) {
+function FeedItem({ clip, onVote, onInspect, canVote, showCTA }: { clip: ClipItem; onVote: (c: ClipItem, vote: 'like' | 'dislike') => void; onInspect: (c: ClipItem) => void; canVote: boolean; showCTA?: boolean }) {
   return (
     <div className="group">
       <div className="flex items-center gap-2.5 lg:gap-1 mb-2.5 lg:mb-1 px-1">
@@ -903,17 +931,20 @@ function FeedItem({ clip, onUpvote, onInspect, canVote, showCTA }: { clip: ClipI
           ))}
         </div>
       </div>
-      <MatchCardVisual title={clip.title} playerName={clip.player.name} userTag={clip.player.userTag} country={clip.player.country} level={clip.player.level} clanTag={clip.player.clanTag} arenaName={clip.arenaName} outcome={(clip.matchData?.outcome as 'extract' | 'death') || 'extract'} chipsEarned={clip.chipsExtracted} chipsLost={clip.matchData?.chipsLost || 0} kills={clip.kills} snakeLength={clip.matchData?.snakeLength || 0} durationSec={clip.matchData?.durationSec || 0} isOnline={clip.matchData?.isOnline || false} upvotes={clip.upvotes} compact />
+      <MatchCardVisual title={clip.title} playerName={clip.player.name} userTag={clip.player.userTag} country={clip.player.country} level={clip.player.level} clanTag={clip.player.clanTag} arenaName={clip.arenaName} outcome={(clip.matchData?.outcome as 'extract' | 'death') || 'extract'} chipsEarned={clip.chipsExtracted} chipsLost={clip.matchData?.chipsLost || 0} kills={clip.kills} snakeLength={clip.matchData?.snakeLength || 0} durationSec={clip.matchData?.durationSec || 0} isOnline={clip.matchData?.isOnline || false} upvotes={clip.likes} compact />
       {showCTA && (
         <div className="mt-3 lg:mt-1 px-4 lg:px-2 py-3 lg:py-1 rounded-xl bg-gradient-to-r from-red-600/10 to-amber-600/10 border border-red-500/20 text-center">
           <p className="text-xs lg:text-[11px] text-slate-300"><span className="text-white font-bold">Can you beat this?</span> <span className="text-slate-500">Sign in and play to get your highlight on the feed!</span></p>
         </div>
       )}
-      <div className="flex items-center gap-4 lg:gap-2 mt-2.5 lg:mt-0.5 px-1">
-        <button type="button" onClick={() => onUpvote(clip)} disabled={!canVote || clip.myUpvote} className={`flex items-center gap-1.5 lg:gap-1 text-xs lg:text-[11px] font-bold transition ${clip.myUpvote ? 'text-red-400' : 'text-slate-500 hover:text-red-400'} disabled:opacity-40`}>
-          <Flame className="w-4 h-4 lg:w-3 lg:h-3" /> {clip.upvotes}
+      <div className="flex items-center gap-3 lg:gap-2 mt-2.5 lg:mt-0.5 px-1">
+        <button type="button" onClick={() => onVote(clip, 'like')} disabled={!canVote} className={`flex items-center gap-1 lg:gap-0.5 text-xs lg:text-[11px] font-bold transition ${clip.myVote === 'like' ? 'text-emerald-400' : 'text-slate-500 hover:text-emerald-400'} disabled:opacity-40`}>
+          <ThumbsUp className="w-3.5 h-3.5 lg:w-3 lg:h-3" /> {clip.likes}
         </button>
-        <button type="button" onClick={() => onInspect(clip)} className="flex items-center gap-1.5 lg:gap-1 text-xs lg:text-[11px] text-slate-500 hover:text-white transition"><Heart className="w-4 h-4 lg:w-3 lg:h-3" /> Profile</button>
+        <button type="button" onClick={() => onVote(clip, 'dislike')} disabled={!canVote} className={`flex items-center gap-1 lg:gap-0.5 text-xs lg:text-[11px] font-bold transition ${clip.myVote === 'dislike' ? 'text-red-400' : 'text-slate-500 hover:text-red-400'} disabled:opacity-40`}>
+          <ThumbsDown className="w-3.5 h-3.5 lg:w-3 lg:h-3" /> {clip.dislikes}
+        </button>
+        <button type="button" onClick={() => onInspect(clip)} className="flex items-center gap-1 lg:gap-0.5 text-xs lg:text-[11px] text-slate-500 hover:text-white transition"><User className="w-3.5 h-3.5 lg:w-3 lg:h-3" /> Profile</button>
       </div>
       <div className="border-b border-slate-800/40 mt-4 lg:mt-1" />
     </div>
@@ -922,12 +953,11 @@ function FeedItem({ clip, onUpvote, onInspect, canVote, showCTA }: { clip: ClipI
 
 // ── Video Card: Horizontal (YouTube Videos) — thumbnail left, info right ──
 
-function VideoCardHorizontal({ clip }: { clip: ClipItem }) {
+function VideoCardHorizontal({ clip, onVote, onInspect, canVote }: { clip: ClipItem; onVote?: (c: ClipItem, vote: 'like' | 'dislike') => void; onInspect?: (c: ClipItem) => void; canVote?: boolean }) {
   const platform = clip.platform.toLowerCase();
   return (
-    <a href={clip.url} target="_blank" rel="noopener noreferrer"
-      className="shrink-0 w-[440px] lg:w-[420px] rounded-xl border border-slate-800 bg-slate-950/70 shadow-md overflow-hidden flex flex-row hover:border-slate-700 transition group/card"
-    >
+    <div className="shrink-0 w-[440px] lg:w-[420px] rounded-xl border border-slate-800 bg-slate-950/70 shadow-md overflow-hidden flex flex-col hover:border-slate-700 transition group/card">
+      <a href={clip.url} target="_blank" rel="noopener noreferrer" className="flex flex-row flex-1">
       {/* Thumbnail */}
       <div className="relative w-56 lg:w-56 h-[160px] lg:h-[150px] shrink-0 bg-gradient-to-br from-slate-900 via-slate-950 to-red-950/20 overflow-hidden">
         {clip.thumbnailUrl ? (
@@ -958,19 +988,30 @@ function VideoCardHorizontal({ clip }: { clip: ClipItem }) {
           <span className="text-[11px] font-mono text-slate-600">{timeAgo(clip.createdAt)}</span>
         </div>
       </div>
-    </a>
+      </a>
+      {onVote && onInspect && (
+        <div className="flex items-center gap-2 px-2.5 py-1.5 border-t border-slate-800/60">
+          <button type="button" onClick={() => onVote(clip, 'like')} disabled={!canVote} className={`flex items-center gap-0.5 text-[11px] font-bold transition ${clip.myVote === 'like' ? 'text-emerald-400' : 'text-slate-500 hover:text-emerald-400'} disabled:opacity-40`}>
+            <ThumbsUp className="w-3 h-3" /> {clip.likes}
+          </button>
+          <button type="button" onClick={() => onVote(clip, 'dislike')} disabled={!canVote} className={`flex items-center gap-0.5 text-[11px] font-bold transition ${clip.myVote === 'dislike' ? 'text-red-400' : 'text-slate-500 hover:text-red-400'} disabled:opacity-40`}>
+            <ThumbsDown className="w-3 h-3" /> {clip.dislikes}
+          </button>
+          <button type="button" onClick={() => onInspect(clip)} className="flex items-center gap-0.5 text-[11px] text-slate-500 hover:text-white transition ml-auto"><User className="w-3 h-3" /> Profile</button>
+        </div>
+      )}
+    </div>
   );
 }
 
 // ── Video Card: Vertical (Shorts & Reels) — 9:16 portrait ──
 
-function VideoCardVertical({ clip }: { clip: ClipItem }) {
+function VideoCardVertical({ clip, onVote, onInspect, canVote }: { clip: ClipItem; onVote?: (c: ClipItem, vote: 'like' | 'dislike') => void; onInspect?: (c: ClipItem) => void; canVote?: boolean }) {
   const platform = clip.platform.toLowerCase();
   const isShort = platform.includes('shorts');
   return (
-    <a href={clip.url} target="_blank" rel="noopener noreferrer"
-      className="shrink-0 w-52 lg:w-48 rounded-xl border border-slate-800 bg-slate-950/70 shadow-md overflow-hidden hover:border-slate-700 transition group/card"
-    >
+    <div className="shrink-0 w-52 lg:w-48 rounded-xl border border-slate-800 bg-slate-950/70 shadow-md overflow-hidden hover:border-slate-700 transition group/card">
+      <a href={clip.url} target="_blank" rel="noopener noreferrer">
       {/* Thumbnail */}
       <div className="relative aspect-[9/16] bg-gradient-to-br from-slate-900 via-slate-950 to-pink-950/20 overflow-hidden">
         {clip.thumbnailUrl ? (
@@ -992,12 +1033,24 @@ function VideoCardVertical({ clip }: { clip: ClipItem }) {
           </div>
         )}
       </div>
+      </a>
       {/* Info */}
       <div className="p-2.5">
         <h3 className="text-xs font-bold text-white leading-tight line-clamp-2">{clip.title}</h3>
         <div className="text-[11px] font-mono text-slate-500 mt-0.5">{timeAgo(clip.createdAt)}</div>
       </div>
-    </a>
+      {onVote && onInspect && (
+        <div className="flex items-center gap-2 px-2.5 py-1.5 border-t border-slate-800/60">
+          <button type="button" onClick={() => onVote(clip, 'like')} disabled={!canVote} className={`flex items-center gap-0.5 text-[11px] font-bold transition ${clip.myVote === 'like' ? 'text-emerald-400' : 'text-slate-500 hover:text-emerald-400'} disabled:opacity-40`}>
+            <ThumbsUp className="w-3 h-3" /> {clip.likes}
+          </button>
+          <button type="button" onClick={() => onVote(clip, 'dislike')} disabled={!canVote} className={`flex items-center gap-0.5 text-[11px] font-bold transition ${clip.myVote === 'dislike' ? 'text-red-400' : 'text-slate-500 hover:text-red-400'} disabled:opacity-40`}>
+            <ThumbsDown className="w-3 h-3" /> {clip.dislikes}
+          </button>
+          <button type="button" onClick={() => onInspect(clip)} className="flex items-center gap-0.5 text-[11px] text-slate-500 hover:text-white transition ml-auto"><User className="w-3 h-3" /> Profile</button>
+        </div>
+      )}
+    </div>
   );
 }
 
