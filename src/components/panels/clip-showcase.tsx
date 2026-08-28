@@ -843,16 +843,7 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
                   <VideoCardHorizontal clip={featured} onVote={handleVote} onInspect={handleInspectCreator} canVote={isLoggedIn} />
                 )}
                 </div>
-                <div className="flex items-center gap-3 lg:gap-2 mt-3 lg:mt-0.5 px-1">
-                  <button type="button" onClick={() => handleVote(featured, 'like')} disabled={!isLoggedIn} className={`flex items-center gap-1 lg:gap-0.5 text-xs lg:text-[11px] font-bold transition ${featured.myVote === 'like' ? 'text-emerald-400' : 'text-slate-400 hover:text-emerald-400'} disabled:opacity-40`}>
-                    <ThumbsUp className="w-4 h-4 lg:w-3 lg:h-3" /> {featured.likes}
-                  </button>
-                  <button type="button" onClick={() => handleVote(featured, 'dislike')} disabled={!isLoggedIn} className={`flex items-center gap-1 lg:gap-0.5 text-xs lg:text-[11px] font-bold transition ${featured.myVote === 'dislike' ? 'text-red-400' : 'text-slate-400 hover:text-red-400'} disabled:opacity-40`}>
-                    <ThumbsDown className="w-4 h-4 lg:w-3 lg:h-3" /> {featured.dislikes}
-                  </button>
-                  <button type="button" onClick={() => handleInspectCreator(featured)} className="flex items-center gap-1 lg:gap-0.5 text-xs lg:text-[11px] text-slate-500 hover:text-white transition"><User className="w-4 h-4 lg:w-3 lg:h-3" /> Profile</button>
-                  {featured.url && <a href={featured.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 lg:gap-0.5 text-xs lg:text-[11px] text-slate-500 hover:text-white transition ml-auto">Watch <ExternalLink className="w-3.5 h-3.5 lg:w-3 lg:h-3" /></a>}
-                </div>
+
               </div>
             )}
 

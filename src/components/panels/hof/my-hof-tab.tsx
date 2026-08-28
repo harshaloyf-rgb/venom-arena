@@ -97,7 +97,7 @@ export function MyHofTab({
                   <button
                     type="button"
                     onClick={() => setExpandedEntry(isExpanded ? null : `m-${e.id}`)}
-                    className="w-full flex items-center gap-3 p-3 text-left"
+                    className="w-full flex items-center gap-3 p-3 text-left lg:hidden"
                   >
                     <span className="text-xl shrink-0" aria-hidden>{tier?.badge.split(' ')[0] || '🏅'}</span>
                     <div className="min-w-0 flex-1">
@@ -151,7 +151,7 @@ export function MyHofTab({
                   <button
                     type="button"
                     onClick={() => setExpandedEntry(isExpanded ? null : `c-${e.id}`)}
-                    className="w-full flex items-center gap-3 p-3 text-left"
+                    className="w-full flex items-center gap-3 p-3 text-left lg:hidden"
                   >
                     <span className="text-xl shrink-0" aria-hidden>{badgeIcon(e.hofBadge)}</span>
                     <div className="min-w-0 flex-1">

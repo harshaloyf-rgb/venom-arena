@@ -483,3 +483,28 @@ Stage Summary:
 - Verified search works (filters by title/player name)
 - Verified sort dropdown works (Newest/Oldest/Most Upvoted)
 - Zero runtime errors on clean reload
+---
+Task ID: 1
+Agent: main
+Task: Add like/dislike/profile to Highlights clip cards (YouTube, Shorts, Instagram, Match Cards)
+
+Work Log:
+- Added `voteType String @default("like")` to ClipUpvote schema, `downvotes Int @default(0)` to Clip schema, pushed to DB
+- Created `/api/clips/vote` with toggle logic: no vote → create, same → undo (delete), different → switch (update)
+- Updated `/api/clips` GET to return `likes`, `dislikes`, `myVote` per clip by batch-fetching ClipUpvote rows
+- Updated `/api/clips/featured` to also return `likes`, `dislikes`, `myVote`
+- Updated ClipItem type: replaced `upvotes`/`myUpvote` with `likes`/`dislikes`/`myVote`
+- Replaced `handleUpvote` with `handleVote(clip, vote)` with optimistic UI + rollback
+- Updated VideoCardHorizontal: changed from `<a>` to `<div>`, added like/dislike/profile action bar at bottom
+- Updated VideoCardVertical: same pattern, added action bar with ThumbsUp/ThumbsDown/User icons
+- Updated FeedItem (match cards): replaced single upvote with like/dislike/profile buttons
+- Updated ExpandedView to pass new props to all card types
+- Updated featured clip section with new like/dislike/profile buttons
+- Fixed undo bug: was decrementing both likes AND dislikes on undo, now only decrements the relevant one
+
+Stage Summary:
+- All clip cards (YouTube, Shorts, Instagram, Match Cards) now have: ThumbsUp (like), ThumbsDown (dislike), Profile button
+- Each user can only vote once per clip (DB unique constraint on [playerId, clipId])
+- Toggle behavior: click same button = undo, click opposite = switch
+- Profile button triggers player inspection panel
+- API: POST /api/clips/vote with {clipId, vote: 'like'|'dislike'}
