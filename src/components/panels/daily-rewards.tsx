@@ -277,43 +277,43 @@ export function DailyRewards({ onToast }: ClaimsProps) {
       <button
         type="button"
         onClick={() => setTab(id)}
-        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition border ${
+        className={`px-3 lg:px-1 py-1.5 lg:py-0.5 rounded-lg text-xs lg:text-[11px] font-bold flex items-center gap-1.5 transition border ${
           tab === id
             ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
             : 'text-slate-500 hover:text-slate-300 border-transparent'
         }`}
       >
-        <Icon className="w-3.5 h-3.5" /> {label}
+        <Icon className="w-3.5 h-3.5 lg:w-2.5 lg:h-2.5" /> {label}
       </button>
     );
   }
 
   // ── RENDER ──
   return (
-    <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 overflow-hidden">
+    <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 lg:p-1.5 overflow-hidden">
       <GlowBlob color="bg-emerald-500/10" className="-top-12 -right-12 w-56 h-56" />
       {flyReward !== null && <RewardFly amount={flyReward} onDone={() => setFlyReward(null)} />}
 
       {/* Header */}
-      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-800">
+      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4 lg:gap-1 mb-4 lg:mb-1 pb-4 lg:pb-1 border-b border-slate-800">
         <div>
-          <h2 className="text-xl sm:text-2xl font-sans font-black text-white tracking-tight flex items-center gap-2.5">
-            <Gift className="w-5.5 h-5.5 text-emerald-400 animate-bounce" />
+          <h2 className="text-xl sm:text-2xl lg:text-[11px] font-sans font-black text-white tracking-tight flex items-center gap-2.5 lg:gap-1">
+            <Gift className="w-5.5 h-5.5 lg:w-3 lg:h-3 text-emerald-400 animate-bounce" />
             Claims & Rewards Center
           </h2>
-          <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+          <p className="text-xs text-slate-400 mt-1 lg:mt-0 max-w-2xl">
             Daily streaks, hourly micro-claims, lucky spins, and more. Never miss a reward!
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="inline-flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-amber-500/30">
-            <Flame className="w-4 h-4 text-amber-500 fill-amber-500" />
-            <span className="text-sm font-bold font-mono text-white">{player.dailyStreak}d</span>
+        <div className="flex items-center gap-3 lg:gap-1">
+          <div className="inline-flex items-center gap-2 lg:gap-1 bg-slate-950 px-3 lg:px-1.5 py-1.5 lg:py-0.5 rounded-xl border border-amber-500/30">
+            <Flame className="w-4 h-4 lg:w-3 lg:h-3 text-amber-500 fill-amber-500" />
+            <span className="text-sm lg:text-[11px] font-bold font-mono text-white">{player.dailyStreak}d</span>
           </div>
           {player.streakFreezes > 0 && (
-            <div className="inline-flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-xl border border-sky-500/30">
-              <Snowflake className="w-4 h-4 text-sky-400" />
-              <span className="text-sm font-bold font-mono text-sky-300">{player.streakFreezes}</span>
+            <div className="inline-flex items-center gap-1.5 lg:gap-1 bg-slate-950 px-3 lg:px-1.5 py-1.5 lg:py-0.5 rounded-xl border border-sky-500/30">
+              <Snowflake className="w-4 h-4 lg:w-3 lg:h-3 text-sky-400" />
+              <span className="text-sm lg:text-[11px] font-bold font-mono text-sky-300">{player.streakFreezes}</span>
             </div>
           )}
         </div>
@@ -321,14 +321,14 @@ export function DailyRewards({ onToast }: ClaimsProps) {
 
       {/* Seasonal Banner */}
       {seasonal && (
-        <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-950/20 p-3 text-[11px] text-amber-200 font-bold flex items-center gap-2">
-          <Flame className="w-4 h-4 text-amber-400 shrink-0" />
+        <div className="mb-4 lg:mb-1 rounded-xl border border-amber-500/40 bg-amber-950/20 p-3 lg:p-1 text-[11px] text-amber-200 font-bold flex items-center gap-2 lg:gap-1">
+          <Flame className="w-4 h-4 lg:w-3 lg:h-3 text-amber-400 shrink-0" />
           {seasonal.label} ({seasonal.multiplier}× all rewards today!)
         </div>
       )}
 
       {/* Tabs */}
-      <div className="relative flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800/60 mb-4">
+      <div className="relative flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800/60 mb-4 lg:mb-1">
         {TABS.map(t => <TabBtn key={t.id} {...t} />)}
       </div>
 
