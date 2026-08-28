@@ -406,22 +406,22 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
   // ─── Render ───────────────────────────────────────────────
 
   return (
-    <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 overflow-hidden">
-      <GlowBlob color="bg-indigo-500/10" className="-top-12 -right-12 w-56 h-56" />
+    <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 lg:p-1.5 overflow-hidden">
+      <GlowBlob color="bg-indigo-500/10" className="-top-12 -right-12 w-56 h-56 lg:w-24 lg:h-24" />
 
-      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-5 border-b border-slate-800">
+      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 lg:gap-1 mb-5 lg:mb-1 pb-5 lg:pb-1 border-b border-slate-800">
         <div>
-          <h2 className="text-xl sm:text-2xl font-sans font-black text-white tracking-tight flex items-center gap-2.5">
-            <Shield className="w-5.5 h-5.5 text-indigo-400" />
+          <h2 className="text-xl sm:text-2xl lg:text-[11px] font-sans font-black text-white tracking-tight flex items-center gap-2.5 lg:gap-1">
+            <Shield className="w-5.5 h-5.5 lg:w-3 lg:h-3 text-indigo-400" />
             Viper Clan &amp; Syndicate Guild HQ
           </h2>
-          <p className="text-xs text-slate-400 mt-1 max-w-3xl">
+          <p className="text-xs lg:text-[11px] text-slate-400 mt-1 lg:mt-0 max-w-3xl">
             Form or join a syndicate, pool chips into the Treasury, complete weekly challenges, manage your crew, and dominate!
           </p>
         </div>
       </div>
 
-      <div className="relative flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800/60 mb-5">
+      <div className="relative flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800/60 mb-5 lg:mb-1">
         <ClanTabBtn active={tab === 'mine'} onClick={() => setTab('mine')} icon={Shield} label="My Clan" />
         <ClanTabBtn active={tab === 'browse'} onClick={() => setTab('browse')} icon={Search} label="Browse Clans" />
         <ClanTabBtn active={tab === 'form'} onClick={() => setTab('form')} icon={Plus} label="Form Syndicate" />
@@ -431,72 +431,72 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
       {tab === 'mine' && (
         <div>
           {!playerClanTag ? (
-            <div className="p-8 rounded-2xl border border-slate-800 bg-slate-950/60 text-center max-w-md mx-auto">
-              <Shield className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-              <h3 className="text-base font-bold text-white">You are not in a Viper Clan</h3>
-              <p className="text-xs text-slate-400 mt-2 mb-4">Join an existing clan or form your own syndicate!</p>
+            <div className="p-8 lg:p-3 rounded-2xl border border-slate-800 bg-slate-950/60 text-center max-w-md mx-auto">
+              <Shield className="w-12 h-12 lg:w-5 lg:h-5 text-slate-600 mx-auto mb-3 lg:mb-0.5" />
+              <h3 className="text-base lg:text-[11px] font-bold text-white">You are not in a Viper Clan</h3>
+              <p className="text-xs lg:text-[11px] text-slate-400 mt-2 lg:mt-0 mb-4 lg:mb-1">Join an existing clan or form your own syndicate!</p>
               <div className="flex items-center justify-center gap-2">
                 <button type="button" onClick={() => setTab('browse')} className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition">Browse Clans</button>
                 <button type="button" onClick={() => setTab('form')} className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 hover:border-indigo-500/40 text-slate-300 hover:text-white text-xs font-bold transition">Form Syndicate</button>
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-4 lg:space-y-1">
               {/* Header */}
-              <div className="flex items-start justify-between gap-3 flex-wrap p-4 rounded-2xl border border-slate-800 bg-slate-950/60">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="text-3xl" aria-hidden>{myClanInfo?.emblem || '\u0001f40d'}</span>
+              <div className="flex items-start justify-between gap-3 lg:gap-1 flex-wrap p-4 lg:p-1.5 rounded-2xl border border-slate-800 bg-slate-950/60">
+                <div className="flex items-center gap-3 lg:gap-1 min-w-0">
+                  <span className="text-3xl lg:text-[11px]" aria-hidden>{myClanInfo?.emblem || '\u0001f40d'}</span>
                   <div className="min-w-0">
-                    <h3 className="text-base font-bold text-white flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base lg:text-[11px] font-bold text-white flex items-center gap-2 lg:gap-1 flex-wrap">
                       {myClanInfo?.name || playerClanTag}
-                      <span className="text-[10px] font-mono text-indigo-300 bg-indigo-500/10 border border-indigo-500/30 px-2 py-0.5 rounded">[{playerClanTag}]</span>
+                      <span className="text-[10px] lg:text-[11px] font-mono text-indigo-300 bg-indigo-500/10 border border-indigo-500/30 px-2 lg:px-1.5 py-0.5 rounded">[{playerClanTag}]</span>
                       {player?.clanRank && (
-                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${RANK_BG[player.clanRank] || RANK_BG.Viper}`}>
-                          <Trophy className="w-2.5 h-2.5 inline mr-0.5" /> {player.clanRank}
+                        <span className={`text-[9px] lg:text-[11px] font-bold px-2 lg:px-1.5 py-0.5 rounded-full border ${RANK_BG[player.clanRank] || RANK_BG.Viper}`}>
+                          <Trophy className="w-2.5 h-2.5 lg:w-2.5 lg:h-2.5 inline mr-0.5" /> {player.clanRank}
                         </span>
                       )}
                     </h3>
-                    {myClanInfo?.description && <p className="text-[11px] text-slate-400 italic mt-0.5">&quot;{myClanInfo.description}&quot;</p>}
+                    {myClanInfo?.description && <p className="text-[11px] lg:text-[11px] text-slate-400 italic mt-0.5 lg:mt-0">&quot;{myClanInfo.description}&quot;</p>}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 lg:gap-1">
                   {isLeader && (
-                    <button type="button" onClick={openSettings} className="px-3 py-2 rounded-lg bg-slate-950 hover:bg-slate-900 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 text-xs font-bold transition flex items-center gap-1.5">
-                      <Settings className="w-3.5 h-3.5" /> Settings
+                    <button type="button" onClick={openSettings} className="px-3 lg:px-1.5 py-2 lg:py-0.5 rounded-lg bg-slate-950 hover:bg-slate-900 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 text-xs lg:text-[11px] font-bold transition flex items-center gap-1.5">
+                      <Settings className="w-3.5 h-3.5 lg:w-3 lg:h-3" /> Settings
                     </button>
                   )}
-                  <button type="button" onClick={() => void handleLeaveClan()} disabled={actionBusy === 'leave'} className="px-3 py-2 rounded-lg bg-slate-950 hover:bg-rose-950/40 text-slate-300 hover:text-rose-400 border border-slate-800 hover:border-rose-500/30 text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50">
-                    {actionBusy === 'leave' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />} Leave
+                  <button type="button" onClick={() => void handleLeaveClan()} disabled={actionBusy === 'leave'} className="px-3 lg:px-1.5 py-2 lg:py-0.5 rounded-lg bg-slate-950 hover:bg-rose-950/40 text-slate-300 hover:text-rose-400 border border-slate-800 hover:border-rose-500/30 text-xs lg:text-[11px] font-bold transition flex items-center gap-1.5 disabled:opacity-50">
+                    {actionBusy === 'leave' ? <Loader2 className="w-3.5 h-3.5 lg:w-3 lg:h-3 animate-spin" /> : <LogOut className="w-3.5 h-3.5 lg:w-3 lg:h-3" />} Leave
                   </button>
                 </div>
               </div>
 
               {/* Stats Row */}
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-[11px]">
-                <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/60">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 lg:gap-1 text-[11px]">
+                <div className="p-3 lg:p-1.5 rounded-xl border border-slate-800 bg-slate-950/60">
                   <MicroLabel>YOUR RANK</MicroLabel>
                   <div className="text-white mt-0.5 font-bold">{player?.clanRank || 'Viper'}</div>
                 </div>
-                <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/60">
+                <div className="p-3 lg:p-1.5 rounded-xl border border-slate-800 bg-slate-950/60">
                   <MicroLabel>MEMBERS</MicroLabel>
                   <div className="text-white mt-0.5 font-bold">{myClanInfo?.memberCount || '?'} / 30</div>
                   {clanStats && clanStats.onlineCount > 0 && (
-                    <div className="text-[9px] text-emerald-400 mt-0.5 flex items-center gap-1"><Circle className="w-1.5 h-1.5 fill-emerald-400" /> {clanStats.onlineCount} online</div>
+                    <div className="text-[9px] lg:text-[11px] text-emerald-400 mt-0.5 lg:mt-0 flex items-center gap-1"><Circle className="w-1.5 h-1.5 fill-emerald-400" /> {clanStats.onlineCount} online</div>
                   )}
                 </div>
-                <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/60">
+                <div className="p-3 lg:p-1.5 rounded-xl border border-slate-800 bg-slate-950/60">
                   <MicroLabel>CLAN LEVEL</MicroLabel>
                   <div className="text-amber-400 mt-0.5 font-bold">Lvl {myClanInfo?.level || 1}</div>
-                  <div className="mt-1.5 w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
+                  <div className="mt-1.5 lg:mt-0.5 w-full h-1.5 lg:h-1 bg-slate-900 rounded-full overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-amber-500 to-amber-300 rounded-full transition-all duration-500" style={{ width: `${xpProgress}%` }} />
                   </div>
-                  <div className="text-[9px] text-slate-500 mt-0.5 font-mono">{myClanInfo?.xp || 0}/{xpNeeded} XP</div>
+                  <div className="text-[9px] lg:text-[11px] text-slate-500 mt-0.5 lg:mt-0 font-mono">{myClanInfo?.xp || 0}/{xpNeeded} XP</div>
                 </div>
-                <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/60">
+                <div className="p-3 lg:p-1.5 rounded-xl border border-slate-800 bg-slate-950/60">
                   <MicroLabel>TREASURY</MicroLabel>
                   <div className="text-emerald-400 mt-0.5 font-bold">{(myClanInfo?.bankedChips || 0).toLocaleString()}c</div>
                 </div>
-                <div className="p-3 rounded-xl border border-slate-800 bg-slate-950/60">
+                <div className="p-3 lg:p-1.5 rounded-xl border border-slate-800 bg-slate-950/60">
                   <MicroLabel>TOTAL DEPOSITED</MicroLabel>
                   <div className="text-emerald-400/70 mt-0.5 font-bold">{(myClanInfo?.totalDeposited || 0).toLocaleString()}c</div>
                 </div>
@@ -661,7 +661,7 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
               <button type="button" onClick={() => void handleDisbandClan()} disabled={actionBusy === 'disband'} className="w-full px-4 py-2.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 text-xs font-bold transition flex items-center justify-center gap-2 border border-rose-500/30 hover:border-rose-500/50 disabled:opacity-50">
                 {actionBusy === 'disband' ? <Loader2 className="w-3 h-3 animate-spin" /> : <AlertTriangle className="w-3 h-3" />} Disband Syndicate
               </button>
-              <p className="text-[9px] text-rose-400/60 text-center mt-1.5 font-mono">Permanently deletes the syndicate, all data, and removes all members.</p>
+              <p className="text-[9px] lg:text-[11px] text-rose-400/60 text-center mt-1.5 font-mono">Permanently deletes the syndicate, all data, and removes all members.</p>
             </div>
           </div>
         </div>
@@ -673,8 +673,8 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
 interface ClanTabBtnProps { active: boolean; onClick: () => void; icon: typeof Shield; label: string; }
 function ClanTabBtn({ active, onClick, icon: Icon, label }: ClanTabBtnProps) {
   return (
-    <button type="button" onClick={onClick} className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition border ${active ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'text-slate-500 hover:text-slate-300 border-transparent'}`}>
-      <Icon className="w-3.5 h-3.5" /> {label}
+    <button type="button" onClick={onClick} className={`px-3 lg:px-1.5 py-1.5 lg:py-0.5 rounded-lg text-xs lg:text-[11px] font-bold flex items-center gap-1.5 transition border ${active ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'text-slate-500 hover:text-slate-300 border-transparent'}`}>
+      <Icon className="w-3.5 h-3.5 lg:w-3 lg:h-3" /> {label}
     </button>
   );
 }
