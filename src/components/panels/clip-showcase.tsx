@@ -33,6 +33,8 @@ import {
   Shield,
   CheckCircle2,
   Smartphone,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { AdminModerationModal } from './clips/admin-moderation-modal';
 import { UploadModal } from './clips/upload-modal';
@@ -75,7 +77,7 @@ interface ClipShowcaseProps {
   onInspectPlayer?: (p: InspectedPlayer) => void;
 }
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 40;
 
 function formatCompact(n: number): string {
   if (n >= 10_000_000) return `${(n / 10_000_000).toFixed(1)} Cr`;
@@ -85,13 +87,82 @@ function formatCompact(n: number): string {
 }
 
 
+// ── Horizontal Scroll Row with arrow buttons ──
+
+function ScrollRow({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollL, setCanScrollL] = useState(false);
+  const [canScrollR, setCanScrollR] = useState(false);
+
+  function checkScroll() {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollL(el.scrollLeft > 4);
+    setCanScrollR(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }
+
+  useEffect(() => { checkScroll(); }, [children]);
+  // Also check on resize
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(checkScroll);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  function scrollBy(dir: 'left' | 'right') {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir === 'left' ? -260 : 260, behavior: 'smooth' });
+  }
+
+  return (
+    <div className="mb-3 lg:mb-1">
+      <div className="flex items-center gap-1.5 mb-2 lg:mb-1 px-1">
+        {icon}
+        <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-widest lg:text-[11px]">{title}</span>
+      </div>
+      <div className="relative group/row">
+        {/* Left arrow */}
+        {canScrollL && (
+          <button
+            type="button"
+            onClick={() => scrollBy('left')}
+            className="absolute left-0 top-0 bottom-0 z-10 w-7 lg:w-5 flex items-center justify-center bg-gradient-to-r from-slate-900/95 to-transparent opacity-0 group-hover/row:opacity-100 transition-opacity"
+          >
+            <ChevronLeft className="w-4 h-4 text-white" />
+          </button>
+        )}
+        {/* Scroll container */}
+        <div
+          ref={scrollRef}
+          onScroll={checkScroll}
+          className="flex gap-3 lg:gap-2 overflow-x-auto scrollbar-none scroll-smooth"
+        >
+          {children}
+        </div>
+        {/* Right arrow */}
+        {canScrollR && (
+          <button
+            type="button"
+            onClick={() => scrollBy('right')}
+            className="absolute right-0 top-0 bottom-0 z-10 w-7 lg:w-5 flex items-center justify-center bg-gradient-to-l from-slate-900/95 to-transparent opacity-0 group-hover/row:opacity-100 transition-opacity"
+          >
+            <ChevronRight className="w-4 h-4 text-white" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 // ── Empty State Component ──
 
 function EmptyState({ isLoggedIn, onOpenUpload }: { isLoggedIn: boolean; onOpenUpload: () => void }) {
   return (
     <div className="text-center py-6 sm:py-8 lg:py-2">
-      {/* Hero icon */}
       <div className="relative inline-flex items-center justify-center mb-5 lg:mb-1">
         <div className="w-16 h-16 lg:w-8 lg:h-8 rounded-2xl bg-gradient-to-br from-red-600/20 to-amber-600/20 border border-red-500/20 flex items-center justify-center">
           <Flame className="w-7 h-7 lg:w-3 lg:h-3 text-red-400" />
@@ -103,25 +174,21 @@ function EmptyState({ isLoggedIn, onOpenUpload }: { isLoggedIn: boolean; onOpenU
         Scroll through top plays, upvote your favorites, and share your own legendary moments!
       </p>
 
-      {/* How it works steps */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:gap-1 mb-5 lg:mb-1 max-w-sm mx-auto">
         <StepCard icon={<Video className="w-5 h-5 lg:w-3 lg:h-3 text-red-400" />} step="1" title="Play Matches" desc="Impressive games (5K+ chips or 3+ kills) auto-generate highlight cards" />
         <StepCard icon={<Upload className="w-5 h-5 lg:w-3 lg:h-3 text-amber-400" />} step="2" title="Record & Upload" desc="Record gameplay, upload to YouTube/Instagram, paste the link here" />
         <StepCard icon={<Trophy className="w-5 h-5 lg:w-3 lg:h-3 text-emerald-400" />} step="3" title="Get Featured" desc="Most upvoted clips hit the Top Play spotlight at the top of the feed" />
       </div>
 
-      {/* What appears here */}
       <div className="max-w-sm mx-auto mb-5 lg:mb-1 space-y-2 lg:space-y-1">
         <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-3 lg:p-1.5 text-left">
           <p className="text-[11px] font-bold text-slate-300 mb-2 lg:mb-0.5 flex items-center gap-1.5"><Film className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-red-400" /> What appears in Highlights?</p>
           <ul className="text-[11px] text-slate-400 space-y-1">
-            <li className="flex items-start gap-1.5"><span className="text-emerald-400 mt-0.5">✓</span> <span><strong className="text-slate-300">Match Cards</strong> — Auto-generated stat cards from impressive matches (big extractions, multi-kills)</span></li>
+            <li className="flex items-start gap-1.5"><span className="text-emerald-400 mt-0.5">✓</span> <span><strong className="text-slate-300">Match Cards</strong> — Auto-generated stat cards from impressive matches</span></li>
             <li className="flex items-start gap-1.5"><span className="text-emerald-400 mt-0.5">✓</span> <span><strong className="text-slate-300">Video Clips</strong> — Community-submitted gameplay from YouTube, YouTube Shorts, and Instagram Reels</span></li>
             <li className="flex items-start gap-1.5"><span className="text-emerald-400 mt-0.5">✓</span> <span><strong className="text-slate-300">Top Play</strong> — The most upvoted clip gets the featured trophy spotlight</span></li>
           </ul>
         </div>
-
-        {/* Content rules summary */}
         <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-3 lg:p-1.5 text-left">
           <p className="text-[11px] font-bold text-slate-300 mb-1.5 lg:mb-0.5 flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-emerald-400" /> Community Guidelines</p>
           <div className="space-y-1">
@@ -135,13 +202,12 @@ function EmptyState({ isLoggedIn, onOpenUpload }: { isLoggedIn: boolean; onOpenU
             </div>
             <div className="flex items-center gap-1.5">
               <Clock className="w-3 h-3 text-slate-500 shrink-0" />
-              <span className="text-[11px] text-slate-500">Match Cards appear instantly (auto-generated), video clips need review</span>
+              <span className="text-[11px] text-slate-500">Match Cards appear instantly, video clips need review</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* CTA */}
       {isLoggedIn ? (
         <button type="button" onClick={onOpenUpload} className="inline-flex items-center gap-2 lg:gap-1 px-6 lg:px-3 py-3 lg:py-1 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs uppercase tracking-wider transition shadow-lg shadow-red-600/20">
           <Plus className="w-4 h-4 lg:w-3 lg:h-3" /> Share Your First Clip
@@ -188,176 +254,97 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
   const isAdmin = player?.role === 'admin';
 
   const [uploadForm, setUploadForm] = useState({
-    title: '',
-    description: '',
-    platform: 'YouTube' as string,
-    chips: '',
-    kills: '',
-    arenaName: '',
-    url: '',
+    title: '', description: '', platform: 'YouTube' as string,
+    chips: '', kills: '', arenaName: '', url: '',
   });
 
-  /* ── Fetch clips (no auth required) ── */
   const fetchClips = useCallback(
     async (reset = false) => {
       const currentOffset = reset ? 0 : offset;
       const isLoadMore = !reset && clips.length > 0;
-
-      if (isLoadMore) setLoadingMore(true);
-      else setLoading(true);
-
+      if (isLoadMore) setLoadingMore(true); else setLoading(true);
       try {
         const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(currentOffset) });
-        if (myClipsOnly && player) {
-          params.set('player', player.userTag);
-          params.set('pending', 'true');
-        }
+        if (myClipsOnly && player) { params.set('player', player.userTag); params.set('pending', 'true'); }
         if (filterType === 'match-card') {
           params.set('type', 'match-card');
         } else if (filterType === 'youtube' || filterType === 'youtube-shorts' || filterType === 'instagram') {
           params.set('type', 'user-clip');
           params.set('platform', filterType);
         }
-
         const res = await fetch(`/api/clips?${params}`);
         if (!res.ok) throw new Error('Failed to load clips');
         const data = await res.json();
-
         setClips((prev) => (reset ? data.clips : [...prev, ...data.clips]));
         setTotal(data.total);
         setOffset(currentOffset + PAGE_SIZE);
         setError(null);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load clips');
-      } finally {
-        setLoading(false);
-        setLoadingMore(false);
-      }
+      } catch (err: any) { setError(err.message || 'Failed to load clips'); }
+      finally { setLoading(false); setLoadingMore(false); }
     },
     [offset, clips.length, myClipsOnly, player, filterType],
   );
 
   const fetchFeatured = useCallback(async () => {
-    try {
-      const res = await fetch('/api/clips/featured');
-      if (!res.ok) return;
-      const data = await res.json();
-      setFeatured(data.clip);
-    } catch {}
+    try { const res = await fetch('/api/clips/featured'); if (!res.ok) return; const data = await res.json(); setFeatured(data.clip); } catch {}
   }, []);
 
   const fetchStats = useCallback(async () => {
-    try {
-      const res = await fetch('/api/stats/live');
-      if (!res.ok) return;
-      const data = await res.json();
-      setLiveStats(data);
-    } catch {}
+    try { const res = await fetch('/api/stats/live'); if (!res.ok) return; const data = await res.json(); setLiveStats(data); } catch {}
   }, []);
 
-  useEffect(() => {
-    fetchClips(true);
-    fetchFeatured();
-    fetchStats();
-  }, [myClipsOnly, filterType]);
+  useEffect(() => { fetchClips(true); fetchFeatured(); fetchStats(); }, [myClipsOnly, filterType]);
 
-  /* ── Admin: fetch pending count ── */
-  useEffect(() => {
-    if (!isAdmin) return;
-    async function load() {
-      try {
-        const res = await fetch('/api/clips/admin?status=pending&limit=1');
-        if (res.ok) {
-          const data = await res.json();
-          setPendingCount(data.counts?.pending ?? 0);
-        }
-      } catch {}
-    }
-    load();
-  }, [isAdmin, showAdmin]);
+  useEffect(() => { if (!isAdmin) return; (async () => { try { const r = await fetch('/api/clips/admin?status=pending&limit=1'); if (r.ok) { const d = await r.json(); setPendingCount(d.counts?.pending ?? 0); } } catch {} })(); }, [isAdmin, showAdmin]);
+
+  useEffect(() => { setClips([]); setOffset(0); }, [myClipsOnly, filterType]);
 
   useEffect(() => {
-    setClips([]);
-    setOffset(0);
-  }, [myClipsOnly, filterType]);
-
-  /* ── Infinite scroll ── */
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !loadingMore && clips.length < total) fetchClips(false);
-      },
-      { rootMargin: '200px' },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
+    const el = sentinelRef.current; if (!el) return;
+    const obs = new IntersectionObserver((e) => { if (e[0].isIntersecting && !loadingMore && clips.length < total) fetchClips(false); }, { rootMargin: '200px' });
+    obs.observe(el); return () => obs.disconnect();
   }, [loadingMore, clips.length, total, fetchClips]);
 
-  /* ── Upvote ── */
   async function handleUpvote(clip: ClipItem) {
     if (!isLoggedIn || clip.myUpvote) return;
     setClips((prev) => prev.map((c) => (c.id === clip.id ? { ...c, upvotes: c.upvotes + 1, myUpvote: true } : c)));
     if (featured?.id === clip.id) setFeatured((f) => (f ? { ...f, upvotes: f.upvotes + 1, myUpvote: true } : f));
-    try {
-      const res = await fetch('/api/clips/upvote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clipId: clip.id }) });
-      if (!res.ok) throw new Error();
-      if (onToast) notify('Upvoted! 🔥', 'success', onToast);
-    } catch {
-      setClips((prev) => prev.map((c) => (c.id === clip.id ? { ...c, upvotes: c.upvotes - 1, myUpvote: false } : c)));
-      if (featured?.id === clip.id) setFeatured((f) => (f ? { ...f, upvotes: f.upvotes - 1, myUpvote: false } : f));
-      if (onToast) notify('Failed to upvote.', 'error', onToast);
-    }
+    try { const r = await fetch('/api/clips/upvote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clipId: clip.id }) }); if (!r.ok) throw new Error(); if (onToast) notify('Upvoted! 🔥', 'success', onToast); }
+    catch { setClips((prev) => prev.map((c) => (c.id === clip.id ? { ...c, upvotes: c.upvotes - 1, myUpvote: false } : c))); if (featured?.id === clip.id) setFeatured((f) => (f ? { ...f, upvotes: f.upvotes - 1, myUpvote: false } : f)); if (onToast) notify('Failed to upvote.', 'error', onToast); }
   }
 
-  /* ── Inspect creator ── */
   function handleInspectCreator(clip: ClipItem) {
     if (!onInspectPlayer) return;
     onInspectPlayer({ name: clip.player.name, userTag: clip.player.userTag, country: clip.player.country, flag: countryFlag(clip.player.country), bankedChips: 0, level: clip.player.level });
   }
 
-  /* ── Upload ── */
   async function handleUpload() {
     if (!isLoggedIn) return;
-    if (!uploadForm.title.trim() || !uploadForm.url.trim()) {
-      if (onToast) notify('Title and Video URL are required.', 'error', onToast);
-      return;
-    }
+    if (!uploadForm.title.trim() || !uploadForm.url.trim()) { if (onToast) notify('Title and Video URL are required.', 'error', onToast); return; }
     setUploading(true);
     try {
-      const res = await fetch('/api/clips', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: uploadForm.title, description: uploadForm.description, platform: uploadForm.platform, url: uploadForm.url,
-          chipsExtracted: parseInt(uploadForm.chips, 10) || 0, kills: parseInt(uploadForm.kills, 10) || 0,
-          arenaName: uploadForm.arenaName, tags: ['Community'],
-        }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(d.error || 'Failed to submit clip');
-      }
+      const res = await fetch('/api/clips', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: uploadForm.title, description: uploadForm.description, platform: uploadForm.platform, url: uploadForm.url, chipsExtracted: parseInt(uploadForm.chips, 10) || 0, kills: parseInt(uploadForm.kills, 10) || 0, arenaName: uploadForm.arenaName, tags: ['Community'] }) });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Failed to submit clip'); }
       const data = await res.json();
-      const msg = data.message || (data.status === 'pending' ? 'Clip submitted for review! It will appear after admin approval. ⏳' : 'Clip published! 🎬');
-      if (onToast) notify(msg, 'success', onToast);
+      if (onToast) notify(data.message || 'Clip submitted! ⏳', 'success', onToast);
       setUploadForm({ title: '', description: '', platform: 'YouTube', chips: '', kills: '', arenaName: '', url: '' });
-      setShowUpload(false);
-      setClips([]); setOffset(0);
-      fetchClips(true);
-      fetchFeatured();
-    } catch (err: any) {
-      if (onToast) notify(err.message || 'Failed to submit clip', 'error', onToast);
-    } finally {
-      setUploading(false);
-    }
+      setShowUpload(false); setClips([]); setOffset(0); fetchClips(true); fetchFeatured();
+    } catch (err: any) { if (onToast) notify(err.message || 'Failed to submit clip', 'error', onToast); }
+    finally { setUploading(false); }
   }
 
-  const hasMore = clips.length < total;
-  const featuredId = featured?.id;
-  const displayClips = clips.filter((c) => c.id !== featuredId);
   const isMatchCard = (c: ClipItem) => c.cardType === 'match-card';
+  const featuredId = featured?.id;
+  const isPlatformTab = filterType !== 'all' && filterType !== 'match-card';
+  // On platform-specific tabs, show ALL clips (don't hide featured)
+  const displayClips = isPlatformTab ? clips : clips.filter((c) => c.id !== featuredId);
+  const hasMore = clips.length < total;
+
+  // Separate clips by platform for scroll rows
+  const ytVideos = displayClips.filter((c) => !isMatchCard(c) && c.platform === 'YouTube');
+  const ytShorts = displayClips.filter((c) => !isMatchCard(c) && c.platform === 'YouTube Shorts');
+  const igReels = displayClips.filter((c) => !isMatchCard(c) && c.platform === 'Instagram');
+  const matchCards = displayClips.filter((c) => isMatchCard(c));
 
   return (
     <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md overflow-hidden">
@@ -393,12 +380,7 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
             )}
             <div className="flex items-center gap-0.5 bg-slate-950 rounded-xl border border-slate-800 p-0.5">
               {(['all', 'match-card', 'youtube', 'youtube-shorts', 'instagram'] as const).map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setFilterType(tab)}
-                  className={`px-2.5 lg:px-1 lg:py-0.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition flex items-center gap-1 lg:gap-0.5 whitespace-nowrap ${filterType === tab ? 'bg-red-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
-                >
+                <button key={tab} type="button" onClick={() => setFilterType(tab)} className={`px-2.5 lg:px-1 lg:py-0.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition flex items-center gap-1 lg:gap-0.5 whitespace-nowrap ${filterType === tab ? 'bg-red-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}>
                   {tab === 'all' && 'All'}
                   {tab === 'match-card' && 'Matches'}
                   {tab === 'youtube' && <><Youtube className="w-3 h-3" /><span className="hidden xl:inline">Videos</span></>}
@@ -422,8 +404,8 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
         </div>
       </div>
 
-      {/* Live Stats Ticker — hide on platform-specific tabs */}
-      {liveStats && !['youtube', 'youtube-shorts', 'instagram'].includes(filterType) && (
+      {/* Live Stats Ticker */}
+      {liveStats && !isPlatformTab && (
         <div className="mx-5 sm:mx-6 mb-4 lg:mx-2 lg:mb-1">
           <div className="flex items-center gap-4 lg:gap-2 overflow-x-auto py-2.5 px-4 lg:py-1 lg:px-1.5 rounded-xl bg-slate-950/80 border border-slate-800/60 scrollbar-none">
             <div className="flex items-center gap-1.5 shrink-0"><Zap className="w-3.5 h-3.5 text-amber-400 lg:w-3 lg:h-3" /><span className="text-[11px] font-mono text-slate-400">Today</span></div>
@@ -452,58 +434,110 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
 
         {!loading && !error && clips.length === 0 && <EmptyState isLoggedIn={isLoggedIn} onOpenUpload={() => setShowUpload(true)} />}
 
-        {/* Featured Clip */}
-        {!loading && featured && !myClipsOnly && filterType === 'all' && (
-          <div className="mb-6 lg:mb-1">
-            <div className="flex items-center gap-2 lg:gap-1 mb-3 lg:mb-0.5">
-              <Trophy className="w-4 h-4 text-amber-400 lg:w-3 lg:h-3" />
-              <span className="text-xs font-mono font-bold text-amber-300 uppercase tracking-widest lg:text-[11px]">Top Play</span>
-            </div>
-            {isMatchCard(featured) ? (
-              <MatchCardVisual title={featured.title} playerName={featured.player.name} userTag={featured.player.userTag} country={featured.player.country} level={featured.player.level} clanTag={featured.player.clanTag} arenaName={featured.arenaName} outcome={(featured.matchData?.outcome as 'extract' | 'death') || 'extract'} chipsEarned={featured.chipsExtracted} chipsLost={featured.matchData?.chipsLost || 0} kills={featured.kills} snakeLength={featured.matchData?.snakeLength || 0} durationSec={featured.matchData?.durationSec || 0} isOnline={featured.matchData?.isOnline || false} upvotes={featured.upvotes} />
-            ) : (
-              <VideoClipCard clip={featured} onUpvote={handleUpvote} onInspect={handleInspectCreator} canVote={isLoggedIn} />
+        {/* ═══ PLATFORM TAB: Horizontal scroll rows ═══ */}
+        {!loading && isPlatformTab && (
+          <>
+            {/* YouTube Videos Tab */}
+            {filterType === 'youtube' && (
+              ytVideos.length > 0
+                ? <ScrollRow title="YouTube Videos" icon={<Youtube className="w-4 h-4 lg:w-3 lg:h-3 text-red-500" />}>{ytVideos.map((c) => <VideoCardHorizontal key={c.id} clip={c} />)}</ScrollRow>
+                : <PlatformEmpty label="YouTube Videos" />
             )}
-            <div className="flex items-center gap-4 lg:gap-2 mt-3 lg:mt-0.5 px-1">
-              <button type="button" onClick={() => handleUpvote(featured)} disabled={!isLoggedIn || featured.myUpvote} className={`flex items-center gap-1.5 lg:gap-1 text-xs lg:text-[11px] font-bold transition ${featured.myUpvote ? 'text-red-400' : 'text-slate-400 hover:text-red-400'} disabled:opacity-40`}>
-                <Flame className="w-4 h-4 lg:w-3 lg:h-3" /> {featured.upvotes}
-              </button>
-              <button type="button" onClick={() => handleInspectCreator(featured)} className="flex items-center gap-1.5 lg:gap-1 text-xs lg:text-[11px] text-slate-500 hover:text-white transition">
-                <Heart className="w-4 h-4 lg:w-3 lg:h-3" /> Profile
-              </button>
-              {featured.url && (
-                <a href={featured.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 lg:gap-1 text-xs lg:text-[11px] text-slate-500 hover:text-white transition ml-auto">Watch <ExternalLink className="w-3.5 h-3.5 lg:w-3 lg:h-3" /></a>
-              )}
-            </div>
-          </div>
+            {/* Shorts Tab */}
+            {filterType === 'youtube-shorts' && (
+              ytShorts.length > 0
+                ? <ScrollRow title="YouTube Shorts" icon={<Smartphone className="w-4 h-4 lg:w-3 lg:h-3 text-red-400" />}>{ytShorts.map((c) => <VideoCardVertical key={c.id} clip={c} />)}</ScrollRow>
+                : <PlatformEmpty label="YouTube Shorts" />
+            )}
+            {/* Instagram Reels Tab */}
+            {filterType === 'instagram' && (
+              igReels.length > 0
+                ? <ScrollRow title="Instagram Reels" icon={<Instagram className="w-4 h-4 lg:w-3 lg:h-3 text-pink-400" />}>{igReels.map((c) => <VideoCardVertical key={c.id} clip={c} />)}</ScrollRow>
+                : <PlatformEmpty label="Instagram Reels" />
+            )}
+            {/* Matches Tab — vertical feed */}
+            {filterType === 'match-card' && (
+              matchCards.length > 0
+                ? <div className="space-y-4 lg:space-y-1">{matchCards.map((clip) => <FeedItem key={clip.id} clip={clip} onUpvote={handleUpvote} onInspect={handleInspectCreator} canVote={isLoggedIn} />)}</div>
+                : <PlatformEmpty label="Match Cards" />
+            )}
+          </>
         )}
 
-        {/* Feed */}
-        {!loading && displayClips.length > 0 && (
-          <div className="space-y-4 lg:space-y-1">
-            {displayClips.map((clip, idx) => (
-              <FeedItem key={clip.id} clip={clip} onUpvote={handleUpvote} onInspect={handleInspectCreator} canVote={isLoggedIn} showCTA={!isLoggedIn && idx === 0} />
-            ))}
-          </div>
+        {/* ═══ ALL TAB: Featured + horizontal scroll rows ═══ */}
+        {!loading && filterType === 'all' && !myClipsOnly && (
+          <>
+            {/* Featured Clip */}
+            {featured && (
+              <div className="mb-4 lg:mb-1">
+                <div className="flex items-center gap-2 lg:gap-1 mb-3 lg:mb-0.5">
+                  <Trophy className="w-4 h-4 text-amber-400 lg:w-3 lg:h-3" />
+                  <span className="text-xs font-mono font-bold text-amber-300 uppercase tracking-widest lg:text-[11px]">Top Play</span>
+                </div>
+                {isMatchCard(featured) ? (
+                  <MatchCardVisual title={featured.title} playerName={featured.player.name} userTag={featured.player.userTag} country={featured.player.country} level={featured.player.level} clanTag={featured.player.clanTag} arenaName={featured.arenaName} outcome={(featured.matchData?.outcome as 'extract' | 'death') || 'extract'} chipsEarned={featured.chipsExtracted} chipsLost={featured.matchData?.chipsLost || 0} kills={featured.kills} snakeLength={featured.matchData?.snakeLength || 0} durationSec={featured.matchData?.durationSec || 0} isOnline={featured.matchData?.isOnline || false} upvotes={featured.upvotes} />
+                ) : (
+                  <VideoCardHorizontal clip={featured} />
+                )}
+                <div className="flex items-center gap-4 lg:gap-2 mt-3 lg:mt-0.5 px-1">
+                  <button type="button" onClick={() => handleUpvote(featured)} disabled={!isLoggedIn || featured.myUpvote} className={`flex items-center gap-1.5 lg:gap-1 text-xs lg:text-[11px] font-bold transition ${featured.myUpvote ? 'text-red-400' : 'text-slate-400 hover:text-red-400'} disabled:opacity-40`}>
+                    <Flame className="w-4 h-4 lg:w-3 lg:h-3" /> {featured.upvotes}
+                  </button>
+                  <button type="button" onClick={() => handleInspectCreator(featured)} className="flex items-center gap-1.5 lg:gap-1 text-xs lg:text-[11px] text-slate-500 hover:text-white transition"><Heart className="w-4 h-4 lg:w-3 lg:h-3" /> Profile</button>
+                  {featured.url && <a href={featured.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 lg:gap-1 text-xs lg:text-[11px] text-slate-500 hover:text-white transition ml-auto">Watch <ExternalLink className="w-3.5 h-3.5 lg:w-3 lg:h-3" /></a>}
+                </div>
+              </div>
+            )}
+
+            {/* YouTube Videos row */}
+            {ytVideos.length > 0 && (
+              <ScrollRow title="YouTube Videos" icon={<Youtube className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-red-500" />}>
+                {ytVideos.map((c) => <VideoCardHorizontal key={c.id} clip={c} />)}
+              </ScrollRow>
+            )}
+
+            {/* Shorts row */}
+            {ytShorts.length > 0 && (
+              <ScrollRow title="Shorts" icon={<Smartphone className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-red-400" />}>
+                {ytShorts.map((c) => <VideoCardVertical key={c.id} clip={c} />)}
+              </ScrollRow>
+            )}
+
+            {/* Instagram Reels row */}
+            {igReels.length > 0 && (
+              <ScrollRow title="Instagram Reels" icon={<Instagram className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-pink-400" />}>
+                {igReels.map((c) => <VideoCardVertical key={c.id} clip={c} />)}
+              </ScrollRow>
+            )}
+
+            {/* Match Cards — vertical feed */}
+            {matchCards.length > 0 && (
+              <div className="mt-3 lg:mt-1">
+                <div className="flex items-center gap-1.5 mb-2 lg:mb-1 px-1">
+                  <Trophy className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-amber-400" />
+                  <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-widest lg:text-[11px]">Match Cards</span>
+                </div>
+                <div className="space-y-4 lg:space-y-1">
+                  {matchCards.map((clip) => <FeedItem key={clip.id} clip={clip} onUpvote={handleUpvote} onInspect={handleInspectCreator} canVote={isLoggedIn} />)}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         <div ref={sentinelRef} className="h-4 lg:h-1" />
         {loadingMore && <div className="flex justify-center py-6 lg:py-2"><Loader2 className="w-5 h-5 lg:w-3 lg:h-3 animate-spin text-slate-500" /></div>}
       </div>
 
-      {/* Upload Modal */}
       {showUpload && <UploadModal uploadForm={uploadForm} setUploadForm={setUploadForm} uploading={uploading} onUpload={handleUpload} onClose={() => setShowUpload(false)} />}
-
-      {/* Admin Moderation Modal */}
       {showAdmin && <AdminModerationModal onClose={() => { setShowAdmin(false); fetchClips(true); fetchFeatured(); }} />}
     </div>
   );
 }
 
-// ── Feed Item ──
+// ── Feed Item (vertical, for match cards) ──
 
 function FeedItem({ clip, onUpvote, onInspect, canVote, showCTA }: { clip: ClipItem; onUpvote: (c: ClipItem) => void; onInspect: (c: ClipItem) => void; canVote: boolean; showCTA?: boolean }) {
-  const isMatch = clip.cardType === 'match-card';
   return (
     <div className="group">
       <div className="flex items-center gap-2.5 lg:gap-1 mb-2.5 lg:mb-1 px-1">
@@ -523,11 +557,7 @@ function FeedItem({ clip, onUpvote, onInspect, canVote, showCTA }: { clip: ClipI
           ))}
         </div>
       </div>
-      {isMatch ? (
-        <MatchCardVisual title={clip.title} playerName={clip.player.name} userTag={clip.player.userTag} country={clip.player.country} level={clip.player.level} clanTag={clip.player.clanTag} arenaName={clip.arenaName} outcome={(clip.matchData?.outcome as 'extract' | 'death') || 'extract'} chipsEarned={clip.chipsExtracted} chipsLost={clip.matchData?.chipsLost || 0} kills={clip.kills} snakeLength={clip.matchData?.snakeLength || 0} durationSec={clip.matchData?.durationSec || 0} isOnline={clip.matchData?.isOnline || false} upvotes={clip.upvotes} compact />
-      ) : (
-        <VideoClipCard clip={clip} onUpvote={onUpvote} onInspect={onInspect} canVote={canVote} />
-      )}
+      <MatchCardVisual title={clip.title} playerName={clip.player.name} userTag={clip.player.userTag} country={clip.player.country} level={clip.player.level} clanTag={clip.player.clanTag} arenaName={clip.arenaName} outcome={(clip.matchData?.outcome as 'extract' | 'death') || 'extract'} chipsEarned={clip.chipsExtracted} chipsLost={clip.matchData?.chipsLost || 0} kills={clip.kills} snakeLength={clip.matchData?.snakeLength || 0} durationSec={clip.matchData?.durationSec || 0} isOnline={clip.matchData?.isOnline || false} upvotes={clip.upvotes} compact />
       {showCTA && (
         <div className="mt-3 lg:mt-1 px-4 lg:px-2 py-3 lg:py-1 rounded-xl bg-gradient-to-r from-red-600/10 to-amber-600/10 border border-red-500/20 text-center">
           <p className="text-xs lg:text-[11px] text-slate-300"><span className="text-white font-bold">Can you beat this?</span> <span className="text-slate-500">Sign in and play to get your highlight on the feed!</span></p>
@@ -538,66 +568,100 @@ function FeedItem({ clip, onUpvote, onInspect, canVote, showCTA }: { clip: ClipI
           <Flame className="w-4 h-4 lg:w-3 lg:h-3" /> {clip.upvotes}
         </button>
         <button type="button" onClick={() => onInspect(clip)} className="flex items-center gap-1.5 lg:gap-1 text-xs lg:text-[11px] text-slate-500 hover:text-white transition"><Heart className="w-4 h-4 lg:w-3 lg:h-3" /> Profile</button>
-        {!isMatch && clip.url && <a href={clip.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 lg:gap-1 text-xs lg:text-[11px] text-slate-500 hover:text-white transition ml-auto">Watch <ExternalLink className="w-3.5 h-3.5 lg:w-3 lg:h-3" /></a>}
       </div>
       <div className="border-b border-slate-800/40 mt-4 lg:mt-1" />
     </div>
   );
 }
 
-// ── Video Clip Card — YouTube-style horizontal layout on desktop ──
+// ── Video Card: Horizontal (YouTube Videos) — thumbnail left, info right ──
 
-function VideoClipCard({ clip, onUpvote, onInspect, canVote }: { clip: ClipItem; onUpvote: (c: ClipItem) => void; onInspect: (c: ClipItem) => void; canVote: boolean }) {
+function VideoCardHorizontal({ clip }: { clip: ClipItem }) {
   const platform = clip.platform.toLowerCase();
-  const isShort = platform.includes('shorts');
-
   return (
-    <div className={`rounded-2xl border border-slate-800 bg-slate-950/70 shadow-md overflow-hidden ${isShort ? 'max-w-[200px] lg:max-w-[140px] shrink-0' : 'flex flex-col lg:flex-row'}`}>
+    <a href={clip.url} target="_blank" rel="noopener noreferrer"
+      className="shrink-0 w-72 lg:w-56 rounded-xl border border-slate-800 bg-slate-950/70 shadow-md overflow-hidden flex flex-row hover:border-slate-700 transition group/card"
+    >
       {/* Thumbnail */}
-      <a href={clip.url} target="_blank" rel="noopener noreferrer"
-        className={`relative block bg-gradient-to-br from-slate-900 via-slate-950 to-red-950/20 overflow-hidden group/thumb
-          ${isShort
-            ? 'aspect-[9/16] w-[160px] lg:w-[130px]'
-            : 'aspect-video lg:aspect-auto lg:w-36 lg:h-20 lg:shrink-0 lg:rounded-l-2xl lg:rounded-r-none'}`}
-      >
+      <div className="relative w-32 lg:w-24 h-20 lg:h-[68px] shrink-0 bg-gradient-to-br from-slate-900 via-slate-950 to-red-950/20 overflow-hidden">
         {clip.thumbnailUrl ? (
-          <img src={clip.thumbnailUrl!} alt={clip.title} className="w-full h-full object-cover transition group-hover/thumb:scale-105" loading="lazy" />
+          <img src={clip.thumbnailUrl!} alt={clip.title} className="w-full h-full object-cover transition group-hover/card:scale-105" loading="lazy" />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-[#0f1623] to-slate-950" />
-            <div className="relative text-center">
-              <PlatformIcon platform={platform} size="sm" />
-              <p className="text-[11px] font-mono text-slate-500 mt-1.5 lg:hidden">WATCH ON {clip.platform.toUpperCase()}</p>
-            </div>
+            <PlatformIcon platform={platform} size="sm" />
           </div>
         )}
-        {/* Platform badge — only on mobile & shorts */}
-        {(isShort || true) && (
-          <div className="absolute top-2 lg:top-1 left-2 lg:left-1">
-            <span className="text-[11px] font-mono font-bold bg-slate-950/90 border border-slate-700 text-white px-1.5 lg:px-1 py-0.5 rounded-md flex items-center gap-1">
-              <PlatformIcon platform={platform} /> {isShort ? 'Shorts' : clip.platform}
-            </span>
-          </div>
-        )}
+        <div className="absolute top-1 left-1">
+          <span className="text-[9px] font-mono font-bold bg-slate-950/90 border border-slate-700 text-white px-1 py-0.5 rounded flex items-center gap-0.5">
+            <PlatformIcon platform={platform} /> {clip.platform}
+          </span>
+        </div>
         {clip.chipsExtracted > 0 && (
-          <div className="absolute top-2 lg:top-1 right-2 lg:right-1">
-            <span className="text-[11px] font-mono font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-1.5 py-0.5 rounded">
-              💰 {clip.chipsExtracted.toLocaleString('en-IN')}
-            </span>
+          <div className="absolute bottom-1 right-1">
+            <span className="text-[9px] font-mono font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-1 py-0.5 rounded">💰{clip.chipsExtracted.toLocaleString('en-IN')}</span>
           </div>
         )}
-      </a>
-
-      {/* Metadata */}
-      <div className={`p-3 lg:p-0 ${!isShort ? 'lg:py-1.5 lg:px-2.5 lg:flex-1 lg:min-w-0' : ''}`}>
-        <h3 className={`font-bold text-white leading-tight ${isShort ? 'text-xs lg:text-[11px] line-clamp-2' : 'text-sm lg:text-[11px]'} ${!isShort ? 'lg:line-clamp-2' : ''}`}>{clip.title}</h3>
-        {!isShort && clip.description && <p className="text-[11px] text-slate-500 mt-0.5 lg:mt-0 lg:line-clamp-1">{clip.description}</p>}
-        <div className="flex items-center gap-2 text-[11px] font-mono text-slate-600 mt-1 lg:mt-0.5">
-          {clip.arenaName && <span>{clip.arenaName}</span>}
-          {clip.arenaName && <span>·</span>}
-          <span>{timeAgo(clip.createdAt)}</span>
+      </div>
+      {/* Info */}
+      <div className="flex-1 min-w-0 p-2 lg:p-1.5 flex flex-col justify-center">
+        <h3 className="text-xs lg:text-[11px] font-bold text-white leading-tight line-clamp-2">{clip.title}</h3>
+        <div className="flex items-center gap-1 mt-1 lg:mt-0.5">
+          <span className="text-[10px] font-mono text-slate-500">{clip.player.name}</span>
+          <span className="text-[10px] text-slate-700">·</span>
+          <span className="text-[10px] font-mono text-slate-600">{timeAgo(clip.createdAt)}</span>
         </div>
       </div>
+    </a>
+  );
+}
+
+// ── Video Card: Vertical (Shorts & Reels) — 9:16 portrait ──
+
+function VideoCardVertical({ clip }: { clip: ClipItem }) {
+  const platform = clip.platform.toLowerCase();
+  const isShort = platform.includes('shorts');
+  return (
+    <a href={clip.url} target="_blank" rel="noopener noreferrer"
+      className="shrink-0 w-36 lg:w-28 rounded-xl border border-slate-800 bg-slate-950/70 shadow-md overflow-hidden hover:border-slate-700 transition group/card"
+    >
+      {/* Thumbnail */}
+      <div className="relative aspect-[9/16] bg-gradient-to-br from-slate-900 via-slate-950 to-pink-950/20 overflow-hidden">
+        {clip.thumbnailUrl ? (
+          <img src={clip.thumbnailUrl!} alt={clip.title} className="w-full h-full object-cover transition group-hover/card:scale-105" loading="lazy" />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-[#0f1623] to-slate-950" />
+            <PlatformIcon platform={platform} size="lg" />
+          </div>
+        )}
+        <div className="absolute top-1 left-1">
+          <span className="text-[9px] font-mono font-bold bg-slate-950/90 border border-slate-700 text-white px-1 py-0.5 rounded flex items-center gap-0.5">
+            <PlatformIcon platform={platform} /> {isShort ? 'Shorts' : 'Reels'}
+          </span>
+        </div>
+        {clip.chipsExtracted > 0 && (
+          <div className="absolute bottom-1 right-1">
+            <span className="text-[9px] font-mono font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-1 py-0.5 rounded">💰{clip.chipsExtracted.toLocaleString('en-IN')}</span>
+          </div>
+        )}
+      </div>
+      {/* Info */}
+      <div className="p-2 lg:p-1">
+        <h3 className="text-[11px] font-bold text-white leading-tight line-clamp-2">{clip.title}</h3>
+        <div className="text-[10px] font-mono text-slate-500 mt-0.5">{timeAgo(clip.createdAt)}</div>
+      </div>
+    </a>
+  );
+}
+
+// ── Empty state for platform tabs ──
+
+function PlatformEmpty({ label }: { label: string }) {
+  return (
+    <div className="text-center py-8 lg:py-3">
+      <Film className="w-6 h-6 text-slate-700 mx-auto mb-2" />
+      <p className="text-[11px] text-slate-500">No {label} yet</p>
     </div>
   );
 }

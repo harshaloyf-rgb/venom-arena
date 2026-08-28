@@ -41,6 +41,30 @@ function extractYoutubeThumbnail(url: string): string | null {
   return null;
 }
 
+// ── Instagram thumbnail: extract og:image from page HTML ──
+async function extractInstagramThumbnail(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+        'Accept': 'text/html,application/xhtml+xml',
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    // Match og:image from meta tags
+    const match = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["'][^>]*>/i)
+      || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["'][^>]*>/i);
+    if (match?.[1]) return match[1].replace(/&amp;/g, '&');
+    // Fallback: try twitter:image
+    const twMatch = html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["'][^>]*>/i)
+      || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']twitter:image["'][^>]*>/i);
+    if (twMatch?.[1]) return twMatch[1].replace(/&amp;/g, '&');
+  } catch {}
+  return null;
+}
+
 // ── Auto-detect platform from URL (overrides user selection) ──
 function detectPlatform(url: string, userPlatform: string): string {
   try {
@@ -114,6 +138,20 @@ export async function GET(req: NextRequest) {
     db.clip.count({ where }),
   ]);
 
+  // Backfill: for Instagram clips missing thumbnails, try to fetch og:image
+  const backfillPromises = clips
+    .filter((c) => !c.thumbnailUrl && c.platform === 'Instagram' && c.url)
+    .map(async (c) => {
+      try {
+        const thumb = await extractInstagramThumbnail(c.url);
+        if (thumb) {
+          await db.clip.update({ where: { id: c.id }, data: { thumbnailUrl: thumb } });
+          c.thumbnailUrl = thumb;
+        }
+      } catch {}
+    });
+  if (backfillPromises.length > 0) await Promise.all(backfillPromises);
+
   return NextResponse.json({
     clips: clips.map((c) => ({
       ...c,
@@ -172,8 +210,13 @@ export async function POST(req: NextRequest) {
   if (!thumbnailUrl && url) {
     if (resolvedPlatform === 'YouTube' || resolvedPlatform === 'YouTube Shorts') {
       thumbnailUrl = extractYoutubeThumbnail(url);
+    } else if (resolvedPlatform === 'Instagram') {
+      thumbnailUrl = await extractInstagramThumbnail(url);
     }
   }
+
+  // If still no thumbnail for Instagram, retry after approval via backfill
+  // (admin can trigger re-fetch or we backfill on read)
 
   const clipStatus = isMatchCard ? 'approved' : 'pending';
 
