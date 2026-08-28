@@ -536,20 +536,20 @@ function VideoClipCard({ clip, onUpvote, onInspect, canVote }: { clip: ClipItem;
   const platform = clip.platform.toLowerCase();
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-950/70 shadow-md overflow-hidden">
-      <a href={clip.url} target="_blank" rel="noopener noreferrer" className="relative block aspect-video bg-gradient-to-br from-slate-900 via-slate-950 to-red-950/20 overflow-hidden">
+      <a href={clip.url} target="_blank" rel="noopener noreferrer" className="relative block aspect-video lg:aspect-auto lg:h-20 bg-gradient-to-br from-slate-900 via-slate-950 to-red-950/20 overflow-hidden">
         {clip.thumbnailUrl ? (
           <img src={clip.thumbnailUrl!} alt={clip.title} className="w-full h-full object-cover" loading="lazy" />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-[#0f1623] to-slate-950" />
             <div className="relative text-center">
-              <PlatformIcon platform={platform} size="lg" />
+              <PlatformIcon platform={platform} size="sm" />
               <p className="text-[11px] font-mono text-slate-500 mt-1.5 lg:mt-0.5">WATCH ON {platform.toUpperCase()}</p>
             </div>
           </div>
         )}
-        <div className="absolute top-2.5 left-2.5"><span className="text-[11px] font-mono font-bold bg-slate-950/90 border border-slate-700 text-white px-2 lg:px-1 py-0.5 rounded-md flex items-center gap-1"><PlatformIcon platform={platform} /> {clip.platform}</span></div>
-        {clip.chipsExtracted > 0 && <div className="absolute top-2.5 right-2.5"><span className="text-[11px] font-mono font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-1.5 py-0.5 rounded">💰 {clip.chipsExtracted.toLocaleString('en-IN')} c</span></div>}
+        <div className="absolute top-2.5 lg:top-1 left-2.5 lg:left-1"><span className="text-[11px] font-mono font-bold bg-slate-950/90 border border-slate-700 text-white px-2 lg:px-1 py-0.5 rounded-md flex items-center gap-1"><PlatformIcon platform={platform} /> {clip.platform}</span></div>
+        {clip.chipsExtracted > 0 && <div className="absolute top-2.5 lg:top-1 right-2.5 lg:right-1"><span className="text-[11px] font-mono font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-1.5 py-0.5 rounded">💰 {clip.chipsExtracted.toLocaleString('en-IN')} c</span></div>}
       </a>
       <div className="p-3 lg:p-1.5">
         <h3 className="text-sm lg:text-[11px] font-bold text-white leading-tight mb-1 lg:mb-0.5">{clip.title}</h3>
