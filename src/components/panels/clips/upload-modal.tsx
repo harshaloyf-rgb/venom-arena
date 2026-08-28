@@ -1,6 +1,6 @@
 'use client';
 
-import { X, Send, Clock, Loader2 } from 'lucide-react';
+import { X, Send, Clock, Loader2, Youtube, Instagram, Smartphone } from 'lucide-react';
 import { MicroLabel } from '../_panel-primitives';
 
 // ── Upload Modal ──
@@ -12,6 +12,21 @@ export function UploadModal({ uploadForm, setUploadForm, uploading, onUpload, on
   onUpload: () => void;
   onClose: () => void;
 }) {
+  // Auto-detect YouTube Shorts from URL
+  function handleUrlChange(url: string) {
+    setUploadForm((f) => {
+      let platform = f.platform;
+      if (url.includes('/shorts/')) {
+        platform = 'YouTube Shorts';
+      } else if (url.includes('youtube.com') || url.includes('youtu.be')) {
+        platform = 'YouTube';
+      } else if (url.includes('instagram.com')) {
+        platform = 'Instagram';
+      }
+      return { ...f, url, platform };
+    });
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
       <div className="relative w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -25,7 +40,7 @@ export function UploadModal({ uploadForm, setUploadForm, uploading, onUpload, on
             <p className="text-[11px] font-bold text-slate-300 mb-2">How to share your clip:</p>
             <ol className="text-[10px] text-slate-400 space-y-1 list-decimal list-inside">
               <li>Record your Venom Arena gameplay (phone screen record, OBS, etc.)</li>
-              <li>Upload to <span className="text-red-400 font-bold">YouTube</span>, <span className="text-pink-400 font-bold">Instagram Reels</span>, or <span className="text-violet-400 font-bold">Twitch</span></li>
+              <li>Upload to <span className="text-red-400 font-bold">YouTube</span>, <span className="text-red-400 font-bold">YouTube Shorts</span>, or <span className="text-pink-400 font-bold">Instagram Reels</span></li>
               <li>Paste the video link below with a descriptive title</li>
               <li>Your clip appears after <span className="text-amber-400 font-bold">admin review</span></li>
             </ol>
@@ -66,9 +81,9 @@ export function UploadModal({ uploadForm, setUploadForm, uploading, onUpload, on
             <div>
               <MicroLabel>Platform</MicroLabel>
               <select value={uploadForm.platform} onChange={(e) => setUploadForm((f) => ({ ...f, platform: e.target.value }))} className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500/50">
-                <option value="YouTube">YouTube</option>
+                <option value="YouTube">YouTube Video</option>
+                <option value="YouTube Shorts">YouTube Shorts</option>
                 <option value="Instagram">Instagram Reels</option>
-                <option value="Twitch">Twitch</option>
               </select>
             </div>
             <div>
@@ -91,8 +106,8 @@ export function UploadModal({ uploadForm, setUploadForm, uploading, onUpload, on
 
           {/* URL */}
           <div>
-            <MicroLabel>Video URL <span className="text-red-400">*</span></MicroLabel>
-            <input type="url" value={uploadForm.url} onChange={(e) => setUploadForm((f) => ({ ...f, url: e.target.value }))} placeholder="https://youtube.com/watch?v=... or https://instagram.com/reel/..." className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-red-500/50" />
+            <MicroLabel>Video URL <span className="text-red-400">*</span> <span className="text-slate-600">(auto-detects platform)</span></MicroLabel>
+            <input type="url" value={uploadForm.url} onChange={(e) => handleUrlChange(e.target.value)} placeholder="https://youtube.com/watch?v=... or https://instagram.com/reel/..." className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-red-500/50" />
           </div>
 
           {/* Review notice */}

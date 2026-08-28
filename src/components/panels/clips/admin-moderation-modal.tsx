@@ -14,7 +14,7 @@ import {
   Star,
   Youtube,
   Instagram,
-  Twitch,
+  Smartphone,
 } from 'lucide-react';
 
 // ── Types ──
@@ -42,9 +42,13 @@ interface AdminClip {
 }
 
 function PlatformIcon({ platform, size = 'sm' }: { platform: string; size?: 'sm' | 'lg' }) {
-  if (platform === 'youtube') return size === 'lg' ? <Youtube className="w-8 h-8 text-red-500 mx-auto" /> : <Youtube className="w-3 h-3 text-red-500" />;
-  if (platform === 'twitch') return size === 'lg' ? <Twitch className="w-8 h-8 text-violet-400 mx-auto" /> : <Twitch className="w-3 h-3 text-violet-400" />;
-  if (platform === 'instagram') return size === 'lg' ? <Instagram className="w-8 h-8 text-pink-400 mx-auto" /> : <Instagram className="w-3 h-3 text-pink-400" />;
+  const p = platform.toLowerCase();
+  const isShort = p.includes('shorts');
+  if (p.includes('youtube')) return size === 'lg'
+    ? <Youtube className={`mx-auto ${isShort ? 'w-7 h-7' : 'w-8 h-8'} text-red-500`} />
+    : <Youtube className={`w-3 h-3 ${isShort ? 'text-red-400' : 'text-red-500'}`} />;
+  if (p.includes('instagram')) return size === 'lg' ? <Instagram className="w-8 h-8 text-pink-400 mx-auto" /> : <Instagram className="w-3 h-3 text-pink-400" />;
+  if (isShort) return size === 'lg' ? <Smartphone className="w-7 h-7 text-red-400 mx-auto" /> : <Smartphone className="w-3 h-3 text-red-400" />;
   return size === 'lg' ? <Film className="w-8 h-8 text-slate-500 mx-auto" /> : <Film className="w-3 h-3 text-slate-400" />;
 }
 

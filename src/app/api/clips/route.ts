@@ -18,8 +18,7 @@ const BANNED_WORDS = [
 function containsBannedWords(text: string): boolean {
   const lower = text.toLowerCase().trim();
   for (const word of BANNED_WORDS) {
-    // Check word boundary to avoid false positives (e.g. "classic" should not match "ass")
-    const regex = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    const regex = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\\\$&')}\\b`, 'i');
     if (regex.test(lower)) return true;
   }
   return false;
@@ -34,34 +33,56 @@ function extractYoutubeThumbnail(url: string): string | null {
       videoId = u.searchParams.get('v')!;
     } else if (u.hostname === 'youtu.be') {
       videoId = u.pathname.slice(1).split('/')[0];
+    } else if (u.hostname.includes('youtube.com') && u.pathname.includes('/shorts/')) {
+      videoId = u.pathname.split('/shorts/')[1]?.split('/')[0] || '';
     }
     if (videoId) return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
   } catch {}
   return null;
 }
 
-// GET /api/clips?limit=20&offset=0&player=USERTAG&type=match-card|user-clip
-// Public: only APPROVED clips. Own player + ?pending=true shows their pending too.
+// ── Auto-detect platform from URL (overrides user selection) ──
+function detectPlatform(url: string, userPlatform: string): string {
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes('youtube.com') || u.hostname === 'youtu.be') {
+      if (u.pathname.includes('/shorts/')) return 'YouTube Shorts';
+      return 'YouTube';
+    }
+    if (u.hostname.includes('instagram.com')) return 'Instagram';
+  } catch {}
+  return userPlatform || 'other';
+}
+
+// ── Map frontend platform filter to DB platform values ──
+function mapPlatformFilter(frontendPlatform: string): string[] {
+  switch (frontendPlatform) {
+    case 'youtube': return ['YouTube'];
+    case 'youtube-shorts': return ['YouTube Shorts'];
+    case 'instagram': return ['Instagram'];
+    default: return [];
+  }
+}
+
+// GET /api/clips?limit=20&offset=0&player=USERTAG&type=match-card|user-clip&platform=youtube|youtube-shorts|instagram
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const limit = Math.min(Math.max(Number(sp.get('limit')) || 30, 1), 100);
   const offset = Math.max(Number(sp.get('offset')) || 0, 0);
   const playerTag = sp.get('player') || undefined;
   const cardType = sp.get('type') || undefined;
-  const showPending = sp.get('pending') === 'true'; // for uploaders to see their own pending
+  const platformFilter = sp.get('platform') || undefined;
+  const showPending = sp.get('pending') === 'true';
 
   const session = await getSession();
 
   const where: Record<string, unknown> = {};
 
-  // Filter by status: public sees only approved; own player can see their pending too
   if (showPending && playerTag && session) {
     const p = await db.player.findUnique({ where: { userTag: playerTag }, select: { id: true } });
     if (!p) return NextResponse.json({ clips: [], total: 0 });
     where.playerId = p.id;
-    // Don't add status filter — show all their clips
   } else {
-    // Public: only approved
     where.status = 'approved';
   }
 
@@ -72,6 +93,12 @@ export async function GET(req: NextRequest) {
   }
   if (cardType && (cardType === 'match-card' || cardType === 'user-clip')) {
     where.cardType = cardType;
+  }
+  if (platformFilter) {
+    const platforms = mapPlatformFilter(platformFilter);
+    if (platforms.length > 0) {
+      where.platform = { in: platforms };
+    }
   }
 
   const [clips, total] = await Promise.all([
@@ -110,7 +137,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Title is required.' }, { status: 400 });
   }
 
-  // Title length limits
   if (title.length < 5) {
     return NextResponse.json({ error: 'Title must be at least 5 characters.' }, { status: 400 });
   }
@@ -118,7 +144,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Title must be under 120 characters.' }, { status: 400 });
   }
 
-  // Description length limit
   if (description && description.length > 300) {
     return NextResponse.json({ error: 'Description must be under 300 characters.' }, { status: 400 });
   }
@@ -131,7 +156,6 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
-  // For user-clip, url is required.
   const isMatchCard = body.cardType === 'match-card';
   if (!isMatchCard && !url) {
     return NextResponse.json({ error: 'Video URL is required for clips.' }, { status: 400 });
@@ -140,17 +164,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'URL must start with http.' }, { status: 400 });
   }
 
-  // Auto-extract thumbnail from YouTube
+  // Auto-detect platform from URL
+  const resolvedPlatform = isMatchCard ? 'match-card' : detectPlatform(url || '', platform || 'other');
+
+  // Auto-extract thumbnail from YouTube (both videos and shorts)
   let thumbnailUrl: string | null = body.thumbnailUrl || null;
   if (!thumbnailUrl && url) {
-    const lowerPlatform = (platform || '').toLowerCase();
-    if (lowerPlatform === 'youtube') {
+    if (resolvedPlatform === 'YouTube' || resolvedPlatform === 'YouTube Shorts') {
       thumbnailUrl = extractYoutubeThumbnail(url);
     }
   }
 
-  // Match-cards are auto-approved (system-generated, always clean).
-  // User clips start as "pending" — admin must approve before public visibility.
   const clipStatus = isMatchCard ? 'approved' : 'pending';
 
   const clip = await db.clip.create({
@@ -158,7 +182,7 @@ export async function POST(req: NextRequest) {
       playerId: session.playerId,
       title: title.trim(),
       description: (description || '').trim(),
-      platform: platform || 'other',
+      platform: resolvedPlatform,
       url: url || '',
       thumbnailUrl,
       chipsExtracted: chipsExtracted || 0,

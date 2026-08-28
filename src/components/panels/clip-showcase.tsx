@@ -20,9 +20,7 @@ import {
   X,
   Youtube,
   Instagram,
-  Twitch,
   Loader2,
-  Filter,
   Users,
   Zap,
   Trophy,
@@ -34,6 +32,7 @@ import {
   Upload,
   Shield,
   CheckCircle2,
+  Smartphone,
 } from 'lucide-react';
 import { AdminModerationModal } from './clips/admin-moderation-modal';
 import { UploadModal } from './clips/upload-modal';
@@ -117,7 +116,7 @@ function EmptyState({ isLoggedIn, onOpenUpload }: { isLoggedIn: boolean; onOpenU
           <p className="text-[11px] font-bold text-slate-300 mb-2 lg:mb-0.5 flex items-center gap-1.5"><Film className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-red-400" /> What appears in Highlights?</p>
           <ul className="text-[11px] text-slate-400 space-y-1">
             <li className="flex items-start gap-1.5"><span className="text-emerald-400 mt-0.5">✓</span> <span><strong className="text-slate-300">Match Cards</strong> — Auto-generated stat cards from impressive matches (big extractions, multi-kills)</span></li>
-            <li className="flex items-start gap-1.5"><span className="text-emerald-400 mt-0.5">✓</span> <span><strong className="text-slate-300">Video Clips</strong> — Community-submitted gameplay from YouTube, Instagram Reels, and Twitch</span></li>
+            <li className="flex items-start gap-1.5"><span className="text-emerald-400 mt-0.5">✓</span> <span><strong className="text-slate-300">Video Clips</strong> — Community-submitted gameplay from YouTube, YouTube Shorts, and Instagram Reels</span></li>
             <li className="flex items-start gap-1.5"><span className="text-emerald-400 mt-0.5">✓</span> <span><strong className="text-slate-300">Top Play</strong> — The most upvoted clip gets the featured trophy spotlight</span></li>
           </ul>
         </div>
@@ -165,7 +164,7 @@ function StepCard({ icon, step, title, desc }: { icon: React.ReactNode; step: st
   );
 }
 
-// ── Main Component ──
+// ── Main Component ─
 
 export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
   const { player } = useAuth();
@@ -183,7 +182,7 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
   const [uploading, setUploading] = useState(false);
   const [myClipsOnly, setMyClipsOnly] = useState(false);
   const [liveStats, setLiveStats] = useState<LiveStats | null>(null);
-  const [filterType, setFilterType] = useState<'all' | 'match-card' | 'user-clip'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'match-card' | 'youtube' | 'youtube-shorts' | 'instagram'>('all');
   const [showAdmin, setShowAdmin] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const isAdmin = player?.role === 'admin';
@@ -211,9 +210,14 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
         const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(currentOffset) });
         if (myClipsOnly && player) {
           params.set('player', player.userTag);
-          params.set('pending', 'true'); // see own pending clips
+          params.set('pending', 'true');
         }
-        if (filterType !== 'all') params.set('type', filterType);
+        if (filterType === 'match-card') {
+          params.set('type', 'match-card');
+        } else if (filterType === 'youtube' || filterType === 'youtube-shorts' || filterType === 'instagram') {
+          params.set('type', 'user-clip');
+          params.set('platform', filterType);
+        }
 
         const res = await fetch(`/api/clips?${params}`);
         if (!res.ok) throw new Error('Failed to load clips');
@@ -384,14 +388,25 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
           <div className="flex items-center gap-2 shrink-0 lg:gap-1">
             {isLoggedIn && (
               <button type="button" onClick={() => setMyClipsOnly((v) => !v)} className={`px-3 py-2 lg:px-1.5 lg:py-1 rounded-xl font-bold text-xs uppercase tracking-wider transition flex items-center gap-1.5 lg:gap-1 border ${myClipsOnly ? 'bg-red-600 border-red-600 text-white' : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'}`}>
-                <Filter className="w-3.5 h-3.5 lg:w-3 lg:h-3" /> {myClipsOnly ? 'All' : 'My Clips'}
+                {myClipsOnly ? '✕' : '👤'} {myClipsOnly ? 'All' : 'My Clips'}
               </button>
             )}
-            <select value={filterType} onChange={(e) => setFilterType(e.target.value as any)} className="px-3 py-2 lg:px-1.5 lg:py-1 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 text-xs font-bold uppercase tracking-wider focus:outline-none focus:border-red-500/50 cursor-pointer">
-              <option value="all">All</option>
-              <option value="match-card">Match Cards</option>
-              <option value="user-clip">Video Clips</option>
-            </select>
+            <div className="flex items-center gap-0.5 bg-slate-950 rounded-xl border border-slate-800 p-0.5">
+              {(['all', 'match-card', 'youtube', 'youtube-shorts', 'instagram'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setFilterType(tab)}
+                  className={`px-2.5 lg:px-1 lg:py-0.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition flex items-center gap-1 lg:gap-0.5 whitespace-nowrap ${filterType === tab ? 'bg-red-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                >
+                  {tab === 'all' && 'All'}
+                  {tab === 'match-card' && 'Matches'}
+                  {tab === 'youtube' && <><Youtube className="w-3 h-3" /><span className="hidden xl:inline">Videos</span></>}
+                  {tab === 'youtube-shorts' && <><Smartphone className="w-3 h-3" /><span className="hidden xl:inline">Shorts</span></>}
+                  {tab === 'instagram' && <><Instagram className="w-3 h-3" /><span className="hidden xl:inline">Reels</span></>}
+                </button>
+              ))}
+            </div>
             {isAdmin && (
               <button type="button" onClick={() => setShowAdmin(true)} className="px-3 py-2 lg:px-1.5 lg:py-1 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs uppercase tracking-wider transition flex items-center gap-1.5 lg:gap-1 relative">
                 <Shield className="w-3.5 h-3.5 lg:w-3 lg:h-3" /> Moderate
@@ -407,8 +422,8 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
         </div>
       </div>
 
-      {/* Live Stats Ticker */}
-      {liveStats && (
+      {/* Live Stats Ticker — hide on platform-specific tabs */}
+      {liveStats && !['youtube', 'youtube-shorts', 'instagram'].includes(filterType) && (
         <div className="mx-5 sm:mx-6 mb-4 lg:mx-2 lg:mb-1">
           <div className="flex items-center gap-4 lg:gap-2 overflow-x-auto py-2.5 px-4 lg:py-1 lg:px-1.5 rounded-xl bg-slate-950/80 border border-slate-800/60 scrollbar-none">
             <div className="flex items-center gap-1.5 shrink-0"><Zap className="w-3.5 h-3.5 text-amber-400 lg:w-3 lg:h-3" /><span className="text-[11px] font-mono text-slate-400">Today</span></div>
@@ -530,40 +545,71 @@ function FeedItem({ clip, onUpvote, onInspect, canVote, showCTA }: { clip: ClipI
   );
 }
 
-// ── Video Clip Card ──
+// ── Video Clip Card — YouTube-style horizontal layout on desktop ──
 
 function VideoClipCard({ clip, onUpvote, onInspect, canVote }: { clip: ClipItem; onUpvote: (c: ClipItem) => void; onInspect: (c: ClipItem) => void; canVote: boolean }) {
   const platform = clip.platform.toLowerCase();
+  const isShort = platform.includes('shorts');
+
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/70 shadow-md overflow-hidden">
-      <a href={clip.url} target="_blank" rel="noopener noreferrer" className="relative block aspect-video lg:aspect-auto lg:h-20 bg-gradient-to-br from-slate-900 via-slate-950 to-red-950/20 overflow-hidden">
+    <div className={`rounded-2xl border border-slate-800 bg-slate-950/70 shadow-md overflow-hidden ${isShort ? 'max-w-[200px] lg:max-w-[140px] shrink-0' : 'flex flex-col lg:flex-row'}`}>
+      {/* Thumbnail */}
+      <a href={clip.url} target="_blank" rel="noopener noreferrer"
+        className={`relative block bg-gradient-to-br from-slate-900 via-slate-950 to-red-950/20 overflow-hidden group/thumb
+          ${isShort
+            ? 'aspect-[9/16] w-[160px] lg:w-[130px]'
+            : 'aspect-video lg:aspect-auto lg:w-36 lg:h-20 lg:shrink-0 lg:rounded-l-2xl lg:rounded-r-none'}`}
+      >
         {clip.thumbnailUrl ? (
-          <img src={clip.thumbnailUrl!} alt={clip.title} className="w-full h-full object-cover" loading="lazy" />
+          <img src={clip.thumbnailUrl!} alt={clip.title} className="w-full h-full object-cover transition group-hover/thumb:scale-105" loading="lazy" />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-[#0f1623] to-slate-950" />
             <div className="relative text-center">
               <PlatformIcon platform={platform} size="sm" />
-              <p className="text-[11px] font-mono text-slate-500 mt-1.5 lg:mt-0.5">WATCH ON {platform.toUpperCase()}</p>
+              <p className="text-[11px] font-mono text-slate-500 mt-1.5 lg:hidden">WATCH ON {clip.platform.toUpperCase()}</p>
             </div>
           </div>
         )}
-        <div className="absolute top-2.5 lg:top-1 left-2.5 lg:left-1"><span className="text-[11px] font-mono font-bold bg-slate-950/90 border border-slate-700 text-white px-2 lg:px-1 py-0.5 rounded-md flex items-center gap-1"><PlatformIcon platform={platform} /> {clip.platform}</span></div>
-        {clip.chipsExtracted > 0 && <div className="absolute top-2.5 lg:top-1 right-2.5 lg:right-1"><span className="text-[11px] font-mono font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-1.5 py-0.5 rounded">💰 {clip.chipsExtracted.toLocaleString('en-IN')} c</span></div>}
+        {/* Platform badge — only on mobile & shorts */}
+        {(isShort || true) && (
+          <div className="absolute top-2 lg:top-1 left-2 lg:left-1">
+            <span className="text-[11px] font-mono font-bold bg-slate-950/90 border border-slate-700 text-white px-1.5 lg:px-1 py-0.5 rounded-md flex items-center gap-1">
+              <PlatformIcon platform={platform} /> {isShort ? 'Shorts' : clip.platform}
+            </span>
+          </div>
+        )}
+        {clip.chipsExtracted > 0 && (
+          <div className="absolute top-2 lg:top-1 right-2 lg:right-1">
+            <span className="text-[11px] font-mono font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-1.5 py-0.5 rounded">
+              💰 {clip.chipsExtracted.toLocaleString('en-IN')}
+            </span>
+          </div>
+        )}
       </a>
-      <div className="p-3 lg:p-1.5">
-        <h3 className="text-sm lg:text-[11px] font-bold text-white leading-tight mb-1 lg:mb-0.5">{clip.title}</h3>
-        {clip.description && <p className="text-[11px] text-slate-500 mb-2 lg:mb-0.5">{clip.description}</p>}
-        <div className="flex items-center gap-2 text-[11px] font-mono text-slate-600">{clip.arenaName && <span>{clip.arenaName}</span>}{clip.arenaName && <span>·</span>}<span>{timeAgo(clip.createdAt)}</span></div>
+
+      {/* Metadata */}
+      <div className={`p-3 lg:p-0 ${!isShort ? 'lg:py-1.5 lg:px-2.5 lg:flex-1 lg:min-w-0' : ''}`}>
+        <h3 className={`font-bold text-white leading-tight ${isShort ? 'text-xs lg:text-[11px] line-clamp-2' : 'text-sm lg:text-[11px]'} ${!isShort ? 'lg:line-clamp-2' : ''}`}>{clip.title}</h3>
+        {!isShort && clip.description && <p className="text-[11px] text-slate-500 mt-0.5 lg:mt-0 lg:line-clamp-1">{clip.description}</p>}
+        <div className="flex items-center gap-2 text-[11px] font-mono text-slate-600 mt-1 lg:mt-0.5">
+          {clip.arenaName && <span>{clip.arenaName}</span>}
+          {clip.arenaName && <span>·</span>}
+          <span>{timeAgo(clip.createdAt)}</span>
+        </div>
       </div>
     </div>
   );
 }
 
 function PlatformIcon({ platform, size = 'sm' }: { platform: string; size?: 'sm' | 'lg' }) {
-  if (platform === 'youtube') return size === 'lg' ? <Youtube className="w-8 h-8 text-red-500 mx-auto" /> : <Youtube className="w-3 h-3 text-red-500" />;
-  if (platform === 'twitch') return size === 'lg' ? <Twitch className="w-8 h-8 text-violet-400 mx-auto" /> : <Twitch className="w-3 h-3 text-violet-400" />;
-  if (platform === 'instagram') return size === 'lg' ? <Instagram className="w-8 h-8 text-pink-400 mx-auto" /> : <Instagram className="w-3 h-3 text-pink-400" />;
+  const p = platform.toLowerCase();
+  const isShort = p.includes('shorts');
+  if (p.includes('youtube')) return size === 'lg'
+    ? <Youtube className={`mx-auto ${isShort ? 'w-7 h-7' : 'w-8 h-8'} text-red-500`} />
+    : <Youtube className={`w-3 h-3 ${isShort ? 'text-red-400' : 'text-red-500'}`} />;
+  if (p.includes('instagram')) return size === 'lg' ? <Instagram className="w-8 h-8 text-pink-400 mx-auto" /> : <Instagram className="w-3 h-3 text-pink-400" />;
+  if (isShort) return size === 'lg' ? <Smartphone className="w-7 h-7 text-red-400 mx-auto" /> : <Smartphone className="w-3 h-3 text-red-400" />;
   return size === 'lg' ? <Film className="w-8 h-8 text-slate-500 mx-auto" /> : <Film className="w-3 h-3 text-slate-400" />;
 }
 
