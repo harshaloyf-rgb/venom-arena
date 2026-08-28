@@ -388,3 +388,26 @@ Stage Summary:
 - Live Ticker tab: completely removed
 - "Your HOF Inductions" explained: it's the count of YOUR HOF entries in the DB (was 0, correct)
 ---\nTask ID: session-start\nAgent: main\nTask: Environment recovery and verification\n\nWork Log:\n- git fetch origin, checkout main, reset --hard origin/main\n- bun install, prisma generate, rm -rf .next\n- .env exists, DB exists, db:push synced\n- Clean start server on port 3000 via next-supervisor\n- Guest login: PASS\n- Admin login: FAIL (password mismatch for admin@venom.arena)\n- Page render: PASS (VENOM ARENA screen visible)\n\nStage Summary:\n- git: d8746f3\n- Session start: 2026-08-28T15:12:03Z\n- All systems ready except admin password may need reset\n
+---
+Task ID: 2
+Agent: main
+Task: YouTube-style compact video cards, remove Twitch, add Shorts/Instagram platform tabs
+
+Work Log:
+- Analyzed uploaded screenshot showing YouTube's recommendation card layout (16:9 thumbnail, compact metadata below)
+- Redesigned VideoClipCard: mobile stays vertical stack, desktop uses flex-row (thumbnail left 144×80px, metadata right) — like YouTube search results
+- Removed Twitch from imports, upload modal, admin moderation modal, and PlatformIcon
+- Added Smartphone icon for YouTube Shorts detection
+- Replaced filter dropdown with pill-style tab buttons: All | Matches | YouTube Videos | Shorts | Instagram Reels
+- Updated GET /api/clips to accept platform query param with mapping (youtube→YouTube, youtube-shorts→YouTube Shorts, instagram→Instagram)
+- Updated POST /api/clips with auto-detect platform from URL (youtube.com/shorts/ → YouTube Shorts)
+- Added YouTube Shorts thumbnail extraction support in extractYoutubeThumbnail
+- Upload modal auto-detects platform from pasted URL and updates platform dropdown
+- Verified in browser: horizontal layout confirmed on desktop, all 5 tabs work, no console errors
+
+Stage Summary:
+- 4 files changed: clip-showcase.tsx, upload-modal.tsx, admin-moderation-modal.tsx, api/clips/route.ts
+- Video cards now compact horizontal layout on desktop (was full-width vertical)
+- Platform tabs replace dropdown filter
+- Twitch removed from clips feature
+- YouTube Shorts auto-detected from URL
