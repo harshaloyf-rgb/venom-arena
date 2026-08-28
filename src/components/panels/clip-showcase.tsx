@@ -425,7 +425,7 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
       )}
 
       {/* Content Area */}
-      <div className="px-5 sm:px-6 pb-6 lg:px-2 lg:pb-2 max-h-[600px] lg:max-h-[540px] overflow-y-auto custom-scrollbar">
+      <div className="px-5 sm:px-6 pb-6 lg:px-2 lg:pb-2">
         {loading && <PanelSkeleton count={3} height="h-80" />}
 
         {error && !loading && (
