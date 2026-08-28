@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
 import {
   SEASONAL_BONUS_DAYS,
@@ -114,9 +114,7 @@ export function DailyRewards({ onToast }: ClaimsProps) {
 
   // History state
   const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [historyTotal, setHistoryTotal] = useState(0);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyPage, setHistoryPage] = useState(0);
 
   // Streak milestone claimed state
   const [claimedMilestones, setClaimedMilestones] = useState<Set<number>>(new Set());
@@ -150,16 +148,14 @@ export function DailyRewards({ onToast }: ClaimsProps) {
     } catch { /* silent */ }
   }, []);
 
-  // Fetch history
-  const fetchHistory = useCallback(async (page = 0) => {
+  // Fetch history (last 7 days)
+  const fetchHistory = useCallback(async () => {
     setHistoryLoading(true);
     try {
-      const res = await fetch(`/api/player/claims/history?limit=30&offset=${page * 30}`);
+      const res = await fetch('/api/player/claims/history');
       if (res.ok) {
         const data = await res.json();
         setHistory(data.entries);
-        setHistoryTotal(data.total);
-        setHistoryPage(page);
       }
     } catch { /* silent */ }
     finally { setHistoryLoading(false); }
@@ -167,7 +163,7 @@ export function DailyRewards({ onToast }: ClaimsProps) {
 
   // Initial fetches
   useEffect(() => { fetchHourly(); fetchSpinStatus(); }, [fetchHourly, fetchSpinStatus]);
-  useEffect(() => { if (tab === 'history') fetchHistory(0); }, [tab, fetchHistory]);
+  useEffect(() => { if (tab === 'history') fetchHistory(); }, [tab, fetchHistory]);
 
   // ── Daily Claim ──
   async function handleDailyClaim() {
@@ -257,16 +253,7 @@ export function DailyRewards({ onToast }: ClaimsProps) {
   const nextDailyTime = player?.lastDailyClaim ? new Date(player.lastDailyClaim + 'T00:00:00Z').getTime() + DAY_MS - now : 0;
   const seasonal = seasonalToday();
 
-  // Calendar heatmap data (last 90 days)
-  const calendarDays = useMemo(() => {
-    const days: { date: string; claimed: boolean }[] = [];
-    for (let i = 89; i >= 0; i--) {
-      const d = new Date(Date.now() - i * DAY_MS);
-      const ds = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-      days.push({ date: ds, claimed: i === 0 ? alreadyClaimed : false });
-    }
-    return days;
-  }, [alreadyClaimed]);
+
 
   if (loading) return <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-5 animate-pulse h-64" />;
   if (!player) return <NotSignedIn />;
@@ -290,8 +277,10 @@ export function DailyRewards({ onToast }: ClaimsProps) {
 
   // ── RENDER ──
   return (
-    <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 lg:p-1.5 overflow-hidden">
-      <GlowBlob color="bg-emerald-500/10" className="-top-12 -right-12 w-56 h-56" />
+    <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md p-5 sm:p-6 lg:p-1.5">
+      <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
+        <GlowBlob color="bg-emerald-500/10" className="-top-12 -right-12 w-56 h-56" />
+      </div>
       {flyReward !== null && <RewardFly amount={flyReward} onDone={() => setFlyReward(null)} />}
 
       {/* Header */}
@@ -375,7 +364,6 @@ export function DailyRewards({ onToast }: ClaimsProps) {
       {tab === 'calendar' && (
         <CalendarTab
           player={player}
-          calendarDays={calendarDays}
           onToast={onToast}
         />
       )}
@@ -384,10 +372,7 @@ export function DailyRewards({ onToast }: ClaimsProps) {
       {tab === 'history' && (
         <HistoryTab
           history={history}
-          historyTotal={historyTotal}
           historyLoading={historyLoading}
-          historyPage={historyPage}
-          onFetchHistory={fetchHistory}
         />
       )}
     </div>

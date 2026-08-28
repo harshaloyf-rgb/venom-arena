@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { Users } from 'lucide-react';
 import { MicroLabel } from '../_panel-primitives';
 import { notify, type ToastFn } from '../_panel-primitives';
@@ -15,11 +16,39 @@ interface CalendarTabProps {
     streakFreezes: number;
     referralCode?: string | null;
   };
-  calendarDays: CalendarDay[];
   onToast?: ToastFn;
 }
 
-export function CalendarTab({ player, calendarDays, onToast }: CalendarTabProps) {
+export function CalendarTab({ player, onToast }: CalendarTabProps) {
+  const [calendarDays, setCalendarDays] = useState<CalendarDay[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState(true);
+
+  // Fetch real calendar data from API
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchCalendar() {
+      setCalendarLoading(true);
+      try {
+        const res = await fetch('/api/player/claims/calendar');
+        if (res.ok) {
+          const { claimedDates } = await res.json();
+          const claimedSet = new Set<string>(claimedDates);
+          const DAY_MS = 86_400_000;
+          const days: CalendarDay[] = [];
+          for (let i = 89; i >= 0; i--) {
+            const d = new Date(Date.now() - i * DAY_MS);
+            const ds = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+            days.push({ date: ds, claimed: claimedSet.has(ds) });
+          }
+          if (!cancelled) setCalendarDays(days);
+        }
+      } catch { /* silent */ }
+      if (!cancelled) setCalendarLoading(false);
+    }
+    fetchCalendar();
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <div className="space-y-4 lg:space-y-1">
       <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 lg:p-1 text-[11px] text-slate-300 leading-relaxed">
@@ -48,18 +77,22 @@ export function CalendarTab({ player, calendarDays, onToast }: CalendarTabProps)
 
       {/* Heatmap grid */}
       <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 lg:p-1.5 overflow-x-auto">
-        <div className="grid grid-cols-10 sm:grid-cols-[repeat(15,minmax(0,1fr))] gap-1 lg:gap-px min-w-[300px] lg:min-w-0 lg:max-h-28 lg:overflow-hidden">
-          {calendarDays.map((d, i) => (
-            <div
-              key={d.date}
-              title={`${d.date}${d.claimed ? ' ✓ Claimed' : ''}`}
-              className={`aspect-square rounded-sm transition-colors ${
-                d.claimed ? 'bg-emerald-500' :
-                i < 7 ? 'bg-slate-700' : 'bg-slate-800/60'
-              } hover:ring-1 hover:ring-slate-500`}
-            />
-          ))}
-        </div>
+        {calendarLoading ? (
+          <div className="flex items-center justify-center py-6 text-[11px] text-slate-500">Loading calendar...</div>
+        ) : (
+          <div className="grid grid-cols-10 sm:grid-cols-[repeat(15,minmax(0,1fr))] gap-1 lg:gap-px">
+            {calendarDays.map((d, i) => (
+              <div
+                key={d.date}
+                title={`${d.date}${d.claimed ? ' ✓ Claimed' : ''}`}
+                className={`aspect-square lg:aspect-auto lg:h-3.5 rounded-sm transition-colors ${
+                  d.claimed ? 'bg-emerald-500' :
+                  i < 7 ? 'bg-slate-700' : 'bg-slate-800/60'
+                } hover:ring-1 hover:ring-slate-500`}
+              />
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-2 mt-3 lg:mt-1 justify-end">
           <span className="text-[11px] text-slate-500">Less</span>
           <div className="w-3 h-3 rounded-sm bg-slate-800" />
@@ -75,7 +108,7 @@ export function CalendarTab({ player, calendarDays, onToast }: CalendarTabProps)
           <span className="text-xs lg:text-[11px] font-bold text-white">Refer & Earn</span>
         </div>
         <p className="text-[11px] text-slate-400 mb-3 lg:mb-1">
-          Share your referral code. When your friend plays 5 matches, you both get <span className="text-emerald-400 font-bold">2,000c</span>!
+          Share your referral code. When your friend plays 5 matches, you both get <span className="text-emerald-400 font-bold">2,500c</span>!
         </p>
         {player.referralCode ? (
           <div className="flex items-center gap-2">
