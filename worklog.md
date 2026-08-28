@@ -411,3 +411,75 @@ Stage Summary:
 - Platform tabs replace dropdown filter
 - Twitch removed from clips feature
 - YouTube Shorts auto-detected from URL
+---
+Task ID: 1
+Agent: Main
+Task: Increase video card sizes in Highlights panel
+
+Work Log:
+- Read clip-showcase.tsx to understand current card sizing
+- Found VideoCardHorizontal was w-72 lg:w-56 with thumbnail w-32 lg:w-24 h-20 lg:h-[68px]
+- Found VideoCardVertical was w-36 lg:w-28 (very small on desktop)
+- Iteratively increased sizes with VLM verification after each change
+- Final VideoCardHorizontal: w-[440px] lg:w-[420px] card, w-56 h-[160px] lg:h-[150px] thumbnail
+- Final VideoCardVertical: w-52 lg:w-48 (192px/208px wide, ~341px/~369px tall at 9:16)
+- Increased text sizes and padding for better readability
+- Updated scroll amount in ScrollRow to 340px to match bigger cards
+- Verified with agent-browser: no console errors, lint clean, all tabs render correctly
+
+Stage Summary:
+- YouTube Video cards now 420px wide with 224×150px thumbnails on desktop
+- Shorts/Reels cards now 192px wide with ~341px tall 9:16 portrait format
+- VLM confirmed all card sizes as GOOD
+- No lint errors or console errors
+---
+Task ID: 2
+Agent: Main
+Task: Move Clip Moderation from Highlights panel to Admin Panel
+
+Work Log:
+- Explored admin panel structure: 4 tabs (Overview, Players, Clans, Guide) in src/components/panels/admin-panel.tsx
+- Created new src/components/panels/admin/clips-tab.tsx with full moderation functionality as an inline tab (not modal)
+- Added "Clips" tab to admin panel tabs array with ShieldCheck icon
+- Added "Moderate Clips" quick action to Overview section
+- Added "Content Moderation" info card to Overview section
+- Removed from clip-showcase.tsx: AdminModerationModal import, Shield import, showAdmin/pendingCount/isAdmin state, pendingCount fetch useEffect, Moderate button JSX, AdminModerationModal render
+- Kept ShieldCheck and CheckCircle2 imports (still used in empty state component)
+- Lint clean, no console errors, browser verified no Moderate button in Highlights
+
+Stage Summary:
+- Created /src/components/panels/admin/clips-tab.tsx (full moderation tab with list+detail split panel)
+- Updated /src/components/panels/admin-panel.tsx (added Clips tab + overview entries)
+- Cleaned /src/components/panels/clip-showcase.tsx (removed all moderation UI)
+- Old modal file /src/components/panels/clips/admin-moderation-modal.tsx still exists but is no longer imported anywhere
+---
+Task ID: 1
+Agent: main
+Task: Build scalable clips viewing system (preview rows + View All → expanded grid with pagination, search, sort)
+
+Work Log:
+- Read existing clip-showcase.tsx (686 lines) and /api/clips/route.ts
+- Confirmed API already supports ?search= and ?sort=newest|oldest|upvotes query params
+- Added React import (needed for React.Children.toArray in ScrollRow)
+- Added new imports: Search, ArrowLeft, Grid3X3, ChevronDown
+- Added constants: PREVIEW_LIMIT=12, EXPANDED_PER_PAGE=20
+- Added type ExpandableSection = 'youtube' | 'youtube-shorts' | 'instagram' | 'match-card'
+- Added SECTION_META config for section metadata (label, icon, isVertical, isMatch)
+- Modified ScrollRow: accepts onViewAll + showViewAll props, slices children to PREVIEW_LIMIT, appends "View All" card
+- Added ExpandedView component with: Back button, search bar (Enter to search), sort dropdown (Newest/Oldest/Most Upvoted), responsive grid (horizontal for YouTube 1-2col, vertical for Shorts/Reels 2-6col, feed for match cards), pagination with ellipsis, result count
+- Added expanded view state: expandedSection, expandedClips, expandedTotal, expandedPage, expandedSearch, expandedSort, expandedLoading
+- Added fetchExpanded function that calls /api/clips with pagination + search + sort
+- Added handleViewAll, handleBackFromExpanded, handleExpandedSearch, handleExpandedSort, handleExpandedPage handlers
+- Expanded view closes when tab changes (useEffect on filterType/myClipsOnly)
+- Live Stats ticker hides when expanded view is active
+- Match Cards row limited to PREVIEW_LIMIT items with separate "View All" button below
+
+Stage Summary:
+- Built complete scalable clips viewing system
+- Preview rows show max 12 clips + "View All →" button (appears when row has >= 12 items for All tab, or total > 12 for platform tabs)
+- Expanded view: full grid with search, sort, pagination (20 per page)
+- Verified all 5 elements (Back, Search, Sort, Grid, Pagination) working via Agent Browser
+- Verified tab switching closes expanded view
+- Verified search works (filters by title/player name)
+- Verified sort dropdown works (Newest/Oldest/Most Upvoted)
+- Zero runtime errors on clean reload

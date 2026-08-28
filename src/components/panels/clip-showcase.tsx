@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
 import { countryFlag, type InspectedPlayer } from '@/lib/game-config';
 import { timeAgo } from '@/lib/date-utils';
@@ -25,18 +25,20 @@ import {
   Zap,
   Trophy,
   Heart,
-  ShieldCheck,
   Clock,
   AlertTriangle,
   Video,
   Upload,
-  Shield,
+  ShieldCheck,
   CheckCircle2,
   Smartphone,
   ChevronLeft,
   ChevronRight,
+  Search,
+  ArrowLeft,
+  Grid3X3,
+  ChevronDown,
 } from 'lucide-react';
-import { AdminModerationModal } from './clips/admin-moderation-modal';
 import { UploadModal } from './clips/upload-modal';
 
 // ── Types ──
@@ -77,7 +79,12 @@ interface ClipShowcaseProps {
   onInspectPlayer?: (p: InspectedPlayer) => void;
 }
 
+type SortOption = 'newest' | 'oldest' | 'upvotes';
+type ExpandableSection = 'youtube' | 'youtube-shorts' | 'instagram' | 'match-card';
+
 const PAGE_SIZE = 40;
+const PREVIEW_LIMIT = 12;
+const EXPANDED_PER_PAGE = 20;
 
 function formatCompact(n: number): string {
   if (n >= 10_000_000) return `${(n / 10_000_000).toFixed(1)} Cr`;
@@ -86,13 +93,25 @@ function formatCompact(n: number): string {
   return String(n);
 }
 
+const SECTION_META: Record<ExpandableSection, { label: string; icon: React.ReactNode; isVertical: boolean; isMatch: boolean }> = {
+  'youtube':        { label: 'YouTube Videos', icon: <Youtube className="w-4 h-4 lg:w-3.5 lg:h-3.5 text-red-500" />, isVertical: false, isMatch: false },
+  'youtube-shorts': { label: 'YouTube Shorts', icon: <Smartphone className="w-4 h-4 lg:w-3.5 lg:h-3.5 text-red-400" />, isVertical: true, isMatch: false },
+  'instagram':      { label: 'Instagram Reels', icon: <Instagram className="w-4 h-4 lg:w-3.5 lg:h-3.5 text-pink-400" />, isVertical: true, isMatch: false },
+  'match-card':     { label: 'Match Cards', icon: <Trophy className="w-4 h-4 lg:w-3.5 lg:h-3.5 text-amber-400" />, isVertical: false, isMatch: true },
+};
 
-// ── Horizontal Scroll Row with arrow buttons ──
 
-function ScrollRow({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+// ── Horizontal Scroll Row with arrow buttons + View All ──
+
+function ScrollRow({ title, icon, children, onViewAll, showViewAll }: { title: string; icon: React.ReactNode; children: React.ReactNode; onViewAll?: () => void; showViewAll?: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollL, setCanScrollL] = useState(false);
   const [canScrollR, setCanScrollR] = useState(false);
+
+  const childArray = useMemo(() => {
+    const arr = React.Children.toArray(children);
+    return showViewAll ? arr.slice(0, PREVIEW_LIMIT) : arr;
+  }, [children, showViewAll]);
 
   function checkScroll() {
     const el = scrollRef.current;
@@ -101,8 +120,7 @@ function ScrollRow({ title, icon, children }: { title: string; icon: React.React
     setCanScrollR(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
   }
 
-  useEffect(() => { checkScroll(); }, [children]);
-  // Also check on resize
+  useEffect(() => { checkScroll(); }, [childArray]);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -114,7 +132,7 @@ function ScrollRow({ title, icon, children }: { title: string; icon: React.React
   function scrollBy(dir: 'left' | 'right') {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollBy({ left: dir === 'left' ? -260 : 260, behavior: 'smooth' });
+    el.scrollBy({ left: dir === 'left' ? -340 : 340, behavior: 'smooth' });
   }
 
   return (
@@ -122,9 +140,13 @@ function ScrollRow({ title, icon, children }: { title: string; icon: React.React
       <div className="flex items-center gap-1.5 mb-2 lg:mb-1 px-1">
         {icon}
         <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-widest lg:text-[11px]">{title}</span>
+        {onViewAll && showViewAll && (
+          <button type="button" onClick={onViewAll} className="ml-auto flex items-center gap-1 text-[11px] font-bold text-red-400 hover:text-red-300 transition uppercase tracking-wider">
+            View All <ChevronRight className="w-3 h-3" />
+          </button>
+        )}
       </div>
       <div className="relative group/row">
-        {/* Left arrow */}
         {canScrollL && (
           <button
             type="button"
@@ -134,15 +156,24 @@ function ScrollRow({ title, icon, children }: { title: string; icon: React.React
             <ChevronLeft className="w-4 h-4 text-white" />
           </button>
         )}
-        {/* Scroll container */}
         <div
           ref={scrollRef}
           onScroll={checkScroll}
           className="flex gap-3 lg:gap-2 overflow-x-auto scrollbar-none scroll-smooth"
         >
-          {children}
+          {childArray}
+          {onViewAll && showViewAll && (
+            <button
+              type="button"
+              onClick={onViewAll}
+              className="shrink-0 w-40 lg:w-32 h-full min-h-[120px] rounded-xl border border-dashed border-slate-700 bg-slate-950/40 hover:bg-slate-800/40 hover:border-red-500/50 flex flex-col items-center justify-center gap-2 transition group/va cursor-pointer"
+            >
+              <Grid3X3 className="w-5 h-5 lg:w-4 lg:h-4 text-slate-500 group-hover/va:text-red-400 transition" />
+              <span className="text-[11px] font-bold text-slate-500 group-hover/va:text-red-300 uppercase tracking-wider">View All</span>
+              <ChevronRight className="w-3 h-3 text-slate-600 group-hover/va:text-red-400 transition" />
+            </button>
+          )}
         </div>
-        {/* Right arrow */}
         {canScrollR && (
           <button
             type="button"
@@ -153,6 +184,202 @@ function ScrollRow({ title, icon, children }: { title: string; icon: React.React
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+
+// ── Expanded Grid View ──
+
+function ExpandedView({
+  section,
+  onBack,
+  clips,
+  total,
+  page,
+  loading,
+  search,
+  sort,
+  onSearchChange,
+  onSortChange,
+  onPageChange,
+  onUpvote,
+  onInspect,
+  canVote,
+}: {
+  section: ExpandableSection;
+  onBack: () => void;
+  clips: ClipItem[];
+  total: number;
+  page: number;
+  loading: boolean;
+  search: string;
+  sort: SortOption;
+  onSearchChange: (v: string) => void;
+  onSortChange: (v: SortOption) => void;
+  onPageChange: (p: number) => void;
+  onUpvote: (c: ClipItem) => void;
+  onInspect: (c: ClipItem) => void;
+  canVote: boolean;
+}) {
+  const meta = SECTION_META[section];
+  const totalPages = Math.max(1, Math.ceil(total / EXPANDED_PER_PAGE));
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  function handleSearchKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') {
+      onSearchChange((e.target as HTMLInputElement).value);
+    }
+  }
+
+  function handleSearchClear() {
+    onSearchChange('');
+    searchRef.current?.focus();
+  }
+
+  // Build page numbers to show
+  const pageNumbers = useMemo(() => {
+    const pages: (number | '...')[] = [];
+    if (totalPages <= 7) {
+      for (let i = 0; i < totalPages; i++) pages.push(i);
+    } else {
+      pages.push(0);
+      if (page > 2) pages.push('...');
+      for (let i = Math.max(1, page - 1); i <= Math.min(totalPages - 2, page + 1); i++) {
+        pages.push(i);
+      }
+      if (page < totalPages - 3) pages.push('...');
+      pages.push(totalPages - 1);
+    }
+    return pages;
+  }, [page, totalPages]);
+
+  return (
+    <div className="space-y-4 lg:space-y-1.5">
+      {/* Header row: Back + Title + Count */}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 lg:px-1.5 lg:py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 transition text-xs font-bold"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Back</span>
+        </button>
+        <div className="flex items-center gap-1.5">
+          {meta.icon}
+          <span className="text-sm font-bold text-white lg:text-xs">{meta.label}</span>
+        </div>
+        <span className="text-[11px] font-mono text-slate-500">{total.toLocaleString()} clips</span>
+      </div>
+
+      {/* Search + Sort bar */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+          <input
+            ref={searchRef}
+            type="text"
+            defaultValue={search}
+            onKeyDown={handleSearchKeyDown}
+            placeholder="Search by title or player name..."
+            className="w-full pl-8 pr-8 py-2 lg:py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-red-500/50 transition"
+          />
+          {search && (
+            <button type="button" onClick={handleSearchClear} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+        <div className="relative">
+          <select
+            value={sort}
+            onChange={(e) => onSortChange(e.target.value as SortOption)}
+            className="appearance-none pl-2.5 pr-7 py-2 lg:py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-300 font-bold focus:outline-none focus:border-red-500/50 transition cursor-pointer"
+          >
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+            <option value="upvotes">Most Upvoted</option>
+          </select>
+          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 pointer-events-none" />
+        </div>
+      </div>
+
+      {/* Grid / Feed */}
+      {loading ? (
+        <div className="flex justify-center py-12 lg:py-6">
+          <Loader2 className="w-6 h-6 animate-spin text-slate-500" />
+        </div>
+      ) : clips.length === 0 ? (
+        <div className="text-center py-12 lg:py-6">
+          <Search className="w-6 h-6 text-slate-700 mx-auto mb-2" />
+          <p className="text-[11px] text-slate-500">No clips found{search ? ` for "${search}"` : ''}</p>
+        </div>
+      ) : meta.isMatch ? (
+        /* Match Cards: vertical feed */
+        <div className="space-y-4 lg:space-y-1">
+          {clips.map((clip) => (
+            <FeedItem key={clip.id} clip={clip} onUpvote={onUpvote} onInspect={onInspect} canVote={canVote} />
+          ))}
+        </div>
+      ) : meta.isVertical ? (
+        /* Vertical cards (Shorts/Reels): responsive grid */
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 lg:gap-2">
+          {clips.map((clip) => (
+            <VideoCardVertical key={clip.id} clip={clip} />
+          ))}
+        </div>
+      ) : (
+        /* Horizontal cards (YouTube): 1-2 col grid */
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 lg:gap-2">
+          {clips.map((clip) => (
+            <VideoCardHorizontal key={clip.id} clip={clip} />
+          ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {!loading && clips.length > 0 && totalPages > 1 && (
+        <div className="flex items-center justify-center gap-1 pt-2">
+          <button
+            type="button"
+            onClick={() => onPageChange(page - 1)}
+            disabled={page === 0}
+            className="p-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          {pageNumbers.map((p, i) =>
+            p === '...' ? (
+              <span key={`dots-${i}`} className="px-1 text-slate-600 text-xs">...</span>
+            ) : (
+              <button
+                key={p}
+                type="button"
+                onClick={() => onPageChange(p)}
+                className={`min-w-[28px] h-7 rounded-lg text-xs font-bold transition ${p === page ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+              >
+                {p + 1}
+              </button>
+            ),
+          )}
+          <button
+            type="button"
+            onClick={() => onPageChange(page + 1)}
+            disabled={page >= totalPages - 1}
+            className="p-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Result info */}
+      {!loading && clips.length > 0 && (
+        <div className="text-center text-[11px] font-mono text-slate-600">
+          Showing {page * EXPANDED_PER_PAGE + 1}-{Math.min((page + 1) * EXPANDED_PER_PAGE, total)} of {total.toLocaleString()}
+        </div>
+      )}
     </div>
   );
 }
@@ -249,9 +476,15 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
   const [myClipsOnly, setMyClipsOnly] = useState(false);
   const [liveStats, setLiveStats] = useState<LiveStats | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'match-card' | 'youtube' | 'youtube-shorts' | 'instagram'>('all');
-  const [showAdmin, setShowAdmin] = useState(false);
-  const [pendingCount, setPendingCount] = useState(0);
-  const isAdmin = player?.role === 'admin';
+
+  // Expanded view state
+  const [expandedSection, setExpandedSection] = useState<ExpandableSection | null>(null);
+  const [expandedClips, setExpandedClips] = useState<ClipItem[]>([]);
+  const [expandedTotal, setExpandedTotal] = useState(0);
+  const [expandedPage, setExpandedPage] = useState(0);
+  const [expandedSearch, setExpandedSearch] = useState('');
+  const [expandedSort, setExpandedSort] = useState<SortOption>('newest');
+  const [expandedLoading, setExpandedLoading] = useState(false);
 
   const [uploadForm, setUploadForm] = useState({
     title: '', description: '', platform: 'YouTube' as string,
@@ -294,9 +527,6 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
   }, []);
 
   useEffect(() => { fetchClips(true); fetchFeatured(); fetchStats(); }, [myClipsOnly, filterType]);
-
-  useEffect(() => { if (!isAdmin) return; (async () => { try { const r = await fetch('/api/clips/admin?status=pending&limit=1'); if (r.ok) { const d = await r.json(); setPendingCount(d.counts?.pending ?? 0); } } catch {} })(); }, [isAdmin, showAdmin]);
-
   useEffect(() => { setClips([]); setOffset(0); }, [myClipsOnly, filterType]);
 
   useEffect(() => {
@@ -304,6 +534,72 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
     const obs = new IntersectionObserver((e) => { if (e[0].isIntersecting && !loadingMore && clips.length < total) fetchClips(false); }, { rootMargin: '200px' });
     obs.observe(el); return () => obs.disconnect();
   }, [loadingMore, clips.length, total, fetchClips]);
+
+  // ── Expanded view fetch ──
+  const fetchExpanded = useCallback(async (section: ExpandableSection, page: number, search: string, sort: SortOption) => {
+    setExpandedLoading(true);
+    try {
+      const params = new URLSearchParams({
+        limit: String(EXPANDED_PER_PAGE),
+        offset: String(page * EXPANDED_PER_PAGE),
+        sort,
+      });
+      if (section === 'match-card') {
+        params.set('type', 'match-card');
+      } else {
+        params.set('type', 'user-clip');
+        params.set('platform', section);
+      }
+      if (search.trim()) params.set('search', search.trim());
+
+      const res = await fetch(`/api/clips?${params}`);
+      if (!res.ok) throw new Error('Failed');
+      const data = await res.json();
+      setExpandedClips(data.clips);
+      setExpandedTotal(data.total);
+    } catch {
+      setExpandedClips([]);
+      setExpandedTotal(0);
+    } finally {
+      setExpandedLoading(false);
+    }
+  }, []);
+
+  function handleViewAll(section: ExpandableSection) {
+    setExpandedSection(section);
+    setExpandedPage(0);
+    setExpandedSearch('');
+    setExpandedSort('newest');
+    fetchExpanded(section, 0, '', 'newest');
+  }
+
+  function handleBackFromExpanded() {
+    setExpandedSection(null);
+    setExpandedClips([]);
+  }
+
+  function handleExpandedSearch(value: string) {
+    setExpandedSearch(value);
+    setExpandedPage(0);
+    if (expandedSection) fetchExpanded(expandedSection, 0, value, expandedSort);
+  }
+
+  function handleExpandedSort(value: SortOption) {
+    setExpandedSort(value);
+    setExpandedPage(0);
+    if (expandedSection) fetchExpanded(expandedSection, 0, expandedSearch, value);
+  }
+
+  function handleExpandedPage(page: number) {
+    setExpandedPage(page);
+    if (expandedSection) fetchExpanded(expandedSection, page, expandedSearch, expandedSort);
+    // Scroll to top of content area
+    const contentEl = document.getElementById('clip-content-area');
+    if (contentEl) contentEl.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // Close expanded view when tab changes
+  useEffect(() => { setExpandedSection(null); }, [filterType, myClipsOnly]);
 
   async function handleUpvote(clip: ClipItem) {
     if (!isLoggedIn || clip.myUpvote) return;
@@ -345,6 +641,19 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
   const ytShorts = displayClips.filter((c) => !isMatchCard(c) && c.platform === 'YouTube Shorts');
   const igReels = displayClips.filter((c) => !isMatchCard(c) && c.platform === 'Instagram');
   const matchCards = displayClips.filter((c) => isMatchCard(c));
+
+  // Whether to show View All for each row in "All" tab
+  // Show View All if the row has >= PREVIEW_LIMIT items (likely more exist)
+  const showViewAllYt = ytVideos.length >= PREVIEW_LIMIT;
+  const showViewAllShorts = ytShorts.length >= PREVIEW_LIMIT;
+  const showViewAllIg = igReels.length >= PREVIEW_LIMIT;
+  const showViewAllMatches = matchCards.length >= PREVIEW_LIMIT;
+
+  // Whether to show View All for platform tabs
+  const showViewAllTab = total > PREVIEW_LIMIT;
+
+  // Check if a specific section should be shown as expanded
+  const isExpanded = expandedSection !== null;
 
   return (
     <div className="relative rounded-2xl border border-slate-800/80 bg-slate-900/60 shadow-md overflow-hidden">
@@ -389,12 +698,7 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
                 </button>
               ))}
             </div>
-            {isAdmin && (
-              <button type="button" onClick={() => setShowAdmin(true)} className="px-3 py-2 lg:px-1.5 lg:py-1 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs uppercase tracking-wider transition flex items-center gap-1.5 lg:gap-1 relative">
-                <Shield className="w-3.5 h-3.5 lg:w-3 lg:h-3" /> Moderate
-                {pendingCount > 0 && <span className="absolute -top-1.5 -right-1.5 w-5 h-5 lg:w-4 lg:h-4 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center border-2 border-slate-900">{pendingCount > 9 ? '9+' : pendingCount}</span>}
-              </button>
-            )}
+
             {isLoggedIn && (
               <button type="button" onClick={() => setShowUpload(true)} className="px-3 py-2 lg:px-1.5 lg:py-1 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs uppercase tracking-wider transition flex items-center gap-1.5 lg:gap-1">
                 <Plus className="w-3.5 h-3.5 lg:w-3 lg:h-3" /> Share Clip
@@ -405,7 +709,7 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
       </div>
 
       {/* Live Stats Ticker */}
-      {liveStats && !isPlatformTab && (
+      {liveStats && !isPlatformTab && !isExpanded && (
         <div className="mx-5 sm:mx-6 mb-4 lg:mx-2 lg:mb-1">
           <div className="flex items-center gap-4 lg:gap-2 overflow-x-auto py-2.5 px-4 lg:py-1 lg:px-1.5 rounded-xl bg-slate-950/80 border border-slate-800/60 scrollbar-none">
             <div className="flex items-center gap-1.5 shrink-0"><Zap className="w-3.5 h-3.5 text-amber-400 lg:w-3 lg:h-3" /><span className="text-[11px] font-mono text-slate-400">Today</span></div>
@@ -422,7 +726,7 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
       )}
 
       {/* Content Area */}
-      <div className="px-5 sm:px-6 pb-6 lg:px-2 lg:pb-2">
+      <div id="clip-content-area" className="px-5 sm:px-6 pb-6 lg:px-2 lg:pb-2">
         {loading && <PanelSkeleton count={3} height="h-80" />}
 
         {error && !loading && (
@@ -432,40 +736,71 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
           </div>
         )}
 
-        {!loading && !error && clips.length === 0 && <EmptyState isLoggedIn={isLoggedIn} onOpenUpload={() => setShowUpload(true)} />}
+        {!loading && !error && clips.length === 0 && !isExpanded && <EmptyState isLoggedIn={isLoggedIn} onOpenUpload={() => setShowUpload(true)} />}
 
-        {/* ═══ PLATFORM TAB: Horizontal scroll rows ═══ */}
-        {!loading && isPlatformTab && (
+        {/* ═══ EXPANDED VIEW ═══ */}
+        {isExpanded && (
+          <ExpandedView
+            section={expandedSection!}
+            onBack={handleBackFromExpanded}
+            clips={expandedClips}
+            total={expandedTotal}
+            page={expandedPage}
+            loading={expandedLoading}
+            search={expandedSearch}
+            sort={expandedSort}
+            onSearchChange={handleExpandedSearch}
+            onSortChange={handleExpandedSort}
+            onPageChange={handleExpandedPage}
+            onUpvote={handleUpvote}
+            onInspect={handleInspectCreator}
+            canVote={isLoggedIn}
+          />
+        )}
+
+        {/* ═══ PLATFORM TAB: Horizontal scroll rows (only when NOT expanded) ═══ */}
+        {!loading && !isExpanded && isPlatformTab && (
           <>
             {/* YouTube Videos Tab */}
             {filterType === 'youtube' && (
               ytVideos.length > 0
-                ? <ScrollRow title="YouTube Videos" icon={<Youtube className="w-4 h-4 lg:w-3 lg:h-3 text-red-500" />}>{ytVideos.map((c) => <VideoCardHorizontal key={c.id} clip={c} />)}</ScrollRow>
+                ? <ScrollRow title="YouTube Videos" icon={<Youtube className="w-4 h-4 lg:w-3 lg:h-3 text-red-500" />} onViewAll={() => handleViewAll('youtube')} showViewAll={showViewAllTab}>{ytVideos.map((c) => <VideoCardHorizontal key={c.id} clip={c} />)}</ScrollRow>
                 : <PlatformEmpty label="YouTube Videos" />
             )}
             {/* Shorts Tab */}
             {filterType === 'youtube-shorts' && (
               ytShorts.length > 0
-                ? <ScrollRow title="YouTube Shorts" icon={<Smartphone className="w-4 h-4 lg:w-3 lg:h-3 text-red-400" />}>{ytShorts.map((c) => <VideoCardVertical key={c.id} clip={c} />)}</ScrollRow>
+                ? <ScrollRow title="YouTube Shorts" icon={<Smartphone className="w-4 h-4 lg:w-3 lg:h-3 text-red-400" />} onViewAll={() => handleViewAll('youtube-shorts')} showViewAll={showViewAllTab}>{ytShorts.map((c) => <VideoCardVertical key={c.id} clip={c} />)}</ScrollRow>
                 : <PlatformEmpty label="YouTube Shorts" />
             )}
             {/* Instagram Reels Tab */}
             {filterType === 'instagram' && (
               igReels.length > 0
-                ? <ScrollRow title="Instagram Reels" icon={<Instagram className="w-4 h-4 lg:w-3 lg:h-3 text-pink-400" />}>{igReels.map((c) => <VideoCardVertical key={c.id} clip={c} />)}</ScrollRow>
+                ? <ScrollRow title="Instagram Reels" icon={<Instagram className="w-4 h-4 lg:w-3 lg:h-3 text-pink-400" />} onViewAll={() => handleViewAll('instagram')} showViewAll={showViewAllTab}>{igReels.map((c) => <VideoCardVertical key={c.id} clip={c} />)}</ScrollRow>
                 : <PlatformEmpty label="Instagram Reels" />
             )}
             {/* Matches Tab — vertical feed */}
             {filterType === 'match-card' && (
               matchCards.length > 0
-                ? <div className="space-y-4 lg:space-y-1">{matchCards.map((clip) => <FeedItem key={clip.id} clip={clip} onUpvote={handleUpvote} onInspect={handleInspectCreator} canVote={isLoggedIn} />)}</div>
+                ? <>
+                    <ScrollRow title="Match Cards" icon={<Trophy className="w-4 h-4 lg:w-3 lg:h-3 text-amber-400" />} onViewAll={() => handleViewAll('match-card')} showViewAll={showViewAllTab}>
+                      {matchCards.slice(0, PREVIEW_LIMIT).map((clip) => <FeedItem key={clip.id} clip={clip} onUpvote={handleUpvote} onInspect={handleInspectCreator} canVote={isLoggedIn} />)}
+                    </ScrollRow>
+                    {showViewAllTab && matchCards.length > PREVIEW_LIMIT && (
+                      <div className="text-center mt-2">
+                        <button type="button" onClick={() => handleViewAll('match-card')} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-950 border border-slate-800 hover:border-red-500/50 text-xs font-bold text-slate-400 hover:text-red-300 uppercase tracking-wider transition">
+                          <Grid3X3 className="w-3.5 h-3.5" /> View All {total} Match Cards
+                        </button>
+                      </div>
+                    )}
+                  </>
                 : <PlatformEmpty label="Match Cards" />
             )}
           </>
         )}
 
-        {/* ═══ ALL TAB: Featured + horizontal scroll rows ═══ */}
-        {!loading && filterType === 'all' && !myClipsOnly && (
+        {/* ═══ ALL TAB: Featured + horizontal scroll rows (only when NOT expanded) ═══ */}
+        {!loading && !isExpanded && filterType === 'all' && !myClipsOnly && (
           <>
             {/* Featured Clip */}
             {featured && (
@@ -474,11 +809,15 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
                   <Trophy className="w-4 h-4 text-amber-400 lg:w-3 lg:h-3" />
                   <span className="text-xs font-mono font-bold text-amber-300 uppercase tracking-widest lg:text-[11px]">Top Play</span>
                 </div>
+                <div className="flex overflow-hidden">
                 {isMatchCard(featured) ? (
                   <MatchCardVisual title={featured.title} playerName={featured.player.name} userTag={featured.player.userTag} country={featured.player.country} level={featured.player.level} clanTag={featured.player.clanTag} arenaName={featured.arenaName} outcome={(featured.matchData?.outcome as 'extract' | 'death') || 'extract'} chipsEarned={featured.chipsExtracted} chipsLost={featured.matchData?.chipsLost || 0} kills={featured.kills} snakeLength={featured.matchData?.snakeLength || 0} durationSec={featured.matchData?.durationSec || 0} isOnline={featured.matchData?.isOnline || false} upvotes={featured.upvotes} />
+                ) : featured.platform.toLowerCase().includes('shorts') || featured.platform.toLowerCase().includes('instagram') ? (
+                  <VideoCardVertical clip={featured} />
                 ) : (
                   <VideoCardHorizontal clip={featured} />
                 )}
+                </div>
                 <div className="flex items-center gap-4 lg:gap-2 mt-3 lg:mt-0.5 px-1">
                   <button type="button" onClick={() => handleUpvote(featured)} disabled={!isLoggedIn || featured.myUpvote} className={`flex items-center gap-1.5 lg:gap-1 text-xs lg:text-[11px] font-bold transition ${featured.myUpvote ? 'text-red-400' : 'text-slate-400 hover:text-red-400'} disabled:opacity-40`}>
                     <Flame className="w-4 h-4 lg:w-3 lg:h-3" /> {featured.upvotes}
@@ -491,21 +830,21 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
 
             {/* YouTube Videos row */}
             {ytVideos.length > 0 && (
-              <ScrollRow title="YouTube Videos" icon={<Youtube className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-red-500" />}>
+              <ScrollRow title="YouTube Videos" icon={<Youtube className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-red-500" />} onViewAll={() => handleViewAll('youtube')} showViewAll={showViewAllYt}>
                 {ytVideos.map((c) => <VideoCardHorizontal key={c.id} clip={c} />)}
               </ScrollRow>
             )}
 
             {/* Shorts row */}
             {ytShorts.length > 0 && (
-              <ScrollRow title="Shorts" icon={<Smartphone className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-red-400" />}>
+              <ScrollRow title="Shorts" icon={<Smartphone className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-red-400" />} onViewAll={() => handleViewAll('youtube-shorts')} showViewAll={showViewAllShorts}>
                 {ytShorts.map((c) => <VideoCardVertical key={c.id} clip={c} />)}
               </ScrollRow>
             )}
 
             {/* Instagram Reels row */}
             {igReels.length > 0 && (
-              <ScrollRow title="Instagram Reels" icon={<Instagram className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-pink-400" />}>
+              <ScrollRow title="Instagram Reels" icon={<Instagram className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-pink-400" />} onViewAll={() => handleViewAll('instagram')} showViewAll={showViewAllIg}>
                 {igReels.map((c) => <VideoCardVertical key={c.id} clip={c} />)}
               </ScrollRow>
             )}
@@ -513,12 +852,19 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
             {/* Match Cards — vertical feed */}
             {matchCards.length > 0 && (
               <div className="mt-3 lg:mt-1">
-                <div className="flex items-center gap-1.5 mb-2 lg:mb-1 px-1">
-                  <Trophy className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-amber-400" />
-                  <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-widest lg:text-[11px]">Match Cards</span>
+                <div className="flex items-center justify-between mb-2 lg:mb-1 px-1">
+                  <div className="flex items-center gap-1.5">
+                    <Trophy className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-amber-400" />
+                    <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-widest lg:text-[11px]">Match Cards</span>
+                  </div>
+                  {showViewAllMatches && (
+                    <button type="button" onClick={() => handleViewAll('match-card')} className="flex items-center gap-1 text-[11px] font-bold text-red-400 hover:text-red-300 transition uppercase tracking-wider">
+                      View All <ChevronRight className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
                 <div className="space-y-4 lg:space-y-1">
-                  {matchCards.map((clip) => <FeedItem key={clip.id} clip={clip} onUpvote={handleUpvote} onInspect={handleInspectCreator} canVote={isLoggedIn} />)}
+                  {matchCards.slice(0, PREVIEW_LIMIT).map((clip) => <FeedItem key={clip.id} clip={clip} onUpvote={handleUpvote} onInspect={handleInspectCreator} canVote={isLoggedIn} />)}
                 </div>
               </div>
             )}
@@ -530,7 +876,7 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
       </div>
 
       {showUpload && <UploadModal uploadForm={uploadForm} setUploadForm={setUploadForm} uploading={uploading} onUpload={handleUpload} onClose={() => setShowUpload(false)} />}
-      {showAdmin && <AdminModerationModal onClose={() => { setShowAdmin(false); fetchClips(true); fetchFeatured(); }} />}
+
     </div>
   );
 }
@@ -580,10 +926,10 @@ function VideoCardHorizontal({ clip }: { clip: ClipItem }) {
   const platform = clip.platform.toLowerCase();
   return (
     <a href={clip.url} target="_blank" rel="noopener noreferrer"
-      className="shrink-0 w-72 lg:w-56 rounded-xl border border-slate-800 bg-slate-950/70 shadow-md overflow-hidden flex flex-row hover:border-slate-700 transition group/card"
+      className="shrink-0 w-[440px] lg:w-[420px] rounded-xl border border-slate-800 bg-slate-950/70 shadow-md overflow-hidden flex flex-row hover:border-slate-700 transition group/card"
     >
       {/* Thumbnail */}
-      <div className="relative w-32 lg:w-24 h-20 lg:h-[68px] shrink-0 bg-gradient-to-br from-slate-900 via-slate-950 to-red-950/20 overflow-hidden">
+      <div className="relative w-56 lg:w-56 h-[160px] lg:h-[150px] shrink-0 bg-gradient-to-br from-slate-900 via-slate-950 to-red-950/20 overflow-hidden">
         {clip.thumbnailUrl ? (
           <img src={clip.thumbnailUrl!} alt={clip.title} className="w-full h-full object-cover transition group-hover/card:scale-105" loading="lazy" />
         ) : (
@@ -604,12 +950,12 @@ function VideoCardHorizontal({ clip }: { clip: ClipItem }) {
         )}
       </div>
       {/* Info */}
-      <div className="flex-1 min-w-0 p-2 lg:p-1.5 flex flex-col justify-center">
-        <h3 className="text-xs lg:text-[11px] font-bold text-white leading-tight line-clamp-2">{clip.title}</h3>
-        <div className="flex items-center gap-1 mt-1 lg:mt-0.5">
-          <span className="text-[10px] font-mono text-slate-500">{clip.player.name}</span>
-          <span className="text-[10px] text-slate-700">·</span>
-          <span className="text-[10px] font-mono text-slate-600">{timeAgo(clip.createdAt)}</span>
+      <div className="flex-1 min-w-0 p-2.5 flex flex-col justify-center">
+        <h3 className="text-sm font-bold text-white leading-tight line-clamp-2">{clip.title}</h3>
+        <div className="flex items-center gap-1 mt-1">
+          <span className="text-[11px] font-mono text-slate-500">{clip.player.name}</span>
+          <span className="text-[11px] text-slate-700">·</span>
+          <span className="text-[11px] font-mono text-slate-600">{timeAgo(clip.createdAt)}</span>
         </div>
       </div>
     </a>
@@ -623,7 +969,7 @@ function VideoCardVertical({ clip }: { clip: ClipItem }) {
   const isShort = platform.includes('shorts');
   return (
     <a href={clip.url} target="_blank" rel="noopener noreferrer"
-      className="shrink-0 w-36 lg:w-28 rounded-xl border border-slate-800 bg-slate-950/70 shadow-md overflow-hidden hover:border-slate-700 transition group/card"
+      className="shrink-0 w-52 lg:w-48 rounded-xl border border-slate-800 bg-slate-950/70 shadow-md overflow-hidden hover:border-slate-700 transition group/card"
     >
       {/* Thumbnail */}
       <div className="relative aspect-[9/16] bg-gradient-to-br from-slate-900 via-slate-950 to-pink-950/20 overflow-hidden">
@@ -647,9 +993,9 @@ function VideoCardVertical({ clip }: { clip: ClipItem }) {
         )}
       </div>
       {/* Info */}
-      <div className="p-2 lg:p-1">
-        <h3 className="text-[11px] font-bold text-white leading-tight line-clamp-2">{clip.title}</h3>
-        <div className="text-[10px] font-mono text-slate-500 mt-0.5">{timeAgo(clip.createdAt)}</div>
+      <div className="p-2.5">
+        <h3 className="text-xs font-bold text-white leading-tight line-clamp-2">{clip.title}</h3>
+        <div className="text-[11px] font-mono text-slate-500 mt-0.5">{timeAgo(clip.createdAt)}</div>
       </div>
     </a>
   );

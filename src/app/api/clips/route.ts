@@ -88,7 +88,7 @@ function mapPlatformFilter(frontendPlatform: string): string[] {
   }
 }
 
-// GET /api/clips?limit=20&offset=0&player=USERTAG&type=match-card|user-clip&platform=youtube|youtube-shorts|instagram
+// GET /api/clips?limit=20&offset=0&player=USERTAG&type=match-card|user-clip&platform=youtube|youtube-shorts|instagram&search=query&sort=newest|oldest|upvotes
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const limit = Math.min(Math.max(Number(sp.get('limit')) || 30, 1), 100);
@@ -97,6 +97,8 @@ export async function GET(req: NextRequest) {
   const cardType = sp.get('type') || undefined;
   const platformFilter = sp.get('platform') || undefined;
   const showPending = sp.get('pending') === 'true';
+  const search = sp.get('search') || undefined;
+  const sort = sp.get('sort') || 'newest';
 
   const session = await getSession();
 
@@ -124,11 +126,23 @@ export async function GET(req: NextRequest) {
       where.platform = { in: platforms };
     }
   }
+  if (search && search.trim().length > 0) {
+    const q = search.trim();
+    where.OR = [
+      { title: { contains: q } },
+      { player: { name: { contains: q } } },
+    ];
+  }
+
+  // Sorting
+  let orderBy: Record<string, string>[] = [{ createdAt: 'desc' }];
+  if (sort === 'oldest') orderBy = [{ createdAt: 'asc' }];
+  else if (sort === 'upvotes') orderBy = [{ upvotes: 'desc' }, { createdAt: 'desc' }];
 
   const [clips, total] = await Promise.all([
     db.clip.findMany({
       where,
-      orderBy: [{ createdAt: 'desc' }],
+      orderBy,
       skip: offset,
       take: limit,
       include: {

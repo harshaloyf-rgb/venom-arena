@@ -1,14 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { Shield, Users, Castle, BookOpen, Search, UserPlus, Settings, LayoutDashboard } from 'lucide-react';
+import { Shield, Users, Castle, BookOpen, Search, UserPlus, Settings, LayoutDashboard, ShieldCheck } from 'lucide-react';
 import { PlayersTab } from '@/components/panels/admin/players-tab';
+import { ClipsTab } from '@/components/panels/admin/clips-tab';
 import GuideTab from '@/components/panels/admin/guide-tab';
 import ClansTab from '@/components/panels/admin/clans-tab';
 import type { ToastFn } from './_panel-primitives';
 
 const tabs = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'clips', label: 'Clips', icon: ShieldCheck },
   { id: 'players', label: 'Players', icon: Users },
   { id: 'clans', label: 'Clans', icon: Castle },
   { id: 'guide', label: 'Guide', icon: BookOpen },
@@ -18,6 +20,12 @@ type TabId = (typeof tabs)[number]['id'];
 
 function OverviewContent({ onToast, onTabChange }: { onToast?: ToastFn; onTabChange: (tab: TabId) => void }) {
   const quickActions = [
+    {
+      icon: ShieldCheck,
+      title: 'Moderate Clips',
+      description: 'Review pending user-submitted highlights, approve or reject.',
+      onClick: () => onTabChange('clips'),
+    },
     {
       icon: UserPlus,
       title: 'Promote Player',
@@ -88,6 +96,17 @@ function OverviewContent({ onToast, onTabChange }: { onToast?: ToastFn; onTabCha
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
           <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-500/10 text-red-400">
+              <ShieldCheck className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">Content Moderation</p>
+              <p className="text-sm font-medium text-slate-300">Review & approve clips</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+          <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
               <Users className="h-4 w-4" />
             </div>
@@ -105,17 +124,6 @@ function OverviewContent({ onToast, onTabChange }: { onToast?: ToastFn; onTabCha
             <div>
               <p className="text-xs text-slate-500">Clan Management</p>
               <p className="text-sm font-medium text-slate-300">Disband, rename, edit</p>
-            </div>
-          </div>
-        </div>
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400">
-              <BookOpen className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">Documentation</p>
-              <p className="text-sm font-medium text-slate-300">Guides & references</p>
             </div>
           </div>
         </div>
@@ -153,7 +161,8 @@ export function AdminPanel({ onToast }: { onToast?: ToastFn }) {
                 isActive
                   ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
                   : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-              }`}
+              }`
+            }
             >
               <Icon className="h-4 w-4" />
               {tab.label}
@@ -165,6 +174,7 @@ export function AdminPanel({ onToast }: { onToast?: ToastFn }) {
       {/* Tab content */}
       <div className="mt-2">
         {activeTab === 'overview' && <OverviewContent onToast={onToast} onTabChange={setActiveTab} />}
+        {activeTab === 'clips' && <ClipsTab onToast={onToast} />}
         {activeTab === 'players' && <PlayersTab onToast={onToast} />}
         {activeTab === 'clans' && <ClansTab onToast={onToast} />}
         {activeTab === 'guide' && <GuideTab />}
