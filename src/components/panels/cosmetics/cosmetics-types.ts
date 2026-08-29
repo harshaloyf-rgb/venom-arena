@@ -20,6 +20,16 @@ export const PALETTE_COLORS = [
   { name: 'Pure White', hex: '#ffffff' },
   { name: 'Slate Gray', hex: '#64748b' },
   { name: 'Pitch Black', hex: '#090d16' },
+  { name: 'Coral', hex: '#ff7f50' },
+  { name: 'Bronze', hex: '#cd853f' },
+  { name: 'Olive', hex: '#556b2f' },
+  { name: 'Silver', hex: '#c0c0c0' },
+  { name: 'Deep Magenta', hex: '#ff1493' },
+  { name: 'Midnight Blue', hex: '#191970' },
+  { name: 'Burgundy', hex: '#800020' },
+  { name: 'Sea Green', hex: '#2e8b57' },
+  { name: 'Hot Pink', hex: '#ff69b4' },
+  { name: 'Copper', hex: '#b87333' },
 ];
 
 // ---------------------------------------------------------------------------

@@ -117,13 +117,6 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
     return 'smooth';
   });
   const [taperStyle, setTaperStyle] = useState<TaperStyle>('natural');
-  const [glowEnabled, setGlowEnabled] = useState<boolean>(() => {
-    const stored = readCustomSkinStateSafe();
-    if (stored?.customSkinSegments?.length) {
-      return stored.customSkinSegments.some((s) => s.glow);
-    }
-    return true;
-  });
 
   if (loading) return <PanelSkeleton count={6} height="h-44" />;
   if (!player) return <NotSignedIn />;
@@ -367,7 +360,6 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
     setColorSequence(sequence);
     setBodyStyle(categories[Math.floor(Math.random() * categories.length)]);
     setTaperStyle(tapers[Math.floor(Math.random() * tapers.length)]);
-    setGlowEnabled(Math.random() > 0.4);
     notify('Mutated new genetic chain!', 'success', onToast);
   }
 
@@ -381,7 +373,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
       colorSequence,
       bodyStyle,
       taperStyle,
-      glowEnabled,
+      false,
     );
     const next: CustomSkinState = {
       useCustomSkin: true,
@@ -623,7 +615,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
                 colors={colorSequence}
                 bodyStyle={bodyStyle}
                 taperStyle={taperStyle}
-                glow={glowEnabled}
+                glow={false}
                 width={480}
                 height={100}
                 segments={24}
@@ -643,29 +635,15 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
               </h3>
               <p className="text-[11px] text-slate-400 mt-1.5 lg:mt-0.5 lg:leading-tight">
                 Your stripe nodes loop continuously as your snake grows in the
-                arena. You can tweak color order, skin geometries, tapering
-                physics, and aurora bioluminescence before deploying!
+                arena. You can tweak color order, skin geometries, and tapering
+                physics before deploying!
               </p>
 
-              <div className="grid grid-cols-2 gap-2.5 lg:gap-1 mt-3 lg:mt-0.5 text-[11px] font-mono">
-                <div className="bg-slate-900 px-2.5 lg:px-1.5 py-1.5 lg:py-1 rounded-lg border border-slate-800">
-                  <span className="text-slate-500">NODES:</span>{' '}
-                  <span className="text-purple-400 font-black">
-                    {colorSequence.length} nodes
-                  </span>
-                </div>
-                <div className="bg-slate-900 px-2.5 lg:px-1.5 py-1.5 lg:py-1 rounded-lg border border-slate-800">
-                  <span className="text-slate-500">GLOW:</span>{' '}
-                  <span
-                    className={
-                      glowEnabled
-                        ? 'text-emerald-400 font-black'
-                        : 'text-slate-500'
-                    }
-                  >
-                    {glowEnabled ? 'ENABLED' : 'DISABLED'}
-                  </span>
-                </div>
+              <div className="bg-slate-900 px-2.5 lg:px-1.5 py-1.5 lg:py-1 rounded-lg border border-slate-800 mt-3 lg:mt-0.5 text-[11px] font-mono">
+                <span className="text-slate-500">NODES:</span>{' '}
+                <span className="text-purple-400 font-black">
+                  {colorSequence.length} nodes
+                </span>
               </div>
 
               <button
@@ -714,7 +692,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
               </div>
 
               {/* Palette */}
-              <div className="grid grid-cols-6 sm:grid-cols-9 gap-2 lg:gap-0.5">
+              <div className="grid grid-cols-7 sm:grid-cols-9 lg:grid-cols-14 gap-2 lg:gap-0.5">
                 {PALETTE_COLORS.map((col) => (
                   <button
                     key={col.hex}
@@ -835,81 +813,35 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
               </div>
             </div>
 
-            {/* STEPS 3 & 4 — Taper + Glow */}
-            <div className="bg-slate-950 border border-slate-800 p-5 lg:p-1 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-0.5">
-              {/* Taper */}
-              <div className="flex flex-col justify-between gap-3 lg:gap-0.5">
-                <div>
-                  <span className="text-[11px] text-slate-500 font-mono tracking-wider block uppercase font-bold lg:leading-tight">
-                    STEP 3
-                  </span>
-                  <h3 className="text-sm lg:text-[11px] font-bold text-white lg:leading-tight">
-                    Body Taper Physics
-                  </h3>
-                  <p className="text-[11px] text-slate-400 leading-relaxed lg:leading-tight mt-0.5 lg:mt-0">
-                    Configure snake tail scaling density styles.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 lg:gap-0.5">
-                  {TAPER_OPTIONS.map((tap) => (
-                    <button
-                      key={tap.id}
-                      type="button"
-                      onClick={() => setTaperStyle(tap.id)}
-                      className={`py-2 px-2.5 lg:py-1 lg:px-1.5 rounded-lg border text-xs lg:text-[11px] font-semibold font-sans text-center transition cursor-pointer ${
-                        taperStyle === tap.id
-                          ? 'bg-indigo-600/15 border-indigo-500 text-indigo-300'
-                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      {tap.label}
-                    </button>
-                  ))}
-                </div>
+            {/* STEP 3 — Taper */}
+            <div className="bg-slate-950 border border-slate-800 p-5 lg:p-1.5 rounded-2xl flex flex-col gap-3 lg:gap-0.5">
+              <div>
+                <span className="text-[11px] text-slate-500 font-mono tracking-wider block uppercase font-bold lg:leading-tight">
+                  STEP 3
+                </span>
+                <h3 className="text-sm lg:text-[11px] font-bold text-white lg:leading-tight">
+                  Body Taper Physics
+                </h3>
+                <p className="text-[11px] text-slate-400 leading-relaxed lg:leading-tight mt-0.5 lg:mt-0">
+                  Configure snake tail scaling density styles.
+                </p>
               </div>
 
-              {/* Glow */}
-              <div className="flex flex-col justify-between gap-3 lg:gap-1 border-t md:border-t-0 md:border-l border-slate-900 pt-4 lg:pt-0 md:pt-0 md:pl-6 lg:pl-1.5">
-                <div>
-                  <span className="text-[11px] text-slate-500 font-mono tracking-wider block uppercase font-bold lg:leading-tight">
-                    STEP 4
-                  </span>
-                  <h3 className="text-sm lg:text-[11px] font-bold text-white lg:leading-tight">
-                    Bioluminescent Aura
-                  </h3>
-                  <p className="text-[11px] text-slate-400 leading-relaxed lg:leading-tight mt-0.5 lg:mt-0">
-                    Toggle active radioactive body node shading glow in battle
-                    arenas.
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between p-3 lg:p-1 bg-slate-900 rounded-xl border border-slate-800">
-                  <div className="text-left">
-                    <span className="text-xs lg:text-[11px] font-bold text-white block lg:leading-tight">
-                      Neon Glow
-                    </span>
-                    <span className="text-[11px] text-slate-400 block lg:leading-none">
-                      Emit high-vis plasma light
-                    </span>
-                  </div>
-
+              <div className="grid grid-cols-2 gap-2 lg:gap-0.5">
+                {TAPER_OPTIONS.map((tap) => (
                   <button
+                    key={tap.id}
                     type="button"
-                    onClick={() => setGlowEnabled(!glowEnabled)}
-                    aria-pressed={glowEnabled}
-                    aria-label="Toggle neon glow"
-                    className={`w-11 h-6 rounded-full transition-all relative flex items-center p-1 cursor-pointer ${
-                      glowEnabled ? 'bg-indigo-500' : 'bg-slate-800'
+                    onClick={() => setTaperStyle(tap.id)}
+                    className={`py-2 px-2.5 lg:py-1 lg:px-1.5 rounded-lg border text-xs lg:text-[11px] font-semibold font-sans text-center transition cursor-pointer ${
+                      taperStyle === tap.id
+                        ? 'bg-indigo-600/15 border-indigo-500 text-indigo-300'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    <span
-                      className={`w-4 h-4 bg-white rounded-full shadow transition-all ${
-                        glowEnabled ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
+                    {tap.label}
                   </button>
-                </div>
+                ))}
               </div>
             </div>
           </div>
