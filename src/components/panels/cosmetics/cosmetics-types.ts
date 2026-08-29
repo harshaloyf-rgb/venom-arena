@@ -1,24 +1,24 @@
 // ---------------------------------------------------------------------------
-// Palette (18 swatches) — exact from AUDIT-C A.1
+// Palette (18 swatches) — maximally distinct colors across the spectrum
 // ---------------------------------------------------------------------------
 export const PALETTE_COLORS = [
   { name: 'Red Alert', hex: '#ef4444' },
   { name: 'Solar Orange', hex: '#f97316' },
   { name: 'Midas Gold', hex: '#f59e0b' },
-  { name: 'Lime Venom', hex: '#84cc16' },
+  { name: 'Lemon Yellow', hex: '#facc15' },
   { name: 'Acid Green', hex: '#22c55e' },
-  { name: 'Emerald', hex: '#10b981' },
-  { name: 'Teal Void', hex: '#0d9488' },
+  { name: 'Bright Turquoise', hex: '#14b8a6' },
   { name: 'Cyber Cyan', hex: '#06b6d4' },
-  { name: 'Sky Blue', hex: '#0ea5e9' },
+  { name: 'Light Sky Blue', hex: '#38bdf8' },
   { name: 'Sapphire', hex: '#3b82f6' },
   { name: 'Royal Indigo', hex: '#6366f1' },
+  { name: 'Lavender Violet', hex: '#a78bfa' },
   { name: 'Shadow Purple', hex: '#a855f7' },
+  { name: 'Fuchsia', hex: '#e879f9' },
   { name: 'Orchid Pink', hex: '#ec4899' },
-  { name: 'Crimson', hex: '#dc2626' },
+  { name: 'Rose', hex: '#fb7185' },
   { name: 'Pure White', hex: '#ffffff' },
   { name: 'Slate Gray', hex: '#64748b' },
-  { name: 'Deep Carbon', hex: '#1e293b' },
   { name: 'Pitch Black', hex: '#090d16' },
 ];
 
