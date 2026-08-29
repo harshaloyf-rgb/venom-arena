@@ -1020,16 +1020,87 @@ export const COSMETIC_ELITE_REWARDS: SeasonReward[] = [
 export const ELITE_PASS_COST = 100_000;
 
 // ----------------------------------------------------------------------------
-// Season Pass — Real cosmetic rewards tied to player level
+// Season Pass — XP-gated progression with mixed cosmetic + chip rewards
 // ----------------------------------------------------------------------------
 
-/** What player level is required to unlock each pass tier (1-indexed) */
-export const PASS_TIER_LEVEL: number[] = [
-  2,  3,  4,  5,  6,  7,  8,  10, 12, 14,
-  15, 17, 19, 21, 23, 25, 28, 31, 34, 38,
+/** Maximum pass XP earnable per day (prevents binge completion) */
+export const PASS_DAILY_XP_CAP = 1_500;
+
+/** Fraction of match XP that converts to pass XP */
+export const PASS_XP_MULTIPLIER = 0.5;
+
+/** Cumulative pass XP required to unlock each tier (1-indexed, tier 1 = 0 = auto-unlocked) */
+export const PASS_TIER_XP: number[] = [
+  0,      // Tier 1:  auto-unlocked
+  500,    // Tier 2
+  1_200,  // Tier 3
+  2_000,  // Tier 4
+  3_000,  // Tier 5
+  4_200,  // Tier 6
+  5_500,  // Tier 7
+  7_000,  // Tier 8
+  8_800,  // Tier 9
+  10_800, // Tier 10
+  13_200, // Tier 11
+  15_800, // Tier 12
+  18_800, // Tier 13
+  22_200, // Tier 14
+  26_000, // Tier 15
+  30_500, // Tier 16
+  35_500, // Tier 17
+  41_000, // Tier 18
+  47_500, // Tier 19
+  55_000, // Tier 20
 ];
 
-export const PASS_SEASON_NUMBER = 1;
+/** Chip rewards for the Free track (0 = cosmetic-only tier). 1-indexed. */
+export const PASS_FREE_CHIP_REWARDS: number[] = [
+  0,     // T1
+  0,     // T2
+  200,   // T3
+  0,     // T4
+  0,     // T5
+  400,   // T6
+  0,     // T7
+  0,     // T8
+  0,     // T9
+  800,   // T10
+  0,     // T11
+  1_000, // T12
+  0,     // T13
+  0,     // T14
+  2_000, // T15
+  0,     // T16
+  0,     // T17
+  3_000, // T18
+  0,     // T19
+  3_000, // T20
+];
+
+/** Chip rewards for the Elite track (0 = cosmetic-only tier). 1-indexed. */
+export const PASS_ELITE_CHIP_REWARDS: number[] = [
+  0,      // T1
+  0,      // T2
+  500,    // T3
+  0,      // T4
+  0,      // T5
+  1_000,  // T6
+  0,      // T7
+  0,      // T8
+  0,      // T9
+  2_000,  // T10
+  0,      // T11
+  3_000,  // T12
+  0,      // T13
+  0,      // T14
+  5_000,  // T15
+  0,      // T16
+  0,      // T17
+  7_000,  // T18
+  0,      // T19
+  10_000, // T20
+];
+
 export const PASS_SEASON_NAME = 'Genesis';
 
 /** Real equippable cosmetics for the Free track (20 tiers). */

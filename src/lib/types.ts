@@ -38,6 +38,9 @@ export interface PlayerProfile {
   hasElitePass: boolean;
   passClaimedFree: number[];
   passClaimedElite: number[];
+  passXp: number;
+  passXpToday: number;
+  passXpDate: string | null;
 
   clanTag: string | null;
   clanRank: string | null;
@@ -82,6 +85,8 @@ export interface MatchResult {
   score: number; // body-length score at end
   deaths: number; // 0 or 1
   xpGained: number; // XP: floor((score*5 + kills*50) * rewardMultiplier) — only on extract
+  passXpGained: number; // Pass XP earned this match
+  newPassTier: number; // Current pass tier after this match
   newLevel: number;
   newBankedChips: number;
   durationSeconds: number;

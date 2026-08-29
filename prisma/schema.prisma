@@ -50,6 +50,9 @@ model Player {
   hasElitePass     Boolean  @default(false)
   passClaimedFree  String   @default("[]")   // JSON array of claimed tier numbers
   passClaimedElite String   @default("[]")   // JSON array of claimed elite tier numbers
+  passXp           Int      @default(0)      // total pass XP (independent of player XP)
+  passXpToday      Int      @default(0)      // pass XP earned today (for daily cap)
+  passXpDate       String?                  // ISO date of last passXpToday reset (YYYY-MM-DD)
 
   // Cosmetics — JSON-encoded arrays/objects (default set in code on register)
   unlockedSkins   String   @default("[]")

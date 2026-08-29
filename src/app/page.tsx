@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '@/components/providers/auth-provider';
-import { PASS_TIER_LEVEL } from '@/lib/game-config';
+import { PASS_TIER_XP } from '@/lib/game-config';
 import AuthGate from '@/components/auth/auth-gate';
 import SnakeGame from '@/components/game/SnakeGame';
 import OnlineSnakeGame from '@/components/game/OnlineSnakeGame';
@@ -512,7 +512,7 @@ export default function Home() {
                     <BentoGate onClick={() => setActiveTab('championships')} icon={Crown} accent="rose" badge="Tournament" title="Championships" desc="Enter elite championship events. Compete against top-ranked operators for massive chip prizes and exclusive titles." footLeft="SEASONAL EVENTS" footRight="Compete" />
                     <BentoGate onClick={() => setActiveTab('halloffame')} icon={Award} accent="yellow" badge="Legends" title="Hall of Fame" desc="View legendary players and record-breaking performances. The greatest venom operators of all time." footLeft="LEGENDARY RANKINGS" footRight="View Legends" />
                     <BentoGate onClick={() => setActiveTab('clans')} icon={Shield} accent="violet" badge="Team Ops" title="Syndicates" desc="Create or join a syndicate. Team up with allies, pool resources, and dominate arenas together." footLeft="CLAN WARFARE" footRight="Assemble" />
-                    <BentoGate onClick={() => setActiveTab('seasonpass')} icon={Sparkles} accent="pink" badge="Level Rewards" title="Season Pass" desc="Level up by playing matches. Unlock 20 free cosmetics + 20 exclusive elite rewards. Claimed items appear in your Shop." footLeft={player ? (() => { const unlocked = PASS_TIER_LEVEL.filter(l => player.level >= l).length; const unclaimed = PASS_TIER_LEVEL.filter((l, i) => player.level >= l && !(player.passClaimedFree ?? []).includes(i + 1)).length; return unclaimed > 0 ? `${unlocked}/20 Unlocked · ${unclaimed} to claim!` : `${unlocked}/20 Unlocked`; })() : 'FREE REWARDS'}
+                    <BentoGate onClick={() => setActiveTab('seasonpass')} icon={Sparkles} accent="pink" badge="Pass XP" title="Season Pass" desc="Earn Pass XP from matches (50% of match XP, daily cap). Unlock cosmetics and chip rewards across 20 tiers." footLeft={player ? (() => { const tiers = PASS_TIER_XP.filter(x => (player.passXp ?? 0) >= x).length; const unclaimed = PASS_TIER_XP.filter((x, i) => (player.passXp ?? 0) >= x && !(player.passClaimedFree ?? []).includes(i + 1)).length; return unclaimed > 0 ? `Tier ${tiers}/20 · ${unclaimed} to claim!` : `Tier ${tiers}/20`; })() : 'EARN XP'}
                     footRight="View Pass" />
                     <BentoGate onClick={() => setActiveTab('clips')} icon={Film} accent="red" badge="Replays" title="Highlights" desc="Watch and share your greatest moments. Review match replays, clutch extractions, and legendary eliminations." footLeft="MATCH HIGHLIGHTS" footRight="Watch" />
                     <div className="relative">

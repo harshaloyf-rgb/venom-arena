@@ -392,6 +392,25 @@ function EndOverlay({
                 </div>
               )}
 
+              {/* Pass XP + Tier info */}
+              {result && result.passXpGained > 0 && (
+                <div className="mt-2 rounded-lg border border-pink-500/20 bg-pink-500/5 p-3 text-xs font-mono">
+                  <div className="flex items-center justify-between">
+                    <span className="text-pink-400">Pass XP Earned:</span>
+                    <span className="font-semibold text-pink-300">+{result.passXpGained.toLocaleString()} XP</span>
+                  </div>
+                  {result.newPassTier > 0 && (
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="text-pink-400">Pass Tier:</span>
+                      <span className="font-semibold text-white">
+                        {result.newPassTier}/20
+                        {leveledUp ? '' : ''}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Final banked chips + level (if server reported) */}
               {result && (
                 <div className="mt-3 rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs font-mono">

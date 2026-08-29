@@ -5,10 +5,12 @@ import { useAuth } from '@/components/providers/auth-provider';
 import {
   PASS_FREE_COSMETICS,
   PASS_ELITE_COSMETICS,
-  PASS_TIER_LEVEL,
+  PASS_TIER_XP,
+  PASS_FREE_CHIP_REWARDS,
+  PASS_ELITE_CHIP_REWARDS,
   PASS_SEASON_NAME,
+  PASS_DAILY_XP_CAP,
   ELITE_PASS_COST,
-  xpForLevel,
 } from '@/lib/game-config';
 import {
   GlowBlob,
@@ -39,49 +41,52 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
   const [claimingAll, setClaimingAll] = useState(false);
 
   const hasElite = player?.hasElitePass ?? false;
-  const currentLevel = player?.level ?? 1;
-  const currentXp = player?.xp ?? 0;
+  const passXp = player?.passXp ?? 0;
+  const passXpToday = player?.passXpToday ?? 0;
   const bankedChips = player?.bankedChips ?? 0;
 
-  // Real XP progress toward next level
-  const thisLevelXp = xpForLevel(currentLevel);
-  const nextLevelXp = xpForLevel(currentLevel + 1);
-  const xpInThisLevel = currentXp - thisLevelXp;
-  const xpNeeded = nextLevelXp - thisLevelXp;
-  const xpPct = xpNeeded > 0 ? Math.min(100, Math.round((xpInThisLevel / xpNeeded) * 100)) : 100;
-
-  // How many tiers are unlocked based on real player level
-  const unlockedTiers = useMemo(() => {
-    let count = 0;
-    for (let i = 0; i < 20; i++) {
-      if (currentLevel >= PASS_TIER_LEVEL[i]) count = i + 1;
-      else break;
+  // Current pass tier from passXp
+  const currentTier = useMemo(() => {
+    for (let i = PASS_TIER_XP.length - 1; i >= 0; i--) {
+      if (passXp >= PASS_TIER_XP[i]) return i + 1;
     }
-    return count;
-  }, [currentLevel]);
+    return 0;
+  }, [passXp]);
+
+  // XP progress toward next tier
+  const currentTierXp = currentTier > 0 ? PASS_TIER_XP[currentTier - 1] : 0;
+  const nextTierXp = currentTier < 20 ? PASS_TIER_XP[currentTier] : PASS_TIER_XP[19];
+  const xpInThisTier = passXp - currentTierXp;
+  const xpNeeded = nextTierXp - currentTierXp;
+  const xpPct = currentTier >= 20 ? 100 : xpNeeded > 0 ? Math.min(100, Math.round((xpInThisTier / xpNeeded) * 100)) : 0;
+
+  // Daily cap remaining
+  const dailyRemaining = Math.max(0, PASS_DAILY_XP_CAP - passXpToday);
+  const dailyPct = Math.min(100, Math.round((passXpToday / PASS_DAILY_XP_CAP) * 100));
+  const isCapped = dailyRemaining <= 0;
 
   const claimedFreeSet = useMemo(() => new Set(player?.passClaimedFree ?? []), [player?.passClaimedFree]);
   const claimedEliteSet = useMemo(() => new Set(player?.passClaimedElite ?? []), [player?.passClaimedElite]);
 
-  // Count unclaimed rewards
+  // Count unclaimed rewards (cosmetic OR chip)
   const unclaimedFree = useMemo(() => {
     let c = 0;
     for (let i = 0; i < 20; i++) {
       const tier = i + 1;
-      if (currentLevel >= PASS_TIER_LEVEL[i] && !claimedFreeSet.has(tier)) c++;
+      if (passXp >= PASS_TIER_XP[i] && !claimedFreeSet.has(tier) && (PASS_FREE_COSMETICS[i] || PASS_FREE_CHIP_REWARDS[i] > 0)) c++;
     }
     return c;
-  }, [currentLevel, claimedFreeSet]);
+  }, [passXp, claimedFreeSet]);
 
   const unclaimedElite = useMemo(() => {
     if (!hasElite) return 0;
     let c = 0;
     for (let i = 0; i < 20; i++) {
       const tier = i + 1;
-      if (currentLevel >= PASS_TIER_LEVEL[i] && !claimedEliteSet.has(tier)) c++;
+      if (passXp >= PASS_TIER_XP[i] && !claimedEliteSet.has(tier) && (PASS_ELITE_COSMETICS[i] || PASS_ELITE_CHIP_REWARDS[i] > 0)) c++;
     }
     return c;
-  }, [currentLevel, hasElite, claimedEliteSet]);
+  }, [passXp, hasElite, claimedEliteSet]);
 
   if (!player) return <NotSignedIn />;
 
@@ -112,14 +117,17 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tier, track }),
       });
-      const data = await res.json().catch(() => ({})) as { error?: string; cosmetic?: { id: string; name: string; type: string; emoji?: string } };
+      const data = await res.json().catch(() => ({})) as { error?: string; cosmetic?: { id: string; name: string; type: string; emoji?: string }; chipReward?: number };
       if (!res.ok) {
         notify(data?.error || 'Failed to claim.', 'error', onToast);
         return;
       }
       const cosmetic = data.cosmetic;
-      const label = `${cosmetic?.emoji ?? ''} ${cosmetic?.name ?? 'Reward'}`;
-      notify(`Claimed: ${label} — now in your Shop!`, 'success', onToast);
+      const chips = data.chipReward ?? 0;
+      const parts: string[] = [];
+      if (cosmetic) parts.push(`${cosmetic.emoji ?? ''} ${cosmetic.name}`);
+      if (chips > 0) parts.push(`${chips.toLocaleString()}c`);
+      notify(`Claimed: ${parts.join(' + ')} — ${chips > 0 ? 'chips banked!' : 'now in your Shop!'}`, 'success', onToast);
       void refresh();
     } catch {
       notify('Network error. Try again.', 'error', onToast);
@@ -137,13 +145,15 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ track }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json().catch(() => ({})) as { error?: string; claimed?: number[]; chipsClaimed?: number };
       if (!res.ok) {
         notify(data?.error || 'Failed to claim.', 'error', onToast);
         return;
       }
       const count = Array.isArray(data.claimed) ? data.claimed.length : 0;
-      notify(`Claimed ${count} reward${count !== 1 ? 's' : ''} — check Shop & Lab!`, 'success', onToast);
+      const chips = data.chipsClaimed ?? 0;
+      const chipNote = chips > 0 ? ` (+${chips.toLocaleString()}c)` : '';
+      notify(`Claimed ${count} reward${count !== 1 ? 's' : ''}${chipNote} — check Shop & Lab!`, 'success', onToast);
       void refresh();
     } catch {
       notify('Network error. Try again.', 'error', onToast);
@@ -151,12 +161,6 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
       setClaimingAll(false);
     }
   }
-
-  // Current tier = highest unlocked tier
-  const currentTier = unlockedTiers;
-
-  // Find what level the next tier needs
-  const nextTierLevel = currentTier < 20 ? PASS_TIER_LEVEL[currentTier] : null;
 
   return (
     <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-5 sm:p-6 shadow-md space-y-6 relative overflow-hidden lg:p-1.5 lg:space-y-0.5">
@@ -173,10 +177,10 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
               Season {PASS_SEASON_NAME}
             </span>
             <span className="text-[11px] text-emerald-400 font-mono font-bold flex items-center gap-1">
-              <Trophy className="w-3 h-3 lg:w-3 lg:h-3" /> {unlockedTiers}/20 Tiers Unlocked
+              <Trophy className="w-3 h-3 lg:w-3 lg:h-3" /> {currentTier}/20 Tiers
             </span>
             <span className="text-[11px] text-slate-400 font-mono lg:text-[11px]">
-              Genesis Season — No Expiry
+              {isCapped ? 'Daily Cap Reached' : `${dailyRemaining.toLocaleString()} XP left today`}
             </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2 lg:text-[11px] lg:leading-tight">
@@ -184,8 +188,7 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
             Cyber Pass
           </h2>
           <p className="text-xs text-slate-300 max-w-xl leading-relaxed lg:text-[11px] lg:leading-tight">
-            Play matches to earn XP and level up. Each level milestone unlocks a real cosmetic reward —
-            skins, trails, death effects, flags, and banners. Claimed rewards appear in your Shop &amp; Lab.
+            Play matches to earn Pass XP. Unlock cosmetics and chip rewards at each tier. {isCapped ? 'Daily cap reached — come back tomorrow!' : `Earn 50% of match XP as Pass XP (max ${PASS_DAILY_XP_CAP.toLocaleString()}/day).`}
           </p>
         </div>
 
@@ -218,25 +221,34 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
         </div>
       </section>
 
-      {/* REAL XP BAR */}
+      {/* PASS XP BAR */}
       <section className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-3 lg:p-0.5 lg:space-y-0 lg:rounded-lg">
         <div className="flex justify-between items-center text-xs lg:text-[11px] lg:leading-tight">
           <span className="text-white font-bold flex items-center gap-1.5">
-            <Zap className="w-4 h-4 text-emerald-400 lg:w-3 lg:h-3" /> Player Level {currentLevel}
+            <Zap className="w-4 h-4 text-pink-400 lg:w-3 lg:h-3" /> Tier {currentTier}{currentTier < 20 ? ` → ${currentTier + 1}` : ''}
           </span>
           <span className="text-slate-400 font-mono lg:text-[11px]">
-            {xpInThisLevel.toLocaleString()} / {xpNeeded.toLocaleString()} XP
+            {currentTier >= 20 ? 'MAX' : `${passXp.toLocaleString()} / ${nextTierXp.toLocaleString()} XP`}
           </span>
         </div>
         <div className="w-full h-3 bg-slate-900 rounded-full border border-slate-800 overflow-hidden lg:h-1.5">
           <div
-            className="h-full bg-gradient-to-r from-emerald-500 via-cyan-500 to-purple-500 rounded-full transition-all duration-500"
+            className="h-full bg-gradient-to-r from-pink-500 via-purple-500 to-amber-500 rounded-full transition-all duration-500"
             style={{ width: `${xpPct}%` }}
           />
         </div>
         <div className="flex justify-between text-[11px] font-mono text-slate-500 lg:text-[11px] lg:leading-tight">
-          <span>Tier {currentTier}/20 unlocked &middot; {nextTierLevel ? `Next tier at Level ${nextTierLevel}` : 'All tiers unlocked!'}</span>
-          <span>Banked: {bankedChips.toLocaleString()}c</span>
+          <span>{currentTier >= 20 ? 'All tiers unlocked!' : `${PASS_TIER_XP[currentTier].toLocaleString()} XP to next tier`}</span>
+          <span className={isCapped ? 'text-red-400' : 'text-slate-500'}>
+            Today: {passXpToday.toLocaleString()}/{PASS_DAILY_XP_CAP.toLocaleString()}{isCapped ? ' (capped)' : ''}
+          </span>
+        </div>
+        {/* Daily cap mini-bar */}
+        <div className="w-full h-1 bg-slate-900 rounded-full overflow-hidden lg:h-0.5">
+          <div
+            className={`h-full rounded-full transition-all duration-300 ${isCapped ? 'bg-red-500' : 'bg-cyan-500'}`}
+            style={{ width: `${dailyPct}%` }}
+          />
         </div>
       </section>
 
@@ -281,11 +293,14 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
           <Trophy className="w-4 h-4 text-amber-400 lg:w-3 lg:h-3" /> Reward Track (20 Tiers)
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto va-scroll pr-1 lg:grid-cols-[96px_1fr_1fr] lg:gap-x-1 lg:gap-y-px lg:max-h-none lg:overflow-visible lg:pr-0 lg:leading-tight">
-          {PASS_FREE_COSMETICS.map((freeCosmetic, i) => {
+          {PASS_FREE_COSMETICS.map((_freeCosmetic, i) => {
             const tier = i + 1;
+            const freeCosmetic = PASS_FREE_COSMETICS[i];
             const eliteCosmetic = PASS_ELITE_COSMETICS[i];
-            const requiredLevel = PASS_TIER_LEVEL[i];
-            const isUnlocked = currentLevel >= requiredLevel;
+            const requiredXp = PASS_TIER_XP[i];
+            const freeChips = PASS_FREE_CHIP_REWARDS[i];
+            const eliteChips = PASS_ELITE_CHIP_REWARDS[i];
+            const isUnlocked = passXp >= requiredXp;
             const isFreeClaimed = claimedFreeSet.has(tier);
             const isEliteClaimed = claimedEliteSet.has(tier);
             const isClaimingThis = claiming === tier;
@@ -303,7 +318,7 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
                 <div className="flex justify-between items-center border-b border-slate-900 pb-2 lg:flex lg:items-center lg:justify-between lg:px-1 lg:border-b-0 lg:pb-0 lg:bg-slate-900/40 lg:rounded">
                   <span className="text-xs font-mono font-bold text-amber-400 lg:text-[11px] lg:leading-tight">TIER {tier}</span>
                   <span className="text-[11px] text-slate-500 font-mono lg:text-[11px] lg:leading-tight">
-                    {isUnlocked ? '✓' : `Lv ${requiredLevel}`}
+                    {isUnlocked ? '✓' : `${requiredXp.toLocaleString()} XP`}
                   </span>
                 </div>
 
@@ -314,10 +329,10 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
                     {isFreeClaimed && <span className="text-emerald-400 font-bold flex items-center gap-0.5"><Check className="w-2.5 h-2.5" /> OWNED</span>}
                   </div>
                   <div className="text-xs font-bold text-white flex items-center gap-1.5 lg:text-[11px] lg:leading-tight">
-                    <span aria-hidden>{freeCosmetic.emoji}</span>
-                    <span>{freeCosmetic.name}</span>
+                    <span aria-hidden>{freeCosmetic?.emoji ?? '💰'}</span>
+                    <span>{freeChips > 0 ? `${freeChips.toLocaleString()} Chips` : freeCosmetic?.name ?? '—'}</span>
                   </div>
-                  <div className="text-[11px] font-mono text-slate-500 lg:inline lg:text-[11px]">{freeCosmetic.type}</div>
+                  <div className="text-[11px] font-mono text-slate-500 lg:inline lg:text-[11px]">{freeChips > 0 ? 'chips' : freeCosmetic?.type ?? ''}</div>
                   <button
                     type="button"
                     onClick={() => handleClaim(tier, 'free')}
@@ -330,7 +345,7 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
                           : 'bg-slate-900 text-slate-600 cursor-not-allowed'
                     }`}
                   >
-                    {isClaimingThis && !isFreeClaimed ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : isFreeClaimed ? 'Owned' : isUnlocked ? 'Claim' : `Reach Lv ${requiredLevel}`}
+                    {isClaimingThis && !isFreeClaimed ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : isFreeClaimed ? 'Owned' : isUnlocked ? 'Claim' : `Need ${requiredXp.toLocaleString()} XP`}
                   </button>
                 </div>
 
@@ -341,10 +356,10 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
                     {isEliteClaimed && <span className="text-emerald-400 flex items-center gap-0.5"><Check className="w-2.5 h-2.5" /> OWNED</span>}
                   </div>
                   <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5 lg:text-[11px] lg:leading-tight">
-                    <span aria-hidden>{eliteCosmetic.emoji}</span>
-                    <span>{eliteCosmetic.name}</span>
+                    <span aria-hidden>{eliteCosmetic?.emoji ?? '💰'}</span>
+                    <span>{eliteChips > 0 ? `${eliteChips.toLocaleString()} Chips` : eliteCosmetic?.name ?? '—'}</span>
                   </div>
-                  <div className="text-[11px] font-mono text-slate-500 lg:inline lg:text-[11px]">{eliteCosmetic.type}</div>
+                  <div className="text-[11px] font-mono text-slate-500 lg:inline lg:text-[11px]">{eliteChips > 0 ? 'chips' : eliteCosmetic?.type ?? ''}</div>
                   <button
                     type="button"
                     onClick={() => handleClaim(tier, 'elite')}
@@ -357,7 +372,7 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
                           : 'bg-slate-900 text-slate-600 cursor-not-allowed'
                     }`}
                   >
-                    {isClaimingThis && !isEliteClaimed && hasElite ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : isEliteClaimed ? 'Owned' : !hasElite ? <span className="flex items-center justify-center gap-0.5"><Lock className="w-2.5 h-2.5" /> Elite Required</span> : isUnlocked ? 'Claim' : `Reach Lv ${requiredLevel}`}
+                    {isClaimingThis && !isEliteClaimed && hasElite ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : isEliteClaimed ? 'Owned' : !hasElite ? <span className="flex items-center justify-center gap-0.5"><Lock className="w-2.5 h-2.5" /> Elite Required</span> : isUnlocked ? 'Claim' : `Need ${requiredXp.toLocaleString()} XP`}
                   </button>
                 </div>
               </div>
@@ -368,8 +383,8 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
 
       {/* FOOTER INFO */}
       <div className="text-center text-[11px] text-slate-500 space-y-1 pt-2 border-t border-slate-800/60 lg:pt-0 lg:space-y-0 lg:leading-tight">
-        <p>Play matches and complete daily challenges to earn XP. Level up to unlock tiers and claim real cosmetics.</p>
-        <p>Claimed rewards are added to your inventory and can be equipped in <strong className="text-slate-400">Shop &amp; Lab</strong>.</p>
+        <p>Play matches to earn Pass XP (50% of match XP, max {PASS_DAILY_XP_CAP.toLocaleString()}/day). Unlock tiers and claim cosmetics + chip rewards.</p>
+        <p>Claimed cosmetics are added to your inventory and can be equipped in <strong className="text-slate-400">Shop &amp; Lab</strong>.</p>
       </div>
     </div>
   );

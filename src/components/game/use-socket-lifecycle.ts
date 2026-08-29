@@ -4,6 +4,7 @@ import { useEffect, type RefObject } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { playExtractStart, playExtractSuccess, playExtractRestart, playDeath, playFoodCollect, playKill, playBoost, playWallHit, initGameAudio } from '@/lib/game-audio';
 import type { ArenaLeaderboardEntry, GameSnapshot, MatchResult, SnakeSnapshot } from '@/lib/types';
+import { PASS_TIER_XP } from '@/lib/game-config';
 import type { Phase, KillerInfo, EndScreenState } from './game-types';
 import type { Particle } from './render-helpers';
 
@@ -42,6 +43,8 @@ interface MatchResultPayload {
   kills: number;
   score: number;
   xpGained: number;
+  passXpGained: number;
+  newPassTier: number;
   newLevel: number;
   newBankedChips: number;
   durationSeconds: number;
@@ -516,6 +519,8 @@ export function useSocketLifecycle({
               score: data.score,
               deaths: data.outcome === 'death' ? 1 : 0,
               xpGained: data.xpGained,
+              passXpGained: data.passXpGained ?? 0,
+              newPassTier: data.newPassTier ?? 0,
               newLevel: data.newLevel,
               newBankedChips: data.newBankedChips,
               durationSeconds: data.durationSeconds,
@@ -562,6 +567,8 @@ export function useSocketLifecycle({
           score: data.score,
           deaths: data.outcome === 'death' ? 1 : 0,
           xpGained: data.xpGained,
+          passXpGained: data.passXpGained ?? 0,
+          newPassTier: data.newPassTier ?? 0,
           newLevel: data.newLevel,
           newBankedChips: data.newBankedChips,
           durationSeconds: data.durationSeconds,
@@ -593,6 +600,19 @@ export function useSocketLifecycle({
           toast({
             title: 'Level Up!',
             description: `LEVEL UP! You reached Level ${data.newLevel}!`,
+          });
+        }
+        // Show pass tier-up toast if applicable.
+        const prevPassTier = player?.passXp ? (() => {
+          for (let i = PASS_TIER_XP.length - 1; i >= 0; i--) {
+            if (player.passXp >= PASS_TIER_XP[i]) return i + 1;
+          }
+          return 0;
+        })() : 0;
+        if (data.newPassTier > prevPassTier && data.passXpGained > 0) {
+          toast({
+            title: `Pass Tier ${data.newPassTier} Unlocked!`,
+            description: `Season Pass progress! Visit the pass to claim your reward.`,
           });
         }
       };

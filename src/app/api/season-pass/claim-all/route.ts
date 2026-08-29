@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { toProfile, encodeSkins } from '@/lib/player-helpers';
-import { PASS_FREE_COSMETICS, PASS_ELITE_COSMETICS, PASS_TIER_LEVEL } from '@/lib/game-config';
+import { PASS_FREE_COSMETICS, PASS_ELITE_COSMETICS, PASS_TIER_XP, PASS_FREE_CHIP_REWARDS, PASS_ELITE_CHIP_REWARDS } from '@/lib/game-config';
 
 // POST /api/season-pass/claim-all
 // body: { track: 'free' | 'elite' }
@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
   }
 
   const cosmetics = track === 'free' ? PASS_FREE_COSMETICS : PASS_ELITE_COSMETICS;
+  const chipRewards = track === 'free' ? PASS_FREE_CHIP_REWARDS : PASS_ELITE_CHIP_REWARDS;
 
   try {
     const result = await db.$transaction(async (tx) => {
@@ -36,30 +37,48 @@ export async function POST(req: NextRequest) {
       const claimedSet = new Set(claimed);
       const newlyClaimed: number[] = [];
       const newCosmetics: typeof cosmetics = [];
+      let totalChips = 0;
 
       for (let i = 0; i < 20; i++) {
         const tier = i + 1;
-        const cosmetic = cosmetics[i];
-        if (!cosmetic) continue;
         if (claimedSet.has(tier)) continue;
-        if (player.level < PASS_TIER_LEVEL[i]) continue;
+        if (player.passXp < PASS_TIER_XP[i]) continue;
+
+        const cosmetic = cosmetics[i];
+        const chips = chipRewards[i];
+
+        // Tier must have something to claim
+        if (!cosmetic && chips === 0) continue;
 
         newlyClaimed.push(tier);
-        newCosmetics.push(cosmetic);
-        if (!unlocked.includes(cosmetic.id)) unlocked.push(cosmetic.id);
-
-        await tx.purchase.create({
-          data: { playerId: player.id, itemId: cosmetic.id, itemType: 'pass-cosmetic', amountChips: 0 },
-        });
+        if (cosmetic) {
+          newCosmetics.push(cosmetic);
+          if (!unlocked.includes(cosmetic.id)) unlocked.push(cosmetic.id);
+          await tx.purchase.create({
+            data: { playerId: player.id, itemId: cosmetic.id, itemType: 'pass-cosmetic', amountChips: 0 },
+          });
+        }
+        if (chips > 0) {
+          totalChips += chips;
+          await tx.purchase.create({
+            data: { playerId: player.id, itemId: `pass-chip-${track}-t${tier}`, itemType: 'pass-chip', amountChips: chips },
+          });
+        }
       }
 
       if (newlyClaimed.length === 0) throw new Error('NOTHING_TO_CLAIM');
 
-      // Auto-equip defaults for the highest-tier cosmetic of each type
       const data: Record<string, unknown> = {
         unlockedSkins: encodeSkins(unlocked),
         [claimedField]: JSON.stringify([...claimed, ...newlyClaimed]),
       };
+
+      if (totalChips > 0) {
+        data.bankedChips = { increment: totalChips };
+        data.totalEarned = { increment: totalChips };
+      }
+
+      // Auto-equip highest-tier cosmetic of each type
       for (const c of newCosmetics) {
         if (c.type === 'skin' && player.currentSkin === 'skin-default') data.currentSkin = c.id;
         else if (c.type === 'trail' && player.currentTrail === 'trail-none') data.currentTrail = c.id;
@@ -73,10 +92,10 @@ export async function POST(req: NextRequest) {
         data,
       });
 
-      return { updated, newlyClaimed, newCosmetics };
+      return { updated, newlyClaimed, newCosmetics, totalChips };
     });
 
-    return NextResponse.json({ player: toProfile(result.updated), claimed: result.newlyClaimed, cosmetics: result.newCosmetics });
+    return NextResponse.json({ player: toProfile(result.updated), claimed: result.newlyClaimed, cosmetics: result.newCosmetics, chipsClaimed: result.totalChips });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     const errorMap: Record<string, { error: string; status: number }> = {

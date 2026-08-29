@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { toProfile } from '@/lib/player-helpers';
-import { getArenaById, levelFromXp, MILESTONE_TIERS, HALL_OF_FAME_TIERS } from '@/lib/game-config';
+import { getArenaById, levelFromXp, MILESTONE_TIERS, HALL_OF_FAME_TIERS, PASS_TIER_XP, PASS_DAILY_XP_CAP, PASS_XP_MULTIPLIER } from '@/lib/game-config';
 import { utcToday, utcMonday } from '@/lib/date-utils';
 
 const TRACKABLE_TIERS = ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'omega'] as const;
@@ -170,8 +170,13 @@ export async function POST(req: NextRequest) {
   // XP formula: floor((score*5 + kills*50) * rewardMultiplier)
   const xpGained = Math.floor((score * 5 + kills * 50) * arena.rewardMultiplier);
 
+  // Pass XP: 50% of match XP, with daily cap
+  const rawPassXp = Math.floor(xpGained * PASS_XP_MULTIPLIER);
+
   // Use a transaction so stats and challenge progress are atomic
   let updated;
+  let passXpGained = 0;
+  let newPassTier = 0;
   try {
     updated = await db.$transaction(async (tx) => {
     const p = await tx.player.findUnique({ where: { id: player.id } });
@@ -185,6 +190,32 @@ export async function POST(req: NextRequest) {
       level: newLevel,
       lifetimeKills: { increment: kills },
     };
+
+    // --- Season Pass XP (with daily cap) ---
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const isSameDay = p.passXpDate === today;
+    const xpToday = isSameDay ? (p.passXpToday ?? 0) : 0;
+    const remaining = PASS_DAILY_XP_CAP - xpToday;
+    if (rawPassXp > 0 && remaining > 0) {
+      passXpGained = Math.min(rawPassXp, remaining);
+      const newPassXp = (p.passXp ?? 0) + passXpGained;
+      const newXpToday = xpToday + passXpGained;
+      data.passXp = newPassXp;
+      data.passXpToday = newXpToday;
+      data.passXpDate = today;
+
+      // Calculate new pass tier
+      newPassTier = 0;
+      for (let i = PASS_TIER_XP.length - 1; i >= 0; i--) {
+        if (newPassXp >= PASS_TIER_XP[i]) { newPassTier = i + 1; break; }
+      }
+    } else {
+      // Cap reached or practice mode — compute current tier from existing passXp
+      const existingPassXp = p.passXp ?? 0;
+      for (let i = PASS_TIER_XP.length - 1; i >= 0; i--) {
+        if (existingPassXp >= PASS_TIER_XP[i]) { newPassTier = i + 1; break; }
+      }
+    }
 
     if (outcome === 'extract') {
       data.bankedChips = { increment: chipsEarned };
@@ -329,5 +360,7 @@ export async function POST(req: NextRequest) {
     xpGained,
     newLevel: updated.level,
     newBankedChips: updated.bankedChips,
+    passXpGained,
+    newPassTier,
   });
 }
