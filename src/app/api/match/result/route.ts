@@ -269,6 +269,15 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // --- Increment ChampionshipRegistration.gamesPlayed for online matches ---
+    if (arena.rewardMultiplier > 0) {
+      const currentYear = new Date().getFullYear();
+      await tx.championshipRegistration.updateMany({
+        where: { playerId: player.id, year: currentYear },
+        data: { gamesPlayed: { increment: 1 } },
+      });
+    }
+
     // --- War scoring (if player is in a clan with an active war) ---
     if (p.clanTag && kills > 0) {
       const war = await tx.clanWar.findFirst({

@@ -12,17 +12,21 @@ export async function GET() {
     const pid = session.playerId;
     const currentYear = new Date().getFullYear();
 
-    // 1. Matches played this year from ChampionshipRegistration
-    const reg = await db.championshipRegistration.findUnique({
-      where: { playerId_year: { playerId: pid, year: currentYear } },
+    // 1. Matches played this year — count from real MatchHistory (online matches only)
+    const currentYearStart = new Date(currentYear, 0, 1).toISOString();
+    const nextYearStart = new Date(currentYear + 1, 0, 1).toISOString();
+    const gamesPlayed = await db.matchHistory.count({
+      where: {
+        playerId: pid,
+        isOnline: true,
+        createdAt: { gte: new Date(currentYearStart), lt: new Date(nextYearStart) },
+      },
     });
-    const gamesPlayed = reg?.gamesPlayed || 0;
     const MAX_MATCHES = 10_000;
     const MATCHES_REMAINING = MAX_MATCHES - gamesPlayed;
 
     // 2. Annual buy cap (25 lakh = 2,500,000)
     // Sum of all Purchase amounts for this player this year
-    const currentYearStart = new Date(currentYear, 0, 1).toISOString();
     const purchases = await db.purchase.findMany({
       where: {
         playerId: pid,
@@ -49,7 +53,7 @@ export async function GET() {
     const adsRemaining = Math.max(0, MAX_DAILY_ADS - adsToday);
 
     return NextResponse.json({
-      matchesPlayed,
+      matchesPlayed: gamesPlayed,
       matchesMax: MAX_MATCHES,
       matchesRemaining: MATCHES_REMAINING,
       totalBought,
