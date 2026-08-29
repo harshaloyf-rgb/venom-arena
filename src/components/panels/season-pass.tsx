@@ -159,43 +159,43 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
   const nextTierLevel = currentTier < 20 ? PASS_TIER_LEVEL[currentTier] : null;
 
   return (
-    <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-5 sm:p-6 shadow-md space-y-6 relative overflow-hidden">
+    <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-5 sm:p-6 shadow-md space-y-6 relative overflow-hidden lg:p-1.5 lg:space-y-0.5">
       <GlowBlob color="bg-purple-500/10" className="-top-12 -right-12 w-64 h-64" />
 
       {/* SEASON BANNER */}
       <section
         aria-label="Season banner"
-        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-950 via-slate-900 to-emerald-950 p-5 sm:p-6 border border-purple-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-md"
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-950 via-slate-900 to-emerald-950 p-5 sm:p-6 border border-purple-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-md lg:p-1.5 lg:gap-1 lg:rounded-lg lg:leading-tight"
       >
-        <div className="space-y-2 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[10px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-widest">
+        <div className="space-y-2 min-w-0 lg:flex lg:flex-row lg:items-center lg:gap-2 lg:space-y-0 lg:leading-tight">
+          <div className="flex items-center gap-2 flex-wrap lg:gap-0.5">
+            <span className="bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[11px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-widest lg:text-[11px]">
               Season {PASS_SEASON_NAME}
             </span>
-            <span className="text-[10px] text-emerald-400 font-mono font-bold flex items-center gap-1">
-              <Trophy className="w-3 h-3" /> {unlockedTiers}/20 Tiers Unlocked
+            <span className="text-[11px] text-emerald-400 font-mono font-bold flex items-center gap-1">
+              <Trophy className="w-3 h-3 lg:w-3 lg:h-3" /> {unlockedTiers}/20 Tiers Unlocked
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">
+            <span className="text-[11px] text-slate-400 font-mono lg:text-[11px]">
               Genesis Season — No Expiry
             </span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
-            <Award className="w-6 h-6 text-amber-400" />
+          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2 lg:text-[11px] lg:leading-tight">
+            <Award className="w-6 h-6 text-amber-400 lg:w-3 lg:h-3" />
             Cyber Pass
           </h2>
-          <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
+          <p className="text-xs text-slate-300 max-w-xl leading-relaxed lg:text-[11px] lg:leading-tight">
             Play matches to earn XP and level up. Each level milestone unlocks a real cosmetic reward —
             skins, trails, death effects, flags, and banners. Claimed rewards appear in your Shop &amp; Lab.
           </p>
         </div>
 
         {/* Elite pass card */}
-        <div className="bg-slate-950/90 p-4 rounded-xl border border-amber-500/40 space-y-2 shrink-0 min-w-[240px] w-full md:w-auto">
-          <div className="flex justify-between items-center text-xs">
+        <div className="bg-slate-950/90 p-4 rounded-xl border border-amber-500/40 space-y-2 shrink-0 min-w-[240px] w-full md:w-auto lg:p-1 lg:min-w-0 lg:space-y-0.5">
+          <div className="flex justify-between items-center text-xs lg:text-[11px]">
             <span className="text-slate-300 font-bold flex items-center gap-1">
-              <Sparkles className="w-4 h-4 text-amber-400" /> Pass Status
+              <Sparkles className="w-4 h-4 text-amber-400 lg:w-3 lg:h-3" /> Pass Status
             </span>
-            <span className={`font-mono font-bold text-[10px] ${hasElite ? 'text-amber-400' : 'text-slate-500'}`}>
+            <span className={`font-mono font-bold text-[11px] ${hasElite ? 'text-amber-400' : 'text-slate-500'}`}>
               {hasElite ? '\u{1F451} ELITE ACTIVE' : 'FREE PASS'}
             </span>
           </div>
@@ -204,14 +204,14 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
               type="button"
               onClick={handleUnlockElite}
               disabled={unlocking || bankedChips < ELITE_PASS_COST}
-              className="w-full py-2 bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-110 text-slate-950 font-black text-xs rounded-lg transition shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-2 bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-110 text-slate-950 font-black text-xs rounded-lg transition shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed lg:py-0.5"
             >
               {unlocking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Crown className="w-3.5 h-3.5" />}
               {unlocking ? 'Unlocking...' : `Unlock Elite (${ELITE_PASS_COST.toLocaleString('en-IN')}c)`}
             </button>
           )}
           {hasElite && (
-            <div className="text-[10px] text-emerald-400 font-mono text-center pt-1">
+            <div className="text-[11px] text-emerald-400 font-mono text-center pt-1">
               Premium rewards unlocked — claim them below
             </div>
           )}
@@ -219,22 +219,22 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
       </section>
 
       {/* REAL XP BAR */}
-      <section className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-3">
-        <div className="flex justify-between items-center text-xs">
+      <section className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-3 lg:p-0.5 lg:space-y-0 lg:rounded-lg">
+        <div className="flex justify-between items-center text-xs lg:text-[11px] lg:leading-tight">
           <span className="text-white font-bold flex items-center gap-1.5">
-            <Zap className="w-4 h-4 text-emerald-400" /> Player Level {currentLevel}
+            <Zap className="w-4 h-4 text-emerald-400 lg:w-3 lg:h-3" /> Player Level {currentLevel}
           </span>
-          <span className="text-slate-400 font-mono">
+          <span className="text-slate-400 font-mono lg:text-[11px]">
             {xpInThisLevel.toLocaleString()} / {xpNeeded.toLocaleString()} XP
           </span>
         </div>
-        <div className="w-full h-3 bg-slate-900 rounded-full border border-slate-800 overflow-hidden">
+        <div className="w-full h-3 bg-slate-900 rounded-full border border-slate-800 overflow-hidden lg:h-1.5">
           <div
             className="h-full bg-gradient-to-r from-emerald-500 via-cyan-500 to-purple-500 rounded-full transition-all duration-500"
             style={{ width: `${xpPct}%` }}
           />
         </div>
-        <div className="flex justify-between text-[10px] font-mono text-slate-500">
+        <div className="flex justify-between text-[11px] font-mono text-slate-500 lg:text-[11px] lg:leading-tight">
           <span>Tier {currentTier}/20 unlocked &middot; {nextTierLevel ? `Next tier at Level ${nextTierLevel}` : 'All tiers unlocked!'}</span>
           <span>Banked: {bankedChips.toLocaleString()}c</span>
         </div>
@@ -242,19 +242,19 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
 
       {/* UNCLAIMED NOTIFICATION */}
       {(unclaimedFree > 0 || unclaimedElite > 0) && (
-        <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-          <span className="text-xs text-emerald-300 font-bold">
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 lg:p-1 lg:gap-1 lg:rounded-lg">
+          <span className="text-xs text-emerald-300 font-bold lg:text-[11px] lg:leading-tight">
             {unclaimedFree > 0 && `${unclaimedFree} free reward${unclaimedFree > 1 ? 's' : ''} available!`}
             {unclaimedFree > 0 && unclaimedElite > 0 && ' \u00B7 '}
             {unclaimedElite > 0 && `${unclaimedElite} elite reward${unclaimedElite > 1 ? 's' : ''} available!`}
           </span>
-          <div className="flex gap-2">
+          <div className="flex gap-2 lg:gap-1">
             {unclaimedFree > 0 && (
               <button
                 type="button"
                 onClick={() => void handleClaimAll('free')}
                 disabled={claimingAll}
-                className="text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-3 py-1 rounded-lg transition inline-flex items-center gap-1"
+                className="text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-3 py-1 rounded-lg transition inline-flex items-center gap-1"
               >
                 {claimingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
                 Claim All Free
@@ -265,7 +265,7 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
                 type="button"
                 onClick={() => void handleClaimAll('elite')}
                 disabled={claimingAll}
-                className="text-[10px] font-bold bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 px-3 py-1 rounded-lg transition inline-flex items-center gap-1"
+                className="text-[11px] font-bold bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 px-3 py-1 rounded-lg transition inline-flex items-center gap-1"
               >
                 {claimingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
                 Claim All Elite
@@ -277,10 +277,10 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
 
       {/* REWARD TIERS GRID */}
       <section aria-label="Reward tiers">
-        <h3 className="text-[10px] font-mono uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
-          <Trophy className="w-4 h-4 text-amber-400" /> Reward Track (20 Tiers)
+        <h3 className="text-[11px] font-mono uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2 lg:mb-1 lg:leading-tight">
+          <Trophy className="w-4 h-4 text-amber-400 lg:w-3 lg:h-3" /> Reward Track (20 Tiers)
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 max-h-[600px] overflow-y-auto va-scroll pr-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto va-scroll pr-1 lg:grid-cols-[96px_1fr_1fr] lg:gap-x-1 lg:gap-y-px lg:max-h-none lg:overflow-visible lg:pr-0 lg:leading-tight">
           {PASS_FREE_COSMETICS.map((freeCosmetic, i) => {
             const tier = i + 1;
             const eliteCosmetic = PASS_ELITE_COSMETICS[i];
@@ -293,36 +293,36 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
             return (
               <div
                 key={tier}
-                className={`p-3 rounded-2xl border flex flex-col justify-between gap-3 transition-all ${
+                className={`p-3 rounded-2xl border flex flex-col justify-between gap-3 transition-all lg:contents lg:p-0 lg:gap-0 lg:border-0 lg:rounded-none lg:bg-transparent lg:shadow-none lg:opacity-100 ${
                   isUnlocked
                     ? 'bg-slate-950 border-slate-700 shadow-md'
                     : 'bg-slate-950/60 border-slate-900 opacity-70'
                 }`}
               >
                 {/* TIER HEADER */}
-                <div className="flex justify-between items-center border-b border-slate-900 pb-2">
-                  <span className="text-xs font-mono font-bold text-amber-400">TIER {tier}</span>
-                  <span className="text-[10px] text-slate-500 font-mono">
+                <div className="flex justify-between items-center border-b border-slate-900 pb-2 lg:flex lg:items-center lg:justify-between lg:px-1 lg:border-b-0 lg:pb-0 lg:bg-slate-900/40 lg:rounded">
+                  <span className="text-xs font-mono font-bold text-amber-400 lg:text-[11px] lg:leading-tight">TIER {tier}</span>
+                  <span className="text-[11px] text-slate-500 font-mono lg:text-[11px] lg:leading-tight">
                     {isUnlocked ? '✓' : `Lv ${requiredLevel}`}
                   </span>
                 </div>
 
                 {/* FREE TRACK */}
-                <div className="p-2.5 bg-slate-900/80 rounded-xl border border-slate-800 space-y-1">
-                  <div className="flex justify-between text-[10px] font-mono text-slate-400">
+                <div className="p-2.5 bg-slate-900/80 rounded-xl border border-slate-800 space-y-1 lg:p-0 lg:bg-transparent lg:border-0 lg:rounded-none lg:space-y-0 lg:flex lg:flex-row lg:items-center lg:gap-1 lg:px-1">
+                  <div className="flex justify-between text-[11px] font-mono text-slate-400 lg:flex lg:items-center lg:gap-0.5">
                     <span className="flex items-center gap-1"><Coins className="w-3 h-3" /> FREE</span>
                     {isFreeClaimed && <span className="text-emerald-400 font-bold flex items-center gap-0.5"><Check className="w-2.5 h-2.5" /> OWNED</span>}
                   </div>
-                  <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <div className="text-xs font-bold text-white flex items-center gap-1.5 lg:text-[11px] lg:leading-tight">
                     <span aria-hidden>{freeCosmetic.emoji}</span>
-                    <span className="truncate">{freeCosmetic.name}</span>
+                    <span>{freeCosmetic.name}</span>
                   </div>
-                  <div className="text-[9px] font-mono text-slate-500">{freeCosmetic.type}</div>
+                  <div className="text-[11px] font-mono text-slate-500 lg:inline lg:text-[11px]">{freeCosmetic.type}</div>
                   <button
                     type="button"
                     onClick={() => handleClaim(tier, 'free')}
                     disabled={!isUnlocked || isFreeClaimed || isClaimingThis}
-                    className={`w-full py-1 mt-1 rounded text-[10px] font-bold transition-colors ${
+                    className={`w-full py-1 mt-1 rounded text-[11px] font-bold transition-colors lg:py-0 lg:px-1.5 lg:mt-0 lg:w-auto lg:shrink-0 lg:text-[11px] ${
                       isFreeClaimed
                         ? 'bg-slate-800 text-slate-500 cursor-default'
                         : isUnlocked
@@ -335,21 +335,21 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
                 </div>
 
                 {/* ELITE TRACK */}
-                <div className={`p-2.5 rounded-xl border space-y-1 ${hasElite ? 'bg-amber-950/20 border-amber-500/30' : 'bg-slate-900/40 border-slate-800'}`}>
-                  <div className="flex justify-between text-[10px] font-mono text-amber-400 font-bold">
-                    <span className="flex items-center gap-1"><Crown className="w-3 h-3" /> ELITE</span>
+                <div className={`p-2.5 rounded-xl border space-y-1 ${hasElite ? 'bg-amber-950/20 border-amber-500/30' : 'bg-slate-900/40 border-slate-800'} lg:p-0 lg:bg-transparent lg:border-0 lg:rounded-none lg:space-y-0 lg:flex lg:flex-row lg:items-center lg:gap-1 lg:px-1`}>
+                  <div className="flex justify-between text-[11px] font-mono text-amber-400 font-bold lg:flex lg:items-center lg:gap-0.5">
+                    <span className="flex items-center gap-1"><Crown className="w-3 h-3 lg:w-3 lg:h-3" /> ELITE</span>
                     {isEliteClaimed && <span className="text-emerald-400 flex items-center gap-0.5"><Check className="w-2.5 h-2.5" /> OWNED</span>}
                   </div>
-                  <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                  <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5 lg:text-[11px] lg:leading-tight">
                     <span aria-hidden>{eliteCosmetic.emoji}</span>
-                    <span className="truncate">{eliteCosmetic.name}</span>
+                    <span>{eliteCosmetic.name}</span>
                   </div>
-                  <div className="text-[9px] font-mono text-slate-500">{eliteCosmetic.type}</div>
+                  <div className="text-[11px] font-mono text-slate-500 lg:inline lg:text-[11px]">{eliteCosmetic.type}</div>
                   <button
                     type="button"
                     onClick={() => handleClaim(tier, 'elite')}
                     disabled={!isUnlocked || isEliteClaimed || !hasElite || isClaimingThis}
-                    className={`w-full py-1 mt-1 rounded text-[10px] font-bold transition-colors ${
+                    className={`w-full py-1 mt-1 rounded text-[11px] font-bold transition-colors lg:py-0 lg:px-1.5 lg:mt-0 lg:w-auto lg:shrink-0 lg:text-[11px] ${
                       isEliteClaimed
                         ? 'bg-slate-800 text-slate-500 cursor-default'
                         : isUnlocked && hasElite
@@ -367,7 +367,7 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
       </section>
 
       {/* FOOTER INFO */}
-      <div className="text-center text-[10px] text-slate-500 space-y-1 pt-2 border-t border-slate-800/60">
+      <div className="text-center text-[11px] text-slate-500 space-y-1 pt-2 border-t border-slate-800/60 lg:pt-0 lg:space-y-0 lg:leading-tight">
         <p>Play matches and complete daily challenges to earn XP. Level up to unlock tiers and claim real cosmetics.</p>
         <p>Claimed rewards are added to your inventory and can be equipped in <strong className="text-slate-400">Shop &amp; Lab</strong>.</p>
       </div>
