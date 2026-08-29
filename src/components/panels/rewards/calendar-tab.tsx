@@ -97,18 +97,19 @@ export function CalendarTab({ player, onToast }: CalendarTabProps) {
         {calendarLoading ? (
           <div className="flex items-center justify-center py-6 text-[11px] text-slate-500">Loading calendar...</div>
         ) : (
-          <div className="grid grid-cols-7 gap-1 lg:gap-px">
+          <div className="grid grid-cols-7 gap-x-1 gap-y-0.5 lg:gap-x-px lg:gap-y-px">
             {calendarDays.map((d) => (
-              <div
-                key={d.date}
-                title={`${d.date}${d.claimed ? ' ✓ Claimed' : d.isFuture ? ' (upcoming)' : ''}`}
-                className={`aspect-square rounded-sm transition-colors flex items-center justify-center text-[10px] lg:text-[9px] font-mono font-bold ${
-                  d.claimed ? 'bg-emerald-500 text-white' :
-                  d.isFuture ? 'bg-slate-900/40 text-slate-600' :
-                  'bg-slate-800/60 text-slate-500'
-                } hover:ring-1 hover:ring-slate-500`}
-              >
-                {d.dayNum}
+              <div key={d.date} className="flex flex-col items-center">
+                <div
+                  className={`w-full h-4 lg:h-3 rounded-sm transition-colors flex items-center justify-center text-[9px] lg:text-[8px] font-mono font-bold ${
+                    d.claimed ? 'bg-emerald-500 text-white' :
+                    d.isFuture ? 'bg-slate-900/40 text-slate-600' :
+                    'bg-slate-800/60 text-slate-500'
+                  }`}
+                >
+                  {d.dayNum}
+                </div>
+                <span className="text-[7px] lg:text-[6px] font-mono text-slate-500 mt-px leading-none whitespace-nowrap">{MONTH_NAMES[month].slice(0,3)} {d.dayNum}</span>
               </div>
             ))}
           </div>
