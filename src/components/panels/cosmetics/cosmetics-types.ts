@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Palette (18 swatches) — maximally distinct colors across the spectrum
+// Palette (28 swatches) — maximally distinct colors across the spectrum
 // ---------------------------------------------------------------------------
 export const PALETTE_COLORS = [
   { name: 'Red Alert', hex: '#ef4444' },
