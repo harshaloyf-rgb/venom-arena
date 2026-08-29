@@ -78,7 +78,7 @@ export function CosmeticsSection({
 
   return (
     <div className="animate-fade-in">
-      <div className="mb-3 lg:mb-1">
+      <div className="mb-3 lg:mb-1 lg:max-h-[100px] lg:overflow-hidden">
         <GameSnakePreview
           key={activeSkinId}
           skinId={activeSkinId}

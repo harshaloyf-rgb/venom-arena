@@ -618,7 +618,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
         <div className="animate-fade-in grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-1.5">
           {/* LEFT COLUMN — Game-accurate roaming snake preview + Projector card */}
           <div className="lg:col-span-5 flex flex-col gap-4 lg:gap-1">
-            <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 lg:p-1.5">
+            <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 lg:p-1.5 lg:max-h-[100px] lg:overflow-hidden">
               <GameSnakePreview
                 colors={colorSequence}
                 bodyStyle={bodyStyle}
@@ -629,6 +629,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
                 segments={24}
                 speed={1.2}
                 scale={1.1}
+                responsive
               />
             </div>
 
