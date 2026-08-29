@@ -508,3 +508,21 @@ Stage Summary:
 - Toggle behavior: click same button = undo, click opposite = switch
 - Profile button triggers player inspection panel
 - API: POST /api/clips/vote with {clipId, vote: 'like'|'dislike'}
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix Shop & Lab panel compression - Lab steps not visibly compressed, snake preview clipped, Face Cosmetics unchanged
+
+Work Log:
+- Diagnosed root cause: previous lg: overrides only reduced padding/gaps by 20-30% — too subtle to notice. Text sizes were already 11px (no change needed). Snake previews used lg:max-h + overflow-hidden causing clipping.
+- Fixed Lab tab (cosmetics-shop.tsx): Added 15+ lg:leading-tight classes on all step headings/descriptions. Reduced all lg:gap values to lg:gap-0.5. Added lg:w-5 lg:h-5 on palette buttons. Made helper buttons lg:px-1.5 lg:py-0.5. Changed geometry grid to lg:grid-cols-5. Removed lg:max-h/[100px] lg:overflow-hidden from preview. Changed canvas height from 220→100.
+- Fixed Face Cosmetics (cosmetics-section.tsx): Removed lg:max-h/[100px] lg:overflow-hidden. Changed canvas height from 260→100. Changed grid to lg:grid-cols-4. Added lg:leading-tight on cards. Reduced emoji to lg:text-xl. Tightened card padding to lg:p-1.
+- Fixed Gallery cards (cosmetics-cards.tsx): Changed canvas height from 140→80 for PresetCard and SkinCard (no more clipping). Added lg:leading-tight on all card descriptions.
+- Verified with agent-browser at 1365×599 viewport: Lab tab scrollH=490 clientH=490 (NO SCROLLBAR), Face tab scrollH=490 clientH=490 (NO SCROLLBAR), no console errors.
+
+Stage Summary:
+- All 3 tabs properly compressed for 1365×599 desktop viewport
+- Snake preview clipping eliminated (canvas heights reduced at source)
+- Lab Steps 1-4 now visibly tighter with lg:leading-tight, smaller buttons, tighter gaps
+- Face Cosmetics grid uses 4 columns on desktop, cards more compact
+- Lint passes clean, no console errors

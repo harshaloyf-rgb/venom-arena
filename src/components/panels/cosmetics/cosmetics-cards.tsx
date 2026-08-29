@@ -125,7 +125,7 @@ export function PresetCard({
             taperStyle={preset.taper}
             glow={preset.glow}
             width={320}
-            height={140}
+            height={80}
             segments={18}
             speed={1.2}
             scale={0.8}
@@ -139,7 +139,7 @@ export function PresetCard({
           </h3>
         </div>
 
-        <p className="text-[11px] text-slate-500 text-center leading-snug mb-2.5 lg:mb-1 px-1">
+        <p className="text-[11px] text-slate-500 text-center leading-snug lg:leading-tight mb-2.5 lg:mb-1 px-1">
           {preset.description}
         </p>
       </div>
@@ -230,7 +230,7 @@ export function SkinCard({
             taperStyle={vis.taperStyle}
             glow={vis.glow}
             width={320}
-            height={140}
+            height={80}
             segments={18}
             speed={1.2}
             scale={0.8}
@@ -244,7 +244,7 @@ export function SkinCard({
           </h3>
         </div>
 
-        <p className="text-[11px] text-slate-500 text-center leading-snug mb-2.5 lg:mb-1 px-1">
+        <p className="text-[11px] text-slate-500 text-center leading-snug lg:leading-tight mb-2.5 lg:mb-1 px-1">
           {item.description}
         </p>
       </div>
@@ -344,7 +344,7 @@ export function TrailCard({
           </h3>
         </div>
 
-        <p className="text-[11px] text-slate-500 text-center leading-snug mb-2.5 lg:mb-1 px-1">
+        <p className="text-[11px] text-slate-500 text-center leading-snug lg:leading-tight mb-2.5 lg:mb-1 px-1">
           {item.description}
         </p>
       </div>
@@ -408,7 +408,7 @@ export function DeathCard({
           </h3>
         </div>
 
-        <p className="text-[11px] text-slate-500 text-center leading-snug mb-2.5 lg:mb-1 px-1">
+        <p className="text-[11px] text-slate-500 text-center leading-snug lg:leading-tight mb-2.5 lg:mb-1 px-1">
           {item.description}
         </p>
       </div>
@@ -466,7 +466,7 @@ export function FlagCard({
           </h3>
         </div>
 
-        <p className="text-[11px] text-slate-500 text-center leading-snug mb-2.5 lg:mb-1 px-1">
+        <p className="text-[11px] text-slate-500 text-center leading-snug lg:leading-tight mb-2.5 lg:mb-1 px-1">
           {item.description}
         </p>
       </div>
@@ -528,7 +528,7 @@ export function BannerCard({
           </h3>
         </div>
 
-        <p className="text-[11px] text-slate-500 text-center leading-snug mb-2.5 lg:mb-1 px-1">
+        <p className="text-[11px] text-slate-500 text-center leading-snug lg:leading-tight mb-2.5 lg:mb-1 px-1">
           {item.description}
         </p>
       </div>
