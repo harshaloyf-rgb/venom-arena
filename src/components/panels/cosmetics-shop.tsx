@@ -430,31 +430,31 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
   return (
     <div
       id="cosmetics-shop"
-      className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl relative overflow-hidden"
+      className="bg-slate-900 border border-slate-800 rounded-2xl p-6 lg:p-2 shadow-2xl relative overflow-hidden"
     >
       {/* Decor */}
       <div className="absolute top-0 right-0 w-80 h-80 bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute -bottom-10 -left-10 w-60 h-60 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
 
       {/* HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-800">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 lg:gap-1 mb-6 lg:mb-1 pb-6 lg:pb-1 border-b border-slate-800">
         <div>
-          <h2 className="text-xl font-bold font-sans tracking-tight text-white flex items-center gap-2">
-            <ShoppingBag className="w-5 h-5 text-indigo-400" /> Identity Workshop
+          <h2 className="text-xl lg:text-[11px] font-bold font-sans tracking-tight text-white flex items-center gap-2">
+            <ShoppingBag className="w-5 h-5 lg:w-3 lg:h-3 text-indigo-400" /> Identity Workshop
             &amp; Skin Gallery
           </h2>
-          <p className="text-xs text-slate-400 font-sans mt-1">
+          <p className="text-xs lg:text-[11px] text-slate-400 font-sans mt-1">
             Browse and equip real-time wiggling skins, luminous laser trails, or
             customize your own custom repeating venom snake DNA blueprint!
           </p>
         </div>
 
         {/* View-mode tabs */}
-        <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800/80 w-fit shrink-0">
+        <div className="flex bg-slate-950 p-1 lg:p-0.5 rounded-xl border border-slate-800/80 w-fit shrink-0">
           <button
             type="button"
             onClick={() => setShopView('presets')}
-            className={`px-4 py-2 rounded-lg text-xs font-sans font-bold transition-all cursor-pointer ${
+            className={`px-4 py-2 lg:px-2 lg:py-1 rounded-lg text-xs lg:text-[11px] font-sans font-bold transition-all cursor-pointer ${
               shopView === 'presets'
                 ? 'bg-indigo-600 text-white shadow'
                 : 'text-slate-400 hover:text-slate-200'
@@ -465,7 +465,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
           <button
             type="button"
             onClick={() => setShopView('editor')}
-            className={`px-4 py-2 rounded-lg text-xs font-sans font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-4 py-2 lg:px-2 lg:py-1 rounded-lg text-xs lg:text-[11px] font-sans font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
               shopView === 'editor'
                 ? 'bg-purple-600 text-white shadow'
                 : 'text-slate-400 hover:text-slate-200'
@@ -476,7 +476,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
           <button
             type="button"
             onClick={() => setShopView('cosmetics')}
-            className={`px-4 py-2 rounded-lg text-xs font-sans font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-4 py-2 lg:px-2 lg:py-1 rounded-lg text-xs lg:text-[11px] font-sans font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
               shopView === 'cosmetics'
                 ? 'bg-amber-600 text-white shadow'
                 : 'text-slate-400 hover:text-slate-200'
@@ -497,7 +497,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
       ) : shopView === 'presets' ? (
         <div className="animate-fade-in">
           {/* Category filters */}
-          <div className="flex flex-wrap gap-2 mb-6">
+          <div className="flex flex-wrap gap-2 lg:gap-1 mb-6 lg:mb-1">
             {CATEGORY_TABS.map((tab) => {
               const handleClick = () => {
                 if (tab.id === 'cosmetics') {
@@ -511,7 +511,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
                   key={tab.id}
                   type="button"
                   onClick={handleClick}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-sans font-semibold transition-all cursor-pointer ${
+                  className={`px-3.5 py-1.5 lg:px-2 lg:py-1 rounded-lg text-xs lg:text-[11px] font-sans font-semibold transition-all cursor-pointer ${
                     (tab.id === 'cosmetics' && shopView === 'cosmetics')
                       || (tab.id !== 'cosmetics' && activeCategory === tab.id)
                       ? 'bg-slate-800 text-white border border-slate-700 shadow-md font-bold'
@@ -525,7 +525,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
           </div>
 
           {/* Gallery grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 lg:gap-1.5">
             {/* A. FREE SLITHER PRESETS */}
             {showPresetsTab &&
               SLITHER_PRESETS.map((preset) => {
@@ -615,10 +615,10 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
         </div>
       ) : (
         /* GENETIC PATTERN LAB */
-        <div className="animate-fade-in grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="animate-fade-in grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-1.5">
           {/* LEFT COLUMN — Game-accurate roaming snake preview + Projector card */}
-          <div className="lg:col-span-5 flex flex-col gap-4">
-            <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4">
+          <div className="lg:col-span-5 flex flex-col gap-4 lg:gap-1">
+            <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 lg:p-1.5">
               <GameSnakePreview
                 colors={colorSequence}
                 bodyStyle={bodyStyle}
@@ -633,12 +633,12 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
             </div>
 
             {/* Projector Details Card */}
-            <div className="bg-slate-950 border border-slate-800 p-4 rounded-2xl shadow-inner">
-              <span className="text-[9px] text-indigo-400 font-mono tracking-widest block uppercase font-extrabold mb-1">
+            <div className="bg-slate-950 border border-slate-800 p-4 lg:p-1.5 rounded-2xl shadow-inner">
+              <span className="text-[11px] text-indigo-400 font-mono tracking-widest block uppercase font-extrabold mb-1">
                 GENETIC PROFILE STATS
               </span>
-              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
-                <Palette className="w-4 h-4 text-purple-400" /> Pattern DNA Engine
+              <h3 className="text-sm lg:text-[11px] font-bold text-white flex items-center gap-1.5">
+                <Palette className="w-4 h-4 lg:w-3 lg:h-3 text-purple-400" /> Pattern DNA Engine
               </h3>
               <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
                 Your stripe nodes loop continuously as your snake grows in the
@@ -646,14 +646,14 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
                 physics, and aurora bioluminescence before deploying!
               </p>
 
-              <div className="grid grid-cols-2 gap-2.5 mt-3 text-[10.5px] font-mono">
-                <div className="bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-800">
+              <div className="grid grid-cols-2 gap-2.5 lg:gap-1 mt-3 lg:mt-1 text-[11px] font-mono">
+                <div className="bg-slate-900 px-2.5 lg:px-1.5 py-1.5 lg:py-1 rounded-lg border border-slate-800">
                   <span className="text-slate-500">NODES:</span>{' '}
                   <span className="text-purple-400 font-black">
                     {colorSequence.length} nodes
                   </span>
                 </div>
-                <div className="bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-800">
+                <div className="bg-slate-900 px-2.5 lg:px-1.5 py-1.5 lg:py-1 rounded-lg border border-slate-800">
                   <span className="text-slate-500">GLOW:</span>{' '}
                   <span
                     className={
@@ -670,7 +670,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
               <button
                 type="button"
                 onClick={handleDeployCustomSkin}
-                className={`w-full mt-4 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md ${
+                className={`w-full mt-4 lg:mt-1 py-3 lg:py-1.5 rounded-xl text-xs lg:text-[11px] font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md ${
                   isCustomLabDeployed
                     ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-emerald-950'
                     : 'bg-purple-600 hover:bg-purple-500 text-white border border-purple-500 hover:shadow-purple-500/20'
@@ -678,12 +678,12 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
               >
                 {isCustomLabDeployed ? (
                   <>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-100 animate-bounce" />{' '}
+                    <CheckCircle2 className="w-4 h-4 lg:w-3 lg:h-3 text-emerald-100 animate-bounce" />{' '}
                     DNA DEPLOYED &amp; EQUIPPED (ACTIVE)
                   </>
                 ) : (
                   <>
-                    <Wand2 className="w-4 h-4 text-purple-100" /> DEPLOY TO
+                    <Wand2 className="w-4 h-4 lg:w-3 lg:h-3 text-purple-100" /> DEPLOY TO
                     BATTLE-ARENA
                   </>
                 )}
@@ -692,15 +692,15 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
           </div>
 
           {/* RIGHT COLUMN — 4-step editor */}
-          <div className="lg:col-span-7 flex flex-col gap-6">
+          <div className="lg:col-span-7 flex flex-col gap-6 lg:gap-1.5">
             {/* STEP 1 — Stripe sequence */}
-            <div className="bg-slate-950 border border-slate-800 p-5 rounded-2xl flex flex-col gap-4">
+            <div className="bg-slate-950 border border-slate-800 p-5 lg:p-1.5 rounded-2xl flex flex-col gap-4 lg:gap-1">
               <div>
-                <span className="text-[10px] text-slate-500 font-mono tracking-wider block uppercase font-bold">
+                <span className="text-[11px] text-slate-500 font-mono tracking-wider block uppercase font-bold">
                   STEP 1
                 </span>
-                <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
-                  <Palette className="w-4 h-4 text-indigo-400" /> Construct
+                <h3 className="text-sm lg:text-[11px] font-bold text-white flex items-center gap-1.5">
+                  <Palette className="w-4 h-4 lg:w-3 lg:h-3 text-indigo-400" /> Construct
                   Stripe Sequence
                 </h3>
                 <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
@@ -713,7 +713,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
               </div>
 
               {/* Palette */}
-              <div className="grid grid-cols-6 sm:grid-cols-9 gap-2">
+              <div className="grid grid-cols-6 sm:grid-cols-9 gap-2 lg:gap-1">
                 {PALETTE_COLORS.map((col) => (
                   <button
                     key={col.hex}
@@ -724,7 +724,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
                     style={{ backgroundColor: col.hex }}
                   >
                     <Plus
-                      className={`w-4 h-4 opacity-0 group-hover:opacity-100 transition ${
+                      className={`w-4 h-4 lg:w-3 lg:h-3 opacity-0 group-hover:opacity-100 transition ${
                         col.hex === '#ffffff' || col.hex === '#f59e0b'
                           ? 'text-slate-950'
                           : 'text-white'
@@ -735,14 +735,14 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
               </div>
 
               {/* Active strip */}
-              <div className="bg-slate-900 border border-slate-800/80 p-3 rounded-xl flex items-center gap-1.5 overflow-x-auto min-h-[64px] max-w-full relative shadow-inner va-scroll">
+              <div className="bg-slate-900 border border-slate-800/80 p-3 lg:p-1.5 rounded-xl flex items-center gap-1.5 overflow-x-auto min-h-[64px] lg:min-h-[36px] max-w-full relative shadow-inner va-scroll">
                 {colorSequence.map((col, idx) => (
                   <button
                     key={`${idx}-${col}`}
                     type="button"
                     onClick={() => handleRemoveColorAt(idx)}
                     title="Click to erase node"
-                    className="w-8 h-8 rounded-full border border-slate-950/45 shrink-0 flex items-center justify-center relative cursor-pointer hover:border-red-500 hover:scale-105 active:scale-95 group transition"
+                    className="w-8 h-8 lg:w-5 lg:h-5 rounded-full border border-slate-950/45 shrink-0 flex items-center justify-center relative cursor-pointer hover:border-red-500 hover:scale-105 active:scale-95 group transition"
                     style={{
                       backgroundColor: col,
                       boxShadow: `0 0 6px ${col}44`,
@@ -753,7 +753,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
                         col === '#ffffff' || col === '#f59e0b'
                           ? 'text-slate-950 font-black'
                           : 'text-white font-bold'
-                      } text-[10px]`}
+                      } text-[11px]`}
                     >
                       {idx === 0 ? '👑' : idx}
                     </span>
@@ -765,53 +765,53 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
               </div>
 
               {/* Helpers */}
-              <div className="flex flex-wrap gap-2.5">
+              <div className="flex flex-wrap gap-2.5 lg:gap-1">
                 <button
                   type="button"
                   onClick={handleDoublePattern}
-                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold text-[10px] rounded-lg transition flex items-center gap-1 cursor-pointer"
+                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold text-[11px] rounded-lg transition flex items-center gap-1 cursor-pointer"
                 >
-                  <Plus className="w-3.5 h-3.5 text-indigo-400" /> Double
+                  <Plus className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-indigo-400" /> Double
                   Sequence Length
                 </button>
                 <button
                   type="button"
                   onClick={handleMirrorPattern}
-                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold text-[10px] rounded-lg transition flex items-center gap-1 cursor-pointer"
+                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold text-[11px] rounded-lg transition flex items-center gap-1 cursor-pointer"
                 >
-                  <ArrowLeftRight className="w-3.5 h-3.5 text-indigo-400" />{' '}
+                  <ArrowLeftRight className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-indigo-400" />{' '}
                   Mirror Symmetrically
                 </button>
                 <button
                   type="button"
                   onClick={handleRandomizePattern}
-                  className="px-3 py-1.5 bg-purple-950/20 hover:bg-purple-950/30 border border-purple-800/20 hover:border-purple-500/30 text-purple-300 font-bold text-[10px] rounded-lg transition flex items-center gap-1 cursor-pointer ml-auto"
+                  className="px-3 py-1.5 bg-purple-950/20 hover:bg-purple-950/30 border border-purple-800/20 hover:border-purple-500/30 text-purple-300 font-bold text-[11px] rounded-lg transition flex items-center gap-1 cursor-pointer ml-auto"
                 >
                   🎲 Mutate DNA
                 </button>
                 <button
                   type="button"
                   onClick={handleClearSequence}
-                  className="px-3 py-1.5 bg-rose-950/10 hover:bg-rose-950/25 border border-rose-800/20 hover:border-rose-500/30 text-rose-400 font-bold text-[10px] rounded-lg transition flex items-center gap-1 cursor-pointer"
+                  className="px-3 py-1.5 bg-rose-950/10 hover:bg-rose-950/25 border border-rose-800/20 hover:border-rose-500/30 text-rose-400 font-bold text-[11px] rounded-lg transition flex items-center gap-1 cursor-pointer"
                 >
-                  <Trash2 className="w-3.5 h-3.5" /> Reset
+                  <Trash2 className="w-3.5 h-3.5 lg:w-3 lg:h-3" /> Reset
                 </button>
               </div>
             </div>
 
             {/* STEP 2 — Geometry */}
-            <div className="bg-slate-950 border border-slate-800 p-5 rounded-2xl flex flex-col gap-3">
+            <div className="bg-slate-950 border border-slate-800 p-5 lg:p-1.5 rounded-2xl flex flex-col gap-3 lg:gap-1">
               <div>
-                <span className="text-[10px] text-slate-500 font-mono tracking-wider block uppercase font-bold">
+                <span className="text-[11px] text-slate-500 font-mono tracking-wider block uppercase font-bold">
                   STEP 2
                 </span>
-                <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
-                  <Sliders className="w-4 h-4 text-indigo-400" /> Choose Segment
+                <h3 className="text-sm lg:text-[11px] font-bold text-white flex items-center gap-1.5">
+                  <Sliders className="w-4 h-4 lg:w-3 lg:h-3 text-indigo-400" /> Choose Segment
                   Geometry
                 </h3>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 lg:gap-1">
                 {BODY_STYLE_OPTIONS.map((style) => (
                   <button
                     key={style.id}
@@ -823,10 +823,10 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
                         : 'bg-slate-900 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/80'
                     }`}
                   >
-                    <span className="text-[10.5px] font-bold text-white block capitalize">
+                    <span className="text-[11px] font-bold text-white block capitalize">
                       {style.label}
                     </span>
-                    <span className="text-[9px] text-slate-400 block mt-0.5 leading-snug">
+                    <span className="text-[11px] text-slate-400 block mt-0.5 leading-snug">
                       {style.desc}
                     </span>
                   </button>
@@ -835,28 +835,28 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
             </div>
 
             {/* STEPS 3 & 4 — Taper + Glow */}
-            <div className="bg-slate-950 border border-slate-800 p-5 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-slate-950 border border-slate-800 p-5 lg:p-1.5 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-1">
               {/* Taper */}
-              <div className="flex flex-col justify-between gap-3">
+              <div className="flex flex-col justify-between gap-3 lg:gap-1">
                 <div>
-                  <span className="text-[10px] text-slate-500 font-mono tracking-wider block uppercase font-bold">
+                  <span className="text-[11px] text-slate-500 font-mono tracking-wider block uppercase font-bold">
                     STEP 3
                   </span>
-                  <h3 className="text-sm font-bold text-white">
+                  <h3 className="text-sm lg:text-[11px] font-bold text-white">
                     Body Taper Physics
                   </h3>
-                  <p className="text-[10px] text-slate-400 leading-relaxed mt-0.5">
+                  <p className="text-[11px] text-slate-400 leading-relaxed mt-0.5">
                     Configure snake tail scaling density styles.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 lg:gap-1">
                   {TAPER_OPTIONS.map((tap) => (
                     <button
                       key={tap.id}
                       type="button"
                       onClick={() => setTaperStyle(tap.id)}
-                      className={`py-2 px-2.5 rounded-lg border text-xs font-semibold font-sans text-center transition cursor-pointer ${
+                      className={`py-2 px-2.5 rounded-lg border text-xs lg:text-[11px] font-semibold font-sans text-center transition cursor-pointer ${
                         taperStyle === tap.id
                           ? 'bg-indigo-600/15 border-indigo-500 text-indigo-300'
                           : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
@@ -869,26 +869,26 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
               </div>
 
               {/* Glow */}
-              <div className="flex flex-col justify-between gap-3 border-t md:border-t-0 md:border-l border-slate-900 pt-4 md:pt-0 md:pl-6">
+              <div className="flex flex-col justify-between gap-3 lg:gap-1 border-t md:border-t-0 md:border-l border-slate-900 pt-4 lg:pt-0 md:pt-0 md:pl-6 lg:pl-2">
                 <div>
-                  <span className="text-[10px] text-slate-500 font-mono tracking-wider block uppercase font-bold">
+                  <span className="text-[11px] text-slate-500 font-mono tracking-wider block uppercase font-bold">
                     STEP 4
                   </span>
-                  <h3 className="text-sm font-bold text-white">
+                  <h3 className="text-sm lg:text-[11px] font-bold text-white">
                     Bioluminescent Aura
                   </h3>
-                  <p className="text-[10px] text-slate-400 leading-relaxed mt-0.5">
+                  <p className="text-[11px] text-slate-400 leading-relaxed mt-0.5">
                     Toggle active radioactive body node shading glow in battle
                     arenas.
                   </p>
                 </div>
 
-                <div className="flex items-center justify-between p-3 bg-slate-900 rounded-xl border border-slate-800">
+                <div className="flex items-center justify-between p-3 lg:p-1.5 bg-slate-900 rounded-xl border border-slate-800">
                   <div className="text-left">
-                    <span className="text-xs font-bold text-white block">
+                    <span className="text-xs lg:text-[11px] font-bold text-white block">
                       Neon Glow
                     </span>
-                    <span className="text-[10px] text-slate-400 block leading-tight">
+                    <span className="text-[11px] text-slate-400 block leading-tight">
                       Emit high-vis plasma light
                     </span>
                   </div>
