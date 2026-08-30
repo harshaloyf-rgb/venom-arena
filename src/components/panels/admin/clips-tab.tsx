@@ -58,14 +58,14 @@ function StatusBadge({ status, size = 'sm' }: { status: string; size?: 'sm' | 'm
     rejected: { color: 'text-red-400 bg-red-500/10 border-red-500/30', label: 'Rejected' },
   };
   const c = cfg[status] || cfg.pending;
-  return <span className={`inline-flex items-center gap-1 font-bold uppercase tracking-wider border px-1.5 py-0.5 rounded ${c.color} ${size === 'md' ? 'text-[10px]' : 'text-[8px]'}`}>{c.label}</span>;
+  return <span className={`inline-flex items-center gap-1 font-bold uppercase tracking-wider border px-1.5 py-0.5 rounded ${c.color} ${size === 'md' ? 'text-[10px] lg:text-[11px]' : 'text-[8px] lg:text-[11px]'}`}>{c.label}</span>;
 }
 
 function MetaItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-slate-950/80 border border-slate-800/60 px-3 py-2.5">
-      <p className="text-[10px] text-slate-600 font-bold uppercase">{label}</p>
-      <p className="text-sm text-white font-medium mt-0.5 truncate">{value}</p>
+    <div className="rounded-lg bg-slate-950/80 border border-slate-800/60 px-3 py-2.5 lg:px-2 lg:py-1.5">
+      <p className="text-[10px] lg:text-[11px] text-slate-600 font-bold uppercase">{label}</p>
+      <p className="text-sm lg:text-[11px] text-white font-medium mt-0.5">{value}</p>
     </div>
   );
 }
@@ -146,40 +146,40 @@ export function ClipsTab({ onToast }: { onToast?: ToastFn }) {
   const pendingInList = clips.filter((c) => c.status === 'pending').length;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 lg:space-y-1">
       {/* Section header with stats */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10">
-            <ShieldCheck className="h-5 w-5 text-red-400" />
+        <div className="flex items-center gap-3 lg:gap-1">
+          <div className="flex h-10 w-10 lg:h-6 lg:w-6 items-center justify-center rounded-lg bg-red-500/10">
+            <ShieldCheck className="h-5 w-5 lg:h-3.5 lg:w-3.5 text-red-400" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-100">Clip Moderation</h3>
-            <p className="text-xs text-slate-500">Review and manage user-submitted highlights</p>
+            <h3 className="text-base lg:text-[11px] font-bold text-slate-100">Clip Moderation</h3>
+            <p className="text-xs lg:text-[11px] text-slate-500">Review and manage user-submitted highlights</p>
           </div>
         </div>
         {counts.pending > 0 && (
-          <span className="px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-bold animate-pulse">
+          <span className="px-3 py-1 lg:px-1.5 lg:py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs lg:text-[11px] font-bold animate-pulse">
             {counts.pending} pending
           </span>
         )}
       </div>
 
       {/* Status filter tabs + bulk actions */}
-      <div className="flex items-center gap-1.5 flex-wrap">
+      <div className="flex items-center gap-1.5 lg:gap-0.5 flex-wrap">
         {(['pending', 'approved', 'rejected', 'all'] as const).map((t) => (
           <button key={t} type="button" onClick={() => { setTab(t); setSelectedId(null); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition border ${tab === t ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'}`}
+            className={`px-3 py-1.5 lg:px-2 lg:py-1 rounded-lg text-xs lg:text-[11px] font-bold uppercase tracking-wider transition border ${tab === t ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'}`}
           >
-            {t} <span className="ml-1 text-[10px] opacity-70">{counts[t as keyof typeof counts] ?? 0}</span>
+            {t} <span className="ml-1 text-[10px] lg:text-[11px] opacity-70">{counts[t as keyof typeof counts] ?? 0}</span>
           </button>
         ))}
         {tab === 'pending' && pendingInList > 1 && (
           <div className="ml-auto flex items-center gap-1.5">
-            <button type="button" onClick={() => handleBulkAction('approve')} disabled={acting === 'bulk'} className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold uppercase tracking-wider transition flex items-center gap-1.5 disabled:opacity-50">
+            <button type="button" onClick={() => handleBulkAction('approve')} disabled={acting === 'bulk'} className="px-3 py-1.5 lg:px-2 lg:py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs lg:text-[11px] font-bold uppercase tracking-wider transition flex items-center gap-1.5 disabled:opacity-50">
               <CheckCircle2 className="w-3.5 h-3.5" /> Approve All
             </button>
-            <button type="button" onClick={() => handleBulkAction('reject')} disabled={acting === 'bulk'} className="px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-600 text-white text-xs font-bold uppercase tracking-wider transition flex items-center gap-1.5 disabled:opacity-50">
+            <button type="button" onClick={() => handleBulkAction('reject')} disabled={acting === 'bulk'} className="px-3 py-1.5 lg:px-2 lg:py-1 rounded-lg bg-red-700 hover:bg-red-600 text-white text-xs lg:text-[11px] font-bold uppercase tracking-wider transition flex items-center gap-1.5 disabled:opacity-50">
               <XCircle className="w-3.5 h-3.5" /> Reject All
             </button>
           </div>
@@ -187,7 +187,7 @@ export function ClipsTab({ onToast }: { onToast?: ToastFn }) {
       </div>
 
       {/* Split panel: list + detail */}
-      <div className="flex rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden" style={{ minHeight: 420 }}>
+      <div className="flex rounded-xl border border-slate-800 bg-slate-900/60 overflow-hidden min-h-[420px] lg:min-h-0">
         {/* Clip List */}
         <div className="w-full sm:w-2/5 border-r border-slate-800/60 overflow-y-auto custom-scrollbar">
           {loading ? (
@@ -201,20 +201,20 @@ export function ClipsTab({ onToast }: { onToast?: ToastFn }) {
           ) : (
             <div className="divide-y divide-slate-800/40">
               {clips.map((clip) => (
-                <button key={clip.id} type="button" onClick={() => setSelectedId(clip.id)} className={`w-full text-left px-4 py-3 hover:bg-slate-800/40 transition ${selectedId === clip.id ? 'bg-slate-800/60 border-l-2 border-emerald-500' : ''}`}>
-                  <div className="flex items-start gap-3">
+                <button key={clip.id} type="button" onClick={() => setSelectedId(clip.id)} className={`w-full text-left px-4 py-3 lg:px-2 lg:py-1.5 hover:bg-slate-800/40 transition ${selectedId === clip.id ? 'bg-slate-800/60 border-l-2 border-emerald-500' : ''}`}>
+                  <div className="flex items-start gap-3 lg:gap-1.5">
                     {clip.thumbnailUrl ? (
-                      <img src={clip.thumbnailUrl} alt="" className="w-16 h-11 rounded-lg object-cover shrink-0 bg-slate-950" />
+                      <img src={clip.thumbnailUrl} alt="" className="w-16 h-11 lg:w-12 lg:h-8 rounded-lg object-cover shrink-0 bg-slate-950" />
                     ) : (
                       <div className="w-16 h-11 rounded-lg bg-slate-950 border border-slate-800 shrink-0 flex items-center justify-center"><Film className="w-4 h-4 text-slate-700" /></div>
                     )}
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold text-white truncate leading-tight flex items-center gap-2">
+                      <p className="text-sm lg:text-[11px] font-bold text-white leading-tight flex items-center gap-2">
                         {clip.title}
-                        {clip.featured && <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0">★ Featured</span>}
+                        {clip.featured && <span className="inline-flex items-center gap-0.5 text-[9px] lg:text-[11px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0">★ Featured</span>}
                       </p>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-slate-500">{clip.player.name}</span>
+                        <span className="text-xs lg:text-[11px] text-slate-500">{clip.player.name}</span>
                         <StatusBadge status={clip.status} />
                       </div>
                     </div>
@@ -226,14 +226,14 @@ export function ClipsTab({ onToast }: { onToast?: ToastFn }) {
         </div>
 
         {/* Clip Detail */}
-        <div className="hidden sm:flex flex-1 flex-col min-w-0">
+        <div className="hidden lg:flex flex-1 flex-col min-w-0">
           {selected ? (
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-5">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-5 lg:p-2 space-y-5 lg:space-y-2">
               {/* Preview */}
               {selected.cardType === 'match-card' ? (
-                <div className="rounded-xl bg-slate-950 border border-slate-800 p-5 text-center">
-                  <span className="text-xs font-mono text-red-400 font-bold uppercase tracking-widest">Match Card (auto-generated)</span>
-                  <p className="text-base font-bold text-white mt-2">{selected.title}</p>
+                <div className="rounded-xl bg-slate-950 border border-slate-800 p-5 lg:p-2 text-center">
+                  <span className="text-xs lg:text-[11px] font-mono text-red-400 font-bold uppercase tracking-widest">Match Card (auto-generated)</span>
+                  <p className="text-base lg:text-[11px] font-bold text-white mt-2">{selected.title}</p>
                 </div>
               ) : (
                 <a href={selected.url} target="_blank" rel="noopener noreferrer" className="block rounded-xl overflow-hidden border border-slate-800 group/prev">
@@ -249,12 +249,12 @@ export function ClipsTab({ onToast }: { onToast?: ToastFn }) {
 
               {/* Info */}
               <div>
-                <h4 className="text-base font-bold text-white">{selected.title}</h4>
-                {selected.description && <p className="text-sm text-slate-400 mt-1">{selected.description}</p>}
+                <h4 className="text-base lg:text-[11px] font-bold text-white">{selected.title}</h4>
+                {selected.description && <p className="text-sm lg:text-[11px] text-slate-400 mt-1">{selected.description}</p>}
               </div>
 
               {/* Metadata */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 lg:gap-1">
                 <MetaItem label="Player" value={`${selected.player.name} (${selected.player.userTag})`} />
                 <MetaItem label="Platform" value={selected.platform} />
                 {selected.arenaName && <MetaItem label="Arena" value={selected.arenaName} />}
@@ -266,31 +266,31 @@ export function ClipsTab({ onToast }: { onToast?: ToastFn }) {
 
               {/* URL */}
               {selected.url && (
-                <div className="rounded-lg bg-slate-950 border border-slate-800 p-3">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Video URL</p>
+                <div className="rounded-lg bg-slate-950 border border-slate-800 p-3 lg:p-2">
+                  <p className="text-[10px] lg:text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Video URL</p>
                   <a href={selected.url} target="_blank" rel="noopener noreferrer" className="text-xs font-mono text-red-400 hover:text-red-300 break-all transition">{selected.url}</a>
                 </div>
               )}
 
               {/* Actions */}
-              <div className="flex items-center gap-3 pt-4 border-t border-slate-800">
+              <div className="flex items-center gap-3 lg:gap-1 pt-4 lg:pt-1 border-t border-slate-800">
                 {selected.status === 'pending' ? (
                   <>
-                    <button type="button" onClick={() => handleAction(selected.id, 'approve')} disabled={acting === selected.id} className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold uppercase tracking-wider transition flex items-center justify-center gap-2 disabled:opacity-50">
+                    <button type="button" onClick={() => handleAction(selected.id, 'approve')} disabled={acting === selected.id} className="flex-1 py-3 lg:py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm lg:text-[11px] font-bold uppercase tracking-wider transition flex items-center justify-center gap-2 disabled:opacity-50">
                       {acting === selected.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Approve
                     </button>
-                    <button type="button" onClick={() => handleAction(selected.id, 'reject')} disabled={acting === selected.id} className="flex-1 py-3 rounded-xl bg-red-700 hover:bg-red-600 text-white text-sm font-bold uppercase tracking-wider transition flex items-center justify-center gap-2 disabled:opacity-50">
+                    <button type="button" onClick={() => handleAction(selected.id, 'reject')} disabled={acting === selected.id} className="flex-1 py-3 lg:py-1.5 rounded-xl bg-red-700 hover:bg-red-600 text-white text-sm lg:text-[11px] font-bold uppercase tracking-wider transition flex items-center justify-center gap-2 disabled:opacity-50">
                       {acting === selected.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />} Reject
                     </button>
                   </>
                 ) : (
-                  <div className="flex-1 flex items-center justify-between py-3">
+                  <div className="flex-1 flex items-center justify-between py-3 lg:py-1.5">
                     <div className="flex items-center gap-2">
                       <StatusBadge status={selected.status} size="md" />
-                      <span className="text-xs text-slate-500">{selected.reviewedAt ? `Reviewed ${timeAgo(selected.reviewedAt)}` : ''}</span>
+                      <span className="text-xs lg:text-[11px] text-slate-500">{selected.reviewedAt ? `Reviewed ${timeAgo(selected.reviewedAt)}` : ''}</span>
                     </div>
                     {selected.status === 'approved' && (
-                      <button type="button" onClick={() => handleAction(selected.id, selected.featured ? 'unfeature' : 'feature')} disabled={acting === selected.id} className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition flex items-center gap-1.5 disabled:opacity-50 border ${selected.featured ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/30' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-amber-300 hover:border-amber-500/50'}`}>
+                      <button type="button" onClick={() => handleAction(selected.id, selected.featured ? 'unfeature' : 'feature')} disabled={acting === selected.id} className={`px-4 py-2.5 lg:px-2 lg:py-1 rounded-xl text-xs lg:text-[11px] font-bold uppercase tracking-wider transition flex items-center gap-1.5 disabled:opacity-50 border ${selected.featured ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 hover:bg-amber-500/30' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-amber-300 hover:border-amber-500/50'}`}>
                         {acting === selected.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Star className={`w-4 h-4 ${selected.featured ? 'fill-amber-400' : ''}`} />} {selected.featured ? 'Unfeature' : 'Feature'}
                       </button>
                     )}
@@ -301,9 +301,9 @@ export function ClipsTab({ onToast }: { onToast?: ToastFn }) {
           ) : (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center px-8">
-                <Eye className="w-12 h-12 text-slate-700 mx-auto mb-4" />
-                <p className="text-sm text-slate-500">Select a clip to review</p>
-                <p className="text-xs text-slate-600 mt-1">Click any clip on the left to see its preview, details, and approve or reject it.</p>
+                <Eye className="w-12 h-12 lg:w-8 lg:h-8 text-slate-700 mx-auto mb-4" />
+                <p className="text-sm lg:text-[11px] text-slate-500">Select a clip to review</p>
+                <p className="text-xs lg:text-[11px] text-slate-600 mt-1">Click any clip on the left to see its preview, details, and approve or reject it.</p>
               </div>
             </div>
           )}

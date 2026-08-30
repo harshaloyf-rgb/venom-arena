@@ -53,11 +53,11 @@ function OverviewContent({ onToast, onTabChange }: { onToast?: ToastFn; onTabCha
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 lg:space-y-1">
       {/* Welcome banner */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-6">
-        <h3 className="text-lg font-semibold text-slate-100">Welcome, Administrator</h3>
-        <p className="mt-1 text-sm text-slate-400">
+      <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-6 lg:p-2">
+        <h3 className="text-lg font-semibold text-slate-100 lg:text-[11px]">Welcome, Administrator</h3>
+        <p className="mt-1 lg:mt-0 text-sm text-slate-400 lg:text-[11px]">
           Use this dashboard to manage players, clans, and game settings. Select a quick action below or
           navigate using the tabs above.
         </p>
@@ -65,25 +65,25 @@ function OverviewContent({ onToast, onTabChange }: { onToast?: ToastFn; onTabCha
 
       {/* Quick actions grid */}
       <div>
-        <h4 className="mb-3 text-sm font-medium uppercase tracking-wider text-slate-500">Quick Actions</h4>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <h4 className="mb-3 lg:mb-0.5 text-sm font-medium uppercase tracking-wider text-slate-500 lg:text-[11px]">Quick Actions</h4>
+        <div className="grid grid-cols-1 gap-4 lg:gap-1 sm:grid-cols-2">
           {quickActions.map((action) => {
             const Icon = action.icon;
             return (
               <button
                 key={action.title}
                 onClick={action.onClick}
-                className="group rounded-xl border border-slate-800 bg-slate-900/60 p-5 text-left transition-all hover:border-emerald-500/50 hover:bg-slate-800/80"
+                className="group rounded-xl border border-slate-800 bg-slate-900/60 p-5 lg:p-1.5 text-left transition-all hover:border-emerald-500/50 hover:bg-slate-800/80"
               >
-                <div className="flex items-start gap-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 transition-colors group-hover:bg-emerald-500/20">
-                    <Icon className="h-5 w-5" />
+                <div className="flex items-start gap-4 lg:gap-2">
+                  <div className="flex h-10 w-10 lg:h-6 lg:w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 transition-colors group-hover:bg-emerald-500/20">
+                    <Icon className="h-5 w-5 lg:h-3 lg:w-3" />
                   </div>
                   <div className="min-w-0">
-                    <h5 className="font-medium text-slate-200 transition-colors group-hover:text-emerald-400">
+                    <h5 className="font-medium text-slate-200 transition-colors group-hover:text-emerald-400 lg:text-[11px]">
                       {action.title}
                     </h5>
-                    <p className="mt-1 text-sm text-slate-500">{action.description}</p>
+                    <p className="mt-1 text-sm text-slate-500 lg:text-[11px]">{action.description}</p>
                   </div>
                 </div>
               </button>
@@ -93,37 +93,37 @@ function OverviewContent({ onToast, onTabChange }: { onToast?: ToastFn; onTabCha
       </div>
 
       {/* Info cards row */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-500/10 text-red-400">
-              <ShieldCheck className="h-4 w-4" />
+      <div className="grid grid-cols-1 gap-4 lg:gap-1 sm:grid-cols-3">
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 lg:p-1.5">
+          <div className="flex items-center gap-3 lg:gap-1">
+            <div className="flex h-9 w-9 lg:h-6 lg:w-6 items-center justify-center rounded-lg bg-red-500/10 text-red-400">
+              <ShieldCheck className="h-4 w-4 lg:h-3 lg:w-3" />
             </div>
             <div>
               <p className="text-xs text-slate-500">Content Moderation</p>
-              <p className="text-sm font-medium text-slate-300">Review & approve clips</p>
+              <p className="text-sm font-medium text-slate-300 lg:text-[11px]">Review & approve clips</p>
             </div>
           </div>
         </div>
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
-              <Users className="h-4 w-4" />
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 lg:p-1.5">
+          <div className="flex items-center gap-3 lg:gap-1">
+            <div className="flex h-9 w-9 lg:h-6 lg:w-6 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+              <Users className="h-4 w-4 lg:h-3 lg:w-3" />
             </div>
             <div>
               <p className="text-xs text-slate-500">Player Management</p>
-              <p className="text-sm font-medium text-slate-300">Ban, mute, promote</p>
+              <p className="text-sm font-medium text-slate-300 lg:text-[11px]">Ban, mute, promote</p>
             </div>
           </div>
         </div>
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400">
-              <Castle className="h-4 w-4" />
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 lg:p-1.5">
+          <div className="flex items-center gap-3 lg:gap-1">
+            <div className="flex h-9 w-9 lg:h-6 lg:w-6 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400">
+              <Castle className="h-4 w-4 lg:h-3 lg:w-3" />
             </div>
             <div>
               <p className="text-xs text-slate-500">Clan Management</p>
-              <p className="text-sm font-medium text-slate-300">Disband, rename, edit</p>
+              <p className="text-sm font-medium text-slate-300 lg:text-[11px]">Disband, rename, edit</p>
             </div>
           </div>
         </div>
@@ -136,20 +136,20 @@ export function AdminPanel({ onToast }: { onToast?: ToastFn }) {
   const [activeTab, setActiveTab] = useState<TabId>('overview');
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 lg:space-y-1">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10">
-          <Shield className="h-5 w-5 text-emerald-400" />
+      <div className="flex items-center gap-3 lg:gap-1">
+        <div className="flex h-10 w-10 lg:h-6 lg:w-6 items-center justify-center rounded-lg bg-emerald-500/10">
+          <Shield className="h-5 w-5 lg:h-3.5 lg:w-3.5 text-emerald-400" />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-slate-100">Admin Dashboard</h2>
-          <p className="text-sm text-slate-500">Manage your game server</p>
+          <h2 className="text-xl font-bold text-slate-100 lg:text-[11px]">Admin Dashboard</h2>
+          <p className="text-sm text-slate-500 lg:text-[11px]">Manage your game server</p>
         </div>
       </div>
 
       {/* Tab buttons */}
-      <div className="flex gap-1 overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/60 p-1">
+      <div className="flex gap-1 overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/60 p-1 lg:p-0.5">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -157,14 +157,14 @@ export function AdminPanel({ onToast }: { onToast?: ToastFn }) {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium transition-all ${
+              className={`flex items-center gap-2 whitespace-nowrap rounded-md px-4 py-2 lg:px-2 lg:py-1 text-sm lg:text-[11px] font-medium transition-all ${
                 isActive
                   ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
                   : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
               }`
             }
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-4 w-4 lg:h-3 lg:w-3" />
               {tab.label}
             </button>
           );
@@ -172,7 +172,7 @@ export function AdminPanel({ onToast }: { onToast?: ToastFn }) {
       </div>
 
       {/* Tab content */}
-      <div className="mt-2">
+      <div className="mt-2 lg:mt-0.5">
         {activeTab === 'overview' && <OverviewContent onToast={onToast} onTabChange={setActiveTab} />}
         {activeTab === 'clips' && <ClipsTab onToast={onToast} />}
         {activeTab === 'players' && <PlayersTab onToast={onToast} />}

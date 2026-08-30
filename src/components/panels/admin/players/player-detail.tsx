@@ -65,13 +65,13 @@ export interface PlayerDetail {
 export function RoleBadge({ role }: { role: string }) {
   if (role === 'admin') {
     return (
-      <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider border px-1.5 py-0.5 rounded text-amber-400 bg-amber-500/10 border-amber-500/30">
+      <span className="inline-flex items-center gap-1 text-[9px] lg:text-[11px] font-bold uppercase tracking-wider border px-1.5 py-0.5 rounded text-amber-400 bg-amber-500/10 border-amber-500/30">
         <ShieldAlert className="w-2.5 h-2.5" /> Admin
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider border px-1.5 py-0.5 rounded text-emerald-400 bg-emerald-500/10 border-emerald-500/30">
+    <span className="inline-flex items-center gap-1 text-[9px] lg:text-[11px] font-bold uppercase tracking-wider border px-1.5 py-0.5 rounded text-emerald-400 bg-emerald-500/10 border-emerald-500/30">
       <UserCheck className="w-2.5 h-2.5" /> Player
     </span>
   );
@@ -79,7 +79,7 @@ export function RoleBadge({ role }: { role: string }) {
 
 export function BannedBadge() {
   return (
-    <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider border px-1.5 py-0.5 rounded text-red-400 bg-red-500/10 border-red-500/30">
+    <span className="inline-flex items-center gap-1 text-[9px] lg:text-[11px] font-bold uppercase tracking-wider border px-1.5 py-0.5 rounded text-red-400 bg-red-500/10 border-red-500/30">
       <Ban className="w-2.5 h-2.5" /> Banned
     </span>
   );
@@ -101,15 +101,15 @@ function StatCard({
   sub?: string;
 }) {
   return (
-    <div className="rounded-xl border border-slate-800/60 bg-slate-950/50 p-3 flex flex-col gap-1">
+    <div className="rounded-xl border border-slate-800/60 bg-slate-950/50 p-3 lg:p-1 flex flex-col gap-1 lg:gap-0">
       <div className="flex items-center justify-between">
-        <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500">
+        <span className="text-[9px] lg:text-[11px] font-mono uppercase tracking-widest text-slate-500">
           {label}
         </span>
         {icon}
       </div>
-      <span className={`text-sm font-black ${color}`}>{value}</span>
-      {sub && <span className="text-[9px] text-slate-600 font-mono">{sub}</span>}
+      <span className={`text-sm lg:text-[11px] font-black ${color}`}>{value}</span>
+      {sub && <span className="text-[9px] lg:text-[11px] text-slate-600 font-mono">{sub}</span>}
     </div>
   );
 }
@@ -140,7 +140,7 @@ export function PlayerDetailPanel({
 
   return (
     <div
-      className={`w-full lg:w-[440px] shrink-0 transition-all duration-300 ${selectedTag ? 'opacity-100 translate-x-0' : 'opacity-0 lg:translate-x-4 pointer-events-none lg:pointer-events-auto lg:opacity-0'}`}
+      className={`w-full lg:w-[340px] shrink-0 transition-all duration-300 ${selectedTag ? 'opacity-100 translate-x-0' : 'opacity-0 lg:translate-x-4 pointer-events-none lg:pointer-events-auto lg:opacity-0'}`}
       aria-hidden={!selectedTag}
     >
       {selectedTag ? (
@@ -165,45 +165,45 @@ export function PlayerDetailPanel({
               <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
             </div>
           ) : playerDetail ? (
-            <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+            <div className="p-4 lg:p-2 space-y-4 lg:space-y-1 max-h-[70vh] lg:max-h-[420px] overflow-y-auto">
               {/* ── Player identity ── */}
-              <div className="flex items-start gap-3">
+              <div className="flex items-start gap-3 lg:gap-1.5">
                 {playerDetail.avatar ? (
                   <img
                     src={playerDetail.avatar}
                     alt=""
-                    className="w-14 h-14 rounded-xl object-cover border border-slate-700 shrink-0"
+                    className="w-14 h-14 lg:w-8 lg:h-8 rounded-xl object-cover border border-slate-700 shrink-0"
                   />
                 ) : (
-                  <div className="w-14 h-14 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-2xl shrink-0">
+                  <div className="w-14 h-14 lg:w-8 lg:h-8 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-2xl lg:text-sm shrink-0">
                     {countryFlag(playerDetail.country)}
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-base font-black text-white truncate">
+                    <h3 className="text-base lg:text-[11px] font-black text-white">
                       {playerDetail.name}
                     </h3>
-                    <span className="text-[9px] font-mono text-slate-500 bg-slate-900 border border-slate-800/60 px-1.5 py-0.5 rounded">
+                    <span className="text-[9px] lg:text-[11px] font-mono text-slate-500 bg-slate-900 border border-slate-800/60 px-1.5 py-0.5 rounded">
                       #{playerDetail.userTag}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    <span className="text-sm">{countryFlag(playerDetail.country)}</span>
+                    <span className="text-sm lg:text-[11px]">{countryFlag(playerDetail.country)}</span>
                     <RoleBadge role={playerDetail.role} />
                     {playerDetail.banned && <BannedBadge />}
                     {playerDetail.clanTag && (
-                      <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
+                      <span className="text-[9px] lg:text-[11px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
                         [{playerDetail.clanTag}]
                         {playerDetail.clanRank && ` ${playerDetail.clanRank}`}
                       </span>
                     )}
                   </div>
-                  <div className="text-[10px] text-slate-500 mt-1.5 font-mono flex items-center gap-3 flex-wrap">
+                  <div className="text-[10px] lg:text-[11px] text-slate-500 mt-1.5 font-mono flex items-center gap-3 flex-wrap">
                     {playerDetail.email && (
-                      <span className="truncate max-w-[200px]">{playerDetail.email}</span>
+                      <span>{playerDetail.email}</span>
                     )}
-                    <span className="flex items-center gap-0.5">
+                    <span className="flex items-center gap-0.5 lg:text-[11px]">
                       <Clock className="w-2.5 h-2.5" />
                       Seen {timeAgo(playerDetail.lastSeenAt)}
                     </span>
@@ -212,7 +212,7 @@ export function PlayerDetailPanel({
               </div>
 
               {/* ── Stats grid ── */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 lg:gap-1">
                 <StatCard
                   label="Banked Chips"
                   value={formatChips(playerDetail.bankedChips)}
@@ -281,7 +281,7 @@ export function PlayerDetailPanel({
               </div>
 
               {/* Extra stats row */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2 lg:gap-1">
                 <StatCard
                   label="Daily Streak"
                   value={playerDetail.dailyStreak}
@@ -296,14 +296,14 @@ export function PlayerDetailPanel({
 
               {/* ── Clan info ── */}
               {playerDetail.clanMembers && (
-                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
-                  <span className="text-[9px] font-mono uppercase tracking-widest text-amber-500/70 block mb-1">
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 lg:p-1.5">
+                  <span className="text-[9px] lg:text-[11px] font-mono uppercase tracking-widest text-amber-500/70 block mb-1">
                     Clan
                   </span>
-                  <p className="text-xs font-bold text-amber-300">
+                  <p className="text-xs lg:text-[11px] font-bold text-amber-300">
                     {playerDetail.clanMembers.clanName}
                   </p>
-                  <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                  <p className="text-[10px] lg:text-[11px] text-slate-400 font-mono mt-0.5">
                     {playerDetail.clanMembers.memberCount} members
                   </p>
                 </div>
@@ -311,8 +311,8 @@ export function PlayerDetailPanel({
 
               {/* ── Social links ── */}
               {(playerDetail.instagram || playerDetail.youtube || playerDetail.twitch) && (
-                <div className="rounded-xl border border-slate-800/60 bg-slate-950/50 p-3">
-                  <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500 block mb-2">
+                <div className="rounded-xl border border-slate-800/60 bg-slate-950/50 p-3 lg:p-1.5">
+                  <span className="text-[9px] lg:text-[11px] font-mono uppercase tracking-widest text-slate-500 block mb-2 lg:mb-0.5">
                     Social Links
                   </span>
                   <div className="space-y-1.5">
@@ -321,7 +321,7 @@ export function PlayerDetailPanel({
                         href={playerDetail.youtube}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-2 text-[10px] text-red-400 hover:text-red-300 transition truncate"
+                        className="flex items-center gap-2 text-[10px] lg:text-[11px] text-red-400 hover:text-red-300 transition"
                       >
                         <ExternalLink className="w-3 h-3 shrink-0" />
                         YouTube
@@ -332,7 +332,7 @@ export function PlayerDetailPanel({
                         href={playerDetail.twitch}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-2 text-[10px] text-violet-400 hover:text-violet-300 transition truncate"
+                        className="flex items-center gap-2 text-[10px] lg:text-[11px] text-violet-400 hover:text-violet-300 transition"
                       >
                         <ExternalLink className="w-3 h-3 shrink-0" />
                         Twitch
@@ -343,7 +343,7 @@ export function PlayerDetailPanel({
                         href={playerDetail.instagram}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-2 text-[10px] text-pink-400 hover:text-pink-300 transition truncate"
+                        className="flex items-center gap-2 text-[10px] lg:text-[11px] text-pink-400 hover:text-pink-300 transition"
                       >
                         <ExternalLink className="w-3 h-3 shrink-0" />
                         Instagram
@@ -354,11 +354,11 @@ export function PlayerDetailPanel({
               )}
 
               {/* ── Cosmetics info ── */}
-              <div className="rounded-xl border border-slate-800/60 bg-slate-950/50 p-3">
-                <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500 block mb-2">
+              <div className="rounded-xl border border-slate-800/60 bg-slate-950/50 p-3 lg:p-1.5">
+                <span className="text-[9px] lg:text-[11px] font-mono uppercase tracking-widest text-slate-500 block mb-2 lg:mb-0.5">
                   Equipped Cosmetics
                 </span>
-                <div className="space-y-1 text-[10px] font-mono text-slate-400">
+                <div className="space-y-1 text-[10px] lg:text-[11px] font-mono text-slate-400">
                   {playerDetail.currentSkin && (
                     <p>Skin: <span className="text-white">{playerDetail.currentSkin}</span></p>
                   )}
@@ -378,32 +378,32 @@ export function PlayerDetailPanel({
 
               {/* ── Referral code ── */}
               {playerDetail.referralCode && (
-                <div className="rounded-xl border border-slate-800/60 bg-slate-950/50 p-3">
-                  <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500 block mb-1">
+                <div className="rounded-xl border border-slate-800/60 bg-slate-950/50 p-3 lg:p-1.5">
+                  <span className="text-[9px] lg:text-[11px] font-mono uppercase tracking-widest text-slate-500 block mb-1 lg:mb-0">
                     Referral Code
                   </span>
-                  <p className="text-xs font-mono font-bold text-emerald-400">
+                  <p className="text-xs lg:text-[11px] font-mono font-bold text-emerald-400">
                     {playerDetail.referralCode}
                   </p>
                 </div>
               )}
 
               {/* ── Account dates ── */}
-              <div className="rounded-xl border border-slate-800/60 bg-slate-950/50 p-3">
-                <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-slate-800/60 bg-slate-950/50 p-3 lg:p-1.5">
+                <div className="grid grid-cols-2 gap-3 lg:gap-1">
                   <div>
-                    <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500 block mb-0.5">
+                    <span className="text-[9px] lg:text-[11px] font-mono uppercase tracking-widest text-slate-500 block mb-0.5">
                       Joined
                     </span>
-                    <span className="text-[10px] text-slate-300 font-mono">
+                    <span className="text-[10px] lg:text-[11px] text-slate-300 font-mono">
                       {timeAgo(playerDetail.createdAt)}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500 block mb-0.5">
+                    <span className="text-[9px] lg:text-[11px] font-mono uppercase tracking-widest text-slate-500 block mb-0.5">
                       Last Seen
                     </span>
-                    <span className="text-[10px] text-slate-300 font-mono">
+                    <span className="text-[10px] lg:text-[11px] text-slate-300 font-mono">
                       {timeAgo(playerDetail.lastSeenAt)}
                     </span>
                   </div>
@@ -411,10 +411,10 @@ export function PlayerDetailPanel({
               </div>
 
               {/* ── Actions ── */}
-              <div className="space-y-3 pt-2 border-t border-slate-800">
+              <div className="space-y-3 lg:space-y-1 pt-2 lg:pt-1 border-t border-slate-800">
                 {/* Chip modification */}
                 <div>
-                  <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500 block mb-2">
+                  <span className="text-[9px] lg:text-[11px] font-mono uppercase tracking-widest text-slate-500 block mb-2 lg:mb-0.5">
                     Chip Modification
                   </span>
                   <div className="flex gap-2">
@@ -423,14 +423,14 @@ export function PlayerDetailPanel({
                       placeholder="Amount"
                       value={chipAmount}
                       onChange={(e) => onChipAmountChange(e.target.value)}
-                      className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-emerald-500/50 transition"
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 lg:px-2 lg:py-1 text-xs text-white font-mono focus:outline-none focus:border-emerald-500/50 transition"
                       min="1"
                     />
                     <button
                       type="button"
                       onClick={() => void onModifyChips('add')}
                       disabled={busy || !chipAmount.trim()}
-                      className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-[10px] font-bold uppercase tracking-wider transition flex items-center gap-1.5 whitespace-nowrap"
+                      className="px-3 py-2 lg:px-2 lg:py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-[10px] font-bold uppercase tracking-wider transition flex items-center gap-1.5 whitespace-nowrap"
                     >
                       {busy ? (
                         <Loader2 className="w-3 h-3 animate-spin" />
@@ -443,7 +443,7 @@ export function PlayerDetailPanel({
                       type="button"
                       onClick={() => void onModifyChips('remove')}
                       disabled={busy || !chipAmount.trim()}
-                      className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-[10px] font-bold uppercase tracking-wider transition flex items-center gap-1.5 whitespace-nowrap"
+                      className="px-3 py-2 lg:px-2 lg:py-1 rounded-lg bg-red-600 hover:bg-red-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-[10px] font-bold uppercase tracking-wider transition flex items-center gap-1.5 whitespace-nowrap"
                     >
                       {busy ? (
                         <Loader2 className="w-3 h-3 animate-spin" />
@@ -453,38 +453,38 @@ export function PlayerDetailPanel({
                       Remove
                     </button>
                   </div>
-                  <p className="text-[9px] text-slate-600 font-mono mt-1.5">
+                  <p className="text-[9px] lg:text-[11px] text-slate-600 font-mono mt-1.5 lg:mt-0.5">
                     Current balance: <span className="text-amber-400 font-bold">{formatChips(playerDetail.bankedChips)}</span> chips
                   </p>
                 </div>
 
                 {/* Ban / Unban */}
                 <div>
-                  <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500 block mb-2">
+                  <span className="text-[9px] lg:text-[11px] font-mono uppercase tracking-widest text-slate-500 block mb-2 lg:mb-0.5">
                     Account Action
                   </span>
                   <button
                     type="button"
                     onClick={() => void onBanToggle()}
                     disabled={busy}
-                    className={`w-full py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition flex items-center justify-center gap-2 ${playerDetail.banned ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-red-600 hover:bg-red-500 text-white'}`}
+                    className={`w-full py-2.5 lg:py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition flex items-center justify-center gap-2 ${playerDetail.banned ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-red-600 hover:bg-red-500 text-white'}`}
                   >
                     {busy ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="w-4 h-4 lg:w-3 lg:h-3 animate-spin" />
                     ) : playerDetail.banned ? (
                       <>
-                        <ShieldBan className="w-4 h-4" />
+                        <ShieldBan className="w-4 h-4 lg:w-3 lg:h-3" />
                         Unban Player
                       </>
                     ) : (
                       <>
-                        <Ban className="w-4 h-4" />
+                        <Ban className="w-4 h-4 lg:w-3 lg:h-3" />
                         Ban Player
                       </>
                     )}
                   </button>
                   {playerDetail.banned && (
-                    <p className="text-[9px] text-red-400/70 font-mono mt-1.5 text-center">
+                    <p className="text-[9px] lg:text-[11px] text-red-400/70 font-mono mt-1.5 text-center">
                       This player is currently banned from the game
                     </p>
                   )}
@@ -503,7 +503,7 @@ export function PlayerDetailPanel({
         <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 border-dashed flex flex-col items-center justify-center py-20 text-slate-500">
           <Eye className="w-8 h-8 text-slate-700 mb-2" />
           <p className="text-xs">Select a player to view details</p>
-          <p className="text-[10px] text-slate-600 mt-1">
+          <p className="text-[10px] lg:text-[11px] text-slate-600 mt-1">
             Click on any row in the list
           </p>
         </div>

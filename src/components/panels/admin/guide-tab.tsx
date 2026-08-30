@@ -143,15 +143,15 @@ export default function GuideTab() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 lg:space-y-1">
       {/* ── Header ────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-        <div className="flex items-center gap-2.5">
-          <span className="flex items-center justify-center h-9 w-9 rounded-lg bg-slate-800 border border-slate-700/50">
-            <BookOpen className="h-4.5 w-4.5 text-slate-300" />
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 lg:gap-1">
+        <div className="flex items-center gap-2.5 lg:gap-1">
+          <span className="flex items-center justify-center h-9 w-9 lg:h-6 lg:w-6 rounded-lg bg-slate-800 border border-slate-700/50">
+            <BookOpen className="h-4.5 w-4.5 lg:h-3 lg:w-3 text-slate-300" />
           </span>
           <div>
-            <h2 className="text-sm font-bold text-white tracking-tight">
+            <h2 className="text-sm lg:text-[11px] font-bold text-white tracking-tight">
               Admin Operations Guide
             </h2>
             <p className="text-[11px] text-slate-500">
@@ -159,7 +159,7 @@ export default function GuideTab() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 sm:ml-auto">
+        <div className="flex items-center gap-2 lg:gap-1 sm:ml-auto">
           <button
             type="button"
             onClick={expandAll}
@@ -180,7 +180,7 @@ export default function GuideTab() {
       </div>
 
       {/* ── Sections ──────────────────────────────────────────────────────── */}
-      <div className="max-h-[600px] overflow-y-auto space-y-2 custom-scrollbar-guide pr-1">
+      <div className="max-h-[600px] lg:max-h-[400px] overflow-y-auto space-y-2 lg:space-y-1 custom-scrollbar-guide pr-1">
         {SECTIONS.map((section) => {
           const isOpen = openSections.has(section.id);
           return (
@@ -202,8 +202,8 @@ export default function GuideTab() {
               />
 
               {isOpen && (
-                <div className="px-5 pb-5 pt-0 border-t border-slate-800/40">
-                  <div className="pt-4">{section.content}</div>
+                <div className="px-5 lg:px-2 pb-5 lg:pb-2 pt-0 border-t border-slate-800/40">
+                  <div className="pt-4 lg:pt-1">{section.content}</div>
                 </div>
               )}
             </div>
@@ -212,7 +212,7 @@ export default function GuideTab() {
       </div>
 
       {/* ── Footer ────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between text-[10px] text-slate-600 pt-1">
+      <div className="flex items-center justify-between text-[10px] lg:text-[11px] text-slate-600 pt-1">
         <span className="flex items-center gap-1.5">
           <Server className="h-3 w-3" />
           Venom Arena Admin v1.0

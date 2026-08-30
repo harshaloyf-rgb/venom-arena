@@ -50,23 +50,23 @@ export function PlayerList({
   return (
     <div className="flex-1 min-w-0">
       {/* Top bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 lg:gap-1 mb-4 lg:mb-1">
         {/* Search input */}
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 lg:w-3 lg:h-3 text-slate-500 pointer-events-none" />
           <input
             type="text"
             placeholder="Search by name or tag…"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50 transition"
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 lg:pl-7 pr-4 py-2.5 lg:py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50 transition"
           />
         </div>
 
         <div className="flex items-center gap-3">
           {/* Banned-only toggle */}
           <label className="flex items-center gap-2 cursor-pointer select-none">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap">
+            <span className="text-[10px] lg:text-[11px] font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap">
               Banned Only
             </span>
             <button
@@ -84,7 +84,7 @@ export function PlayerList({
           </label>
 
           {/* Result count */}
-          <span className="text-[10px] font-mono text-slate-500 whitespace-nowrap">
+          <span className="text-[10px] lg:text-[11px] font-mono text-slate-500 whitespace-nowrap">
             {loading ? '…' : `${players.length} result${players.length !== 1 ? 's' : ''}`}
           </span>
         </div>
@@ -92,7 +92,7 @@ export function PlayerList({
 
       {/* Player list */}
       <div className="rounded-2xl border border-slate-800/80 bg-slate-900/60 overflow-hidden">
-        <div className="max-h-[400px] overflow-y-auto">
+        <div className="max-h-[400px] lg:max-h-[350px] overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
@@ -101,7 +101,7 @@ export function PlayerList({
             <div className="flex flex-col items-center justify-center py-16 text-slate-500">
               <Search className="w-8 h-8 text-slate-700 mb-2" />
               <p className="text-xs">No players found</p>
-              <p className="text-[10px] text-slate-600 mt-1">
+              <p className="text-[10px] lg:text-[11px] text-slate-600 mt-1">
                 Try a different search query
               </p>
             </div>
@@ -114,7 +114,7 @@ export function PlayerList({
                     key={p.userTag}
                     type="button"
                     onClick={() => onSelectPlayer(p.userTag)}
-                    className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-all duration-150 group ${isSelected ? 'bg-emerald-500/10 border-l-2 border-emerald-500' : 'hover:bg-slate-800/40 border-l-2 border-transparent'}`}
+                    className={`w-full text-left px-4 py-3 lg:px-2 lg:py-1.5 flex items-center gap-3 lg:gap-1.5 transition-all duration-150 group ${isSelected ? 'bg-emerald-500/10 border-l-2 border-emerald-500' : 'hover:bg-slate-800/40 border-l-2 border-transparent'}`}
                   >
                     {/* Avatar / Flag */}
                     <div className="shrink-0">
@@ -122,7 +122,7 @@ export function PlayerList({
                         <img
                           src={p.avatar}
                           alt=""
-                          className="w-9 h-9 rounded-lg object-cover border border-slate-700"
+                          className="w-9 h-9 lg:w-6 lg:h-6 rounded-lg object-cover border border-slate-700"
                         />
                       ) : (
                         <div className="w-9 h-9 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-base">
@@ -134,27 +134,27 @@ export function PlayerList({
                     {/* Name + tag */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-bold text-white truncate">
+                        <span className="text-xs lg:text-[11px] font-bold text-white">
                           {p.name}
                         </span>
-                        <span className="text-[9px] font-mono text-slate-500 bg-slate-900 border border-slate-800/60 px-1.5 py-0.5 rounded">
+                        <span className="text-[9px] lg:text-[11px] font-mono text-slate-500 bg-slate-900 border border-slate-800/60 px-1.5 py-0.5 rounded">
                           #{p.userTag}
                         </span>
                         {p.clanTag && (
-                          <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
+                          <span className="text-[9px] lg:text-[11px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
                             [{p.clanTag}]
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <span className="text-[10px] text-amber-400 font-bold flex items-center gap-0.5">
+                        <span className="text-[10px] lg:text-[11px] text-amber-400 font-bold flex items-center gap-0.5">
                           <Coins className="w-2.5 h-2.5" />
                           {formatChips(p.bankedChips)}
                         </span>
-                        <span className="text-[10px] text-slate-500">
+                        <span className="text-[10px] lg:text-[11px] text-slate-500">
                           Lvl {p.level}
                         </span>
-                        <span className="text-[10px] text-slate-600 flex items-center gap-0.5">
+                        <span className="text-[10px] lg:text-[11px] text-slate-600 flex items-center gap-0.5">
                           <Clock className="w-2.5 h-2.5" />
                           {timeAgo(p.lastSeenAt)}
                         </span>
@@ -162,11 +162,11 @@ export function PlayerList({
                     </div>
 
                     {/* Right side: badges + chevron */}
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-1.5 lg:gap-1 shrink-0">
                       {p.banned && <BannedBadge />}
                       {p.role === 'admin' && <RoleBadge role="admin" />}
                       {p.role !== 'admin' && !p.banned && <RoleBadge role="player" />}
-                      <ChevronRight className={`w-4 h-4 transition-transform ${isSelected ? 'text-emerald-400 -rotate-90' : 'text-slate-600 group-hover:text-slate-400'}`} />
+                      <ChevronRight className={`w-4 h-4 lg:w-3 lg:h-3 transition-transform ${isSelected ? 'text-emerald-400 -rotate-90' : 'text-slate-600 group-hover:text-slate-400'}`} />
                     </div>
                   </button>
                 );

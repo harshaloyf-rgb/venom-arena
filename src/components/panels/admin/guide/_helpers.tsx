@@ -36,20 +36,20 @@ export function SectionHeader({
     <button
       type="button"
       onClick={onClick}
-      className="w-full flex items-center gap-3 p-4 rounded-xl hover:bg-slate-800/60 transition-colors duration-150 group cursor-pointer"
+      className="w-full flex items-center gap-3 lg:gap-1 p-4 lg:p-1.5 rounded-xl hover:bg-slate-800/60 transition-colors duration-150 group cursor-pointer"
     >
       <span
-        className={`flex items-center justify-center h-9 w-9 rounded-lg ${iconBg} flex-shrink-0`}
+        className={`flex items-center justify-center h-9 w-9 lg:h-6 lg:w-6 rounded-lg ${iconBg} flex-shrink-0`}
       >
         <span className={iconColor}>{icon}</span>
       </span>
-      <span className="flex-1 text-left text-sm font-bold text-slate-200 group-hover:text-white transition-colors">
+      <span className="flex-1 text-left text-sm lg:text-[11px] font-bold text-slate-200 group-hover:text-white transition-colors">
         {title}
       </span>
       {open ? (
-        <ChevronDown className="h-4 w-4 text-slate-500 flex-shrink-0" />
+        <ChevronDown className="h-4 w-4 lg:h-3 lg:w-3 text-slate-500 flex-shrink-0" />
       ) : (
-        <ChevronRight className="h-4 w-4 text-slate-500 flex-shrink-0" />
+        <ChevronRight className="h-4 w-4 lg:h-3 lg:w-3 text-slate-500 flex-shrink-0" />
       )}
     </button>
   );
@@ -57,7 +57,7 @@ export function SectionHeader({
 
 export function SubHeading({ children }: { children: ReactNode }) {
   return (
-    <h4 className="text-xs font-bold uppercase tracking-widest text-slate-300 mt-5 mb-2 first:mt-0">
+    <h4 className="text-xs lg:text-[11px] font-bold uppercase tracking-widest text-slate-300 mt-5 lg:mt-2 mb-2 lg:mb-0.5 first:mt-0">
       {children}
     </h4>
   );
@@ -65,7 +65,7 @@ export function SubHeading({ children }: { children: ReactNode }) {
 
 export function Bullet({ children }: { children: ReactNode }) {
   return (
-    <li className="flex items-start gap-2 text-xs text-slate-400 leading-relaxed">
+    <li className="flex items-start gap-2 lg:gap-1 text-xs lg:text-[11px] text-slate-400 leading-relaxed">
       <span className="text-slate-600 mt-1.5 flex-shrink-0">
         <span className="inline-block h-1 w-1 rounded-full bg-slate-600" />
       </span>
@@ -76,7 +76,7 @@ export function Bullet({ children }: { children: ReactNode }) {
 
 export function Note({ children }: { children: ReactNode }) {
   return (
-    <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-500/5 border border-amber-500/15 px-3 py-2.5">
+    <div className="mt-3 lg:mt-1 flex items-start gap-2 rounded-lg bg-amber-500/5 border border-amber-500/15 px-3 lg:px-2 py-2.5 lg:py-1.5">
       <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
       <p className="text-[11px] text-amber-300/80 leading-relaxed">{children}</p>
     </div>
@@ -85,7 +85,7 @@ export function Note({ children }: { children: ReactNode }) {
 
 export function InfoBox({ children }: { children: ReactNode }) {
   return (
-    <div className="mt-3 flex items-start gap-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15 px-3 py-2.5">
+    <div className="mt-3 lg:mt-1 flex items-start gap-2 rounded-lg bg-emerald-500/5 border border-emerald-500/15 px-3 lg:px-2 py-2.5 lg:py-1.5">
       <Shield className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
       <p className="text-[11px] text-emerald-300/80 leading-relaxed">{children}</p>
     </div>
@@ -98,17 +98,17 @@ export function EndpointTable({
   rows: { method: string; path: string; desc: string }[];
 }) {
   return (
-    <div className="mt-3 overflow-x-auto rounded-lg border border-slate-800/80">
+    <div className="mt-3 lg:mt-1 overflow-x-auto rounded-lg border border-slate-800/80">
       <table className="w-full text-left">
         <thead>
           <tr className="border-b border-slate-800/80 bg-slate-900/80">
-            <th className="px-3 py-2 text-[10px] font-mono uppercase tracking-widest text-slate-500">
+            <th className="px-3 lg:px-1.5 py-2 lg:py-1 text-[10px] lg:text-[11px] font-mono uppercase tracking-widest text-slate-500">
               Method
             </th>
-            <th className="px-3 py-2 text-[10px] font-mono uppercase tracking-widest text-slate-500">
+            <th className="px-3 lg:px-1.5 py-2 lg:py-1 text-[10px] lg:text-[11px] font-mono uppercase tracking-widest text-slate-500">
               Endpoint
             </th>
-            <th className="px-3 py-2 text-[10px] font-mono uppercase tracking-widest text-slate-500">
+            <th className="px-3 lg:px-1.5 py-2 lg:py-1 text-[10px] lg:text-[11px] font-mono uppercase tracking-widest text-slate-500">
               Description
             </th>
           </tr>
@@ -119,15 +119,15 @@ export function EndpointTable({
               key={i}
               className="border-b border-slate-800/40 last:border-0"
             >
-              <td className="px-3 py-2">
+              <td className="px-3 lg:px-1.5 py-2 lg:py-1">
                 <MethodBadge method={row.method} />
               </td>
-              <td className="px-3 py-2">
+              <td className="px-3 lg:px-1.5 py-2 lg:py-1">
                 <code className="text-[11px] font-mono text-slate-300">
                   {row.path}
                 </code>
               </td>
-              <td className="px-3 py-2 text-[11px] text-slate-400">
+              <td className="px-3 lg:px-1.5 py-2 lg:py-1 text-[11px] text-slate-400">
                 {row.desc}
               </td>
             </tr>
@@ -148,7 +148,7 @@ export function MethodBadge({ method }: { method: string }) {
   };
   return (
     <span
-      className={`inline-block px-2 py-0.5 rounded-md border text-[10px] font-mono font-bold ${colors[method] ?? 'bg-slate-800 text-slate-400 border-slate-700'}`}
+      className={`inline-block px-2 py-0.5 rounded-md border text-[10px] lg:text-[11px] font-mono font-bold ${colors[method] ?? 'bg-slate-800 text-slate-400 border-slate-700'}`}
     >
       {method}
     </span>
@@ -161,7 +161,7 @@ export function TwoColumnTable({
   rows: { label: string; value: string; note?: string; icon?: ReactNode }[];
 }) {
   return (
-    <div className="mt-3 overflow-x-auto rounded-lg border border-slate-800/80">
+    <div className="mt-3 lg:mt-1 overflow-x-auto rounded-lg border border-slate-800/80">
       <table className="w-full text-left">
         <tbody>
           {rows.map((row, i) => (
@@ -169,16 +169,16 @@ export function TwoColumnTable({
               key={i}
               className="border-b border-slate-800/40 last:border-0"
             >
-              <td className="px-3 py-2 text-[11px] font-medium text-slate-300 whitespace-nowrap">
+              <td className="px-3 lg:px-1.5 py-2 lg:py-1 text-[11px] font-medium text-slate-300 whitespace-nowrap">
                 <span className="inline-flex items-center gap-1.5">
                   {row.icon}
                   {row.label}
                 </span>
               </td>
-              <td className="px-3 py-2 text-[11px] text-slate-400">
+              <td className="px-3 lg:px-1.5 py-2 lg:py-1 text-[11px] text-slate-400">
                 {row.value}
                 {row.note && (
-                  <span className="ml-1.5 text-[10px] text-slate-600">
+                  <span className="ml-1.5 text-[10px] lg:text-[11px] text-slate-600">
                     {row.note}
                   </span>
                 )}
