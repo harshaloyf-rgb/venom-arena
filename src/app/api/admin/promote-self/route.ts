@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => ({})) as { userTag?: string };
-  const userTag = String(body.userTag || '').trim().toUpperCase();
+  const userTag = String(body.userTag || '').trim();
   if (!userTag) {
     return NextResponse.json({ error: 'userTag is required' }, { status: 400 });
   }

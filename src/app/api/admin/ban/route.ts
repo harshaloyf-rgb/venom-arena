@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const userTag = String(body.userTag || '').toUpperCase().trim();
+  const userTag = String(body.userTag || '').trim();
   const banned = Boolean(body.banned);
 
   if (!userTag) {
