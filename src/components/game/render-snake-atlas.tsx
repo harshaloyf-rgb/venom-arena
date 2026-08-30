@@ -595,7 +595,8 @@ export function renderSnakeAtlas(
   const camZoomX = cw / 2 - camera.x * zoom;
   const camZoomY = ch / 2 - camera.y * zoom;
   const bodyLen = atlas.body.length;
-  const hasEpicEffect = isEpic && animation;
+  // FIX: Epic/legendary per-segment glow ONLY while boosting (was always-on)
+  const hasEpicEffect = isEpic && animation && snake.boosting;
   for (let i = walked.count - 1; i >= 0; i--) {
     const wx = walked.xs[i];
     const wy = walked.ys[i];
@@ -635,8 +636,8 @@ export function renderSnakeAtlas(
     const hsy = headSY;
     const headDrawSize = segRadius * 2 * 1.05;
 
-    // Legendary glow underlay — only for epic/legendary (rare, acceptable cost)
-    if (isLegendary && Number.isFinite(hsx) && Number.isFinite(hsy) && headDrawSize > 0) {
+    // Legendary glow underlay — only while boosting (was always-on)
+    if (isLegendary && snake.boosting && Number.isFinite(hsx) && Number.isFinite(hsy) && headDrawSize > 0) {
       const glowR = headDrawSize / 2 + LEGENDARY_GLOW_SIZE * zoom;
       if (glowR <= 0) return;
       const intensity = 0.25 + 0.15 * Math.sin(time * 3);
@@ -699,7 +700,7 @@ export function renderSnakeAtlas(
     ctx.translate(hsx, hsy);
     ctx.rotate(snake.angle);
 
-    if (isLegendary && animation) {
+    if (isLegendary && animation && snake.boosting) {
       atlasManager.applyEpicEffect(ctx, animation, time, 0, 0, headDrawSize, snake.headColor);
     }
 
@@ -1039,7 +1040,9 @@ export function renderSnakeFallback(
       const seg = segs[i % segs.length];
       const taperedR = segRadius * seg.sizeScale;
       const segAngle = walked.angles[i];
-      drawSegmentShape(ctx, sx, sy, taperedR, segAngle, seg.shape, seg.color, seg.glow);
+      // FIX: Custom lab skin glow ONLY while boosting (was always-on)
+      const segGlow = seg.glow && snake.boosting;
+      drawSegmentShape(ctx, sx, sy, taperedR, segAngle, seg.shape, seg.color, segGlow);
     }
   } else if (patternVis) {
     // Pattern-based skin: draw with shapes, taper, and glow from the shared mapping

@@ -192,10 +192,11 @@ export function checkCollisions(
   // PERF: Clear per-tick caches
   _tailIdxCache.clear();
   // FIX: Body hash optimization — skip segments for bots far from the player.
-  // Increased from 5000 to 8000: a snake with bodyLength 200 at SEGMENT_SPACING=8
-  // has a body that extends 1600px behind its head. At 5000px range, a bot
-  // whose head is at 5001px but whose body trails to 3401px was fully excluded.
-  const BODY_HASH_RANGE_SQ = 8000 * 8000;
+  // Increased from 8000 to 12000: a snake with bodyLength 300+ at SEGMENT_SPACING=8
+  // has a body that extends 2400+ px behind its head. At 8000px range, a bot
+  // whose head is at 8001px but whose body trails toward the player was excluded,
+  // causing the player to pass through the body without collision detection.
+  const BODY_HASH_RANGE_SQ = 12000 * 12000;
   const hasPlayerRef = playerX !== undefined && playerY !== undefined;
 
   // ── Build body spatial hash (broad phase) ──
@@ -337,7 +338,7 @@ export function checkCollisions(
     // Broad phase: find which snakes have body near this head
     const nearX = (hcx + prevHcx) * 0.5;
     const nearY = (hcy + prevHcy) * 0.5;
-    const nearby = bodyHash.query(nearX, nearY, SNAKE_RADIUS * 6);
+    const nearby = bodyHash.query(nearX, nearY, SNAKE_RADIUS * 8);
     const checkedSnakes = _checkedSnakesSet;
     checkedSnakes.clear();
 

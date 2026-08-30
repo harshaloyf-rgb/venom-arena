@@ -58,3 +58,41 @@ Stage Summary:
 - Game server restarted to pick up collision.ts changes (shared import)
 - Performance improvement: ~600-900 fewer drawImage calls per frame (glow gating)
 - Collision now uses actual body radius, preventing pass-through on large snakes
+
+---
+Task ID: 3
+Agent: Main
+Task: Fix remaining glow bug, collision edge cases, and guest default skin issue
+
+Work Log:
+- User reported: snakes (including player) still glow without boosting, collision still inconsistent, guest inherits previous user's skin
+
+### Bug 1: Glow still on non-boosting snakes (REMAINING GLOW SOURCES)
+- Found 3 additional glow sources that were NOT gated by `snake.boosting`:
+  1. Atlas renderer: `applyEpicEffect('glow', ...)` on every segment for epic/legendary skins — always on
+  2. Atlas renderer: Legendary head underlay (radial gradient) — always on for legendary
+  3. Fallback renderer: Custom lab skin `seg.glow` passed directly without boosting check
+- Fix: Added `&& snake.boosting` to all 3 locations
+- Files: `src/components/game/render-snake-atlas.tsx` lines 598-599, 640, 703, 1043-1044
+
+### Bug 2: Collision pass-through (BODY HASH RANGE + QUERY RADIUS)
+- BODY_HASH_RANGE_SQ was 8000*8000 — bots with heads at 8001px excluded entirely
+- Long snakes (bodyLength 300+) have bodies extending 2400+ px behind head
+- Body hash query radius was SNAKE_RADIUS*6=18px, but max collision dist is ~20px for large snakes
+- Fix: Increased BODY_HASH_RANGE_SQ to 12000*12000 (4000px buffer for long bodies)
+- Fix: Increased body hash query from SNAKE_RADIUS*6 to SNAKE_RADIUS*8 (24px, covers max collision dist)
+- File: `src/lib/snake/collision.ts` lines 194-199, 341
+
+### Bug 3: Guest inherits previous user's skin (LOCALSTORAGE LEAK)
+- `getPlayerSkinAsset()` checked localStorage for custom skin override BEFORE verifying server skin
+- localStorage is per-browser, not per-user — switching users inherited previous user's skin
+- Example: admin uses custom-lab-skin → guest logs in → guest gets admin's skin
+- Fix: Only apply localStorage override when `serverSkinId === state.currentSkin` (server confirms it)
+- File: `src/lib/snake/skin-registry.ts` lines 179-201
+
+Stage Summary:
+- 3 files modified: render-snake-atlas.tsx, collision.ts, skin-registry.ts
+- Lint passes, game server restarted to pick up collision.ts changes
+- All glow sources now properly gated by snake.boosting
+- Collision detection range increased to handle long snake bodies
+- Guest users now correctly get their own default skin from server

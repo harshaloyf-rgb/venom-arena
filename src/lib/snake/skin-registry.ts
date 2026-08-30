@@ -176,19 +176,27 @@ export function getPlayerSkinAsset(serverSkinId: string): SkinAsset {
     return getSkinAsset(serverSkinId);
   }
 
-  // Check localStorage for custom skin override
+  // Check localStorage for custom skin override.
+  // FIX: Only use localStorage override when the server confirms the player is
+  // actually using that skin. Without this check, switching users on the same
+  // browser (e.g., admin → guest) would inherit the previous user's custom skin
+  // from localStorage, since localStorage is per-browser not per-user.
   try {
     const raw = localStorage.getItem(CUSTOM_SKIN_KEY);
     if (raw) {
       const state: CustomSkinState = JSON.parse(raw);
       if (state.useCustomSkin) {
-        // Player has activated a custom skin (preset or DNA lab)
-        if (state.currentSkin === 'custom-lab-skin') {
-          return getCustomLabSkinFromState(state);
+        const matchesServer = serverSkinId === state.currentSkin
+          || (state.currentSkin === 'custom-lab-skin' && serverSkinId === 'custom-lab-skin');
+        if (matchesServer) {
+          // Player has activated a custom skin (preset or DNA lab) and server confirms it
+          if (state.currentSkin === 'custom-lab-skin') {
+            return getCustomLabSkinFromState(state);
+          }
+          // It's a preset
+          const preset = presetSkinMap.get(state.currentSkin);
+          if (preset) return preset;
         }
-        // It's a preset
-        const preset = presetSkinMap.get(state.currentSkin);
-        if (preset) return preset;
       }
     }
   } catch {
