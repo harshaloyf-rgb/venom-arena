@@ -35,9 +35,11 @@ function seededRandom(seed: number): () => number {
 // ─── Game rendering constants (exact match to render-snake-atlas.tsx) ──
 
 const G = {
-  segR: SNAKE_RADIUS * CAMERA_BASE_ZOOM,  // 16.2
+  segR: SNAKE_RADIUS * CAMERA_BASE_ZOOM,  // 4.8
   headScale: 1.3,
-  step: 14,
+  // step is now computed dynamically: segR * 1.35 (matches game density)
+  step: 0, // placeholder — overridden by local variable
+  stepRatio: 1.35, // step = segR * stepRatio  (game ≈ 0.667 * diameter)
   lighten: 0.35,
   lightenStop: 0.55,
   darken: 0.35,
@@ -219,18 +221,30 @@ export function GameSnakePreview({
     c.addEventListener('mousemove', onMove);
     c.addEventListener('mouseleave', onLeave);
 
+    // Segment radius and wall margin (needed for step computation)
+    const segR = G.segR * scale;
+    const wallM = Math.max(segR + 5, Math.min(width, height) * 0.3);
+
+    // Compute step to match game visual density:
+    // Game: bodyDrawStep = max(bodyRadius*1.3, 4) / min(zoom,1)
+    // In screen space: step_screen = bodyDrawStep * zoom = ~6.4px
+    // With segR=4.8, diameter=9.6, ratio = 6.4/9.6 ≈ 0.667
+    // step = diameter * 0.667 = segR * 2 * 0.667 = segR * 1.33
+    const localStep = segR * G.stepRatio;
+
     // Reallocate buffer only if segment count changed
-    // Economy cards use smaller buffer (less pre-sim = faster mount)
-    const bufLen = economy ? segments * 3 : segments * 6;
+    // Need more buffer entries for tighter spacing
+    // step/speed = entries per segment. Buffer must hold segments * entries.
+    const entriesPerSeg = Math.ceil(localStep / speed) + 2;
+    const bufLen = economy
+      ? segments * Math.min(entriesPerSeg, 8)
+      : segments * Math.min(entriesPerSeg * 2, 24);
     if (!bufRef.current || prevSegRef.current !== segments) {
       bufRef.current = { bx: new Float64Array(bufLen), by: new Float64Array(bufLen) };
       posRef.current = null; // Force fresh init with pre-simulation
       prevSegRef.current = segments;
     }
     const { bx, by } = bufRef.current;
-
-    const segR = G.segR * scale;
-    const wallM = Math.max(segR + 5, Math.min(width, height) * 0.3);
 
     // Initialize with UNIQUE per-instance state + pre-simulate buffer
     if (!posRef.current || !posRef.current.initialized) {
@@ -447,7 +461,7 @@ export function GameSnakePreview({
       segCount = 1;
 
       for (let s = 1; s < segments && srcIdx < bufCount - 1; s++) {
-        let rem = G.step;
+        let rem = localStep;
         while (rem > 0 && srcIdx < bufCount - 1) {
           const dx = bx[srcIdx + 1] - bx[srcIdx];
           const dy = by[srcIdx + 1] - by[srcIdx];
@@ -494,6 +508,23 @@ export function GameSnakePreview({
 
       // Head color
       const headCol = curLabMode ? (curColors![0] ?? '#22c55e') : curHeadCol;
+
+      // ── Body spine line (matches game renderer — fills any gaps) ──
+      if (segCount > 1) {
+        ctx.save();
+        ctx.strokeStyle = curLabMode ? (curColors![0] ?? curBodyCol) : curBodyCol;
+        ctx.lineWidth = segR * 1.4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.globalAlpha = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(segs[segCount - 1].x, segs[segCount - 1].y);
+        for (let i = segCount - 2; i >= 0; i--) {
+          ctx.lineTo(segs[i].x, segs[i].y);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
 
       // Body segments
       if (economy) {
@@ -573,6 +604,23 @@ export function GameSnakePreview({
         }
       } else {
         // FULL MODE: shadows, gradients, mouse-tracking eyes, cosmetics
+        // ── Body spine line (matches game renderer) ──
+        if (segCount > 1) {
+          ctx.save();
+          ctx.strokeStyle = curLabMode ? (curColors![0] ?? curBodyCol) : curBodyCol;
+          ctx.lineWidth = segR * 1.4;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.globalAlpha = 0.6;
+          ctx.beginPath();
+          ctx.moveTo(segs[segCount - 1].x, segs[segCount - 1].y);
+          for (let i = segCount - 2; i >= 0; i--) {
+            ctx.lineTo(segs[i].x, segs[i].y);
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
+
         ctx.save();
         if (!curGlow) {
           ctx.shadowColor = 'rgba(0,0,0,0.3)';

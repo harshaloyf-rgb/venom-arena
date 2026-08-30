@@ -56,6 +56,23 @@ export function SkinsCanvasPreview({
         points[i] = { x, y };
       }
 
+      // ── Body spine line (fills gaps between segments) ──
+      if (points.length > 1) {
+        ctx.save();
+        ctx.strokeStyle = colors[0] || '#ffffff';
+        ctx.lineWidth = 10;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(points[points.length - 1].x, points[points.length - 1].y);
+        for (let i = points.length - 2; i >= 0; i--) {
+          ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+
       // Draw trailing segment shadows & nodes from tail to head
       for (let i = points.length - 1; i >= 1; i--) {
         const pt = points[i];
