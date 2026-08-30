@@ -56,6 +56,7 @@ export function toProfile(p: Player): PlayerProfile {
     name: p.name,
     email: p.email,
     country: p.country,
+    region: p.region,
     avatar: p.avatar,
     role: p.role as 'player' | 'admin',
     bankedChips: p.bankedChips,

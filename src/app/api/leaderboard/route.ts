@@ -1,19 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { milestoneTierForChips, MILESTONE_TIERS } from '@/lib/game-config';
-
-// ── Regional mapping (mirrors client-side REGION_MAP) ─────────────
-const REGION_MAP: Record<string, string> = {
-  IN: 'APAC', JP: 'APAC', KR: 'APAC', SG: 'APAC', AU: 'APAC', CN: 'APAC', TW: 'APAC', TH: 'APAC', VN: 'APAC', PH: 'APAC', ID: 'APAC', MY: 'APAC',
-  US: 'NA', CA: 'NA', MX: 'NA',
-  GB: 'EU', DE: 'EU', FR: 'EU', IT: 'EU', ES: 'EU', NL: 'EU', PL: 'EU', SE: 'EU', NO: 'EU', FI: 'EU', DK: 'EU', PT: 'EU', AT: 'EU', CH: 'EU', BE: 'EU', IE: 'EU', CZ: 'EU', GR: 'EU',
-  BR: 'LATAM', AR: 'LATAM', CO: 'LATAM', CL: 'LATAM', PE: 'LATAM',
-};
-
-function regionOf(countryCode: string): string {
-  return REGION_MAP[countryCode] || 'EU';
-}
+import { milestoneTierForChips, MILESTONE_TIERS, REGION_MAP, regionOf, VALID_REGIONS } from '@/lib/game-config';
 
 // GET /api/leaderboard?type=chips|level&limit=50&view=global|national|world_summit|regional&country=US&milestone=gold&region=APAC
 export async function GET(req: NextRequest) {
@@ -43,12 +31,12 @@ export async function GET(req: NextRequest) {
 
   // Regional view requires region
   if (view === 'regional' && !region) {
-    return NextResponse.json({ error: 'Regional view requires a region parameter (APAC, NA, EU, LATAM).' }, { status: 400 });
+    return NextResponse.json({ error: 'Regional view requires a region parameter.' }, { status: 400 });
   }
 
   // Validate region if provided
-  if (region && !['APAC', 'NA', 'EU', 'LATAM'].includes(region)) {
-    return NextResponse.json({ error: 'Invalid region. Use APAC, NA, EU, or LATAM.' }, { status: 400 });
+  if (region && !VALID_REGIONS.includes(region as typeof VALID_REGIONS[number])) {
+    return NextResponse.json({ error: 'Invalid region.' }, { status: 400 });
   }
 
   // Validate milestone if provided

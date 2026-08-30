@@ -96,9 +96,13 @@ function prizeColorForRank(rank: number): string {
 export const REGIONS = [
   { code: 'ALL', name: 'All Regions', flag: '🌐' },
   { code: 'APAC', name: 'Asia-Pacific (APAC)', flag: '🌏' },
+  { code: 'SA', name: 'South Asia (SA)', flag: '🇮🇳' },
+  { code: 'MEA', name: 'Middle East & Africa (MEA)', flag: '🌍' },
   { code: 'NA', name: 'North America (NA)', flag: '🌎' },
+  { code: 'SA_AM', name: 'South America (SA_AM)', flag: '🌎' },
   { code: 'EU', name: 'Europe (EU)', flag: '🌍' },
-  { code: 'LATAM', name: 'Latin America (LATAM)', flag: '💃' },
+  { code: 'CIS', name: 'CIS & Central Asia (CIS)', flag: '🌏' },
+  { code: 'OC', name: 'Oceania (OC)', flag: '🏝️' },
 ];
 
 export const COUNTRY_OPTIONS = [

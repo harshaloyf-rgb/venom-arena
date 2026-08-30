@@ -8,6 +8,8 @@ import {
   countryFlag,
   countryName,
   milestoneTierForChips,
+  regionOf,
+  REGIONS,
   type InspectedPlayer,
 } from '@/lib/game-config';
 import type { LeaderboardEntry } from '@/lib/types';
@@ -51,24 +53,7 @@ type TopTab = 'summit' | 'global' | 'national' | 'regional' | 'tiers';
 
 const RANK_MEDALS: Record<number, string> = { 1: '\u{1F947}', 2: '\u{1F948}', 3: '\u{1F949}' };
 
-// ── Regional mapping ──────────────────────────────────────────────
-const REGION_MAP: Record<string, string> = {
-  IN: 'APAC', JP: 'APAC', KR: 'APAC', SG: 'APAC', AU: 'APAC', CN: 'APAC', TW: 'APAC', TH: 'APAC', VN: 'APAC', PH: 'APAC', ID: 'APAC', MY: 'APAC',
-  US: 'NA', CA: 'NA', MX: 'NA',
-  GB: 'EU', DE: 'EU', FR: 'EU', IT: 'EU', ES: 'EU', NL: 'EU', PL: 'EU', SE: 'EU', NO: 'EU', FI: 'EU', DK: 'EU', PT: 'EU', AT: 'EU', CH: 'EU', BE: 'EU', IE: 'EU', CZ: 'EU', GR: 'EU',
-  BR: 'LATAM', AR: 'LATAM', CO: 'LATAM', CL: 'LATAM', PE: 'LATAM',
-};
-
-const REGIONS = [
-  { code: 'APAC', name: 'Asia-Pacific', flag: '\u{1F30F}' },
-  { code: 'NA', name: 'North America', flag: '\u{1F30E}' },
-  { code: 'EU', name: 'Europe', flag: '\u{1F30D}' },
-  { code: 'LATAM', name: 'Latin America', flag: '\u{1F483}' },
-];
-
-function regionOf(countryCode: string): string {
-  return REGION_MAP[countryCode] || 'EU';
-}
+// ── Region utilities (regionOf, REGIONS) imported from game-config ──
 
 // ── Championship prize tier for a given rank ───────────────────────
 function championshipPrizeForRank(rank: number) {
@@ -104,7 +89,7 @@ const TAB_DESCRIPTIONS: Record<TopTab, { title: string; desc: string; scope: str
   },
   regional: {
     title: 'Regional Rankings',
-    desc: 'Players grouped by world region (APAC, NA, EU, LATAM). See how you stack up against your geographic neighbors.',
+    desc: 'Players grouped by world region (8 regions covering all countries). See how you stack up against your geographic neighbors.',
     scope: 'Players from 1 region \u2192 top 100 by banked chips',
   },
   tiers: {

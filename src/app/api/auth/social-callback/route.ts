@@ -13,7 +13,8 @@ import {
 } from '@/lib/oauth';
 import { encodeSkins, generateReferralCode } from '@/lib/player-helpers';
 import { DEFAULT_UNLOCKED_SKINS } from '@/lib/constants';
-import { REGISTERED_TOTAL_CHIPS } from '@/lib/game-config';
+import { REGISTERED_TOTAL_CHIPS, regionOf } from '@/lib/game-config';
+import { detectCountry } from '@/lib/geoip';
 
 /**
  * GET /api/auth/social-callback?provider=google&code=xxx&state=xxx
@@ -60,7 +61,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL('/?oauth_error=no_user_info', url.origin));
   }
 
-  return await handleOAuthLogin(p, userInfo, url.origin);
+  // Get IP for GeoIP detection
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  return await handleOAuthLogin(p, userInfo, url.origin, ip, req.headers);
 }
 
 /**
@@ -106,7 +109,9 @@ export async function POST(req: NextRequest) {
       userInfo.name = appleName;
     }
 
-    return await handleOAuthLogin(provider, userInfo, req.nextUrl.origin);
+    // Get IP for GeoIP detection
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    return await handleOAuthLogin(provider, userInfo, req.nextUrl.origin, ip, req.headers);
   } catch (e) {
     console.error('[oauth/apple] callback error:', e);
     return NextResponse.redirect(new URL('/?oauth_error=account_error', req.nextUrl.origin));
@@ -119,7 +124,7 @@ export async function POST(req: NextRequest) {
 
 import type { OAuthUserInfo } from '@/lib/oauth';
 
-async function handleOAuthLogin(provider: OAuthProvider, userInfo: OAuthUserInfo, origin: string) {
+async function handleOAuthLogin(provider: OAuthProvider, userInfo: OAuthUserInfo, origin: string, ip: string, headers: Headers) {
   try {
     // 1. Check if an account with this OAuth provider+ID already exists
     const existingByOauth = await db.player.findFirst({
@@ -183,6 +188,11 @@ async function handleOAuthLogin(provider: OAuthProvider, userInfo: OAuthUserInfo
     }
 
     // 3. Create a brand new account
+    // Auto-detect country from IP (best-effort)
+    let country = await detectCountry(ip, headers);
+    if (!country) country = 'US'; // fallback for social login (no way to prompt)
+    const region = regionOf(country);
+
     const userTag = await generateUniqueUserTag();
     const displayName = userInfo.name || userInfo.email?.split('@')[0] || 'Player';
     const referralCode = generateReferralCode();
@@ -193,7 +203,8 @@ async function handleOAuthLogin(provider: OAuthProvider, userInfo: OAuthUserInfo
         passwordHash: null, // OAuth accounts have no password
         userTag,
         name: displayName.slice(0, 20),
-        country: 'US',
+        country,
+        region,
         avatar: userInfo.avatar,
         unlockedSkins: encodeSkins(DEFAULT_UNLOCKED_SKINS),
         bankedChips: REGISTERED_TOTAL_CHIPS,

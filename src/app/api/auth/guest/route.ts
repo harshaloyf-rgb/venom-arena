@@ -8,6 +8,8 @@ import {
 import { toProfile, encodeSkins, generateReferralCode } from '@/lib/player-helpers';
 import { DEFAULT_UNLOCKED_SKINS } from '@/lib/constants';
 import { rateLimit } from '@/lib/api-helpers';
+import { detectCountry } from '@/lib/geoip';
+import { COUNTRIES, regionOf } from '@/lib/game-config';
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,6 +20,26 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const name = String(body.name || 'Guest').trim().slice(0, 20) || 'Guest';
 
+    // Country: use client-provided value if valid, otherwise auto-detect via GeoIP
+    let country: string;
+    const clientCountry = String(body.country || '').trim();
+    if (clientCountry && clientCountry !== 'AUTO' && COUNTRIES.some(c => c.code === clientCountry)) {
+      country = clientCountry;
+    } else {
+      // GeoIP auto-detect (returns '' for private/localhost IPs)
+      country = await detectCountry(ip, req.headers);
+      // If GeoIP can't determine (localhost, no CF header, API failure), require manual selection
+      if (!country) {
+        return NextResponse.json(
+          { error: 'Please select your country to continue.', code: 'COUNTRY_REQUIRED' },
+          { status: 400 },
+        );
+      }
+    }
+
+    // Compute region from country
+    const region = regionOf(country);
+
     const userTag = await generateUniqueUserTag();
     const referralCode = generateReferralCode();
     const player = await db.player.create({
@@ -26,7 +48,8 @@ export async function POST(req: NextRequest) {
         passwordHash: null,
         userTag,
         name,
-        country: 'US',
+        country,
+        region,
         unlockedSkins: encodeSkins(DEFAULT_UNLOCKED_SKINS),
         bankedChips: 150,
         totalEarned: 150,

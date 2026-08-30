@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { useAuth } from '@/components/providers/auth-provider';
 import { GameRulesModal } from '@/components/modals/game-rules-modal';
+import { COUNTRIES, regionOf, REGION_NAMES } from '@/lib/game-config';
 import {
   Skull,
   Zap,
@@ -29,6 +30,7 @@ import {
   KeyRound,
   Mail,
   Shield,
+  Globe,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -46,6 +48,140 @@ function getPasswordStrength(pw: string): { label: string; color: string; width:
   if (score <= 2) return { label: 'Fair', color: 'bg-orange-500', width: 'w-2/4', score };
   if (score <= 3) return { label: 'Good', color: 'bg-yellow-500', width: 'w-3/4', score };
   return { label: 'Strong', color: 'bg-emerald-500', width: 'w-full', score };
+}
+
+// ---------------------------------------------------------------------------
+// Guest Play Section — country picker + play button
+// ---------------------------------------------------------------------------
+function GuestPlaySection({ busy, onPlay }: { busy: boolean; onPlay: (country: string) => Promise<boolean> }) {
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState('');
+  const [showPicker, setShowPicker] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  const filtered = search
+    ? COUNTRIES.filter(c =>
+        c.name.toLowerCase().includes(search.toLowerCase()) ||
+        c.code.toLowerCase().includes(search.toLowerCase())
+      ).slice(0, 15)
+    : COUNTRIES.slice(0, 30);
+
+  const selectedCountry = COUNTRIES.find(c => c.code === selected);
+  const playerRegion = selected ? regionOf(selected) : null;
+  const regionName = playerRegion ? REGION_NAMES[playerRegion] : null;
+
+  // Close picker on outside click
+  useEffect(() => {
+    if (!showPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setShowPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showPicker]);
+
+  return (
+    <div className="space-y-1.5" ref={pickerRef}>
+      {/* Country selector — REQUIRED */}
+      <div className="space-y-1">
+        <label className="flex items-center gap-1 text-[11px] font-medium text-foreground">
+          <Globe className="w-3 h-3 text-primary" />
+          Select your country <span className="text-destructive">*</span>
+        </label>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowPicker(!showPicker)}
+            className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs text-left transition ${
+              selected
+                ? 'border-primary/50 bg-primary/5'
+                : 'border-border bg-background hover:bg-accent/50'
+            }`}
+          >
+            {selectedCountry ? (
+              <span className="flex items-center gap-1.5">
+                <span className="text-base">{selectedCountry.flag}</span>
+                <span className="font-medium">{selectedCountry.name}</span>
+              </span>
+            ) : (
+              <span className="text-muted-foreground">Choose your country…</span>
+            )}
+          </button>
+
+          {showPicker && (
+            <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-border rounded-md shadow-lg overflow-hidden">
+              <div className="p-1.5 border-b border-border">
+                <Input
+                  placeholder="Search country..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="h-7 text-[11px]"
+                  autoFocus
+                />
+              </div>
+              <div className="max-h-40 overflow-y-auto">
+                {filtered.map(c => (
+                  <button
+                    key={c.code}
+                    type="button"
+                    onClick={() => { setSelected(c.code); setShowPicker(false); setSearch(''); }}
+                    className={`w-full flex items-center gap-2 px-2.5 py-1 text-[11px] text-left hover:bg-accent/50 transition ${selected === c.code ? 'bg-primary/10 text-primary' : ''}`}
+                  >
+                    <span>{c.flag}</span>
+                    <span>{c.name}</span>
+                    {selected === c.code && <span className="ml-auto text-[9px]">✓</span>}
+                  </button>
+                ))}
+              </div>
+              {selected && (
+                <button
+                  type="button"
+                  onClick={() => { setSelected(''); setSearch(''); }}
+                  className="w-full text-center py-1 text-[10px] text-muted-foreground hover:text-foreground border-t border-border transition"
+                >
+                  Clear selection
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Region badge — shows after country is selected */}
+      {selectedCountry && regionName && (
+        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-primary/10 text-[10px] text-primary">
+          <Zap className="w-3 h-3" />
+          <span>Region: <strong>{regionName}</strong> — You&apos;ll play on the nearest server</span>
+        </div>
+      )}
+
+      {/* Play button — disabled until country is selected */}
+      <Button
+        variant="secondary"
+        size="sm"
+        className="w-full text-xs"
+        disabled={busy || !selected}
+        onClick={async () => {
+          if (!selected) return;
+          await onPlay(selected);
+        }}
+      >
+        {busy ? (
+          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+        ) : (
+          <Ghost className="w-3 h-3 mr-1" />
+        )}
+        Play as Guest
+      </Button>
+      {!selected && (
+        <p className="text-[10px] text-muted-foreground text-center">
+          Select your country to join your regional server
+        </p>
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -218,22 +354,10 @@ function AuthScreen() {
             </div>
 
             {/* Guest Play */}
-            <Button
-              variant="secondary"
-              size="sm"
-              className="w-full text-xs"
-              disabled={busy}
-              onClick={async () => {
-                await callApi('/api/auth/guest', {});
-              }}
-            >
-              {busy ? (
-                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-              ) : (
-                <Ghost className="w-3 h-3 mr-1" />
-              )}
-              Play as Guest
-            </Button>
+            <GuestPlaySection busy={busy} onPlay={async (country) => {
+  const ok = await callApi('/api/auth/guest', { country });
+  return ok;
+}} />
 
             {/* Bottom info */}
             <div className="mt-0 space-y-0">

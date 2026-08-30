@@ -61,7 +61,9 @@ import { getArenaById, ARENA_TIERS } from '../../src/lib/game-config';
 const INTERNAL_SECRET = process.env.INTERNAL_SECRET || 'dev-secret';
 const dbg = process.env.DEBUG ? console.log : () => {};
 const MAIN_SERVER = 'http://localhost:3000';
-const PORT = 3001;
+const PORT = parseInt(process.env.PORT || '3001', 10);
+const SERVER_REGION = process.env.REGION || 'DEFAULT';
+console.log(`[GameServer] Starting region=${SERVER_REGION} on port=${PORT}`);
 const TICK_RATE = 60; // ticks per second
 const TICK_MS = 1000 / TICK_RATE;
 const SNAPSHOT_INTERVAL = 3; // broadcast every N ticks (20Hz)

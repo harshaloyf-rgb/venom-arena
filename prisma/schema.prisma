@@ -19,6 +19,7 @@ model Player {
   userTag         String   @unique // e.g. VENOM-8291
   name            String
   country         String   @default("US")
+  region          String   @default("EU")  // auto-computed from country on signup
   avatar          String?
 
   // OAuth — for social login (Google, Facebook, Apple)

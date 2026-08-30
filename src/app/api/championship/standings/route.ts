@@ -3,7 +3,7 @@
  *
  * Query params:
  *   scope=global|regional|national
- *   region=APAC|NA|EU|LATAM
+ *   region=APAC|SA|MEA|NA|SA_AM|EU|CIS|OC
  *   country=IN
  *   rankFilter=all|rank1|rank2_10|rank11_50|rank51_100
  *   search=q
@@ -12,21 +12,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { countryFlag, CHAMPIONSHIP_PRIZE_TIERS } from '@/lib/game-config';
+import { countryFlag, CHAMPIONSHIP_PRIZE_TIERS, REGION_MAP, regionOf } from '@/lib/game-config';
 
 const CURRENT_YEAR = 2026;
-
-const REGION_MAP: Record<string, string> = {
-  IN: 'APAC', JP: 'APAC', KR: 'APAC', SG: 'APAC', AU: 'APAC', CN: 'APAC',
-  TW: 'APAC', TH: 'APAC', VN: 'APAC', PH: 'APAC', ID: 'APAC', MY: 'APAC',
-  US: 'NA', CA: 'NA', MX: 'NA',
-  GB: 'EU', DE: 'EU', FR: 'EU', IT: 'EU', ES: 'EU', NL: 'EU', PL: 'EU',
-  SE: 'EU', NO: 'EU', FI: 'EU', DK: 'EU', PT: 'EU', AT: 'EU', CH: 'EU',
-  BE: 'EU', IE: 'EU', CZ: 'EU', GR: 'EU',
-  BR: 'LATAM', AR: 'LATAM', CO: 'LATAM', CL: 'LATAM', PE: 'LATAM',
-};
-
-function regionOf(cc: string) { return REGION_MAP[cc] || 'EU'; }
 
 function prizeForRank(rank: number) {
   if (rank === 1) return CHAMPIONSHIP_PRIZE_TIERS[0];

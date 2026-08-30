@@ -9,8 +9,10 @@ import {
 } from '@/lib/auth';
 import { toProfile, encodeSkins, generateReferralCode } from '@/lib/player-helpers';
 import { DEFAULT_UNLOCKED_SKINS } from '@/lib/constants';
-import { REGISTERED_STARTER_CHIPS } from '@/lib/game-config';
+import { REGISTERED_STARTER_CHIPS, regionOf } from '@/lib/game-config';
 import { rateLimit } from '@/lib/api-helpers';
+import { detectCountry } from '@/lib/geoip';
+import { COUNTRIES } from '@/lib/game-config';
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,6 +26,7 @@ export async function POST(req: NextRequest) {
     const name = String(body.name || '').trim().slice(0, 20);
     const pin = String(body.pin || '').trim();
     const referralCodeInput = String(body.referralCode || '').trim().toUpperCase();
+    const clientCountry = String(body.country || '').trim();
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: 'Valid email is required.' }, { status: 400 });
@@ -66,6 +69,18 @@ export async function POST(req: NextRequest) {
       referrerId = referrer.id;
     }
 
+    // Country: use client-provided value if valid, otherwise auto-detect via GeoIP
+    let country: string;
+    if (clientCountry && clientCountry !== 'AUTO' && COUNTRIES.some(c => c.code === clientCountry)) {
+      country = clientCountry;
+    } else {
+      country = await detectCountry(ip, req.headers);
+      if (!country) country = 'US'; // fallback for registered users (they can change later)
+    }
+
+    // Compute region from country
+    const region = regionOf(country);
+
     const passwordHash = await hashPassword(password);
     const userTag = await generateUniqueUserTag();
     const referralCode = generateReferralCode();
@@ -77,7 +92,8 @@ export async function POST(req: NextRequest) {
         securityPin: pin || null,
         userTag,
         name,
-        country: 'US',
+        country,
+        region,
         unlockedSkins: encodeSkins(DEFAULT_UNLOCKED_SKINS),
         bankedChips: REGISTERED_STARTER_CHIPS,
         totalEarned: REGISTERED_STARTER_CHIPS,

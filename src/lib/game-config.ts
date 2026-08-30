@@ -614,6 +614,139 @@ export function countryName(code: string): string {
 }
 
 // ----------------------------------------------------------------------------
+// Regions (8) — covers all 197 countries for leaderboard grouping
+// ----------------------------------------------------------------------------
+export const REGION_MAP: Record<string, string> = {
+  // ── APAC: East & Southeast Asia ─────────────────────────────────────
+  CN: 'APAC', JP: 'APAC', KR: 'APAC', TW: 'APAC',
+  KH: 'APAC', ID: 'APAC', LA: 'APAC', MY: 'APAC',
+  MN: 'APAC', MM: 'APAC', PH: 'APAC', SG: 'APAC',
+  TH: 'APAC', TL: 'APAC', VN: 'APAC', BN: 'APAC',
+  KP: 'APAC',
+  // ── SA: South Asia ─────────────────────────────────────────────────
+  AF: 'SA', BD: 'SA', BT: 'SA', IN: 'SA',
+  MV: 'SA', NP: 'SA', PK: 'SA', LK: 'SA',
+  // ── MEA: Middle East & Africa ──────────────────────────────────────
+  // Middle East
+  AE: 'MEA', BH: 'MEA', EG: 'MEA', IL: 'MEA',
+  IQ: 'MEA', JO: 'MEA', KW: 'MEA', LB: 'MEA',
+  OM: 'MEA', PS: 'MEA', QA: 'MEA', SA: 'MEA',
+  SY: 'MEA', YE: 'MEA', IR: 'MEA',
+  // Caucasus
+  AM: 'MEA', AZ: 'MEA', GE: 'MEA',
+  // North Africa
+  DZ: 'MEA', LY: 'MEA', MA: 'MEA', SD: 'MEA', SS: 'MEA', TN: 'MEA',
+  // West Africa
+  BF: 'MEA', BJ: 'MEA', CM: 'MEA', CV: 'MEA', GH: 'MEA', GN: 'MEA',
+  GQ: 'MEA', GW: 'MEA', LR: 'MEA', ML: 'MEA', MR: 'MEA', NE: 'MEA',
+  NG: 'MEA', SN: 'MEA', SL: 'MEA', TD: 'MEA', TG: 'MEA',
+  // Central & East Africa
+  BI: 'MEA', CF: 'MEA', CG: 'MEA', CD: 'MEA', CI: 'MEA', DJ: 'MEA',
+  ER: 'MEA', ET: 'MEA', KE: 'MEA', KM: 'MEA', RW: 'MEA', SO: 'MEA',
+  ST: 'MEA', TZ: 'MEA', UG: 'MEA',
+  // Southern Africa
+  AO: 'MEA', BW: 'MEA', GA: 'MEA', LS: 'MEA', MG: 'MEA', MW: 'MEA',
+  MZ: 'MEA', MU: 'MEA', NA: 'MEA', SC: 'MEA', SZ: 'MEA', ZA: 'MEA',
+  ZM: 'MEA', ZW: 'MEA', GM: 'MEA',
+  // ── NA: North America + Central America + Caribbean ────────────────
+  US: 'NA', CA: 'NA', MX: 'NA',
+  GT: 'NA', BZ: 'NA', HN: 'NA', SV: 'NA', NI: 'NA',
+  CR: 'NA', PA: 'NA',
+  CU: 'NA', DO: 'NA', JM: 'NA', HT: 'NA', TT: 'NA',
+  BB: 'NA', BS: 'NA', AG: 'NA', DM: 'NA', GD: 'NA',
+  KN: 'NA', LC: 'NA', VC: 'NA',
+  // ── SA_AM: South America ───────────────────────────────────────────
+  BR: 'SA_AM', AR: 'SA_AM', CO: 'SA_AM', CL: 'SA_AM',
+  PE: 'SA_AM', EC: 'SA_AM', VE: 'SA_AM', BO: 'SA_AM',
+  UY: 'SA_AM', PY: 'SA_AM', GY: 'SA_AM', SR: 'SA_AM',
+  // ── EU: Europe ────────────────────────────────────────────────────
+  GB: 'EU', IE: 'EU', IS: 'EU', NO: 'EU', SE: 'EU', FI: 'EU',
+  DK: 'EU', NL: 'EU', BE: 'EU', LU: 'EU', DE: 'EU', AT: 'EU',
+  CH: 'EU', LI: 'EU', FR: 'EU', ES: 'EU', PT: 'EU', IT: 'EU',
+  MT: 'EU', GR: 'EU', CY: 'EU', TR: 'EU',
+  AL: 'EU', AD: 'EU', BY: 'EU', BA: 'EU', BG: 'EU', HR: 'EU',
+  HU: 'EU', MD: 'EU', ME: 'EU', MK: 'EU', RO: 'EU', RS: 'EU',
+  SK: 'EU', SI: 'EU', UA: 'EU', CZ: 'EU', PL: 'EU',
+  EE: 'EU', LV: 'EU', LT: 'EU', MC: 'EU', SM: 'EU', VA: 'EU',
+  XK: 'EU',
+  // ── CIS: CIS & Central Asia ───────────────────────────────────────
+  RU: 'CIS', KZ: 'CIS', UZ: 'CIS', KG: 'CIS', TJ: 'CIS', TM: 'CIS',
+  // ── OC: Oceania ───────────────────────────────────────────────────
+  AU: 'OC', NZ: 'OC', FJ: 'OC', PG: 'OC', SB: 'OC',
+  VU: 'OC', TO: 'OC', TV: 'OC', KI: 'OC', NR: 'OC',
+  PW: 'OC', FM: 'OC', WS: 'OC', MH: 'OC',
+};
+
+/** Valid region codes */
+export const VALID_REGIONS = ['APAC', 'SA', 'MEA', 'NA', 'SA_AM', 'EU', 'CIS', 'OC'] as const;
+export type RegionCode = (typeof VALID_REGIONS)[number];
+
+/** Region display info for UI */
+export const REGIONS: Array<{ code: RegionCode; name: string; flag: string }> = [
+  { code: 'APAC',  name: 'Asia-Pacific',      flag: '\u{1F30F}' },
+  { code: 'SA',    name: 'South Asia',        flag: '\u{1F1F0}\u{1F1F5}' },
+  { code: 'MEA',   name: 'Middle East & Africa', flag: '\u{1F30D}' },
+  { code: 'NA',    name: 'North America',     flag: '\u{1F30E}' },
+  { code: 'SA_AM', name: 'South America',     flag: '\u{1F30D}' },
+  { code: 'EU',    name: 'Europe',            flag: '\u{1F30D}' },
+  { code: 'CIS',   name: 'CIS & Central Asia', flag: '\u{1F30F}' },
+  { code: 'OC',    name: 'Oceania',           flag: '\u{1F30D}' },
+];
+
+/** Region display names for responses */
+export const REGION_NAMES: Record<string, string> = {
+  APAC: 'Asia-Pacific',
+  SA: 'South Asia',
+  MEA: 'Middle East & Africa',
+  NA: 'North America',
+  SA_AM: 'South America',
+  EU: 'Europe',
+  CIS: 'CIS & Central Asia',
+  OC: 'Oceania',
+};
+
+/** Get the region code for a given country code */
+export function regionOf(countryCode: string): string {
+  return REGION_MAP[countryCode] || 'EU';
+}
+
+// ----------------------------------------------------------------------------
+// Regional Server Infrastructure — maps each region to its game server
+// ----------------------------------------------------------------------------
+// In production, each region runs in a separate data center (AWS/GCP region).
+// In dev/sandbox, all map to localhost with different ports.
+// Port 0 = use the default game server (3001) — for sandbox single-server mode.
+//
+// Production example:
+//   APAC:  { host: 'ap-southeast-1.game.venomarena.com', port: 443, tls: true }
+//   SA:    { host: 'ap-south-1.game.venomarena.com',     port: 443, tls: true }
+//   EU:    { host: 'eu-west-1.game.venomarena.com',      port: 443, tls: true }
+
+export interface RegionServer {
+  host: string;
+  port: number;
+  tls: boolean;
+}
+
+/** Regional server endpoints — change host/port for production deployment */
+export const REGION_SERVERS: Record<RegionCode, RegionServer> = {
+  APAC:  { host: 'localhost', port: 3010, tls: false },
+  SA:    { host: 'localhost', port: 3011, tls: false },
+  MEA:   { host: 'localhost', port: 3012, tls: false },
+  NA:    { host: 'localhost', port: 3013, tls: false },
+  SA_AM: { host: 'localhost', port: 3014, tls: false },
+  EU:    { host: 'localhost', port: 3015, tls: false },
+  CIS:   { host: 'localhost', port: 3016, tls: false },
+  OC:    { host: 'localhost', port: 3017, tls: false },
+};
+
+/** Get the game server config for a given region */
+export function getRegionServer(regionCode: string): RegionServer {
+  const rs = REGION_SERVERS[regionCode as RegionCode];
+  return rs || REGION_SERVERS.EU;
+}
+
+// ----------------------------------------------------------------------------
 // Milestone tiers (7) — used by Leaderboards + Hall of Fame
 // ----------------------------------------------------------------------------
 export interface MilestoneTier {

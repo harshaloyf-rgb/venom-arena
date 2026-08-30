@@ -1,23 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { milestoneTierForChips, MILESTONE_TIERS } from '@/lib/game-config';
-
-// ── Regional mapping (mirrors client-side) ──────────────────────
-const REGION_MAP: Record<string, string> = {
-  IN: 'APAC', JP: 'APAC', KR: 'APAC', SG: 'APAC', AU: 'APAC', CN: 'APAC', TW: 'APAC', TH: 'APAC', VN: 'APAC', PH: 'APAC', ID: 'APAC', MY: 'APAC',
-  US: 'NA', CA: 'NA', MX: 'NA',
-  GB: 'EU', DE: 'EU', FR: 'EU', IT: 'EU', ES: 'EU', NL: 'EU', PL: 'EU', SE: 'EU', NO: 'EU', FI: 'EU', DK: 'EU', PT: 'EU', AT: 'EU', CH: 'EU', BE: 'EU', IE: 'EU', CZ: 'EU', GR: 'EU',
-  BR: 'LATAM', AR: 'LATAM', CO: 'LATAM', CL: 'LATAM', PE: 'LATAM',
-};
-
-const REGION_NAMES: Record<string, string> = {
-  APAC: 'Asia-Pacific', NA: 'North America', EU: 'Europe', LATAM: 'Latin America',
-};
-
-function regionOf(countryCode: string): string {
-  return REGION_MAP[countryCode] || 'EU';
-}
+import { milestoneTierForChips, MILESTONE_TIERS, REGION_MAP, regionOf, REGION_NAMES } from '@/lib/game-config';
 
 interface MilestoneEntry {
   tier: string;

@@ -6,6 +6,7 @@ export interface PlayerProfile {
   name: string;
   email: string | null;
   country: string;
+  region: string;
   avatar: string | null;
   role: 'player' | 'admin';
 
@@ -68,6 +69,7 @@ export interface LeaderboardEntry {
   userTag: string;
   name: string;
   country: string;
+  region: string;
   bankedChips: number;
   level: number;
   rank: number;

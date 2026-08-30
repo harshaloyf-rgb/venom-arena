@@ -1,37 +1,37 @@
-import { db } from '@/lib/db';
-import { hashPassword, generateUniqueUserTag } from '@/lib/auth';
-import { encodeSkins, generateReferralCode } from '@/lib/player-helpers';
-import { DEFAULT_UNLOCKED_SKINS } from '@/lib/constants';
-import { REGISTERED_TOTAL_CHIPS } from '@/lib/game-config';
+import { db } from '../src/lib/db';
+import bcrypt from 'bcryptjs';
 
 async function main() {
-  const email = 'admin@venom.arena';
-  const password = 'Admin@123';
-  const passwordHash = await hashPassword(password);
-  const userTag = await generateUniqueUserTag();
-  const referralCode = generateReferralCode();
-
-  const admin = await db.player.create({
-    data: {
-      email,
-      passwordHash,
-      userTag,
-      name: 'Admin',
-      country: 'US',
-      role: 'admin',
-      emailVerified: true,
-      unlockedSkins: encodeSkins(DEFAULT_UNLOCKED_SKINS),
-      bankedChips: REGISTERED_TOTAL_CHIPS,
-      totalEarned: REGISTERED_TOTAL_CHIPS,
-      referralCode,
-    },
-  });
-
-  console.log('Admin created:');
-  console.log('  Email:', email);
-  console.log('  Password:', password);
-  console.log('  UserTag:', userTag);
-  console.log('  Chips:', admin.bankedChips);
-  await db.disconnect();
+  const hash = bcrypt.hashSync('123456', 10);
+  try {
+    const player = await db.player.create({
+      data: {
+        email: 'harshpawar57@gmail.com',
+        emailVerified: true,
+        passwordHash: hash,
+        userTag: 'VIPER-ADMIN',
+        name: 'Admin',
+        country: 'IN',
+        region: 'SA',
+        role: 'admin',
+        bankedChips: 999999,
+        totalEarned: 999999,
+        level: 99,
+        xp: 999999,
+        lifetimeKills: 9999,
+        lifetimeExtracts: 5000,
+        bestStreak: 500,
+        biggestExtract: 200,
+        dailyStreak: 365,
+        streakFreezes: 200,
+        hasElitePass: true,
+        unlockedSkins: JSON.stringify(['skin-default','trail-none','death-default']),
+      }
+    });
+    console.log('Admin created:', player.id, player.userTag);
+  } catch (e: any) {
+    console.error('Error:', e.message);
+  }
+  await db.$disconnect();
 }
 main();

@@ -14,7 +14,7 @@ export function Section12_Leaderboards() {
             <li><strong>World Summit</strong> — #1 player per country (top 100)</li>
             <li><strong>Global Rankings</strong> — All players worldwide, 1-to-N</li>
             <li><strong>National Rankings</strong> — Players from one country (top 100)</li>
-            <li><strong>Regional Rankings</strong> — Players from one region: APAC / NA / EU / LATAM (top 100)</li>
+            <li><strong>Regional Rankings</strong> — Players from one of 8 world regions (top 100)</li>
             <li><strong>Milestone Tiers</strong> — Players grouped by chip milestone (top 100 per tier)</li>
           </ul>
         </InfoCard>
@@ -75,12 +75,16 @@ export function Section12_Leaderboards() {
         </InfoCard>
 
         <InfoCard title="🌎 Regional Rankings (Top 100 Per Region)" accent="text-pink-300">
-          <p className="mb-1.5">Players grouped by <strong>world region</strong>. Click a region button to filter:</p>
+          <p className="mb-1.5">Players grouped by <strong>world region</strong> (8 regions covering all 197 countries). Click a region button to filter:</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>🌏 <strong>APAC</strong> — India, Japan, Korea, Singapore, Australia, China, Taiwan, Thailand, Vietnam, Philippines, Indonesia, Malaysia</li>
-            <li>🌎 <strong>NA</strong> — United States, Canada, Mexico</li>
-            <li>🌍 <strong>EU</strong> — UK, Germany, France, Italy, Spain, Netherlands, Poland, Sweden, Norway, Finland, and 10 more</li>
-            <li>💃 <strong>LATAM</strong> — Brazil, Argentina, Colombia, Chile, Peru</li>
+            <li>🌏 <strong>APAC</strong> — East &amp; Southeast Asia (China, Japan, Korea, Taiwan, Singapore, Thailand, Vietnam, Philippines, Indonesia, Malaysia, and more)</li>
+            <li>🇮🇳 <strong>South Asia</strong> — India, Pakistan, Bangladesh, Sri Lanka, Nepal, Bhutan, Maldives, Afghanistan</li>
+            <li>🌍 <strong>Middle East &amp; Africa</strong> — All Arab states, Israel, Iran, Turkey &amp; the entire African continent (67 countries)</li>
+            <li>🌎 <strong>North America</strong> — United States, Canada, Mexico, Central America &amp; Caribbean</li>
+            <li>🌎 <strong>South America</strong> — Brazil, Argentina, Colombia, Chile, Peru, and more</li>
+            <li>🌍 <strong>Europe</strong> — UK, Germany, France, Italy, Spain, and 40+ more European nations</li>
+            <li>🌏 <strong>CIS &amp; Central Asia</strong> — Russia, Kazakhstan, Uzbekistan, Kyrgyzstan, Tajikistan, Turkmenistan</li>
+            <li>🏝️ <strong>Oceania</strong> — Australia, New Zealand, and Pacific islands</li>
           </ul>
           <p className="mt-1">Columns: Rank, Move, Player (name + tag), Clan Tag, Country (flag + name), Chips, Status. <strong>HOF badge (🏆)</strong> appears next to Hall of Fame players&apos; names. <strong>Status column</strong> shows championship prize tier for top 100. Shows top 100 per region.</p>
         </InfoCard>

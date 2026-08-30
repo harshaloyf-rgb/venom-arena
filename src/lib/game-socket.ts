@@ -1,5 +1,6 @@
 // ============================================================================
 // Game Socket — Client-side Socket.IO connection for online multiplayer
+// Connects to the player's regional game server for optimal latency.
 // ============================================================================
 
 import { io, Socket } from 'socket.io-client';
@@ -158,17 +159,41 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       emit();
 
       try {
-        // Ensure game server is running before connecting
+        // 1. Fetch the player's regional game server endpoint
+        let gamePort = 3001; // fallback to default
+        let playerRegion = 'UNKNOWN';
         try {
-          const ensureRes = await fetch('/api/game-server/ensure');
+          const regionRes = await fetch('/api/player/region-server');
+          if (regionRes.ok) {
+            const data = await regionRes.json();
+            if (data?.server?.port) {
+              gamePort = data.server.port;
+              playerRegion = data.region;
+            }
+          }
+        } catch {
+          console.warn('[GameSocket] Failed to fetch region-server, using default port 3001');
+        }
+        console.log(`[GameSocket] Connecting to region=${playerRegion} port=${gamePort}`);
+
+        // 2. Ensure the regional game server is running
+        try {
+          const ensureRes = await fetch(`/api/game-server/ensure?region=${playerRegion}`);
           if (!ensureRes.ok) {
             console.warn('[GameSocket] Game server ensure check failed:', ensureRes.status);
+            // Fallback: try without region param (starts default server on 3001)
+            await fetch('/api/game-server/ensure');
+            gamePort = 3001;
+          } else {
+            const ensureData = await ensureRes.json();
+            if (ensureData.port) gamePort = ensureData.port;
           }
         } catch {
           console.warn('[GameSocket] Game server ensure check failed — will attempt connection anyway');
         }
 
-        socket = io('/?XTransformPort=3001', {
+        // 3. Connect Socket.IO to the regional game server
+        socket = io(`/?XTransformPort=${gamePort}`, {
           auth: { token },
           transports: ['websocket', 'polling'],
           reconnection: true,
@@ -180,7 +205,6 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
         socket.on('connect', () => {
           currentStatus = 'connected';
           emit();
-          // Join arena
           socket!.emit('join', { arenaId });
         });
 
@@ -212,7 +236,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
         });
 
         socket.on('disconnect', (reason) => {
-          console.log('[GameSocket] Disconnected:', reason, '— transport:', socket.io?.engine?.transport?.name);
+          console.log('[GameSocket] Disconnected:', reason);
           currentStatus = 'disconnected';
           emit();
         });
