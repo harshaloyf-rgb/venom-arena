@@ -15,7 +15,7 @@ export async function GET(
   }
 
   const { userTag: rawTag } = await params;
-  const userTag = rawTag.toUpperCase().trim();
+  const userTag = rawTag.trim();
 
   if (!userTag) {
     return NextResponse.json({ error: 'userTag is required' }, { status: 400 });
