@@ -7,7 +7,7 @@ import { createGameSocket, type GameSnapshot, type ConnectionStatus } from '@/li
 import { RemoteSnakeManager } from '@/lib/remote-snake-manager';
 import { createCamera, updateCameraInterpolated, getViewport } from '@/lib/snake/camera';
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
-import { getPlayerSkinAsset, registerSkinAsset } from '@/lib/snake/skin-registry';
+import { getPlayerSkinAsset, registerSkinAsset, registerDefaultSkins } from '@/lib/snake/skin-registry';
 import { getArenaConfig, SEGMENT_SPACING } from '@/lib/snake/config';
 import { getArenaById } from '@/lib/game-config';
 import type { Snake, Camera, Viewport } from '@/lib/snake/types';
@@ -116,7 +116,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
   const { player: authPlayer } = useAuth();
 
   // ── Stabilized auth refs ──
-  const authSkinRef = useRef(authPlayer?.currentSkin ?? 'skin-default');
+  const authSkinRef = useRef(authPlayer?.currentSkin ?? 'n');
   const authNameRef = useRef(authPlayer?.name || 'Player');
   useEffect(() => {
     if (authPlayer?.currentSkin) authSkinRef.current = authPlayer.currentSkin;
@@ -262,6 +262,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     // ── Build atlas manager ──
     const atlasManager = new SkinAtlasManager();
     atlasRef.current = atlasManager;
+    registerDefaultSkins(DEFAULT_SKINS);
     for (const skin of DEFAULT_SKINS) {
       atlasManager.buildAtlas(skin);
     }
