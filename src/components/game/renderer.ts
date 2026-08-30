@@ -4,7 +4,7 @@
 
 import type { Camera, FoodOrb, Viewport } from '@/lib/snake/types';
 import { ARENA_GRID_SIZE, FOOD_COLORS, FOOD_GLOW_COLORS } from '@/lib/snake/config';
-import { worldToScreenSnapped } from '@/lib/snake/camera';
+import { computeCamTransform, w2sXS, w2sYS } from '@/lib/snake/camera';
 
 // ==========================================================================
 // Grid
@@ -74,6 +74,7 @@ export function drawFood(
   const zoom = camera.zoom;
   const cw = viewport.width;
   const ch = viewport.height;
+  const ct = computeCamTransform(camera, cw, ch);
 
   // Two-pass: collect visible food by color bucket (3 colors),
   // then draw each bucket as a single batched path.
@@ -92,7 +93,8 @@ export function drawFood(
     if (f.x < viewport.left - 20 || f.x > viewport.right + 20) continue;
     if (f.y < viewport.top - 20 || f.y > viewport.bottom + 20) continue;
 
-    const { x: sx, y: sy } = worldToScreenSnapped(f.x, f.y, camera, cw, ch);
+    const sx = w2sXS(f.x, ct);
+    const sy = w2sYS(f.y, ct);
     let baseR = f.radius * zoom;
     let r = f.magnetized ? baseR / 3 : baseR;
     if (r < 0.5) continue;

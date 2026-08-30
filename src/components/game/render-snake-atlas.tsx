@@ -4,7 +4,7 @@
 
 import type { Camera, Snake, Viewport } from '@/lib/snake/types';
 import { SEGMENT_SPACING, SPAWN_PROTECTION_MS, LEGENDARY_GLOW_SIZE } from '@/lib/snake/config';
-import { worldToScreen, worldToScreenSnapped } from '@/lib/snake/camera';
+import { worldToScreen, worldToScreenSnapped, computeCamTransform, w2sXS, w2sYS, w2sX, w2sY } from '@/lib/snake/camera';
 import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
 import { isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
@@ -13,6 +13,34 @@ import { drawSegmentShape, readCustomSkinState, getSkinVisualProps, getPresetVis
 import type { CustomSkinState } from '@/components/panels/cosmetics/cosmetics-types';
 import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-types';
 import { incrementCoilFrame } from './coil-path';
+
+// ─── Per-frame skin prop & lighten caches (avoid repeated Map.get per bot) ──
+const _multiColorCache = new Map<string, boolean>();
+const _patternVisCache = new Map<string, ReturnType<typeof getSkinVisualProps>>();
+const _presetVisCache = new Map<string, ReturnType<typeof getPresetVisualProps>>();
+const _lightenCache = new Map<string, string>(); // grows only, max ~100 unique colors
+
+function cachedIsMultiColor(skinId: string): boolean {
+  let v = _multiColorCache.get(skinId);
+  if (v === undefined) { v = isMultiColorSkin(skinId); _multiColorCache.set(skinId, v); }
+  return v;
+}
+function cachedGetSkinVisualProps(skinId: string) {
+  let v = _patternVisCache.get(skinId);
+  if (v === undefined) { v = getSkinVisualProps(skinId); _patternVisCache.set(skinId, v); }
+  return v;
+}
+function cachedGetPresetVisualProps(skinId: string) {
+  let v = _presetVisCache.get(skinId);
+  if (v === undefined) { v = getPresetVisualProps(skinId); _presetVisCache.set(skinId, v); }
+  return v;
+}
+function cachedLighten(color: string, amt: number): string {
+  const key = color + '|' + amt;
+  let v = _lightenCache.get(key);
+  if (!v) { v = lightenHex(color, amt); _lightenCache.set(key, v); }
+  return v;
+}
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -111,6 +139,12 @@ export function setCachedDpr(dpr: number): void { _cachedDpr = dpr; }
 export function beginRenderFrame(): void {
   _frameCounter++;
   incrementCoilFrame();
+  // Clear per-frame skin prop caches (repopulated on first access each frame)
+  _multiColorCache.clear();
+  _patternVisCache.clear();
+  _presetVisCache.clear();
+  // NOTE: _lightenCache is NOT cleared — same colors recur across bots,
+  // and the cache caps at ~100 unique entries.
   // FIX #13: Prune _smoothSegs to prevent unbounded Map growth
   if (_smoothSegs.size > _SMOOTH_SEGS_MAX) {
     let toRemove = _smoothSegs.size - _SMOOTH_SEGS_MAX;
@@ -389,10 +423,10 @@ export function renderSnakeAtlas(
     (customState.customSkinSegments?.length ?? 0) > 0;
 
   // Pattern-based skins (neon, rainbow, metallic, etc.) need shape-aware rendering
-  const patternVisuals = getSkinVisualProps(snake.skinId);
+  const patternVisuals = cachedGetSkinVisualProps(snake.skinId);
 
   // Preset skins (preset-fish, preset-lion, etc.) need shape-aware rendering too
-  const presetVisuals = !patternVisuals ? getPresetVisualProps(snake.skinId) : null;
+  const presetVisuals = !patternVisuals ? cachedGetPresetVisualProps(snake.skinId) : null;
 
   if (snake.skinId === 'custom-lab-skin' || hasCustomSegments || patternVisuals || presetVisuals) {
     renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY, snap, alpha, effectivePath);
@@ -434,7 +468,7 @@ export function renderSnakeAtlas(
 
   // P3 FIX #10: Non-linear head scale — large snakes have proportionally smaller heads
   // Small snakes: 15% bigger head, large snakes: ~5% bigger head
-  const headScale = isMultiColorSkin(snake.skinId)
+  const headScale = cachedIsMultiColor(snake.skinId)
     ? 1.0
     : 1.15 - 0.1 * Math.log2(1 + snake.score / 1000);
   const clampedHeadScale = Math.max(1.0, Math.min(1.15, headScale));
@@ -452,12 +486,8 @@ export function renderSnakeAtlas(
   const safeInterpY = Number.isFinite(interpHeadY) ? interpHeadY : snake.path.headY;
   const renderOffX = (safeInterpX - snake.path.headX) * zoom;
   const renderOffY = (safeInterpY - snake.path.headY) * zoom;
-  const w2sOff = (wx: number, wy: number) => {
-    const r = worldToScreen(wx, wy, camera, cw, ch);
-    r.x += renderOffX;
-    r.y += renderOffY;
-    return r;
-  };
+  // Zero-allocation world-to-screen: compute transform once, inline per coordinate
+  const ct = computeCamTransform(camera, cw, ch);
 
   const vl = viewport.left - 40;
   const vr = viewport.right + 40;
@@ -466,12 +496,13 @@ export function renderSnakeAtlas(
 
   // ── Head visibility & screen pos (needed by spawn shield + head rendering) ──
   const headVisible = headWx >= vl && headWx <= vr && headWy >= vt && headWy <= vb;
-  const headScreen = headVisible ? w2sOff(headWx, headWy) : null;
+  const headSX = w2sX(headWx, ct) + renderOffX;
+  const headSY = w2sY(headWy, ct) + renderOffY;
   const atlasHeadR = segRadius * clampedHeadScale;
 
   // ── Spawn shield: rotating hexagonal ring that fades out ──
   const spawnAge = time - snake.spawnTime;
-  if (spawnAge < SPAWN_PROTECTION_MS && headScreen) {
+  if (spawnAge < SPAWN_PROTECTION_MS && headVisible) {
     const t = spawnAge / SPAWN_PROTECTION_MS;
     const shieldAlpha = 1 - t;
     const shieldR = atlasHeadR * (2.2 + 0.3 * Math.sin(time * 0.006));
@@ -485,8 +516,8 @@ export function renderSnakeAtlas(
     ctx.beginPath();
     for (let i = 0; i <= sides; i++) {
       const a = rot + (i / sides) * Math.PI * 2;
-      const px = headScreen.x + Math.cos(a) * shieldR;
-      const py = headScreen.y + Math.sin(a) * shieldR;
+      const px = headSX + Math.cos(a) * shieldR;
+      const py = headSY + Math.sin(a) * shieldR;
       if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
     ctx.closePath();
@@ -501,8 +532,8 @@ export function renderSnakeAtlas(
     ctx.beginPath();
     for (let i = 0; i <= sides; i++) {
       const a = -rot * 1.5 + (i / sides) * Math.PI * 2 + 0.5;
-      const px = headScreen.x + Math.cos(a) * shieldR2;
-      const py = headScreen.y + Math.sin(a) * shieldR2;
+      const px = headSX + Math.cos(a) * shieldR2;
+      const py = headSY + Math.sin(a) * shieldR2;
       if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
     ctx.closePath();
@@ -540,16 +571,14 @@ export function renderSnakeAtlas(
     ctx.globalAlpha = boostPulse;
     // Draw a thick line along the body for glow (no shadowBlur — too expensive)
     if (walked.count > 1) {
-      ctx.strokeStyle = lightenHex(snake.color, 0.4);
+      ctx.strokeStyle = cachedLighten(snake.color, 0.4);
       ctx.lineWidth = segRadius * 3;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.beginPath();
-      const s0 = w2sOff(walked.xs[walked.count - 1], walked.ys[walked.count - 1]);
-      ctx.moveTo(s0.x, s0.y);
+      ctx.moveTo(w2sX(walked.xs[walked.count - 1], ct) + renderOffX, w2sY(walked.ys[walked.count - 1], ct) + renderOffY);
       for (let i = walked.count - 2; i >= 0; i--) {
-        const sp = w2sOff(walked.xs[i], walked.ys[i]);
-        ctx.lineTo(sp.x, sp.y);
+        ctx.lineTo(w2sX(walked.xs[i], ct) + renderOffX, w2sY(walked.ys[i], ct) + renderOffY);
       }
       ctx.stroke();
     }
@@ -601,9 +630,9 @@ export function renderSnakeAtlas(
   ctx.setTransform(_cachedDpr, 0, 0, _cachedDpr, 0, 0);
 
   // ── Head ──
-  if (headVisible && headScreen) {
-    const hsx = headScreen.x;
-    const hsy = headScreen.y;
+  if (headVisible) {
+    const hsx = headSX;
+    const hsy = headSY;
     const headDrawSize = segRadius * 2 * 1.05;
 
     // Legendary glow underlay — only for epic/legendary (rare, acceptable cost)
@@ -791,7 +820,8 @@ export function renderSnakeAtlas(
     if (pool) {
       for (const p of pool) {
         if (p.x < vl || p.x > vr || p.y < vt || p.y > vb) continue;
-        const { x: px, y: py } = w2sOff(p.x, p.y);
+        const px = w2sX(p.x, ct) + renderOffX;
+        const py = w2sY(p.y, ct) + renderOffY;
         const alpha = clamp(p.life / p.maxLife, 0, 1);
         const pr = p.radius * zoom;
         ctx.globalAlpha = alpha * 0.8;
@@ -824,8 +854,6 @@ export function renderSnakeFallback(
 ): void {
   // P8: LOD — far bots skip coiled path, eyes, name, direction pointer, shield
   const isFar = lodFar === 1;
-  // Choose pixel-snapped or exact world-to-screen conversion
-  const w2s = snap ? worldToScreenSnapped : worldToScreen;
   // P8: Far bots skip coil contraction (saves neighbor lookups per segment)
   const path = (coiledPath && !isFar) ? coiledPath : snake.path;
   const pathLen = path.length;
@@ -878,14 +906,13 @@ export function renderSnakeFallback(
   const safeInterpY = Number.isFinite(interpHeadY) ? interpHeadY : snake.path.headY;
   const renderOffX = (safeInterpX - snake.path.headX) * zoom;
   const renderOffY = (safeInterpY - snake.path.headY) * zoom;
-  const w2sOff = (wx: number, wy: number) => {
-    const r = w2s(wx, wy, camera, cw, ch);
-    r.x += renderOffX;
-    r.y += renderOffY;
-    return r;
-  };
+  // Zero-allocation world-to-screen: compute transform once, inline per coordinate
+  const ct = computeCamTransform(camera, cw, ch);
+  const toSX = snap ? w2sXS : w2sX;
+  const toSY = snap ? w2sYS : w2sY;
 
-  const headScreen = w2sOff(headWorldX, headWorldY);
+  const headSX = toSX(headWorldX, ct) + renderOffX;
+  const headSY = toSY(headWorldY, ct) + renderOffY;
   const headVisible = headWorldX >= vl && headWorldX <= vr && headWorldY >= vt && headWorldY <= vb;
 
   // ── Spawn shield: rotating hexagonal ring that fades out ──
@@ -905,8 +932,8 @@ export function renderSnakeFallback(
     ctx.beginPath();
     for (let i = 0; i <= sides; i++) {
       const a = rot + (i / sides) * Math.PI * 2;
-      const px = headScreen.x + Math.cos(a) * shieldR;
-      const py = headScreen.y + Math.sin(a) * shieldR;
+      const px = headSX + Math.cos(a) * shieldR;
+      const py = headSY + Math.sin(a) * shieldR;
       if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
     ctx.closePath();
@@ -921,8 +948,8 @@ export function renderSnakeFallback(
     ctx.beginPath();
     for (let i = 0; i <= sides; i++) {
       const a = -rot * 1.5 + (i / sides) * Math.PI * 2 + 0.5;
-      const px = headScreen.x + Math.cos(a) * shieldR2;
-      const py = headScreen.y + Math.sin(a) * shieldR2;
+      const px = headSX + Math.cos(a) * shieldR2;
+      const py = headSY + Math.sin(a) * shieldR2;
       if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
     ctx.closePath();
@@ -948,18 +975,16 @@ export function renderSnakeFallback(
     ctx.globalAlpha = boostPulse;
     // No shadowBlur — too expensive with many segments
     if (walked.count > 1) {
-      ctx.strokeStyle = lightenHex(snake.color, 0.4);
+      ctx.strokeStyle = cachedLighten(snake.color, 0.4);
       ctx.lineWidth = segRadius * 3;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.beginPath();
       const s0x = walked.xs[walked.count - 1];
       const s0y = walked.ys[walked.count - 1];
-      const scr0 = w2sOff(s0x, s0y);
-      ctx.moveTo(scr0.x, scr0.y);
+      ctx.moveTo(toSX(s0x, ct) + renderOffX, toSY(s0y, ct) + renderOffY);
       for (let i = walked.count - 2; i >= 0; i--) {
-        const scr = w2sOff(walked.xs[i], walked.ys[i]);
-        ctx.lineTo(scr.x, scr.y);
+        ctx.lineTo(toSX(walked.xs[i], ct) + renderOffX, toSY(walked.ys[i], ct) + renderOffY);
       }
       ctx.stroke();
     }
@@ -968,7 +993,7 @@ export function renderSnakeFallback(
 
   // Draw body circles (tail → head for proper layering)
   // Multi-color skins alternate colors per segment
-  const multiColor = isMultiColorSkin(snake.skinId);
+  const multiColor = cachedIsMultiColor(snake.skinId);
 
   // Check for custom segments (presets or custom-lab-skin) with shapes/taper/glow
   let customSegments: CustomSegment[] | null = null;
@@ -979,11 +1004,11 @@ export function renderSnakeFallback(
   }
 
   // Check for pattern-based visual props (manufactured skins with neon/rainbow/etc.)
-  const patternVis = getSkinVisualProps(snake.skinId);
+  const patternVis = cachedGetSkinVisualProps(snake.skinId);
 
   // Check for preset-based visual props (preset-fish, preset-lion, etc.)
   // This lets bots and players with preset skins render with proper shapes/taper/glow
-  const presetVis = !patternVis ? getPresetVisualProps(snake.skinId) : null;
+  const presetVis = !patternVis ? cachedGetPresetVisualProps(snake.skinId) : null;
 
   // No drop shadow — shadowBlur on every segment was causing massive
   // frame drops (650+ blurred fills/frame). The 3D gradient already
@@ -1009,11 +1034,12 @@ export function renderSnakeFallback(
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-      const scr = w2sOff(wx, wy);
+      const sx = toSX(wx, ct) + renderOffX;
+      const sy = toSY(wy, ct) + renderOffY;
       const seg = segs[i % segs.length];
       const taperedR = segRadius * seg.sizeScale;
       const segAngle = walked.angles[i];
-      drawSegmentShape(ctx, scr.x, scr.y, taperedR, segAngle, seg.shape, seg.color, seg.glow);
+      drawSegmentShape(ctx, sx, sy, taperedR, segAngle, seg.shape, seg.color, seg.glow);
     }
   } else if (patternVis) {
     // Pattern-based skin: draw with shapes, taper, and glow from the shared mapping
@@ -1025,12 +1051,13 @@ export function renderSnakeFallback(
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-      const scr = w2sOff(wx, wy);
+      const sx = toSX(wx, ct) + renderOffX;
+      const sy = toSY(wy, ct) + renderOffY;
       const segAngle = walked.angles[i];
       const segColor = pColors[i % pColors.length] ?? snake.color;
       const segShape = resolveShapeStyle(pBodyStyle, i);
       const taperedR = segRadius * computeTaperRadius(i, walked.count, pTaper);
-      drawSegmentShape(ctx, scr.x, scr.y, taperedR, segAngle, segShape, segColor, pGlow);
+      drawSegmentShape(ctx, sx, sy, taperedR, segAngle, segShape, segColor, pGlow);
     }
   } else if (presetVis) {
     // Preset skin (preset-fish, preset-lion, etc.): same rendering as pattern-based
@@ -1042,12 +1069,13 @@ export function renderSnakeFallback(
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-      const scr = w2sOff(wx, wy);
+      const sx = toSX(wx, ct) + renderOffX;
+      const sy = toSY(wy, ct) + renderOffY;
       const segAngle = walked.angles[i];
       const segColor = pColors[i % pColors.length] ?? snake.color;
       const segShape = resolveShapeStyle(pBodyStyle, i);
       const taperedR = segRadius * computeTaperRadius(i, walked.count, pTaper);
-      drawSegmentShape(ctx, scr.x, scr.y, taperedR, segAngle, segShape, segColor, pGlow);
+      drawSegmentShape(ctx, sx, sy, taperedR, segAngle, segShape, segColor, pGlow);
     }
   } else if (multiColor) {
     // Per-segment color: batch circles by color to minimize fillStyle changes.
@@ -1057,11 +1085,12 @@ export function renderSnakeFallback(
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-      const scr = w2sOff(wx, wy);
+      const sx = toSX(wx, ct) + renderOffX;
+      const sy = toSY(wy, ct) + renderOffY;
       const segColor = getSegmentColor(snake.skinId, i) ?? snake.color;
       let group = colorGroups.get(segColor);
       if (!group) { group = []; colorGroups.set(segColor, group); }
-      group.push(scr.x, scr.y);
+      group.push(sx, sy);
     }
     for (const [color, coords] of colorGroups) {
       ctx.fillStyle = color;
@@ -1084,9 +1113,10 @@ export function renderSnakeFallback(
       const wx = walked.xs[i];
       const wy = walked.ys[i];
       if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-      const scr = w2sOff(wx, wy);
-      ctx.moveTo(scr.x + segRadius, scr.y);
-      ctx.arc(scr.x, scr.y, segRadius, 0, Math.PI * 2);
+      const sx = toSX(wx, ct) + renderOffX;
+      const sy = toSY(wy, ct) + renderOffY;
+      ctx.moveTo(sx + segRadius, sy);
+      ctx.arc(sx, sy, segRadius, 0, Math.PI * 2);
     }
     ctx.fill();
   }
@@ -1111,17 +1141,17 @@ export function renderSnakeFallback(
     // Gradient only for pattern/preset skins (rare for bots).
     if (visProps) {
       const headCircle = getCachedGradientCircle(effectiveHeadColor, headRadius, _cachedDpr);
-      ctx.drawImage(headCircle, headScreen.x - headRadius, headScreen.y - headRadius, headRadius * 2, headRadius * 2);
+      ctx.drawImage(headCircle, headSX - headRadius, headSY - headRadius, headRadius * 2, headRadius * 2);
     } else {
       ctx.fillStyle = effectiveHeadColor;
       ctx.beginPath();
-      ctx.arc(headScreen.x, headScreen.y, headRadius, 0, Math.PI * 2);
+      ctx.arc(headSX, headSY, headRadius, 0, Math.PI * 2);
       ctx.fill();
     }
 
     // Direction pointer — player only, not bots
     if (snake.isPlayer) {
-      drawDirectionPointer(ctx, snake.id, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting);
+      drawDirectionPointer(ctx, snake.id, headSX, headSY, snake.angle, snake.targetAngle, headRadius, snake.boosting);
     }
 
     // Responsive eyes — P8: skip for far LOD bots
@@ -1130,11 +1160,11 @@ export function renderSnakeFallback(
       const eq2 = getCachedEquipped();
       const hasCustomEyes2 = eq2.eyes && eq2.eyes !== 'none';
       if (!hasCustomEyes2) {
-        drawResponsiveEyes(ctx, headScreen.x, headScreen.y, snake.angle, snake.targetAngle, headRadius, snake.boosting, snake.id, now);
+        drawResponsiveEyes(ctx, headSX, headSY, snake.angle, snake.targetAngle, headRadius, snake.boosting, snake.id, now);
       }
 
       // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
-      renderEquippedCosmetics(ctx, { hx: headScreen.x, hy: headScreen.y, hr: headRadius, angle: snake.angle, time: now, boosting: snake.boosting, mouseScreenX, mouseScreenY });
+      renderEquippedCosmetics(ctx, { hx: headSX, hy: headSY, hr: headRadius, angle: snake.angle, time: now, boosting: snake.boosting, mouseScreenX, mouseScreenY });
     }
 
     // Name — P8: skip for far LOD bots
@@ -1151,8 +1181,8 @@ export function renderSnakeFallback(
         ctx.font = `${Math.max(10, 12 * zoom)}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
-        const nameX = Math.round(headScreen.x);
-        const nameY = Math.round(headScreen.y - headRadius - 8 * zoom);
+        const nameX = Math.round(headSX);
+        const nameY = Math.round(headSY - headRadius - 8 * zoom);
         ctx.fillText(snake.name, nameX, nameY);
       }
     }

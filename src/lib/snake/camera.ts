@@ -94,30 +94,59 @@ export function createCamera(x: number, y: number): Camera {
 
 /** Convert world coordinates to screen coordinates */
 export function worldToScreen(
-  wx: number,
-  wy: number,
-  camera: Camera,
-  canvasWidth: number,
-  canvasHeight: number,
+  wx: number, wy: number, camera: Camera, cw: number, ch: number,
+): { x: number; y: number } {
+  return { x: (wx - camera.x) * camera.zoom + cw / 2, y: (wy - camera.y) * camera.zoom + ch / 2 };
+}
+
+/** World-to-screen snapped to integer pixels (for food/bots). */
+export function worldToScreenSnapped(
+  wx: number, wy: number, camera: Camera, cw: number, ch: number,
 ): { x: number; y: number } {
   return {
-    x: (wx - camera.x) * camera.zoom + canvasWidth / 2,
-    y: (wy - camera.y) * camera.zoom + canvasHeight / 2,
+    x: Math.round((wx - camera.x) * camera.zoom + cw / 2),
+    y: Math.round((wy - camera.y) * camera.zoom + ch / 2),
   };
 }
 
-/** World-to-screen for food, bot snakes, and other non-player elements.
- *  Uses Math.round to snap to integer CSS pixel positions — prevents
- *  sub-pixel anti-aliasing that causes blurry/stationary shimmer during motion. */
-export function worldToScreenSnapped(
-  wx: number,
-  wy: number,
-  camera: Camera,
-  canvasWidth: number,
-  canvasHeight: number,
-): { x: number; y: number } {
+// ─── ZERO-ALLOCATION RENDER HELPERS ──────────────────────────────────────
+// Pre-computed transform constants for batch rendering.
+// Instead of calling worldToScreen() per segment (allocates {x,y} object),
+// compute these once per frame and use simple multiply-add inline.
+// This eliminates ~5000-7000 object allocations per frame → no GC stutter.
+
+/** Pre-computed camera transform state for inline world-to-screen conversion. */
+export interface CamTransform {
+  zoom: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+/** Compute transform constants once per frame. */
+export function computeCamTransform(camera: Camera, cw: number, ch: number): CamTransform {
   return {
-    x: Math.round((wx - camera.x) * camera.zoom + canvasWidth / 2),
-    y: Math.round((wy - camera.y) * camera.zoom + canvasHeight / 2),
+    zoom: camera.zoom,
+    offsetX: camera.x * camera.zoom - cw / 2,
+    offsetY: camera.y * camera.zoom - ch / 2,
   };
+}
+
+/** Inline world→screen X (snapped, no allocation). */
+export function w2sXS(wx: number, ct: CamTransform): number {
+  return (wx * ct.zoom - ct.offsetX + 0.5) | 0;
+}
+
+/** Inline world→screen Y (snapped, no allocation). */
+export function w2sYS(wy: number, ct: CamTransform): number {
+  return (wy * ct.zoom - ct.offsetY + 0.5) | 0;
+}
+
+/** Inline world→screen X (exact, no allocation). */
+export function w2sX(wx: number, ct: CamTransform): number {
+  return wx * ct.zoom - ct.offsetX;
+}
+
+/** Inline world→screen Y (exact, no allocation). */
+export function w2sY(wy: number, ct: CamTransform): number {
+  return wy * ct.zoom - ct.offsetY;
 }

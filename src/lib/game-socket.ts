@@ -85,6 +85,11 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
   let serverMapHalf: number | null = null;
   let inputSeq = 0;
 
+  // Pre-allocated parse buffers (avoid GC from array creation every 50ms)
+  const _parseFoods: RemoteFood[] = [];
+  const _parseMinimap: MinimapDot[] = [];
+  const _parseStars: RemoteStar[] = [];
+
   function emit() {
     onStateChange({
       status: currentStatus,
@@ -97,28 +102,28 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
   }
 
   function parseCompactSnapshot(raw: any): GameSnapshot {
-    // Handle compact format: { t, br, s, f, ps, pk }
-    // where f is a flat array [x, y, r, color, mag, x, y, r, color, mag, ...]
-    const foods: RemoteFood[] = [];
+    // Reuse pre-allocated arrays (avoid GC from 1500+ object creation every 50ms)
+    const foods = _parseFoods;
     const fArr = raw.f;
+    foods.length = 0;
     if (Array.isArray(fArr)) {
       for (let i = 0; i < fArr.length; i += 5) {
         foods.push({ x: fArr[i], y: fArr[i + 1], r: fArr[i + 2], color: fArr[i + 3], m: fArr[i + 4] === 1 });
       }
     }
 
-    // Parse minimap dots: flat [x, y, score, isBot, ...]
-    const minimapDots: MinimapDot[] = [];
+    const minimapDots = _parseMinimap;
     const mArr = raw.m;
+    minimapDots.length = 0;
     if (Array.isArray(mArr)) {
       for (let i = 0; i < mArr.length; i += 4) {
         minimapDots.push({ x: mArr[i], y: mArr[i + 1], score: mArr[i + 2], isBot: mArr[i + 3] === 1 });
       }
     }
 
-    // Parse stars: flat [x, y, value, id, radius, ...]
-    const stars: RemoteStar[] = [];
+    const stars = _parseStars;
     const stArr = raw.st;
+    stars.length = 0;
     if (Array.isArray(stArr)) {
       for (let i = 0; i < stArr.length; i += 5) {
         stars.push({ x: stArr[i], y: stArr[i + 1], value: stArr[i + 2], id: stArr[i + 3], radius: stArr[i + 4] });
@@ -136,7 +141,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       playerCarriedChips: raw.pc || 0,
       minimapDots,
     };
-  }
+    }
 
   return {
     get snapshot() { return currentSnapshot; },

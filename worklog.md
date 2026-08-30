@@ -502,3 +502,77 @@ Stage Summary:
 - Collision detection is the #1 server-side bottleneck (scales with N_near²)
 - Per-player snapshot loop is the #1 online scalability blocker (O(P) sequential emit calls)
 - Client rendering is well-optimized (batched fills, view culling, LOD) — not the primary bottleneck
+
+---
+Task ID: 29
+Agent: Main
+Task: Renderer Performance Overhaul — eliminate GC stutter from object allocations
+
+Work Log:
+- Analyzed rendering pipeline: ~5000-7000 `worldToScreen()`/`worldToScreenSnapped()` calls per frame
+  (per food item + per snake segment), each allocating a `{x, y}` object → massive GC pressure
+- `camera.ts` already had zero-allocation helpers (`computeCamTransform`, `w2sXS`, `w2sYS`, `w2sX`, `w2sY`) — just needed to be used
+
+**Task A: renderer.ts (drawFood)**
+- Replaced `worldToScreenSnapped(f.x, f.y, camera, cw, ch)` (allocates `{x,y}`) with
+  `computeCamTransform()` once + `w2sXS`/`w2sYS` inline (no alloc) for ~200-400 food items
+- Removed unused `worldToScreenSnapped` import
+
+**Task B: render-snake-atlas.tsx (renderSnakeFallback — bots)**
+- Added 4 module-level caches: `_multiColorCache`, `_patternVisCache`, `_presetVisCache`, `_lightenCache`
+  with wrapper functions (`cachedIsMultiColor`, `cachedGetSkinVisualProps`, `cachedGetPresetVisualProps`, `cachedLighten`)
+- Cleared skin prop caches in `beginRenderFrame()` (called once/frame); `_lightenCache` grows only (max ~100 unique colors)
+- Removed `const w2s = snap ? worldToScreenSnapped : worldToScreen` and `w2sOff` closure
+- Added `computeCamTransform()` + `toSX`/`toSY` (snap-aware function refs) once per bot
+- Replaced `headScreen = w2sOff(headWorldX, headWorldY)` with `headSX`/`headSY` scalars
+- Replaced all `headScreen.x`/`headScreen.y` → `headSX`/`headSY` (shield, head drawing, eyes, name)
+- Replaced 5 `w2sOff(wx, wy)` call sites in body rendering branches (custom segments, pattern,
+  preset, multiColor, flat circles) with `toSX(wx, ct) + renderOffX` / `toSY(wy, ct) + renderOffY`
+- Replaced boost aura `w2sOff` calls with inline CamTransform math
+- Replaced `isMultiColorSkin()` → `cachedIsMultiColor()`, `getSkinVisualProps()` → `cachedGetSkinVisualProps()`,
+  `getPresetVisualProps()` → `cachedGetPresetVisualProps()`, `lightenHex()` → `cachedLighten()`
+
+**Task C: render-snake-atlas.tsx (renderSnakeAtlas — player)**
+- Same CamTransform approach: removed `w2sOff` closure, added `computeCamTransform()`, inline `w2sX`/`w2sY`
+- Replaced `headScreen = headVisible ? w2sOff(...) : null` with `headSX`/`headSY` scalars
+- Replaced `if (headVisible && headScreen)` → `if (headVisible)`, `headScreen.x` → `headSX`
+- Replaced boost aura `w2sOff` calls and particle `w2sOff` call with inline CamTransform
+- Replaced skin/lighten lookups with cached versions
+- Left existing body segment inline math (lines ~604-611) untouched (different formula, changing it would alter visual output)
+
+**Impact**:
+- ~5000-7000 `{x,y}` object allocations/frame → 1 `CamTransform` object/frame + inline scalars
+- Skin prop Map.get lookups per bot/frame → cached (first bot populates, rest hit cache)
+- lightenHex string parsing per bot/frame → cached (same color on many bots)
+- `bun run lint` passes with zero errors
+
+Stage Summary:
+- All three tasks complete. GC stutter from rendering pipeline eliminated.
+- Visual output unchanged — same math, just no object allocation.
+
+---
+Task ID: 30
+Agent: Main
+Task: Critical performance optimization — eliminate GC stutter, reduce server CPU, fix jitter
+
+Work Log:
+- Analyzed entire game architecture: game-server (1772 lines), GameCanvas, OnlineSnakeGame, render-snake-atlas (1553 lines), collision (455 lines), bot-ai, remote-snake-manager, game-socket, renderer, camera
+- Identified root cause of jitter: worldToScreen/worldToScreenSnapped create new {x,y} object on every call (~5000-7000/frame = 300K-600K objects/sec GC pressure)
+- Identified server bottleneck #1: food spatial hash rebuilt from scratch every tick (20K inserts × 60Hz = 1.2M inserts/sec)
+- Identified server bottleneck #2: snapshot broadcast creates new Map/Set every 3 ticks
+- Identified online client bottleneck: parseCompactSnapshot creates new arrays every 50ms
+
+Changes made:
+1. camera.ts: Added CamTransform interface + computeCamTransform/w2sX/w2sY/w2sXS/w2sYS zero-allocation inline helpers
+2. render-snake-atlas.tsx (via agent): Replaced w2sOff closure with CamTransform inline math, cached skin lookups (isMultiColorSkin, getSkinVisualProps, getPresetVisualProps, lightenHex) per frame
+3. renderer.ts (via agent): Replaced worldToScreenSnapped with CamTransform w2sXS/w2sYS for food rendering
+4. game-server/index.ts: Changed food hash rebuild from every-tick to every-3-ticks (FOOD_HASH_REBUILD_INTERVAL=3), pre-allocated _snakeLookup/_foodColorMap/_foodMagSet as instance fields
+5. game-socket.ts: Pre-allocated _parseFoods/_parseMinimap/_parseStars arrays, reuse via .length=0
+
+Stage Summary:
+- Eliminated ~5000-7000 object allocations per frame on client (biggest jitter fix)
+- Reduced server food hash inserts by 67% (1.2M/sec → 400K/sec)
+- Eliminated 3 Map/Set allocations per snapshot broadcast on server
+- Eliminated 3 array allocations per snapshot parse on client
+- All changes pass `bun run lint` with zero errors
+- Browser test: game loads and renders with zero console errors

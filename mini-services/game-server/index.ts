@@ -65,6 +65,7 @@ const PORT = 3001;
 const TICK_RATE = 60; // ticks per second
 const TICK_MS = 1000 / TICK_RATE;
 const SNAPSHOT_INTERVAL = 3; // broadcast every N ticks (20Hz)
+const FOOD_HASH_REBUILD_INTERVAL = 3; // rebuild food spatial hash every N ticks (not every tick)
 const DEATH_SCREEN_DELAY = 6000; // ms before disconnecting dead player (5s elimination + 1s overlay)
 
 // ─── Scalability & Validation Constants ─────────────────────────────────
@@ -416,6 +417,7 @@ function killSnake(snake: Snake, nextFoodId: { value: number }, foods: FoodOrb[]
 function checkFoodEating(
   snakes: Iterable<Snake>, foods: FoodOrb[],
   fh: SpatialHash, fvc: Map<number, number>, now: number,
+  foodHashRebuild: boolean,
 ): Set<number> {
   // Reset only magnetized food flags
   for (let i = 0; i < _magnetizedIds.length; i++) {
@@ -424,18 +426,25 @@ function checkFoodEating(
   }
   _magnetizedIds.length = 0;
 
-  // ALWAYS rebuild hash from scratch every tick.
-  // This ensures: fresh positions after magnet pull, no ghost food (eaten), no missing food (new spawns).
-  fh.clear();
-  fvc.clear();
-  _cachedFoodById.clear();
-  const scratch = _foodHashScratch;
-  for (let i = 0; i < foods.length; i++) {
-    const f = foods[i];
-    scratch.x = f.x; scratch.y = f.y; scratch.radius = f.radius; scratch.id = f.id;
-    fh.insert(scratch);
-    fvc.set(f.id, f.value);
-    _cachedFoodById.set(f.id, f);
+  // Rebuild food hash every FOOD_HASH_REBUILD_INTERVAL ticks (not every tick).
+  // Every-tick rebuild was 20K inserts × 60Hz = 1.2M inserts/sec — the #1 server bottleneck.
+  // Magnet pulls move food ~1-10px/tick, so 2-tick-old positions are close enough
+  // for the spatial hash query radius (MAGNET_PULL_DIST=38px) to still find them.
+  // New food spawns and eaten food removal are handled by the interval.
+  // NOTE: The snapshot broadcast (every SNAPSHOT_INTERVAL ticks) still rebuilds
+  // the hash for accurate food visibility — this only affects collision/magnet checks.
+  if (foodHashRebuild) {
+    fh.clear();
+    fvc.clear();
+    _cachedFoodById.clear();
+    const scratch = _foodHashScratch;
+    for (let i = 0; i < foods.length; i++) {
+      const f = foods[i];
+      scratch.x = f.x; scratch.y = f.y; scratch.radius = f.radius; scratch.id = f.id;
+      fh.insert(scratch);
+      fvc.set(f.id, f.value);
+      _cachedFoodById.set(f.id, f);
+    }
   }
 
   const foodById = _cachedFoodById;
@@ -989,10 +998,11 @@ class ArenaInstance {
       }
     }
 
-    // 5. Check food eating — hash is rebuilt every tick inside checkFoodEating
+    // 5. Check food eating — hash rebuilt every FOOD_HASH_REBUILD_INTERVAL ticks
+    const rebuildFoodHash = state.tickCount % FOOD_HASH_REBUILD_INTERVAL === 0;
     const eatenIds = checkFoodEating(
       state.snakes.values(), state.foods,
-      this.foodHash, this.foodValueCache, now,
+      this.foodHash, this.foodValueCache, now, rebuildFoodHash,
     );
     if (eatenIds.size > 0) {
       let writeIdx = 0;
@@ -1263,27 +1273,26 @@ class ArenaInstance {
     m: number[]; // minimap dots: flat [x, y, score, isBot, ...] for ALL bots
   } = { tick: 0, boundaryRadius: 0, snakes: [], foods: [], ps: 0, pk: 0, st: [], pc: 0, m: [] };
 
+  // Pre-allocated snapshot data structures (avoid GC from Map/Set creation every 3 ticks)
+  private _snakeLookup = new Map<string, any>();
+  private _foodColorMap = new Map<number, string>();
+  private _foodMagSet = new Set<number>();
+
   private broadcastSnapshots(): void {
     const state = this.state;
     const tick = state.tickCount;
     const boundaryRadius = state.boundaryRadius;
 
     // ── Step 1: REBUILD food hash from CURRENT state.foods[] ──
-    // This is critical: the hash used by checkFoodEating (step 5) was built
-    // BEFORE food management (steps 7-8) and collision deaths (step 10).
-    // Rebuilding here ensures the snapshot includes ALL food:
-    //   - New food from maintainFoodAroundPlayer
-    //   - New food from maintainMapFood
-    //   - Death food from killSnake
-    //   - Food at post-magnet-pull positions
-    // Cost: ~20K inserts every 3 ticks (snapshot interval) = negligible.
     const fh = this.foodHash;
     fh.clear();
     const foodScratch = this._headScratch; // reuse scratch object
     const stateFoods = state.foods;
-    // Build color+magnetized map for snapshot lookups
-    const foodColorMap = new Map<number, string>();
-    const foodMagMap = new Set<number>();
+    // Reuse pre-allocated maps (avoid GC from new Map/Set every 3 ticks)
+    const foodColorMap = this._foodColorMap;
+    const foodMagMap = this._foodMagSet;
+    foodColorMap.clear();
+    foodMagMap.clear();
     for (let fi = 0; fi < stateFoods.length; fi++) {
       const f = stateFoods[fi];
       foodScratch.x = f.x;
@@ -1308,37 +1317,32 @@ class ArenaInstance {
       hh.insert(headScratch);
     }
 
-    // ── Step 3: Pre-build snake snapshot lookup map ──
-    const snakeLookup = new Map<string, {
-      id: string; name: string; hx: number; hy: number;
-      angle: number; score: number;
-      color: string; sc: string;
-      ip: boolean; ib: boolean;
-      bl: number; br: number;
-      bo: boolean;
-      cc: number;  // carriedChips (only > 0 for real players)
-      si?: string; ra?: string;
-    }>();
+    // ── Step 3: Pre-build snake snapshot lookup map (reuse pre-allocated Map) ──
+    const snakeLookup = this._snakeLookup;
+    snakeLookup.clear();
     for (const [, snake] of state.snakes) {
       if (!snake.alive) continue;
-      snakeLookup.set(snake.id, {
-        id: snake.id,
-        name: snake.name,
-        hx: snake.path.headX,
-        hy: snake.path.headY,
-        angle: snake.angle,
-        score: snake.score,
-        color: snake.color,
-        sc: snake.headColor,
-        ip: snake.isPlayer,
-        ib: snake.isBot,
-        bl: snake.cachedBodyLength,
-        br: snake.bodyRadius,
-        bo: snake.boosting,
-        cc: snake.carriedChips || 0,
-        si: snake.skinId,
-        ra: snake.rarity,
-      });
+      // Reuse the last inserted object if possible (avoids object allocation)
+      let entry = snakeLookup.get(snake.id);
+      if (!entry) {
+        entry = { id: snake.id };
+        snakeLookup.set(snake.id, entry);
+      }
+      entry.name = snake.name;
+      entry.hx = snake.path.headX;
+      entry.hy = snake.path.headY;
+      entry.angle = snake.angle;
+      entry.score = snake.score;
+      entry.color = snake.color;
+      entry.sc = snake.headColor;
+      entry.ip = snake.isPlayer;
+      entry.ib = snake.isBot;
+      entry.bl = snake.cachedBodyLength;
+      entry.br = snake.bodyRadius;
+      entry.bo = snake.boosting;
+      entry.cc = snake.carriedChips || 0;
+      entry.si = snake.skinId;
+      entry.ra = snake.rarity;
     }
 
     // ── Step 3.5: Build minimap dots (ALL bots, full map — for minimap rendering) ──
