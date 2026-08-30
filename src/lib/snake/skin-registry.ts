@@ -114,6 +114,17 @@ for (const preset of SLITHER_PRESETS) {
 // ─── Built-in DEFAULT_SKINS from atlas.ts (already have SkinAsset format) ───
 // These are imported from atlas.ts by the game, registered here for completeness.
 
+// Pre-built map of DEFAULT_SKINS for getSkinAsset() lookup.
+// Populated by registerDefaultSkins() called from GameCanvas on mount.
+const _defaultSkinMap = new Map<string, SkinAsset>();
+
+/** Register the built-in default skins (called once from GameCanvas) */
+export function registerDefaultSkins(skins: SkinAsset[]): void {
+  for (const s of skins) {
+    if (!_defaultSkinMap.has(s.id)) _defaultSkinMap.set(s.id, s);
+  }
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -130,14 +141,17 @@ export function getSkinAsset(skinId: string): SkinAsset {
   if (preset) return preset;
 
   // 3. Check DEFAULT_SKINS from atlas (those are already SkinAsset format)
-  // We'll add them dynamically below
+  const defaultSkin = _defaultSkinMap.get(skinId);
+  if (defaultSkin) return defaultSkin;
 
   // 4. Fallback: create a solid skin from the ID's hash if it's a custom skin
   if (skinId === 'custom-lab-skin') {
     return getCustomLabSkin();
   }
 
-  // 5. Ultimate fallback
+  // 5. Ultimate fallback — use skin-viper-green as the true default
+  const viper = _defaultSkinMap.get('skin-viper-green');
+  if (viper) return { ...viper, id: skinId };
   return {
     id: skinId,
     name: 'Unknown Skin',

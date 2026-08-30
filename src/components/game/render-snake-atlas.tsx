@@ -1046,7 +1046,9 @@ export function renderSnakeFallback(
     const pColors = patternVis.colors;
     const pBodyStyle = patternVis.bodyStyle;
     const pTaper = patternVis.taperStyle;
-    const pGlow = patternVis.glow;
+    // FIX: Per-segment glow ONLY renders while boosting (was always-on, causing
+    // 600-900 extra drawImage/frame for nearby bots = major lag + visual bug)
+    const pGlow = patternVis.glow && snake.boosting;
     for (let i = walked.count - 1; i >= 0; i--) {
       const wx = walked.xs[i];
       const wy = walked.ys[i];
@@ -1064,7 +1066,9 @@ export function renderSnakeFallback(
     const pColors = presetVis.colors;
     const pBodyStyle = presetVis.bodyStyle;
     const pTaper = presetVis.taperStyle;
-    const pGlow = presetVis.glow;
+    // FIX: Per-segment glow ONLY renders while boosting (was always-on, causing
+    // 600-900 extra drawImage/frame for nearby bots = major lag + visual bug)
+    const pGlow = presetVis.glow && snake.boosting;
     for (let i = walked.count - 1; i >= 0; i--) {
       const wx = walked.xs[i];
       const wy = walked.ys[i];

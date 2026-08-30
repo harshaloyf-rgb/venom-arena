@@ -47,10 +47,12 @@ export interface CollisionResult {
 const DOT_DIST_FACTOR = 0.75;
 // Proximity uses head CENTER (not dot) against body spine.
 // Head surface touches body surface when center-to-spine distance <=
-// 2 * SNAKE_RADIUS (= 12px). We allow 2px grace so collision
-// triggers at 10px (= (2*R - 2)² = 100). This catches parallel
-// crawling where swept line crossing misses (parallel lines never cross).
-const CRAWL_HIT_DIST_SQ = (2 * SNAKE_RADIUS - 2) * (2 * SNAKE_RADIUS - 2); // 100 for R=6
+// headRadius + bodyRadius. We allow 2px grace so collision triggers at
+// (headR + bodyR - 2). Previously used fixed SNAKE_RADIUS=3 for BOTH
+// radii, causing pass-through on larger snakes (bodyRadius grows to 10+).
+// Now computed per-snake pair in the narrow phase below.
+// This constant is only used as a MINIMUM threshold (for degenerate cases).
+const MIN_CRAWL_HIT_DIST_SQ = (2 * SNAKE_RADIUS - 2) * (2 * SNAKE_RADIUS - 2); // 16 for R=3
 
 // ─── Module-level scratch (avoids per-tick allocation) ──────────────────────
 
@@ -189,8 +191,11 @@ export function checkCollisions(
   const VIEWPORT_COLLISION_RANGE_SQ = 2000 * 2000;
   // PERF: Clear per-tick caches
   _tailIdxCache.clear();
-  // FIX #5: Body hash optimization — skip segments for bots far from the player.
-  const BODY_HASH_RANGE_SQ = 5000 * 5000;
+  // FIX: Body hash optimization — skip segments for bots far from the player.
+  // Increased from 5000 to 8000: a snake with bodyLength 200 at SEGMENT_SPACING=8
+  // has a body that extends 1600px behind its head. At 5000px range, a bot
+  // whose head is at 5001px but whose body trails to 3401px was fully excluded.
+  const BODY_HASH_RANGE_SQ = 8000 * 8000;
   const hasPlayerRef = playerX !== undefined && playerY !== undefined;
 
   // ── Build body spatial hash (broad phase) ──
@@ -368,6 +373,14 @@ export function checkCollisions(
       // Midpoint of head CENTER movement
       const midHcx = (prevHcx + hcx) * 0.5;
       const midHcy = (prevHcy + hcy) * 0.5;
+      // FIX: Use actual body radius of the target snake, not fixed SNAKE_RADIUS.
+      // A snake with score 500 has bodyRadius ~10, so collision surface is
+      // headRadius(3) + bodyRadius(10) - 2grace = 11px from spine.
+      // Previously was always 4px (using SNAKE_RADIUS=3 for both), causing
+      // players to pass through large snakes.
+      const otherBodyR = otherSnake.bodyRadius || SNAKE_RADIUS;
+      const crawlDist = SNAKE_RADIUS + otherBodyR - 2;
+      const crawlDistSq = crawlDist * crawlDist;
       for (let j = 1; j <= maxCheckIdx; j++) {
         const sx = otherSnake.path.getX(j);
         const sy = otherSnake.path.getY(j);
@@ -385,10 +398,10 @@ export function checkCollisions(
         }
         // 2. PROXIMITY: head CENTER vs body SPINE segment.
         //    Catches parallel crawling where lines don't cross.
-        //    Threshold: 2*R-2 = 10px (2px grace before surfaces touch).
-        if (distPointToSegSq(hcx, hcy, sx, sy, ex, ey) <= CRAWL_HIT_DIST_SQ
-          || distPointToSegSq(prevHcx, prevHcy, sx, sy, ex, ey) <= CRAWL_HIT_DIST_SQ
-          || distPointToSegSq(midHcx, midHcy, sx, sy, ex, ey) <= CRAWL_HIT_DIST_SQ) {
+        //    Threshold: headRadius + bodyRadius - 2px grace.
+        if (distPointToSegSq(hcx, hcy, sx, sy, ex, ey) <= crawlDistSq
+          || distPointToSegSq(prevHcx, prevHcy, sx, sy, ex, ey) <= crawlDistSq
+          || distPointToSegSq(midHcx, midHcy, sx, sy, ex, ey) <= crawlDistSq) {
           hit = true;
           break;
         }

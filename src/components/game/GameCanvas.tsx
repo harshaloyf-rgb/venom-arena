@@ -6,7 +6,7 @@ import { createExtractionState, updateExtractionProgress, drawExtractRing } from
 import { createInitialState, gameTick, respawnPlayer, seedInitialFood, type PlayerSkinOverride } from '@/lib/snake/engine';
 import { createCamera, updateCameraInterpolated, getViewport } from '@/lib/snake/camera';
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
-import { getPlayerSkinAsset, registerSkinAsset } from '@/lib/snake/skin-registry';
+import { getPlayerSkinAsset, registerSkinAsset, registerDefaultSkins } from '@/lib/snake/skin-registry';
 import { type GameState, type Camera, type Viewport } from '@/lib/snake/types';
 import { FIXED_DT } from '@/lib/snake/config';
 import { drawDeathOverlay, drawEliminatedBanner, drawControlsHint } from './renderer';
@@ -165,6 +165,8 @@ export default function GameCanvas({
     for (const skin of DEFAULT_SKINS) {
       atlasManager.buildAtlas(skin);
     }
+    // Register default skins in the skin registry so getSkinAsset() finds them
+    registerDefaultSkins(DEFAULT_SKINS);
 
     // ── Resolve player's selected skin (from stabilized ref) ──
     const serverSkinId = authSkinRef.current;
