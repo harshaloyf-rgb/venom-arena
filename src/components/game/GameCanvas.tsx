@@ -7,7 +7,8 @@ import { createInitialState, gameTick, respawnPlayer, seedInitialFood, type Play
 import { createCamera, updateCameraInterpolated, getViewport } from '@/lib/snake/camera';
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, registerSkinAsset } from '@/lib/snake/skin-registry';
-import { type GameState, type Camera, type Viewport, FIXED_DT } from '@/lib/snake';
+import { type GameState, type Camera, type Viewport } from '@/lib/snake/types';
+import { FIXED_DT } from '@/lib/snake/config';
 import { drawDeathOverlay, drawEliminatedBanner, drawControlsHint } from './renderer';
 import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrameWithDpr } from './render-snake-atlas';
 import { cleanupDeadSnakeParticles, renderBackground, renderHUD, handleMinimapClick, resetMinimapZoom } from './hud';

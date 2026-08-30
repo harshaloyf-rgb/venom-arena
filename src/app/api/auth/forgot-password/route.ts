@@ -42,21 +42,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Find the player by email
+    // Find the player by email (use generic message to prevent email enumeration)
     const player = await db.player.findUnique({ where: { email } });
-    if (!player) {
-      return NextResponse.json({ error: 'No account found with that email.' }, { status: 404 });
-    }
-    if (!player.passwordHash) {
+    if (!player || !player.passwordHash || !player.securityPin) {
+      // Always return the same generic message regardless of which check failed
       return NextResponse.json(
-        { error: 'This is a guest account. Guest accounts have no password to reset.' },
-        { status: 400 }
-      );
-    }
-    if (!player.securityPin) {
-      return NextResponse.json(
-        { error: 'This account has no Security PIN set. PIN is required for password recovery. Please create a new account or contact an admin.' },
-        { status: 400 }
+        { error: 'If the email and PIN are correct, the password has been reset.' },
+        { status: 200 },
       );
     }
 
@@ -76,7 +68,7 @@ export async function POST(req: NextRequest) {
     const newHash = await hashPassword(newPassword);
     await db.player.update({
       where: { id: player.id },
-      data: { passwordHash: newHash },
+      data: { passwordHash: newHash, tokenVersion: { increment: 1 } },
     });
 
     // Clear rate limit on success

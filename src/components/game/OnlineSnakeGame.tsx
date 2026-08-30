@@ -10,7 +10,7 @@ import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, registerSkinAsset } from '@/lib/snake/skin-registry';
 import { getArenaConfig, SEGMENT_SPACING, BASE_SPEED } from '@/lib/snake/config';
 import { getArenaById } from '@/lib/game-config';
-import type { Snake, Camera, Viewport } from '@/lib/snake';
+import type { Snake, Camera, Viewport } from '@/lib/snake/types';
 import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrameWithDpr } from './render-snake-atlas';
 import { renderBackground, renderHUD, resetMinimapZoom, handleMinimapClick } from './hud';
 import { drawDeathOverlay, drawEliminatedBanner, drawControlsHint } from './renderer';

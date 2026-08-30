@@ -48,8 +48,8 @@ export async function POST(req: NextRequest) {
     const me = await db.player.findUnique({ where: { id: session.playerId } });
     if (!me || me.clanTag !== tag) return NextResponse.json({ error: 'Not a member.' }, { status: 403 });
 
-    // Strip HTML tags from message
-    const sanitized = message.replace(/<[^>]*>/g, '');
+    // Strip anything that looks like an HTML tag (including unclosed) to prevent stored XSS
+    const sanitized = message.replace(/<\/?[a-zA-Z][^>]*>?/g, '');
 
     const created = await db.clanMessage.create({
       data: {

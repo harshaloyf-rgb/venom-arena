@@ -1,13 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getSession, hashPassword, verifyPassword, signSession, setSessionCookie } from '@/lib/auth';
+import { hashPassword, verifyPassword, signSession, setSessionCookie } from '@/lib/auth';
+import { requireAuth } from '@/lib/api-helpers';
+
+// In-memory rate limit: 5 attempts per 15 min per player
+const changePwAttempts = new Map<string, { count: number; firstAt: number }>();
+const MAX_CHANGE_PW = 5;
+const CHANGE_PW_WINDOW_MS = 15 * 60 * 1000;
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+    const { session, error } = await requireAuth();
+    if (error) return error;
+
+    // Rate limit: 5 attempts per 15 min
+    const now = Date.now();
+    const attempt = changePwAttempts.get(session.playerId);
+    if (attempt && now - attempt.firstAt <= CHANGE_PW_WINDOW_MS && attempt.count >= MAX_CHANGE_PW) {
+      const remaining = Math.ceil((CHANGE_PW_WINDOW_MS - (now - attempt.firstAt)) / 60000);
+      return NextResponse.json({ error: `Too many attempts. Try again in ${remaining} minute(s).` }, { status: 429 });
     }
+
     const body = await req.json().catch(() => ({}));
     const currentPassword = String(body.currentPassword || '');
     const newPassword = String(body.newPassword || '');
@@ -26,8 +39,17 @@ export async function POST(req: NextRequest) {
 
     const valid = await verifyPassword(currentPassword, player.passwordHash);
     if (!valid) {
+      // Increment rate limit counter
+      if (attempt && now - attempt.firstAt <= CHANGE_PW_WINDOW_MS) {
+        attempt.count++;
+      } else {
+        changePwAttempts.set(session.playerId, { count: 1, firstAt: now });
+      }
       return NextResponse.json({ error: 'Current password is incorrect.' }, { status: 401 });
     }
+
+    // Clear rate limit on success
+    changePwAttempts.delete(session.playerId);
 
     const newHash = await hashPassword(newPassword);
     // Increment tokenVersion to invalidate all existing sessions

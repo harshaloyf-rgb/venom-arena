@@ -130,3 +130,28 @@ Work Log:
 Stage Summary:
 - clans-tab.tsx compressed: tighter layout on desktop via lg: overrides
 - 1 file modified, 0 new files
+---
+Task ID: 8
+Agent: Main
+Task: Remove dead code, duplicates, and fix security issues
+
+Work Log:
+- Full project audit: traced every import to find dead files
+- Identified and deleted 45+ dead files across lib/ and components/game/
+- Deleted 3 dead directories: components/game/engines/, hooks/, render/, offline/
+- Deleted 6 dead audit documentation .md files
+- Removed unused duplicate rate limiter (rate-limit.ts — api-helpers.ts is the active one)
+- Removed unused duplicate share-card.tsx (share-card/ directory is the active one)
+- Removed dead auth-gate.tsx and game-rules-modal.tsx (newer versions exist elsewhere)
+- Removed 3 dead functions from snake-engine.ts (buildInitialPath, extendPath, sampleSegments)
+- Fixed barrel import breakage (snake/index.ts deleted → updated GameCanvas.tsx and OnlineSnakeGame.tsx)
+- Security fix: forgot-password now increments tokenVersion (prevents session hijack after pw reset)
+- Security fix: forgot-password now returns generic message (prevents email enumeration)
+- Security fix: change-password now has rate limiting (5 attempts/15min)
+- Security fix: clan chat sanitization improved (handles unclosed tags)
+- Security fix: INTERNAL_SECRET replaced with cryptographically random 64-char hex
+
+Stage Summary:
+- ~45 dead files deleted, ~3000+ lines of dead code removed
+- 5 security vulnerabilities fixed (session hijack, email enum, brute force, XSS, weak secret)
+- Clean lint, zero browser errors, full lobby + game verified working
