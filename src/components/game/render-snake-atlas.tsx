@@ -585,6 +585,31 @@ export function renderSnakeAtlas(
     ctx.restore();
   }
 
+  // ── Body spine: thick line along the body path ensures visual continuity.
+  //  Drawn BEFORE individual segment sprites so any gaps between circles are
+  //  filled by this continuous sausage-link base. Uses the body color at
+  //  reduced opacity so it blends under the detailed segment sprites.
+  if (walked.count > 1) {
+    ctx.save();
+    ctx.strokeStyle = snake.color;
+    ctx.lineWidth = segRadius * 1.6;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    // Draw from tail (last walked) to head (first walked)
+    const tailSx = (walked.xs[walked.count - 1] - camera.x) * zoom + camZoomX + renderOffX;
+    const tailSy = (walked.ys[walked.count - 1] - camera.y) * zoom + camZoomY + renderOffY;
+    ctx.moveTo(tailSx, tailSy);
+    for (let i = walked.count - 2; i >= 0; i--) {
+      const sx = (walked.xs[i] - camera.x) * zoom + camZoomX + renderOffX;
+      const sy = (walked.ys[i] - camera.y) * zoom + camZoomY + renderOffY;
+      ctx.lineTo(sx, sy);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
   // ── Draw body segments (tail → head for proper layering) ──
   // PERF FIX: Replace per-segment save/translate/rotate/restore with setTransform.
   // save/restore pushes/pops entire canvas state (~1μs each × 200 segments = 200μs).
@@ -989,6 +1014,24 @@ export function renderSnakeFallback(
       }
       ctx.stroke();
     }
+    ctx.restore();
+  }
+
+  // ── Body spine: thick line ensures visual continuity between segments ──
+  //  Drawn BEFORE individual segment circles so any tiny gaps are filled.
+  if (walked.count > 1) {
+    ctx.save();
+    ctx.strokeStyle = snake.color;
+    ctx.lineWidth = segRadius * 1.6;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.moveTo(toSX(walked.xs[walked.count - 1], ct) + renderOffX, toSY(walked.ys[walked.count - 1], ct) + renderOffY);
+    for (let i = walked.count - 2; i >= 0; i--) {
+      ctx.lineTo(toSX(walked.xs[i], ct) + renderOffX, toSY(walked.ys[i], ct) + renderOffY);
+    }
+    ctx.stroke();
     ctx.restore();
   }
 

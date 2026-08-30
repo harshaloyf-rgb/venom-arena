@@ -142,7 +142,7 @@ export interface Skin {
 
 export const ALL_COSMETICS: Skin[] = [
   // ----- Skins (13) -----
-  { id: 'skin-default', name: 'Toxic Slime', cost: 0, type: 'skin', color: '#22c55e', secondaryColor: '#15803d', description: 'The standard issue bio-luminescent skin.', emoji: '🐍' },
+  { id: 'skin-default', name: 'Toxic Slime', cost: 0, type: 'skin', color: '#22c55e', secondaryColor: '#22c55e', pattern: 'gradient', description: 'The standard issue bio-luminescent skin.', emoji: '🐍' },
   { id: 'skin-venom', name: 'Venom Stryker', cost: 40, type: 'skin', color: '#a855f7', secondaryColor: '#6b21a8', description: 'A striking royal purple skin designed to intimidate.', emoji: '👾' },
   { id: 'skin-cyber', name: 'Cyber Grid', cost: 100, type: 'skin', color: '#06b6d4', secondaryColor: '#0891b2', description: 'Futuristic grid design that flows like computer data.', emoji: '🤖' },
   { id: 'skin-fish', name: 'The Fish Snake', cost: 200, type: 'skin', color: '#06b6d4', secondaryColor: '#3b82f6', description: 'Aquatic scales with hydrodynamic dorsal fins and bubble bioluminescence.', emoji: '🐟', pattern: 'neon' },
