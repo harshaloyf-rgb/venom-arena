@@ -96,3 +96,31 @@ Stage Summary:
 - All glow sources now properly gated by snake.boosting
 - Collision detection range increased to handle long snake bodies
 - Guest users now correctly get their own default skin from server
+
+---
+Task ID: 4
+Agent: Main
+Task: Fix default skin head-body visual separation
+
+Work Log:
+- User reported: default skin shows head and body as separate/disconnected objects
+- Other skins don't have this issue — only the default skin (skin-viper-green)
+
+### Root Cause Analysis
+- Default skin had `pattern: 'solid'` = flat bodyColor fill on every body segment
+- `bodyColor: '#22c55e'` (bright green) vs `headColor: '#16a34a'` (dark green) = visible color seam
+- `accentColor: '#86efac'` (very light green) = jarring bright ring around head
+- Head has 3D shading overlay + accent ring; body has no visual detail
+- Result: head looks like a completely separate object from the flat body
+
+### Fix
+- Changed pattern from `'solid'` to `'gradient'` — body segments now have a diagonal gradient
+  from bodyColor (#22c55e) to headColor (#16a34a), creating smooth transition to head
+- Changed accentColor from `'#86efac'` to `'#4ade80'` — closer to body color, less jarring ring
+- Updated both DEFAULT_SKINS in atlas.ts and fallback in skin-registry.ts
+
+Stage Summary:
+- 2 files modified: atlas.ts, skin-registry.ts
+- Default skin now uses gradient pattern for cohesive head-body appearance
+- Accent ring toned down to blend with body
+- Lint passes, committed and pushed
