@@ -124,3 +124,26 @@ Stage Summary:
 - Default skin now uses gradient pattern for cohesive head-body appearance
 - Accent ring toned down to blend with body
 - Lint passes, committed and pushed
+---
+Task ID: 5
+Agent: Main
+Task: Fix body/head disconnection, camZoomX crash, and skin selection bugs
+
+Work Log:
+- Analyzed render-snake-atlas.tsx camZoomX usage: found double-subtraction of camera position
+- camZoomX was cw/2 - camera.x*zoom, body code does (wx-camera.x)*zoom + camZoomX = double subtract
+- Head used w2sX() which correctly computes (wx-camera.x)*zoom + cw/2
+- This caused body segments to shift by -camera.x*zoom pixels from the head
+- Moved camZoomX/camZoomY declarations before first use (was line 620, used at 601)
+- Fixed camZoomX to cw/2 and camZoomY to ch/2 (remove double camera offset)
+- Created POST /api/player/current-skin endpoint for free skin sync
+- Updated handleEquipSlitherPreset() and handleDeployCustomSkin() to call new API
+- Changed GameCanvas fallback from 'skin-default' to 'skin-viper-green'
+- Verified with agent-browser: game starts, 1 canvas, 32727 non-black pixels, 0 console errors
+
+Stage Summary:
+- Root cause of body/head disconnection: camZoomX double-subtracted camera.x*zoom
+- Root cause of skin selection: presets never synced to server, matchesServer check failed
+- Root cause of crash: camZoomX declared after first use (TDZ violation)
+- All 3 bugs fixed, lint passes, game verified running with agent-browser
+- Committed: 4b78dbb
