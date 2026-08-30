@@ -56,7 +56,7 @@ model Player {
 
   // Cosmetics — JSON-encoded arrays/objects (default set in code on register)
   unlockedSkins   String   @default("[]")
-  currentSkin     String   @default("skin-default")
+  currentSkin     String   @default("skin-viper-green")
   currentTrail    String   @default("trail-none")
   currentDeath    String   @default("death-default")
   currentFlag     String?
