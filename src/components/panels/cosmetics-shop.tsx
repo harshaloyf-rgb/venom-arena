@@ -205,7 +205,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
     }
   }
 
-  function handleEquipSlitherPreset(preset: SlitherPreset) {
+  async function handleEquipSlitherPreset(preset: SlitherPreset) {
     const segments = generateCustomSegments(
       preset.colors,
       preset.shape,
@@ -219,6 +219,15 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
     };
     writeCustomSkinState(next);
     setCustomState(next);
+    // Sync to server so getPlayerSkinAsset() matchesServer check passes
+    try {
+      await fetch('/api/player/current-skin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skinId: preset.id }),
+      });
+      await refresh();
+    } catch { /* non-critical: skin works in offline mode via localStorage */ }
     notify(
       `Injected DNA: ${preset.name}! Equipped in Battle Arena.`,
       'success',
@@ -363,7 +372,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
     notify('Mutated new genetic chain!', 'success', onToast);
   }
 
-  function handleDeployCustomSkin() {
+  async function handleDeployCustomSkin() {
     if (colorSequence.length === 0) {
       notify('Choose at least 1 color node before deploying!', 'error', onToast);
       return;
@@ -382,6 +391,15 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
     };
     writeCustomSkinState(next);
     setCustomState(next);
+    // Sync to server so getPlayerSkinAsset() matchesServer check passes
+    try {
+      await fetch('/api/player/current-skin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skinId: 'custom-lab-skin' }),
+      });
+      await refresh();
+    } catch { /* non-critical: skin works in offline mode via localStorage */ }
     notify(
       '🧪 Genetic Custom Segment deployed! Equipped in Battle Arena.',
       'success',

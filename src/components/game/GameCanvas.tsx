@@ -41,7 +41,7 @@ export default function GameCanvas({
   // P0 FIX: Stabilize auth values as refs so the game useEffect doesn't
   // re-initialize (resetting the entire game) when authPlayer reference changes.
   // Previously, any auth refresh during gameplay killed the game.
-  const authSkinRef = useRef(authPlayer?.currentSkin ?? 'skin-default');
+  const authSkinRef = useRef(authPlayer?.currentSkin ?? 'skin-viper-green');
   const authNameRef = useRef(authPlayer?.name || 'Player');
   // Note: ref sync moved to useEffect to avoid lint "ref-during-render" rule
   useEffect(() => {

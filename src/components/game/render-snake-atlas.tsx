@@ -464,8 +464,8 @@ export function renderSnakeAtlas(
   if (headWy < viewport.top - cullMargin || headWy > viewport.bottom + cullMargin) return;
   const cw = viewport.width;
   const ch = viewport.height;
-  const camZoomX = cw / 2 - camera.x * zoom;
-  const camZoomY = ch / 2 - camera.y * zoom;
+  const camZoomX = cw / 2;
+  const camZoomY = ch / 2;
   const segRadius = snake.bodyRadius * zoom;
 
   // P3 FIX #10: Non-linear head scale — large snakes have proportionally smaller heads
