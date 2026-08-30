@@ -4,7 +4,7 @@
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type CosmeticSlot = 'eyes' | 'mouth' | 'ears' | 'wings' | 'nose' | 'hat' | 'goggles' | 'flag' | 'banner';
+export type CosmeticSlot = 'eyes' | 'mouth' | 'ears' | 'wings' | 'nose' | 'hat' | 'goggles';
 
 export type CosmeticRarity = 'common' | 'rare' | 'epic' | 'legendary';
 
@@ -277,18 +277,6 @@ export const FACE_COSMETICS: FaceCosmetic[] = [
   { id: 'goggles-shades', name: 'Cool Shades', slot: 'goggles', cost: 0, rarity: 'common', emoji: '😎', description: 'Dark sunglasses.', draw: drawCoolShades },
   { id: 'goggles-monocle', name: 'Monocle', slot: 'goggles', cost: 0, rarity: 'epic', emoji: '🧐', description: 'A sophisticated monocle.', draw: drawMonocle },
 
-  // ═══════════════════════════════════════════════════════════════════
-  // FLAGS — Country capes that wave on the snake neck (8)
-  // ═══════════════════════════════════════════════════════════════════
-  { id: 'flag-none', name: 'No Flag', slot: 'flag', cost: 0, rarity: 'common', emoji: '❌', description: 'Remove flag.', draw: () => {} },
-  { id: 'flag-india', name: 'India', slot: 'flag', cost: 0, rarity: 'common', emoji: '🇮🇳', description: 'Indian tricolor flag cape.', draw: (ctx, p) => drawWavingFlag(ctx, p, ['#FF9933', '#FFFFFF', '#138808'], 'circle') },
-  { id: 'flag-usa', name: 'USA', slot: 'flag', cost: 0, rarity: 'common', emoji: '🇺🇸', description: 'Stars and stripes flag cape.', draw: (ctx, p) => drawWavingFlag(ctx, p, ['#B31942', '#FFFFFF', '#0A3161'], 'stars') },
-  { id: 'flag-uk', name: 'United Kingdom', slot: 'flag', cost: 0, rarity: 'common', emoji: '🇬🇧', description: 'Union Jack flag cape.', draw: (ctx, p) => drawWavingFlag(ctx, p, ['#012169', '#FFFFFF', '#C8102E'], 'cross') },
-  { id: 'flag-japan', name: 'Japan', slot: 'flag', cost: 0, rarity: 'common', emoji: '🇯🇵', description: 'White flag with red sun.', draw: (ctx, p) => drawWavingFlag(ctx, p, ['#FFFFFF', '#BC002D', '#FFFFFF'], 'circle') },
-  { id: 'flag-brazil', name: 'Brazil', slot: 'flag', cost: 0, rarity: 'common', emoji: '🇧🇷', description: 'Green and gold Brazilian flag.', draw: (ctx, p) => drawWavingFlag(ctx, p, ['#009739', '#FEDD00', '#002776'], 'circle') },
-  { id: 'flag-france', name: 'France', slot: 'flag', cost: 0, rarity: 'common', emoji: '🇫🇷', description: 'French tricolor flag cape.', draw: (ctx, p) => drawWavingFlag(ctx, p, ['#002395', '#FFFFFF', '#ED2939'], 'plain') },
-  { id: 'flag-germany', name: 'Germany', slot: 'flag', cost: 0, rarity: 'common', emoji: '🇩🇪', description: 'German tricolor flag cape.', draw: (ctx, p) => drawWavingFlag(ctx, p, ['#000000', '#DD0000', '#FFCC00'], 'plain') },
-  { id: 'flag-south-korea', name: 'South Korea', slot: 'flag', cost: 0, rarity: 'common', emoji: '🇰🇷', description: 'South Korean flag cape.', draw: (ctx, p) => drawWavingFlag(ctx, p, ['#FFFFFF', '#CD2E3A', '#0047A0'], 'circle') },
 ];
 
 // ─── Lookup helpers ──────────────────────────────────────────────────────────
@@ -311,8 +299,6 @@ export const SLOT_INFO: Record<CosmeticSlot, { label: string; emoji: string; des
   nose:    { label: 'Nose',     emoji: '👃', desc: 'Nose accessories and gems' },
   hat:     { label: 'Hats',     emoji: '🎩', desc: 'Hats, crowns, helmets & headwear' },
   goggles: { label: 'Goggles',  emoji: '🥽', desc: 'Goggles, sunglasses & eyewear' },
-  flag:    { label: 'Flags',    emoji: '🚩', desc: 'Country flag capes on your neck' },
-  banner:  { label: 'Banner',   emoji: '🏆', desc: 'Show a banner above your name' },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1546,85 +1532,6 @@ function drawMonocle(ctx: CanvasRenderingContext2D, p: CosmeticDrawParams) {
   ctx.restore();
 }
 
-// ─── WAVING FLAG CAPE ─────────────────────────────────────────────────────
-
-type FlagStyle = 'plain' | 'circle' | 'stars' | 'cross';
-
-function drawWavingFlag(
-  ctx: CanvasRenderingContext2D,
-  p: CosmeticDrawParams,
-  stripeColors: string[],
-  style: FlagStyle,
-): void {
-  const { hx, hy, hr, angle, time } = p;
-  const t = (time || 0) * 0.004;
-  ctx.save(); ctx.translate(hx, hy); ctx.rotate(angle);
-
-  // Position: attached at the neck (behind head center)
-  const attachX = -hr * 0.6;
-  const flagW = hr * 2.0;
-  const flagH = hr * 1.2;
-  const cols = 20;
-  const colW = flagW / cols;
-  const amplitude = hr * 0.25;
-
-  // Draw flag as vertical strips with wave
-  for (let c = 0; c < cols; c++) {
-    const x0 = attachX + c * colW;
-    const x1 = attachX + (c + 1) * colW;
-    const wave0 = Math.sin(t + c * 0.4) * amplitude * (c / cols);
-    const wave1 = Math.sin(t + (c + 1) * 0.4) * amplitude * ((c + 1) / cols);
-    const topY = -hr * 0.3;
-    const botY = topY + flagH;
-
-    // Determine color based on stripe
-    const stripeIdx = Math.min(Math.floor(c / (cols / stripeColors.length)), stripeColors.length - 1);
-    ctx.fillStyle = stripeColors[stripeIdx];
-
-    ctx.beginPath();
-    ctx.moveTo(x0, topY + wave0);
-    ctx.lineTo(x1, topY + wave1);
-    ctx.lineTo(x1, botY + wave1);
-    ctx.lineTo(x0, botY + wave0);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  // Center emblem (for circle/cross styles)
-  if (style === 'circle' || style === 'stars') {
-    const centerX = attachX + flagW * 0.35;
-    const centerWave = Math.sin(t + (cols / 3) * 0.4) * amplitude * 0.35;
-    const centerY = -hr * 0.3 + flagH * 0.5 + centerWave;
-    const emblemR = flagH * 0.2;
-    ctx.fillStyle = stripeColors[1];
-    if (style === 'circle') {
-      ctx.beginPath(); ctx.arc(centerX, centerY, emblemR, 0, Math.PI * 2); ctx.fill();
-    } else {
-      // Stars: small dots
-      for (let s = 0; s < 5; s++) {
-        const sx = centerX + Math.cos(s * 1.26) * emblemR * 0.5;
-        const sy = centerY + Math.sin(s * 1.26) * emblemR * 0.5;
-        ctx.beginPath(); ctx.arc(sx, sy, emblemR * 0.15, 0, Math.PI * 2); ctx.fill();
-      }
-    }
-  }
-
-  if (style === 'cross') {
-    const cx = attachX + flagW * 0.35;
-    const cWave = Math.sin(t + (cols / 3) * 0.4) * amplitude * 0.35;
-    const cy = -hr * 0.3 + flagH * 0.5 + cWave;
-    ctx.strokeStyle = '#C8102E'; ctx.lineWidth = flagH * 0.08;
-    ctx.beginPath(); ctx.moveTo(cx - flagH * 0.35, cy); ctx.lineTo(cx + flagH * 0.35, cy); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cx, cy - flagH * 0.35); ctx.lineTo(cx, cy + flagH * 0.35); ctx.stroke();
-  }
-
-  // Pole line
-  ctx.strokeStyle = '#9CA3AF'; ctx.lineWidth = Math.max(1.5, hr * 0.05);
-  ctx.beginPath(); ctx.moveTo(attachX, -hr * 0.5); ctx.lineTo(attachX, hr * 0.5); ctx.stroke();
-
-  ctx.restore();
-}
-
 // ─── EQUIPPED COSMETICS STATE ─────────────────────────────────────────────────
 
 const EQUIPPED_KEY = 'venom_equipped_cosmetics';
@@ -1637,7 +1544,6 @@ export interface EquippedCosmetics {
   nose: string;
   hat: string;
   goggles: string;
-  flag: string;
 }
 
 const DEFAULT_EQUIPPED: EquippedCosmetics = {
@@ -1648,7 +1554,6 @@ const DEFAULT_EQUIPPED: EquippedCosmetics = {
   nose: 'nose-none',
   hat: 'hat-none',
   goggles: 'goggles-none',
-  flag: 'flag-none',
 };
 
 export function readEquippedCosmetics(): EquippedCosmetics {
@@ -1671,7 +1576,7 @@ export function renderEquippedCosmetics(
   params: CosmeticDrawParams,
 ): void {
   const equipped = readEquippedCosmetics();
-  const slots: CosmeticSlot[] = ['wings', 'flag', 'ears', 'hat', 'goggles', 'mouth', 'nose', 'eyes']; // back-to-front
+  const slots: CosmeticSlot[] = ['wings', 'ears', 'hat', 'goggles', 'mouth', 'nose', 'eyes']; // back-to-front
   for (const slot of slots) {
     const id = equipped[slot];
     if (!id || id === 'none') continue;

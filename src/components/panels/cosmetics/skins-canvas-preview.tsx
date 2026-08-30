@@ -80,15 +80,14 @@ export function SkinsCanvasPreview({
         const segAngle = Math.atan2(nextPt.y - pt.y, nextPt.x - pt.x);
 
         let fillColor = colors[i % colors.length] || '#ffffff';
-        let segmentGlow = glow;
+        // Glow disabled in preview — glow only renders in-game while boosting
+        let segmentGlow = false;
 
         if (pattern === 'rainbow') {
           const hue = (Date.now() * 0.06 + i * 36) % 360;
           fillColor = `hsl(${hue}, 85%, 55%)`;
-          segmentGlow = true;
         } else if (pattern === 'neon') {
           fillColor = i % 2 === 0 ? '#06b6d4' : '#a855f7';
-          segmentGlow = true;
         } else if (pattern === 'metallic') {
           fillColor = i % 2 === 0 ? '#cbd5e1' : '#475569';
         } else if (pattern === 'camo') {
@@ -159,10 +158,7 @@ export function SkinsCanvasPreview({
 
       ctx.save();
       ctx.fillStyle = headColor;
-      if (glow) {
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = headColor;
-      }
+      // Glow disabled in preview — glow only renders in-game while boosting
       ctx.beginPath();
       ctx.arc(head.x, head.y, 8.5, 0, Math.PI * 2);
       ctx.fill();

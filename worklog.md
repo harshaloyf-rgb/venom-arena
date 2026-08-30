@@ -147,3 +147,104 @@ Stage Summary:
 - Root cause of crash: camZoomX declared after first use (TDZ violation)
 - All 3 bugs fixed, lint passes, game verified running with agent-browser
 - Committed: 4b78dbb
+
+---
+Task ID: 6
+Agent: Main
+Task: Remove glow effects from all skin preview components
+
+Work Log:
+- User requested: no glow in any preview — glow only in-game while boosting
+- Fixed 5 preview components:
+  1. cosmetics-cards.tsx: Changed `glow={preset.glow}` → `glow={false}` and `glow={vis.glow}` → `glow={false}`
+  2. game-snake-preview.tsx: Changed `effectiveGlow = glow ?? autoGlow ?? false` → `effectiveGlow = false`
+  3. skin-preview-game.tsx: Removed seg.glow (→false), removed applyEpicEffect for body/head, removed rarity glow
+  4. try-on-preview.tsx: Changed drawSegmentShape glow to false, removed head shadowBlur
+  5. skins-canvas-preview.tsx: Set segmentGlow=false, removed neon/rainbow glow overrides, removed head shadowBlur
+- Left venom-painter.tsx untouched (user has explicit GLOW ON/OFF toggle for skin creation)
+- Lint passes clean
+
+Stage Summary:
+- All 5 skin preview components no longer render glow effects
+- Glow now ONLY appears in-game while boosting (as intended)
+- Venom painter lab tool keeps its manual toggle for design purposes
+
+---
+Task ID: 7
+Agent: Main
+Task: Fix boost glow not visible when boosting in-game
+
+Work Log:
+- User reported snake doesn't glow when boosting
+- Root cause: boost aura used alpha 0.15-0.25 (barely visible) with only 1 layer at 3x segRadius
+- Head glow used hardcoded orange color (rgba(255,200,80)) instead of snake's own color
+- Fix: Replaced single boost aura with 2-layer glow system:
+  - Layer 1: Wide outer halo (5x segRadius, alpha 0.12-0.18) — soft ambient glow
+  - Layer 2: Tight inner glow (2.5x segRadius, alpha 0.35-0.50) — bright visible core
+- Fix: Head glow now uses snake's own headColor (lightened 50%) instead of hardcoded orange
+- Fix: Head glow radius increased from 1.5x to 2.2x head size, alpha from 0.25-0.40 to 0.45-0.65
+- Applied same 2-layer boost aura to both atlas renderer and fallback renderer
+- Lint passes clean
+
+Stage Summary:
+- Boost glow is now clearly visible with dual-layer body aura + bright head glow
+- Glow color matches snake's skin color (not hardcoded)
+- Both player (atlas) and bots (fallback) get the same visible boost effect
+---
+Task ID: 1
+Agent: Main
+Task: Fix snake body not glowing when boosting + remove strange straight line glow
+
+Work Log:
+- Investigated render-snake-atlas.tsx boost glow code
+- Found that the "boost aura" used line-stroke approach (ctx.stroke with thick lineWidth) which looked like ugly straight lines
+- The per-segment body glow was missing entirely — no slither.io-style glow effect
+- Speed lines behind head (6 lines) were also visual noise
+- Added getCachedBoostGlow() function: creates a pre-rendered soft radial gradient glow sprite cached by color+size+dpr
+- Replaced line-stroke boost aura in atlas renderer (lines 619-654 old) with per-segment drawImage glow loop
+- Replaced line-stroke boost aura in fallback renderer (lines 1028-1065 old) with per-segment drawImage glow loop
+- Removed speed lines (6 stroked lines behind head) from atlas renderer
+- Kept head glow pulse (radial gradient on head) which looks correct
+
+Stage Summary:
+- Boost glow now uses slither.io-style per-segment soft radial glow circles
+- Each segment gets a cached OffscreenCanvas glow sprite drawn behind it
+- Pulsing alpha (0.6 ± 0.2) creates a breathing glow effect
+- No more ugly straight line artifacts
+- Both atlas and fallback renderers updated consistently
+- Lint passes clean
+---
+Task ID: 1
+Agent: main
+Task: Remove laser trails, death novas, US flags, and profile banners from shops and labs
+
+Work Log:
+- Searched codebase for all references to trail/death/flag/banner cosmetic types
+- Identified 7 key files that needed modification
+- Removed trail/death/flag/banner items from ALL_COSMETICS in game-config.ts (14 items removed)
+- Converted trail/death/flag/banner pass cosmetics to skin type in PASS_FREE_COSMETICS (8 items) and PASS_ELITE_COSMETICS (8 items)
+- Simplified CosmeticType to just 'skin'
+- Removed 4 category tabs (trails, deaths, flags, banners) from CATEGORY_TABS in cosmetics-types.ts
+- Removed CategoryFilter union members for trails/deaths/flags/banners
+- Removed TrailCard/DeathCard/FlagCard/BannerCard imports and all rendering sections from cosmetics-shop.tsx
+- Removed handleEquip function for trail/death/flag/banner types
+- Removed isTrailActive/isDeathActive/isFlagActive/isBannerActive helpers
+- Removed 'flag' and 'banner' from CosmeticSlot type in face-cosmetics.ts
+- Removed 9 flag cosmetic items (flag-none, flag-india, flag-usa, flag-uk, flag-japan, flag-brazil, flag-france, flag-germany, flag-south-korea) from FACE_COSMETICS
+- Removed drawWavingFlag function and FlagStyle type
+- Removed flag/banner from SLOT_INFO, EquippedCosmetics interface, and DEFAULT_EQUIPPED
+- Removed 'flag' from renderEquippedCosmetics slot render order
+- Removed flag/banner from ALL_SLOTS and EQUIPPABLE_SLOTS in cosmetics-section.tsx
+- Fixed season-pass claim/route.ts and claim-all/route.ts to remove trail/death/flag/banner auto-equip logic
+- Fixed api/player/cosmetic/route.ts to remove trail/death/flag/banner equip logic
+- Removed activeTrail/activeDeath references from player-profile.tsx
+- Updated shop subtitle text to remove 'luminous laser trails' mention
+- Ran lint - clean
+- Browser verified: shop shows only 4 tabs (All Items, Ready Presets, Premium Shop, Face Cosmetics)
+- Browser verified: Face Cosmetics shows only 7 slots (no Flags/Banner)
+
+Stage Summary:
+- All laser trails, death novas, flags, and profile banners completely removed from shops and labs
+- 7 files modified: game-config.ts, cosmetics-types.ts, cosmetics-shop.tsx, face-cosmetics.ts, cosmetics-section.tsx, player-profile.tsx, api routes (3)
+- Pass cosmetics that were trail/death/flag/banner types converted to skin equivalents to preserve tier rewards
+- Lint clean, browser verified

@@ -125,7 +125,7 @@ export function GameSkinPreview({
 
       if (normalizedSegs) {
         const seg = normalizedSegs[i % normalizedSegs.length];
-        drawSegmentShape(ctx, p.x, p.y, r * seg.sizeScale, p.a, seg.shape, seg.color, seg.glow);
+        drawSegmentShape(ctx, p.x, p.y, r * seg.sizeScale, p.a, seg.shape, seg.color, false);
         continue;
       }
 
@@ -134,11 +134,7 @@ export function GameSkinPreview({
         ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate(p.a);
-        if (asset.animation && asset.animation !== 'none') {
-          am.applyEpicEffect(ctx, asset.animation, time * 0.001, 0, 0, r * 2, asset.bodyColor);
-        }
         ctx.drawImage(atlas.canvas, region.x, region.y, region.width, region.height, -r, -r, r * 2, r * 2);
-        am.resetEpicEffect(ctx);
         ctx.restore();
       } else {
         const col = multiColor ? (getSegmentColor(skinId, i) ?? asset.bodyColor) : asset.bodyColor;
@@ -172,11 +168,7 @@ export function GameSkinPreview({
         ctx.save();
         ctx.translate(hp.x, hp.y);
         ctx.rotate(hp.a);
-        if (asset.animation && asset.animation !== 'none') {
-          am.applyEpicEffect(ctx, asset.animation, time * 0.001, 0, 0, hr * 2, asset.headColor);
-        }
         ctx.drawImage(atlas.canvas, region.x, region.y, region.width, region.height, -hr, -hr, hr * 2, hr * 2);
-        am.resetEpicEffect(ctx);
         ctx.restore();
       } else {
         const hc = multiColor ? (getSegmentColor(skinId, 0) ?? asset.headColor) : asset.headColor;
@@ -238,16 +230,7 @@ export function GameSkinPreview({
         renderEquippedCosmetics(ctx, { hx: hp.x, hy: hp.y, hr, angle: hp.a, time, boosting: false });
       }
 
-      // Rarity glow
-      if (asset.rarity === 'epic' || asset.rarity === 'legendary') {
-        const gi = 0.2 + 0.1 * Math.sin(time * 0.003);
-        ctx.save(); ctx.globalAlpha = gi;
-        const gg = ctx.createRadialGradient(hp.x, hp.y, hr, hp.x, hp.y, hr * 2.5);
-        gg.addColorStop(0, asset.bodyColor); gg.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = gg;
-        ctx.beginPath(); ctx.arc(hp.x, hp.y, hr * 2.5, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
-      }
+      // Rarity glow removed from preview — glow only renders in-game while boosting
     }
   }, [skinId, segments, animated, assetOverride, equippedCosmetics]);
 

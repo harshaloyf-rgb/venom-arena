@@ -592,8 +592,6 @@ function ProfileContent({
       : '0%';
 
   const activeSkin = getCosmeticById(player.currentSkin);
-  const activeTrail = getCosmeticById(player.currentTrail);
-  const activeDeath = getCosmeticById(player.currentDeath);
 
   // Account age in days
   const accountAgeDays = Math.floor(
@@ -1297,7 +1295,7 @@ function ProfileContent({
                   <div className="w-3 h-3 rounded-full border border-slate-700" style={{ backgroundColor: activeSkin?.color || '#22c55e' }} />
                   <span className="text-[11px] text-slate-500 font-mono">{activeSkin?.pattern || 'solid'}</span>
                   <span className="text-[11px] text-slate-600">•</span>
-                  <span className="text-[11px] text-slate-500">Trail: {activeTrail?.name || 'None'}</span>
+
                 </div>
               </div>
               <span className="text-[11px] text-indigo-400 ml-auto shrink-0 hidden sm:inline">Live Demo →</span>
@@ -1983,7 +1981,7 @@ function ProfileContent({
             <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
               <Gamepad2 className="w-4 h-4 text-indigo-400" /> {activeSkin?.name || 'Default Viper'} — Live Demo
             </h3>
-            <p className="text-[11px] text-slate-500 mb-2">Trail: {activeTrail?.name || 'None'}</p>
+
 
             {/* Canvas-based live snake animation */}
             <div className="relative w-full rounded-xl bg-slate-950/60 border border-slate-800 overflow-hidden">

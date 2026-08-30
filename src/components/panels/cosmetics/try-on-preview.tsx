@@ -134,7 +134,7 @@ export function TryOnPreview({
 
         const r = 10 * sizeScale;
 
-        drawSegmentShape(ctx, pt.x, pt.y, r, segAngle, resolveShapeStyle(shapeStyle, i), color, glow);
+        drawSegmentShape(ctx, pt.x, pt.y, r, segAngle, resolveShapeStyle(shapeStyle, i), color, false);
       }
 
       // Head — matches body size when taper is uniform
@@ -145,10 +145,7 @@ export function TryOnPreview({
       const headR = taperStyle === 'uniform' ? 10 : 13;
 
       ctx.save();
-      if (glow) {
-        ctx.shadowBlur = 18;
-        ctx.shadowColor = headColor;
-      }
+      // Glow disabled in preview — glow only renders in-game while boosting
 
       // 3D head gradient (same as atlas head rendering)
       const headGrad = ctx.createRadialGradient(

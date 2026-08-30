@@ -190,7 +190,8 @@ export function GameSnakePreview({
   const isLabMode = effectiveColors && effectiveColors.length > 0;
   const effectiveBodyStyle = bodyStyle ?? autoBodyStyle ?? 'smooth';
   const effectiveTaper = taperStyle ?? autoTaper ?? 'natural';
-  const effectiveGlow = glow ?? autoGlow ?? false;
+  // Glow disabled in previews — glow only renders in-game while boosting
+  const effectiveGlow = false;
 
   // Derive a unique seed from skinId or color combination
   const instanceSeed = (() => {

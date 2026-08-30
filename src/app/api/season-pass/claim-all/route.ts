@@ -81,10 +81,6 @@ export async function POST(req: NextRequest) {
       // Auto-equip highest-tier cosmetic of each type
       for (const c of newCosmetics) {
         if (c.type === 'skin' && player.currentSkin === 'skin-default') data.currentSkin = c.id;
-        else if (c.type === 'trail' && player.currentTrail === 'trail-none') data.currentTrail = c.id;
-        else if (c.type === 'death' && player.currentDeath === 'death-default') data.currentDeath = c.id;
-        else if (c.type === 'flag' && !player.currentFlag) data.currentFlag = c.id;
-        else if (c.type === 'banner' && !player.currentBanner) data.currentBanner = c.id;
       }
 
       const updated = await tx.player.update({

@@ -41,10 +41,6 @@ export async function POST(req: NextRequest) {
             unlockedSkins: encodeSkins([...unlocked, skinId]),
             // equip the freshly purchased item
             ...(cosmetic.type === 'skin' ? { currentSkin: skinId } : {}),
-            ...(cosmetic.type === 'trail' ? { currentTrail: skinId } : {}),
-            ...(cosmetic.type === 'death' ? { currentDeath: skinId } : {}),
-            ...(cosmetic.type === 'flag' ? { currentFlag: skinId } : {}),
-            ...(cosmetic.type === 'banner' ? { currentBanner: skinId } : {}),
           },
         });
         await tx.purchase.create({
@@ -89,10 +85,6 @@ export async function POST(req: NextRequest) {
         }
         const data: Record<string, string | null> = {};
         if (cosmetic.type === 'skin') data.currentSkin = skinId;
-        if (cosmetic.type === 'trail') data.currentTrail = skinId;
-        if (cosmetic.type === 'death') data.currentDeath = skinId;
-        if (cosmetic.type === 'flag') data.currentFlag = skinId;
-        if (cosmetic.type === 'banner') data.currentBanner = skinId;
         const updated = await tx.player.update({
           where: { id: player.id },
           data,

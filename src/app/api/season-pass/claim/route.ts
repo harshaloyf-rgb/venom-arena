@@ -84,14 +84,6 @@ export async function POST(req: NextRequest) {
         // Auto-equip if player has nothing equipped in that slot
         if (cosmetic.type === 'skin' && player.currentSkin === 'skin-default') {
           data.currentSkin = cosmetic.id;
-        } else if (cosmetic.type === 'trail' && player.currentTrail === 'trail-none') {
-          data.currentTrail = cosmetic.id;
-        } else if (cosmetic.type === 'death' && player.currentDeath === 'death-default') {
-          data.currentDeath = cosmetic.id;
-        } else if (cosmetic.type === 'flag' && !player.currentFlag) {
-          data.currentFlag = cosmetic.id;
-        } else if (cosmetic.type === 'banner' && !player.currentBanner) {
-          data.currentBanner = cosmetic.id;
         }
 
         // Record purchase (cost 0 — earned from pass)

@@ -14,9 +14,8 @@ import {
   type CosmeticRarity,
 } from '@/lib/snake/face-cosmetics';
 
-// Slots that have actual equippable face cosmetics (flag & banner are server-side)
-const EQUIPPABLE_SLOTS: CosmeticSlot[] = ['eyes', 'mouth', 'ears', 'wings', 'nose', 'hat', 'goggles', 'flag'];
-const ALL_SLOTS: CosmeticSlot[] = ['eyes', 'mouth', 'ears', 'wings', 'nose', 'hat', 'goggles', 'flag', 'banner'];
+const EQUIPPABLE_SLOTS: CosmeticSlot[] = ['eyes', 'mouth', 'ears', 'wings', 'nose', 'hat', 'goggles'];
+const ALL_SLOTS: CosmeticSlot[] = ['eyes', 'mouth', 'ears', 'wings', 'nose', 'hat', 'goggles'];
 
 const RARITY_STYLES: Record<CosmeticRarity, string> = {
   common: 'bg-slate-500/15 text-slate-400 border-slate-500/20',

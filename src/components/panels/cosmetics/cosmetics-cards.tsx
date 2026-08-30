@@ -123,7 +123,7 @@ export function PresetCard({
             colors={preset.colors}
             bodyStyle={preset.shape}
             taperStyle={preset.taper}
-            glow={preset.glow}
+            glow={false}
             width={320}
             height={80}
             segments={18}
@@ -228,7 +228,7 @@ export function SkinCard({
             colors={vis.colors}
             bodyStyle={vis.bodyStyle}
             taperStyle={vis.taperStyle}
-            glow={vis.glow}
+            glow={false}
             width={320}
             height={80}
             segments={18}

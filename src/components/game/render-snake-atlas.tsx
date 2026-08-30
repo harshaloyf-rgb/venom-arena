@@ -132,6 +132,56 @@ function getCachedGradientCircle(color: string, r: number, dpr: number): Offscre
   return oc;
 }
 
+// ─── Pre-rendered boost glow sprite cache (slither.io-style per-segment glow) ──
+// Soft radial gradient circle drawn behind each segment when boosting.
+// Replaces the old line-stroke aura which looked like ugly straight lines.
+const _boostGlowCache = new Map<string, OffscreenCanvas | HTMLCanvasElement>();
+const _BOOST_GLOW_CACHE_MAX = 64;
+
+function getCachedBoostGlow(color: string, r: number, dpr: number): OffscreenCanvas | HTMLCanvasElement {
+  if (!Number.isFinite(r) || r <= 0) r = 3;
+  if (!Number.isFinite(dpr) || dpr <= 0) dpr = 1;
+  const key = `${color}|${Math.round(r)}|${dpr}`;
+  let cached = _boostGlowCache.get(key);
+  if (cached) return cached;
+
+  const glowR = r * 2.5;
+  const diameter = Math.ceil(glowR * 2 * dpr) + 4;
+  const oc = typeof OffscreenCanvas !== 'undefined'
+    ? new OffscreenCanvas(diameter, diameter)
+    : document.createElement('canvas');
+  if (!(oc instanceof OffscreenCanvas)) {
+    (oc as HTMLCanvasElement).width = diameter;
+    (oc as HTMLCanvasElement).height = diameter;
+  }
+  const cx = oc.getContext('2d')!;
+  const center = diameter / (2 * dpr);
+  cx.scale(dpr, dpr);
+
+  const glowColor = lightenHex(color, 0.4);
+  const n = parseInt(glowColor.replace('#', ''), 16);
+  const gr = (n >> 16) & 0xff;
+  const gg = (n >> 8) & 0xff;
+  const gb = n & 0xff;
+
+  const grad = cx.createRadialGradient(center, center, r * 0.5, center, center, glowR);
+  grad.addColorStop(0, `rgba(${gr},${gg},${gb},0.5)`);
+  grad.addColorStop(0.4, `rgba(${gr},${gg},${gb},0.25)`);
+  grad.addColorStop(0.7, `rgba(${gr},${gg},${gb},0.08)`);
+  grad.addColorStop(1, `rgba(${gr},${gg},${gb},0)`);
+  cx.fillStyle = grad;
+  cx.beginPath();
+  cx.arc(center, center, glowR, 0, Math.PI * 2);
+  cx.fill();
+
+  if (_boostGlowCache.size >= _BOOST_GLOW_CACHE_MAX) {
+    const firstKey = _boostGlowCache.keys().next().value;
+    if (firstKey !== undefined) _boostGlowCache.delete(firstKey);
+  }
+  _boostGlowCache.set(key, oc);
+  return oc;
+}
+
 /** Get device pixel ratio (cached per frame) */
 let _cachedDpr = 1;
 export function setCachedDpr(dpr: number): void { _cachedDpr = dpr; }
@@ -566,23 +616,20 @@ export function renderSnakeAtlas(
   const vpDiag = Math.sqrt(cw * cw + ch * ch) / zoom;
   const walked = walkPathFixedStep(effectivePath, step, maxSegs, snake.angle, vpDiag + 500);
 
-  // ── BOOST AURA: Full-body glow effect ──
-  if (snake.boosting) {
-    const boostPulse = 0.15 + 0.1 * Math.sin(time * 0.008);
+  // ── BOOST GLOW: Per-segment soft glow (slither.io style) ──
+  if (snake.boosting && walked.count > 0) {
+    const boostGlow = getCachedBoostGlow(snake.color, segRadius, _cachedDpr);
+    const glowR = segRadius * 2.5;
+    const pulse = 0.6 + 0.2 * Math.sin(time * 0.008);
     ctx.save();
-    ctx.globalAlpha = boostPulse;
-    // Draw a thick line along the body for glow (no shadowBlur — too expensive)
-    if (walked.count > 1) {
-      ctx.strokeStyle = cachedLighten(snake.color, 0.4);
-      ctx.lineWidth = segRadius * 3;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(w2sX(walked.xs[walked.count - 1], ct) + renderOffX, w2sY(walked.ys[walked.count - 1], ct) + renderOffY);
-      for (let i = walked.count - 2; i >= 0; i--) {
-        ctx.lineTo(w2sX(walked.xs[i], ct) + renderOffX, w2sY(walked.ys[i], ct) + renderOffY);
-      }
-      ctx.stroke();
+    ctx.globalAlpha = pulse;
+    for (let i = walked.count - 1; i >= 0; i--) {
+      const wx = walked.xs[i];
+      const wy = walked.ys[i];
+      if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
+      const sx = w2sX(wx, ct) + renderOffX;
+      const sy = w2sY(wy, ct) + renderOffY;
+      ctx.drawImage(boostGlow, sx - glowR, sy - glowR, glowR * 2, glowR * 2);
     }
     ctx.restore();
   }
@@ -777,36 +824,20 @@ export function renderSnakeAtlas(
     // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
     renderEquippedCosmetics(ctx, { hx: hsx, hy: hsy, hr: headDrawSize / 2, angle: snake.angle, time, boosting: snake.boosting, mouseScreenX, mouseScreenY });
 
-    // Boost speed lines — dramatic streaks behind the head
+    // Head glow pulse when boosting
     if (snake.boosting && segRadius > 3) {
-      const lineCount = 6;
-      for (let j = 0; j < lineCount; j++) {
-        const spread = (j - (lineCount - 1) / 2) * 0.25;
-        const a = snake.angle + Math.PI + spread;
-        const len = (20 + j * 8) * zoom;
-        const alpha = 0.4 - j * 0.05;
-        const lx = hsx - Math.cos(snake.angle) * headDrawSize / 2;
-        const ly = hsy - Math.sin(snake.angle) * headDrawSize / 2;
-        ctx.strokeStyle = `rgba(255, 200, 100, ${Math.max(alpha, 0.1)})`;
-        ctx.lineWidth = (3 - j * 0.3) * zoom;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(lx, ly);
-        ctx.lineTo(lx + Math.cos(a) * len, ly + Math.sin(a) * len);
-        ctx.stroke();
-      }
-      // Head glow pulse when boosting — guard all values for createRadialGradient
       if (Number.isFinite(hsx) && Number.isFinite(hsy) && Number.isFinite(headDrawSize) && headDrawSize > 0) {
-      ctx.save();
-      ctx.globalAlpha = 0.25 + 0.15 * Math.sin(time * 0.01);
-      const hGlow = ctx.createRadialGradient(hsx, hsy, headDrawSize / 4, hsx, hsy, headDrawSize * 1.5);
-      hGlow.addColorStop(0, 'rgba(255, 200, 80, 0.4)');
-      hGlow.addColorStop(1, 'rgba(255, 100, 50, 0)');
-      ctx.fillStyle = hGlow;
-      ctx.beginPath();
-      ctx.arc(hsx, hsy, headDrawSize * 1.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+        ctx.save();
+        ctx.globalAlpha = 0.45 + 0.2 * Math.sin(time * 0.01);
+        const hGlowR = headDrawSize * 2.2;
+        const hGlow = ctx.createRadialGradient(hsx, hsy, headDrawSize / 3, hsx, hsy, hGlowR);
+        hGlow.addColorStop(0, cachedLighten(snake.headColor || snake.color, 0.5));
+        hGlow.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = hGlow;
+        ctx.beginPath();
+        ctx.arc(hsx, hsy, hGlowR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       }
     }
 
@@ -994,25 +1025,20 @@ export function renderSnakeFallback(
   // Bot walk cache was removed to eliminate head-body separation bug.
   const walked = walkPathFixedStep(path, step, maxSegs, snake.angle, walkDistLimit);
 
-  // ── BOOST AURA: Full-body glow effect (fallback) ──
-  if (snake.boosting) {
-    const boostPulse = 0.15 + 0.1 * Math.sin(now * 0.008);
+  // ── BOOST GLOW: Per-segment soft glow (slither.io style) ──
+  if (snake.boosting && walked.count > 0) {
+    const boostGlow = getCachedBoostGlow(snake.color, segRadius, _cachedDpr);
+    const glowR = segRadius * 2.5;
+    const pulse = 0.6 + 0.2 * Math.sin(now * 0.008);
     ctx.save();
-    ctx.globalAlpha = boostPulse;
-    // No shadowBlur — too expensive with many segments
-    if (walked.count > 1) {
-      ctx.strokeStyle = cachedLighten(snake.color, 0.4);
-      ctx.lineWidth = segRadius * 3;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      const s0x = walked.xs[walked.count - 1];
-      const s0y = walked.ys[walked.count - 1];
-      ctx.moveTo(toSX(s0x, ct) + renderOffX, toSY(s0y, ct) + renderOffY);
-      for (let i = walked.count - 2; i >= 0; i--) {
-        ctx.lineTo(toSX(walked.xs[i], ct) + renderOffX, toSY(walked.ys[i], ct) + renderOffY);
-      }
-      ctx.stroke();
+    ctx.globalAlpha = pulse;
+    for (let i = walked.count - 1; i >= 0; i--) {
+      const wx = walked.xs[i];
+      const wy = walked.ys[i];
+      if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
+      const sx = toSX(wx, ct) + renderOffX;
+      const sy = toSY(wy, ct) + renderOffY;
+      ctx.drawImage(boostGlow, sx - glowR, sy - glowR, glowR * 2, glowR * 2);
     }
     ctx.restore();
   }

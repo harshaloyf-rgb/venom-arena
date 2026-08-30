@@ -332,20 +332,12 @@ export type CategoryFilter =
   | 'all'
   | 'presets'
   | 'premium'
-  | 'trails'
-  | 'deaths'
-  | 'flags'
-  | 'banners'
   | 'cosmetics';
 
 export const CATEGORY_TABS: { id: CategoryFilter; label: string }[] = [
   { id: 'all', label: '🌈 All Items' },
   { id: 'presets', label: '🐍 Ready Presets (Free!)' },
   { id: 'premium', label: '✨ Premium Shop' },
-  { id: 'trails', label: '💫 Laser Trails' },
-  { id: 'deaths', label: '💥 Death Novas' },
-  { id: 'flags', label: '🇺🇸 Flags' },
-  { id: 'banners', label: '🏆 Profile Banners' },
   { id: 'cosmetics', label: '🎭 Face Cosmetics' },
 ];
 

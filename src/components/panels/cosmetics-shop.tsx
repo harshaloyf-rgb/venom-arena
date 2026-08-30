@@ -73,10 +73,6 @@ import {
 import {
   PresetCard,
   SkinCard,
-  TrailCard,
-  DeathCard,
-  FlagCard,
-  BannerCard,
 } from './cosmetics/cosmetics-cards';
 import { GameSnakePreview } from './cosmetics/game-snake-preview';
 import { CosmeticsSection } from './cosmetics/cosmetics-section';
@@ -135,10 +131,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
     customState?.useCustomSkin === true &&
     customState.currentSkin === preset.id;
 
-  const isTrailActive = (item: Skin) => p.currentTrail === item.id;
-  const isDeathActive = (item: Skin) => p.currentDeath === item.id;
-  const isFlagActive = (item: Skin) => p.currentFlag === item.id;
-  const isBannerActive = (item: Skin) => p.currentBanner === item.id;
+
 
   async function postCosmetic(action: 'buy' | 'equip', skinId: string) {
     try {
@@ -235,84 +228,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
     );
   }
 
-  // Consolidated handler for trail / death / flag / banner — all four
-  // share the exact same check-owned → check-afford → postCosmetic → toast
-  // flow, differing only in the toast message.
-  async function handleEquip(
-    type: 'trail' | 'death' | 'flag' | 'banner',
-    item: Skin,
-  ) {
-    const owned = p.unlockedSkins.includes(item.id);
-    if (owned) {
-      if (await postCosmetic('equip', item.id)) {
-        if (type === 'trail') {
-          notify(`Equipped Trail Effect: ${item.name}`, 'success', onToast);
-        } else if (type === 'death') {
-          notify(`Equipped Death Effect: ${item.name}`, 'success', onToast);
-        } else if (type === 'flag') {
-          notify(`Equipped Flag: ${item.name}`, 'success', onToast);
-        } else {
-          notify(`Equipped Profile Banner: ${item.name}`, 'success', onToast);
-        }
-      }
-    } else {
-      if (p.bankedChips < item.cost) {
-        if (type === 'trail') {
-          notify(
-            `You need ${item.cost} chips to unlock this trail!`,
-            'error',
-            onToast,
-          );
-        } else if (type === 'death') {
-          notify(
-            `You need ${item.cost} chips to unlock this death effect!`,
-            'error',
-            onToast,
-          );
-        } else if (type === 'flag') {
-          notify(
-            `You need ${item.cost} chips to unlock this flag!`,
-            'error',
-            onToast,
-          );
-        } else {
-          notify(
-            `You need ${item.cost} chips to unlock this profile banner!`,
-            'error',
-            onToast,
-          );
-        }
-        return;
-      }
-      if (await postCosmetic('buy', item.id)) {
-        if (type === 'trail') {
-          notify(
-            `Unlocked & Equipped Trail: ${item.name}! -${item.cost} CHIPS`,
-            'success',
-            onToast,
-          );
-        } else if (type === 'death') {
-          notify(
-            `Unlocked & Equipped Death Nova: ${item.name}! -${item.cost} CHIPS`,
-            'success',
-            onToast,
-          );
-        } else if (type === 'flag') {
-          notify(
-            `Unlocked & Equipped Flag: ${item.emoji} ${item.name}! -${item.cost} CHIPS`,
-            'success',
-            onToast,
-          );
-        } else {
-          notify(
-            `Unlocked & Equipped Profile Banner: ${item.name}! -${item.cost} CHIPS`,
-            'success',
-            onToast,
-          );
-        }
-      }
-    }
-  }
+
 
   // -- genetic lab handlers -------------------------------------------------
   function handleAppendColor(hex: string) {
@@ -416,22 +332,11 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
   const allVisible = [...ALL_COSMETICS, ...passOwnedCosmetics];
 
   const manufacturedSkins = allVisible.filter((c) => c.type === 'skin');
-  const trailCosmetics = allVisible.filter((c) => c.type === 'trail');
-  const deathCosmetics = allVisible.filter((c) => c.type === 'death');
-  const flagCosmetics = allVisible.filter((c) => c.type === 'flag');
-  const bannerCosmetics = allVisible.filter((c) => c.type === 'banner');
 
   const showPresetsTab =
     activeCategory === 'all' || activeCategory === 'presets';
   const showPremiumTab =
     activeCategory === 'all' || activeCategory === 'premium';
-  const showTrailsTab =
-    activeCategory === 'all' || activeCategory === 'trails';
-  const showDeathsTab =
-    activeCategory === 'all' || activeCategory === 'deaths';
-  const showFlagsTab = activeCategory === 'all' || activeCategory === 'flags';
-  const showBannersTab =
-    activeCategory === 'all' || activeCategory === 'banners';
 
   const isCustomLabDeployed =
     customState?.useCustomSkin === true &&
@@ -454,8 +359,8 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
             &amp; Skin Gallery
           </h2>
           <p className="text-xs lg:text-[11px] text-slate-400 font-sans mt-1 lg:mt-0 lg:leading-tight">
-            Browse and equip real-time wiggling skins, luminous laser trails, or
-            customize your own custom repeating venom snake DNA blueprint!
+            Browse and equip real-time wiggling skins or customize your own
+            custom repeating venom snake DNA blueprint!
           </p>
         </div>
 
@@ -570,57 +475,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
                 );
               })}
 
-            {/* C. LASER TRAILS */}
-            {showTrailsTab &&
-              trailCosmetics.map((item) => (
-                <TrailCard
-                  key={item.id}
-                  item={item}
-                  unlocked={p.unlockedSkins.includes(item.id)}
-                  active={isTrailActive(item)}
-                  canAfford={p.bankedChips >= item.cost}
-                  onClick={() => void handleEquip('trail', item)}
-                />
-              ))}
 
-            {/* D. DEATH BURSTS */}
-            {showDeathsTab &&
-              deathCosmetics.map((item) => (
-                <DeathCard
-                  key={item.id}
-                  item={item}
-                  unlocked={p.unlockedSkins.includes(item.id)}
-                  active={isDeathActive(item)}
-                  canAfford={p.bankedChips >= item.cost}
-                  onClick={() => void handleEquip('death', item)}
-                />
-              ))}
-
-            {/* E. FLAGS */}
-            {showFlagsTab &&
-              flagCosmetics.map((item) => (
-                <FlagCard
-                  key={item.id}
-                  item={item}
-                  unlocked={p.unlockedSkins.includes(item.id)}
-                  active={isFlagActive(item)}
-                  canAfford={p.bankedChips >= item.cost}
-                  onClick={() => void handleEquip('flag', item)}
-                />
-              ))}
-
-            {/* F. BANNERS */}
-            {showBannersTab &&
-              bannerCosmetics.map((item) => (
-                <BannerCard
-                  key={item.id}
-                  item={item}
-                  unlocked={p.unlockedSkins.includes(item.id)}
-                  active={isBannerActive(item)}
-                  canAfford={p.bankedChips >= item.cost}
-                  onClick={() => void handleEquip('banner', item)}
-                />
-              ))}
           </div>
         </div>
       ) : (
