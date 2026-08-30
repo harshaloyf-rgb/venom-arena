@@ -158,8 +158,8 @@ export function getSkinAsset(skinId: string): SkinAsset {
     rarity: 'common',
     bodyColor: '#22c55e',
     headColor: '#16a34a',
-    accentColor: '#86efac',
-    pattern: 'solid',
+    accentColor: '#4ade80',
+    pattern: 'gradient',
     animation: 'none',
   };
 }
