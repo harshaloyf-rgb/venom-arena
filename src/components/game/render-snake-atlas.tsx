@@ -464,6 +464,8 @@ export function renderSnakeAtlas(
   if (headWy < viewport.top - cullMargin || headWy > viewport.bottom + cullMargin) return;
   const cw = viewport.width;
   const ch = viewport.height;
+  const camZoomX = cw / 2 - camera.x * zoom;
+  const camZoomY = ch / 2 - camera.y * zoom;
   const segRadius = snake.bodyRadius * zoom;
 
   // P3 FIX #10: Non-linear head scale — large snakes have proportionally smaller heads
@@ -617,8 +619,6 @@ export function renderSnakeAtlas(
   // worldToScreen math to avoid 200 object allocations per frame.
   const drawSize = segRadius * 2;
   const halfDraw = drawSize / 2;
-  const camZoomX = cw / 2 - camera.x * zoom;
-  const camZoomY = ch / 2 - camera.y * zoom;
   const bodyLen = atlas.body.length;
   // FIX: Epic/legendary per-segment glow ONLY while boosting (was always-on)
   const hasEpicEffect = isEpic && animation && snake.boosting;
