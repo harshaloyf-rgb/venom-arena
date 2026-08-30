@@ -100,10 +100,10 @@ export function PlayersTab({ onToast }: { onToast?: ToastFn }) {
 
   // ── Refresh both list + detail ──
   async function refreshAll() {
-    void fetchPlayers(search, showBannedOnly);
-    if (selectedTag) {
-      void fetchDetail(selectedTag);
-    }
+    await Promise.all([
+      fetchPlayers(search, showBannedOnly),
+      selectedTag ? fetchDetail(selectedTag) : Promise.resolve(),
+    ]);
   }
 
   // ── Modify chips ──
@@ -158,7 +158,7 @@ export function PlayersTab({ onToast }: { onToast?: ToastFn }) {
       const res = await fetch('/api/admin/ban', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userTag: selectedTag, ban: banning }),
+        body: JSON.stringify({ userTag: selectedTag, banned: banning }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
