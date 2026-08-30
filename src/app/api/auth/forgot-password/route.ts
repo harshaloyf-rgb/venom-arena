@@ -62,7 +62,11 @@ export async function POST(req: NextRequest) {
 
     const valid = await bcrypt.compare(securityPin, player.securityPin);
     if (!valid) {
-      return NextResponse.json({ error: 'Incorrect Security PIN. Please try again.' }, { status: 401 });
+      // Return the same generic message to prevent email/PIN enumeration
+      return NextResponse.json(
+        { error: 'If the email and PIN are correct, the password has been reset.' },
+        { status: 200 },
+      );
     }
 
     const newHash = await hashPassword(newPassword);

@@ -8,7 +8,7 @@ import { RemoteSnakeManager } from '@/lib/remote-snake-manager';
 import { createCamera, updateCameraInterpolated, getViewport } from '@/lib/snake/camera';
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, registerSkinAsset } from '@/lib/snake/skin-registry';
-import { getArenaConfig, SEGMENT_SPACING, BASE_SPEED } from '@/lib/snake/config';
+import { getArenaConfig, SEGMENT_SPACING } from '@/lib/snake/config';
 import { getArenaById } from '@/lib/game-config';
 import type { Snake, Camera, Viewport } from '@/lib/snake/types';
 import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrameWithDpr } from './render-snake-atlas';

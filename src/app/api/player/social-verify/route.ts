@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth, rateLimit } from '@/lib/api-helpers';
-import { randomBytes } from 'crypto';
 
 // In-memory store for social verification codes (15 min TTL)
 interface VerifyEntry {

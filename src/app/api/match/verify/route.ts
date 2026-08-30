@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifySession } from '@/lib/auth';
 import { getCosmeticById } from '@/lib/game-config';
+import { verifyInternalSecret } from '@/lib/api-helpers';
 
 // POST /api/match/verify
 // Internal endpoint called by the Socket.IO server on socket connection.
@@ -12,10 +13,7 @@ import { getCosmeticById } from '@/lib/game-config';
 // returns: { ok: boolean, player?: {...} }
 export async function POST(req: NextRequest) {
   try {
-    const internalSecret = req.headers.get('x-internal-secret');
-    const expected = process.env.INTERNAL_SECRET;
-    if (!expected) throw new Error('INTERNAL_SECRET env var is required');
-    if (internalSecret !== expected) {
+    if (!verifyInternalSecret(req)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

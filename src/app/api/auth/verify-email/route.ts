@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getSession } from '@/lib/auth';
 import { EMAIL_VERIFY_BONUS } from '@/lib/game-config';
 
 export async function POST(request: Request) {

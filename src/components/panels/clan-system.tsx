@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
-import { countryFlag, type InspectedPlayer } from '@/lib/game-config';
+import { countryFlag } from '@/lib/game-config';
 import {
   GlowBlob,
   MicroLabel,

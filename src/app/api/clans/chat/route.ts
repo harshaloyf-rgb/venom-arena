@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { utcMonday } from '@/lib/date-utils';
 
 // Simple in-memory cooldown per player for clan chat
 const chatCooldowns = new Map<string, number>();
@@ -62,12 +63,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Update chat_activity challenge progress for current week
-    const dayOfWeek = now.getDay ? new Date().getDay() : new Date().getDay();
-    const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const monday = new Date();
-    monday.setDate(new Date().getDate() - diff);
-    monday.setHours(0, 0, 0, 0);
-    const weekStart = monday.toISOString().split('T')[0];
+    const weekStart = utcMonday();
 
     await db.clanChallenge.updateMany({
       where: { clanTag: tag, type: 'chat_activity', weekStart, claimed: false },

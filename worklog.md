@@ -155,3 +155,90 @@ Stage Summary:
 - ~45 dead files deleted, ~3000+ lines of dead code removed
 - 5 security vulnerabilities fixed (session hijack, email enum, brute force, XSS, weak secret)
 - Clean lint, zero browser errors, full lobby + game verified working
+
+---
+Task ID: 9
+Agent: Dedup
+Task: Deduplicate lightenHex/darkenHex across project
+
+Work Log:
+- Identified canonical versions in src/components/panels/cosmetics/cosmetics-utils.ts (lines 105-125)
+- Removed local lightenHex + darkenHex from src/components/panels/cosmetics/skin-preview-game.tsx, added import from ./cosmetics-utils
+- Removed local lightenHex + darkenHex from src/components/panels/cosmetics/game-snake-preview.tsx, added import from ./cosmetics-utils
+- Removed local lightenHex + darkenHex from src/components/game/render-snake-atlas.tsx, added import from ../panels/cosmetics/cosmetics-utils
+- Removed local lightenHex (only) from src/lib/snake/skin-registry.ts, added import from ../../components/panels/cosmetics/cosmetics-utils (darkenHex not used in this file)
+- Verified with tsc --noEmit: no new type errors introduced
+
+Stage Summary:
+- 4 files de-duplicated, ~50 lines of duplicate code removed
+- Single source of truth: cosmetics-utils.ts exports lightenHex and darkenHex
+- skin-registry.ts imports only lightenHex (its sole usage)
+
+---
+Task ID: 10
+Agent: General-purpose
+Task: Remove unused imports from 11 files
+
+Work Log:
+- clan-system.tsx: Removed `InspectedPlayer` from `@/lib/game-config` import
+- clips/upload-modal.tsx: Removed `Youtube`, `Instagram`, `Smartphone` from lucide-react import
+- cosmetics/skin-preview-game.tsx: Removed `SNAKE_RADIUS`, `CAMERA_BASE_ZOOM` from `@/lib/snake/config` import
+- cosmetics/venom-painter.tsx: Removed `readCustomSkinStateSafe` from `./cosmetics-utils` import
+- player-profile.tsx: Removed `milestoneTierForChips` from `@/lib/game-config` import; Removed `CapCard` from `./player-profile/stat-card` import
+- player-profile/identity-editor.tsx: Removed `ExternalLink` from lucide-react import
+- player-profile/tournament-guardrails.tsx: Removed `PanelSkeleton` import line (entire line deleted)
+- social-panel.tsx: Removed `timeAgo` import line from `@/lib/date-utils`
+- social/friends-tab.tsx: Removed `Gift` from lucide-react import; Removed `ToastFn` type import line
+- lib/remote-snake-manager.ts: Removed `RemoteSnake` from `./game-socket` type import
+- lib/snake/skin-resolver.ts: Removed `SegmentShape` from `./types` type import; Removed `CustomSegment` from `./skin-types` type import
+
+Stage Summary:
+- 11 files modified, 14 unused imports removed
+- No functional changes, only import cleanup
+
+---
+Task ID: 11
+Agent: General-purpose
+Task: Deduplicate Monday-of-week calculation in 4 clan API routes
+
+Work Log:
+- Identified duplicated inline Monday calculation in 4 files: deposit, chat, join, challenges
+- Replaced 6-line inline `getDay/diff/monday/setHours/toISOString` blocks with single `utcMonday()` call
+- Added `import { utcMonday } from '@/lib/date-utils'` to all 4 files
+- Removed unused `const now = new Date()` in deposit, join, and challenges (only used for Monday calc)
+- Kept `const now = Date.now()` in chat (used for rate limiting, separate from Monday calc)
+- Bug fix: inline code used local time via `new Date()` + `setHours(0,0,0,0)` + `toISOString()` (which can shift the date due to timezone offset); `utcMonday()` correctly computes Monday in UTC
+
+Stage Summary:
+- 4 files modified, ~24 lines of duplicate code replaced with 4 single-line calls
+- Single source of truth: `utcMonday()` from `@/lib/date-utils`
+- Incidental bug fix: local-time Monday calc replaced with correct UTC computation
+---
+Task ID: Session-2-deadcode-security
+Agent: Main
+Task: Remove dead code, fix security issues, fix GameSocket verification
+
+Work Log:
+- Fixed GameSocket 'Verification failed' error: game-server supervisor wasn't loading INTERNAL_SECRET from parent .env
+- Updated supervisor.py to load parent .env file before spawning game server
+- Restarted game server with correct INTERNAL_SECRET
+- Removed 23 unused imports across 15 files (API routes, components, lib)
+- Deduplicated lightenHex/darkenHex: 4 files replaced local copies with import from cosmetics-utils.ts (~50 lines removed)
+- Deduplicated formatCompact: match-history route now uses formatChipsIndian from lib
+- Deduplicated Monday week calculation: 4 clan routes now use utcMonday() from date-utils
+- Added requireAdmin() and verifyInternalSecret() helpers to api-helpers.ts
+- Fixed 5 timing-vulnerable secret comparisons (match/verify, match/join, match/result, challenges/progress, hof/induct)
+- Fixed HOF induct route: switched from Authorization: Bearer to x-internal-secret header
+- Fixed HOF induct route: replaced error message leak with generic message + server-side logging
+- Fixed forgot-password info disclosure: wrong PIN now returns same generic message as unknown email
+- Added security headers via next.config.ts: X-Frame-Options, X-Content-Type-Options, Referrer-Policy, etc.
+- Ran ESLint: zero errors
+- Browser verification: site loads correctly, no console errors
+
+Stage Summary:
+- 1 critical bug fix (GameSocket verification)
+- 23 unused imports removed
+- ~70 lines of duplicate code eliminated
+- 6 security vulnerabilities fixed (timing attack, info disclosure, missing headers, inconsistent auth)
+- 2 new reusable helpers (requireAdmin, verifyInternalSecret)
+- All changes pass lint and browser verification

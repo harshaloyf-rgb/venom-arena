@@ -1,6 +1,6 @@
 'use client';
 
-import { X, Send, Clock, Loader2, Youtube, Instagram, Smartphone } from 'lucide-react';
+import { X, Send, Clock, Loader2 } from 'lucide-react';
 import { MicroLabel } from '../_panel-primitives';
 
 // ── Upload Modal ──

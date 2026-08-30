@@ -3,8 +3,8 @@
 // Reads skinId / custom skin state and produces a ResolvedSkin for the renderer.
 // ============================================================================
 
-import type { BodyStyle, SegmentShape, SkinPattern, SnakeIdentity } from './types';
-import type { CustomSegment, CustomSkinState, ResolvedSegment, ResolvedSkin } from './skin-types';
+import type { BodyStyle, SkinPattern, SnakeIdentity } from './types';
+import type { CustomSkinState, ResolvedSegment, ResolvedSkin } from './skin-types';
 import { brighten, darken, neonGlow, resolveSegmentShape } from './skin-types';
 import { getTaperFunction } from './skin-types';
 

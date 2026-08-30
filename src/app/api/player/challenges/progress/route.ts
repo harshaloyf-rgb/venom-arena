@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { utcToday, utcMonday } from '@/lib/date-utils';
+import { verifyInternalSecret } from '@/lib/api-helpers';
 
 // This endpoint now requires INTERNAL_SECRET to prevent client-side exploitation.
 // Challenge progress should only be reported by the game server via /api/match/result.
@@ -38,11 +39,7 @@ const MAX_AMOUNT_PER_CATEGORY: Record<ChallengeCategory, number> = {
 //   amount?: number  (defaults to 1)
 // }
 export async function POST(req: NextRequest) {
-  // Require INTERNAL_SECRET to prevent client-side exploitation
-  const internalSecret = req.headers.get('x-internal-secret');
-  const expected = process.env.INTERNAL_SECRET;
-  if (!expected) throw new Error('INTERNAL_SECRET env var is required');
-  if (internalSecret !== expected) {
+  if (!verifyInternalSecret(req)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

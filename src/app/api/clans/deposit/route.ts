@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { utcMonday } from '@/lib/date-utils';
 
 // POST /api/clans/deposit  body: { tag, amount }
 export async function POST(req: NextRequest) {
@@ -60,13 +61,7 @@ export async function POST(req: NextRequest) {
       });
 
       // Update treasury challenge progress for current week
-      const now = new Date();
-      const dayOfWeek = now.getDay();
-      const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-      const monday = new Date(now);
-      monday.setDate(now.getDate() - diff);
-      monday.setHours(0, 0, 0, 0);
-      const weekStart = monday.toISOString().split('T')[0];
+      const weekStart = utcMonday();
 
       await tx.clanChallenge.updateMany({
         where: { clanTag: tag, type: 'treasury_target', weekStart, claimed: false },

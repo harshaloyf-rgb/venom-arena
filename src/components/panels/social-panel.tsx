@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
 import { countryFlag, type InspectedPlayer } from '@/lib/game-config';
-import { timeAgo } from '@/lib/date-utils';
 import {
   GlowBlob,
   NotSignedIn,

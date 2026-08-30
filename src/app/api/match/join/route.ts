@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getArenaById } from '@/lib/game-config';
+import { verifyInternalSecret } from '@/lib/api-helpers';
 
 // POST /api/match/join
 // Internal endpoint called by the Socket.IO server when a player joins an arena.
@@ -9,10 +10,7 @@ import { getArenaById } from '@/lib/game-config';
 // body: { userTag: string, arenaId: string }
 // returns: { ok: boolean, player: {...} | null, reason?: string }
 export async function POST(req: NextRequest) {
-  const internalSecret = req.headers.get('x-internal-secret');
-  const expected = process.env.INTERNAL_SECRET;
-  if (!expected) throw new Error('INTERNAL_SECRET env var is required');
-  if (internalSecret !== expected) {
+  if (!verifyInternalSecret(req)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { COUNTRIES } from '@/lib/game-config';
-import { Check, ExternalLink, Globe, Lock, Shield, Timer, Trash2, Upload, AlertTriangle, ShieldCheck, Loader2, RefreshCw, X } from 'lucide-react';
+import { Check, Globe, Lock, Shield, Timer, Trash2, Upload, AlertTriangle, ShieldCheck, Loader2, RefreshCw, X } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // FACTION_COUNTRIES

@@ -14,7 +14,7 @@ import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrameWithDpr } from '
 import { cleanupDeadSnakeParticles, renderBackground, renderHUD, handleMinimapClick, resetMinimapZoom } from './hud';
 import { InputHandler } from './input';
 import { makeCoiledPath } from './coil-path';
-import { computeBodyLength, SEGMENT_SPACING } from '@/lib/snake/config';
+import { SEGMENT_SPACING } from '@/lib/snake/config';
 import { useAuth } from '@/components/providers/auth-provider';
 
 

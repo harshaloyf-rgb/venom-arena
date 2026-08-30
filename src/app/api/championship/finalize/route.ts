@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { CHAMPIONSHIP_PRIZE_TIERS } from '@/lib/game-config';
 
 // POST /api/championship/finalize
 // Admin-only: Finalizes a championship year — locks standings, creates HOF entries

@@ -10,23 +10,9 @@
 import { useEffect, useRef } from 'react';
 import { SNAKE_RADIUS, CAMERA_BASE_ZOOM } from '@/lib/snake/config';
 import { getSkinAsset } from '@/lib/snake/skin-registry';
-import { resolveShapeStyle, computeTaperRadius, drawSegmentShape, readCustomSkinStateSafe, getSkinVisualProps } from './cosmetics-utils';
+import { resolveShapeStyle, computeTaperRadius, drawSegmentShape, readCustomSkinStateSafe, getSkinVisualProps, lightenHex, darkenHex } from './cosmetics-utils';
 import type { BodyStyle, TaperStyle, CustomSegment } from './cosmetics-types';
 import { getCosmeticById, readEquippedCosmetics, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
-
-// ─── Color helpers ─────────────────────────────────────────
-
-function lightenHex(hex: string, factor: number): string {
-  const n = parseInt(hex.replace('#', ''), 16);
-  const r = (n >> 16) & 0xff, g = (n >> 8) & 0xff, b = n & 0xff;
-  return `#${Math.round(r + (255 - r) * factor).toString(16).padStart(2, '0')}${Math.round(g + (255 - g) * factor).toString(16).padStart(2, '0')}${Math.round(b + (255 - b) * factor).toString(16).padStart(2, '0')}`;
-}
-
-function darkenHex(hex: string, factor: number): string {
-  const n = parseInt(hex.replace('#', ''), 16);
-  const r = (n >> 16) & 0xff, g = (n >> 8) & 0xff, b = n & 0xff;
-  return `#${Math.round(r * (1 - factor)).toString(16).padStart(2, '0')}${Math.round(g * (1 - factor)).toString(16).padStart(2, '0')}${Math.round(b * (1 - factor)).toString(16).padStart(2, '0')}`;
-}
 
 // ─── Seeded random for deterministic per-instance behavior ─────
 

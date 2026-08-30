@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { formatChipsIndian } from '@/lib/format-chips';
 
 // Auto-publish thresholds for highlights feed
 const AUTO_PUBLISH_MIN_CHIPS = 5000;
@@ -111,9 +112,9 @@ export async function POST(req: NextRequest) {
           // Generate a catchy title
           let title: string;
           if (isExtract && safeChipsEarned >= AUTO_PUBLISH_MIN_CHIPS && safeKills >= AUTO_PUBLISH_MIN_KILLS) {
-            title = `💥 ${formatCompact(safeChipsEarned)}c Extraction with ${safeKills} Kills!`;
+            title = `💥 ${formatChipsIndian(safeChipsEarned)}c Extraction with ${safeKills} Kills!`;
           } else if (isExtract && safeChipsEarned >= AUTO_PUBLISH_MIN_CHIPS) {
-            title = `💰 Massive ${formatCompact(safeChipsEarned)}c Extraction!`;
+            title = `💰 Massive ${formatChipsIndian(safeChipsEarned)}c Extraction!`;
           } else if (isExtract && safeKills >= AUTO_PUBLISH_MIN_KILLS) {
             title = `💀 ${safeKills}-Kill Extraction in ${arenaName}!`;
           } else {
@@ -178,10 +179,4 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// ── Helpers ──
-function formatCompact(n: number): string {
-  if (n >= 10_000_000) return `${(n / 10_000_000).toFixed(1)} Cr`;
-  if (n >= 100_000) return `${(n / 100_000).toFixed(1)}L`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
-}
+

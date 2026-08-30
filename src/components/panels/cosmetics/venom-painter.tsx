@@ -12,7 +12,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Trash2, RotateCcw, Save } from 'lucide-react';
 import { PALETTE_COLORS } from './cosmetics-types';
 import type { BodyStyle, TaperStyle } from './cosmetics-types';
-import { generateCustomSegments, readCustomSkinStateSafe, writeCustomSkinState, lightenHex, darkenHex } from './cosmetics-utils';
+import { generateCustomSegments, writeCustomSkinState, lightenHex, darkenHex } from './cosmetics-utils';
 import type { CustomSkinState } from './cosmetics-types';
 
 interface VenomPainterProps {

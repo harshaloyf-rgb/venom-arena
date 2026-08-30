@@ -1,7 +1,6 @@
 'use client';
 
 import { Shield, Swords, Landmark, Trophy } from 'lucide-react';
-import { PanelSkeleton } from '../_panel-primitives';
 import { CapCard } from './stat-card';
 
 interface TournamentStats {

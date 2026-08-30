@@ -37,7 +37,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
-import { COUNTRIES, countryFlag, getCosmeticById, MILESTONE_TIERS, milestoneTierForChips, REFERRAL_REWARD, REFERRAL_MATCH_THRESHOLD, EMAIL_VERIFY_BONUS } from '@/lib/game-config';
+import { COUNTRIES, countryFlag, getCosmeticById, MILESTONE_TIERS, REFERRAL_REWARD, REFERRAL_MATCH_THRESHOLD, EMAIL_VERIFY_BONUS } from '@/lib/game-config';
 import type { PlayerProfile } from '@/lib/types';
 import {
   PanelSkeleton,
@@ -67,7 +67,7 @@ import { renderProfileCard, renderMilestoneCard, downloadBlob, shareBlob, copyBl
 import { GameSnakePreview } from './cosmetics/game-snake-preview';
 
 // Sub-components
-import { StatCard, CapCard } from './player-profile/stat-card';
+import { StatCard } from './player-profile/stat-card';
 import { TournamentGuardrailsSection, type TournamentStats } from './player-profile/tournament-guardrails';
 import { DeleteAccountSection } from './player-profile/delete-account';
 import { IdentityEditor } from './player-profile/identity-editor';

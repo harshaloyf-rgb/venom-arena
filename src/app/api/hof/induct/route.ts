@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { HALL_OF_FAME_TIERS, CHAMPIONSHIP_PRIZE_TIERS } from '@/lib/game-config';
+import { verifyInternalSecret } from '@/lib/api-helpers';
 
 // POST /api/hof/induct
 // Internal + admin-only endpoint for creating HOF entries.
@@ -15,14 +16,10 @@ export async function POST(req: Request) {
 
   if (session && session.role === 'admin') {
     isAdmin = true;
+  } else if (verifyInternalSecret(req as any)) {
+    isInternal = true;
   } else {
-    const auth = req.headers.get('authorization');
-    const secret = auth?.replace('Bearer ', '');
-    if (secret === process.env.INTERNAL_SECRET) {
-      isInternal = true;
-    } else {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const body = await req.json().catch(() => ({})) as {
@@ -144,7 +141,7 @@ export async function POST(req: Request) {
       title: resolvedTitle,
     });
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: `Induction failed: ${msg}` }, { status: 500 });
+    console.error('[hof/induct] error', error);
+    return NextResponse.json({ error: 'Induction failed. Please try again.' }, { status: 500 });
   }
 }

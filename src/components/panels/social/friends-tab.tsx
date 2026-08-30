@@ -1,10 +1,9 @@
 'use client';
 
-import { Users, UserPlus, Gift, Send, X, Check, Ban, Unlock, ExternalLink, Activity } from 'lucide-react';
+import { Users, UserPlus, Send, X, Check, Ban, Unlock, ExternalLink, Activity } from 'lucide-react';
 import { PanelSkeleton } from '../_panel-primitives';
 import { timeAgo } from '@/lib/date-utils';
 import type { FriendItem, PendingRequestItem, BlockedPlayerItem, RecentMatch } from './_types';
-import type { ToastFn } from '../_panel-primitives';
 
 interface FriendsTabProps {
   friends: FriendItem[];

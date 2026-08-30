@@ -2,8 +2,9 @@
 // Shared API route helpers — reduce boilerplate across 20+ routes.
 // ============================================================================
 
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
+import { timingSafeEqual } from 'crypto';
 
 /**
  * Require authentication for an API route.
@@ -19,6 +20,39 @@ export async function requireAuth() {
     return { session: null, error: NextResponse.json({ error: 'Not authenticated.' }, { status: 401 }) };
   }
   return { session, error: null };
+}
+
+/**
+ * Require admin role for an API route.
+ * Returns the session if admin, or a 401/403 JSON response if not.
+ *
+ * Usage:
+ *   const { session, error } = await requireAdmin();
+ *   if (error) return error;
+ */
+export async function requireAdmin() {
+  const { session, error: authError } = await requireAuth();
+  if (authError) return { session: null, error: authError };
+  if (session.role !== 'admin') {
+    return { session: null, error: NextResponse.json({ error: 'Forbidden: admin role required' }, { status: 403 }) };
+  }
+  return { session, error: null };
+}
+
+/**
+ * Verify an x-internal-secret header using constant-time comparison.
+ * Returns true if the secret matches, false otherwise.
+ */
+export function verifyInternalSecret(req: Request): boolean {
+  const provided = req.headers.get('x-internal-secret');
+  const expected = process.env.INTERNAL_SECRET;
+  if (!provided || !expected) return false;
+  if (provided.length !== expected.length) return false;
+  try {
+    return timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+  } catch {
+    return false;
+  }
 }
 
 // ============================================================================

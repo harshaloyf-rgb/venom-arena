@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { utcMonday } from '@/lib/date-utils';
 
 // ─── GET /api/clans/challenges?tag=APEX ────────────────────────────────────
 export async function GET(req: NextRequest) {
@@ -21,14 +22,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Current ISO week start (Monday)
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - diff);
-    monday.setHours(0, 0, 0, 0);
-    const weekStart = monday.toISOString().split('T')[0];
+    // Current ISO week start (Monday, UTC)
+    const weekStart = utcMonday();
 
     let challenges = await db.clanChallenge.findMany({
       where: { clanTag: tag, weekStart },

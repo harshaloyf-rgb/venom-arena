@@ -13,7 +13,7 @@
 
 import { PathBuffer } from '@/lib/snake/pool';
 import type { Snake, FoodOrb, SkinRarity } from '@/lib/snake/types';
-import type { RemoteSnake, RemoteFood, GameSnapshot } from './game-socket';
+import type { RemoteFood, GameSnapshot } from './game-socket';
 import { SEGMENT_SPACING, BASE_SPEED, FOOD_COLORS, FOOD_GLOW_COLORS } from '@/lib/snake/config';
 
 // ─── History entry per snapshot ──────────────────────────────────────────────

@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { toProfile } from '@/lib/player-helpers';
 import { getArenaById, levelFromXp, MILESTONE_TIERS, HALL_OF_FAME_TIERS, PASS_TIER_XP, PASS_DAILY_XP_CAP, PASS_XP_MULTIPLIER } from '@/lib/game-config';
 import { utcToday, utcMonday } from '@/lib/date-utils';
+import { verifyInternalSecret } from '@/lib/api-helpers';
 
 const TRACKABLE_TIERS = ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'omega'] as const;
 
@@ -122,10 +123,7 @@ async function updateChallengeProgress(
 //   killerTag?: string  (when outcome === 'death')
 // }
 export async function POST(req: NextRequest) {
-  const internalSecret = req.headers.get('x-internal-secret');
-  const expected = process.env.INTERNAL_SECRET;
-  if (!expected) throw new Error('INTERNAL_SECRET env var is required');
-  if (internalSecret !== expected) {
+  if (!verifyInternalSecret(req)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

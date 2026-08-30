@@ -9,10 +9,10 @@
 import { useEffect, useRef, useCallback } from 'react';
 import type { SkinAsset } from '@/lib/snake/types';
 import { SkinAtlasManager } from '@/lib/snake/atlas';
-import { SNAKE_RADIUS, CAMERA_BASE_ZOOM, SEGMENT_SPACING } from '@/lib/snake/config';
+import { SEGMENT_SPACING } from '@/lib/snake/config';
 import { getSkinAsset, isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
 import { renderEquippedCosmetics, getCosmeticById, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
-import { readCustomSkinStateSafe, drawSegmentShape } from '@/components/panels/cosmetics/cosmetics-utils';
+import { readCustomSkinStateSafe, drawSegmentShape, lightenHex, darkenHex } from './cosmetics-utils';
 import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-types';
 
 // ─── Game-accurate constants (mirrors render-snake-atlas.tsx) ───────────
@@ -47,19 +47,6 @@ let sharedAtlasManager: SkinAtlasManager | null = null;
 function getSharedAtlasManager(): SkinAtlasManager {
   if (!sharedAtlasManager) sharedAtlasManager = new SkinAtlasManager();
   return sharedAtlasManager;
-}
-
-// ─── Color helpers ─────────────────────────────────────────────────────
-
-function lightenHex(hex: string, f: number): string {
-  const n = parseInt(hex.replace('#', ''), 16);
-  const r = (n >> 16) & 0xff, g = (n >> 8) & 0xff, b = n & 0xff;
-  return `#${Math.round(r + (255 - r) * f).toString(16).padStart(2, '0')}${Math.round(g + (255 - g) * f).toString(16).padStart(2, '0')}${Math.round(b + (255 - b) * f).toString(16).padStart(2, '0')}`;
-}
-function darkenHex(hex: string, f: number): string {
-  const n = parseInt(hex.replace('#', ''), 16);
-  const r = (n >> 16) & 0xff, g = (n >> 8) & 0xff, b = n & 0xff;
-  return `#${Math.round(r * (1 - f)).toString(16).padStart(2, '0')}${Math.round(g * (1 - f)).toString(16).padStart(2, '0')}${Math.round(b * (1 - f)).toString(16).padStart(2, '0')}`;
 }
 
 // ─── Component ─────────────────────────────────────────────────────────

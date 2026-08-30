@@ -7,20 +7,9 @@ import { ALL_COSMETICS, PASS_FREE_COSMETICS, PASS_ELITE_COSMETICS } from '@/lib/
 import type { Skin } from '@/lib/game-config';
 import { SLITHER_PRESETS, CUSTOM_SKIN_KEY } from '@/components/panels/cosmetics/cosmetics-types';
 import type { CustomSkinState } from '@/components/panels/cosmetics/cosmetics-types';
+import { lightenHex } from '../../components/panels/cosmetics/cosmetics-utils';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-/** Lighten a hex color by factor (0–1) */
-function lightenHex(hex: string, factor: number): string {
-  const n = parseInt(hex.replace('#', ''), 16);
-  const r = (n >> 16) & 0xff;
-  const g = (n >> 8) & 0xff;
-  const b = n & 0xff;
-  const nr = Math.round(r + (255 - r) * factor);
-  const ng = Math.round(g + (255 - g) * factor);
-  const nb = Math.round(b + (255 - b) * factor);
-  return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`;
-}
 
 /** Determine rarity based on cost */
 function rarityFromCost(cost: number): SkinRarity {
