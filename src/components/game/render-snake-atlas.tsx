@@ -4,7 +4,7 @@
 
 import type { Camera, Snake, Viewport } from '@/lib/snake/types';
 import { SEGMENT_SPACING, SPAWN_PROTECTION_MS, LEGENDARY_GLOW_SIZE } from '@/lib/snake/config';
-import { worldToScreen, worldToScreenSnapped, computeCamTransform, w2sXS, w2sYS, w2sX, w2sY } from '@/lib/snake/camera';
+import { worldToScreen, computeCamTransform, w2sXS, w2sYS, w2sX, w2sY } from '@/lib/snake/camera';
 import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
 import { isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';

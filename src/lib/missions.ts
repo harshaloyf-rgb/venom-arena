@@ -224,21 +224,3 @@ export function getAllowedRewards(
   }
   return rewards;
 }
-
-/** Get the tracker type for a given mission ID (for match-result tracking) */
-export function getTrackerForMission(
-  missionId: string,
-  dailyDateStr?: string,
-  weeklyWeekStr?: string,
-): MissionTracker | null {
-  const dailyDate = dailyDateStr || new Date().toISOString().slice(0, 10);
-  const weeklyWeek = weeklyWeekStr || getISOWeek(new Date());
-
-  for (const m of getTodaysDailyMissions(dailyDate)) {
-    if (m.id === missionId) return m.tracker;
-  }
-  for (const m of getThisWeeksWeeklyMissions(weeklyWeek)) {
-    if (m.id === missionId) return m.tracker;
-  }
-  return null;
-}

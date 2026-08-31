@@ -2,7 +2,7 @@
 // Shared API route helpers — reduce boilerplate across 20+ routes.
 // ============================================================================
 
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { timingSafeEqual } from 'crypto';
 

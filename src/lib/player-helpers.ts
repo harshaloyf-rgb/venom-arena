@@ -108,8 +108,3 @@ export function toProfile(p: Player): PlayerProfile {
 export function encodeSkins(skins: string[]): string {
   return JSON.stringify(Array.from(new Set(skins)));
 }
-
-export async function getFirstAdmin(): Promise<Player | null> {
-  const admin = await db.player.findFirst({ where: { role: 'admin' } });
-  return admin;
-}

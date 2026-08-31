@@ -429,33 +429,4 @@ export async function seedGameConfig() {
   }
 }
 
-/**
- * Load ALL configs from DB and return as a flat Record<string, any>.
- * Each stored JSON string is parsed back to its native type.
- */
-export async function getGameConfig(): Promise<Record<string, any>> {
-  const rows = await db.gameConfig.findMany({ orderBy: { order: 'asc' } })
-  const result: Record<string, any> = {}
-  for (const row of rows) {
-    try {
-      result[row.key] = JSON.parse(row.value)
-    } catch {
-      result[row.key] = row.value
-    }
-  }
-  return result
-}
 
-/**
- * Get a single config value by key. Returns `undefined` if the key
- * does not exist in the database.
- */
-export async function getGameConfigValue(key: string): Promise<any> {
-  const row = await db.gameConfig.findUnique({ where: { key } })
-  if (!row) return undefined
-  try {
-    return JSON.parse(row.value)
-  } catch {
-    return row.value
-  }
-}

@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { countryFlag, CHAMPIONSHIP_PRIZE_TIERS, REGION_MAP, regionOf } from '@/lib/game-config';
+import { countryFlag, CHAMPIONSHIP_PRIZE_TIERS, regionOf } from '@/lib/game-config';
 
 const CURRENT_YEAR = 2026;
 

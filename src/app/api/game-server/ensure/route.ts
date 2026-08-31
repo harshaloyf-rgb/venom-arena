@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { exec } from 'child_process';
 import net from 'net';
-import { getRegionServer, VALID_REGIONS, type RegionCode } from '@/lib/game-config';
+import { getRegionServer, VALID_REGIONS } from '@/lib/game-config';
 
 const GAME_SERVER_DIR = '/home/z/my-project/mini-services/game-server';
 const spawnLocks = new Map<string, boolean>();
