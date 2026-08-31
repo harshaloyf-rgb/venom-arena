@@ -47,3 +47,22 @@ Stage Summary:
 - All systems ready
 - Commit: 354e36d
 
+---
+Session start: 2026-08-31T20:31:00Z, git: f296397
+---
+Task ID: 1
+Agent: main
+Task: Add Score/Chips toggle to online mode leaderboard
+
+Work Log:
+- Extended LBEntry interface with carriedChips and isBot fields
+- Added lbMode state and lbModeRef for stable callback access
+- Updated updateLeaderboardRef: captures carriedChips/isBot per snake, filters bots in chips mode
+- Added Trophy/Coins toggle buttons in leaderboard header
+- Score mode: all snakes sorted by score (default, crown on #1)
+- Chips mode: real players only, sorted by carriedChips, amber-colored, c suffix
+- Lint passes clean
+
+Stage Summary:
+- Only file changed: src/components/game/OnlineSnakeGame.tsx
+- No backend changes needed

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X, Zap, CircleDot, Wifi, WifiOff } from 'lucide-react';
+import { X, Zap, CircleDot, Wifi, WifiOff, Trophy, Coins } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
 import { createGameSocket, type GameSnapshot, type ConnectionStatus } from '@/lib/game-socket';
 import { RemoteSnakeManager } from '@/lib/remote-snake-manager';
@@ -107,7 +107,9 @@ interface OnlineSnakeGameProps {
 interface LBEntry {
   name: string;
   score: number;
+  carriedChips: number;
   isPlayer: boolean;
+  isBot: boolean;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -156,18 +158,34 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
   const [displayStatus, setDisplayStatus] = useState<ConnectionStatus>('disconnected');
   const [displayError, setDisplayError] = useState<string | null>(null);
   const [leaderboard, setLeaderboard] = useState<LBEntry[]>([]);
+  const [lbMode, setLbMode] = useState<'score' | 'chips'>('chips');
   const [displayHighScore, setDisplayHighScore] = useState(0);
   const [isDead, setIsDead] = useState(false);
 
   // ── Stable leaderboard callback ──
+  const lbModeRef = useRef(lbMode);
+  useEffect(() => { lbModeRef.current = lbMode; });
   const updateLeaderboardRef = useRef((snakes: Map<string, Snake>, player: Snake | null) => {
     const entries: LBEntry[] = [];
     for (const [, s] of snakes) {
       if (!s.alive) continue;
-      entries.push({ name: s.name, score: Math.floor(s.score), isPlayer: !!s.isPlayer });
+      entries.push({
+        name: s.name,
+        score: Math.floor(s.score),
+        carriedChips: Math.floor(s.carriedChips),
+        isPlayer: !!s.isPlayer,
+        isBot: !!s.isBot,
+      });
     }
-    entries.sort((a, b) => b.score - a.score);
-    setLeaderboard(entries.slice(0, 10));
+    if (lbModeRef.current === 'chips') {
+      // Chips mode: only real players, sorted by carriedChips
+      const real = entries.filter(e => !e.isBot);
+      real.sort((a, b) => b.carriedChips - a.carriedChips);
+      setLeaderboard(real.slice(0, 10));
+    } else {
+      entries.sort((a, b) => b.score - a.score);
+      setLeaderboard(entries.slice(0, 10));
+    }
   });
 
   // ── Connect to game server ──
@@ -671,19 +689,34 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
           <div className="text-[9px] text-amber-400 font-bold font-mono text-center leading-tight">{displayHighScore.toLocaleString()} <span className="font-normal opacity-60">score</span></div>
         </div>
         <div className="bg-black/50 backdrop-blur-sm rounded-lg p-2 max-h-72 overflow-y-auto scrollbar-thin">
-          <div className="text-[10px] text-white/60 font-mono mb-1 text-center">Leaderboard</div>
+          {/* Toggle: Score / Chips */}
+          <div className="flex items-center justify-center gap-1 mb-1">
+            <button
+              onClick={() => setLbMode('chips')}
+              className={`pointer-events-auto flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-mono transition-colors cursor-pointer ${lbMode === 'chips' ? 'bg-amber-500/20 text-amber-400' : 'text-white/40 hover:text-white/60'}`}
+            >
+              <Coins className="w-2.5 h-2.5" />Chips
+            </button>
+            <span className="text-white/20 text-[8px]">|</span>
+            <button
+              onClick={() => setLbMode('score')}
+              className={`pointer-events-auto flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-mono transition-colors cursor-pointer ${lbMode === 'score' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/60'}`}
+            >
+              <Trophy className="w-2.5 h-2.5" />Score
+            </button>
+          </div>
           {leaderboard.length === 0 && (
-            <div className="text-[9px] text-white/30 font-mono text-center py-2">Waiting...</div>
+            <div className="text-[9px] text-white/30 font-mono text-center py-2">{lbMode === 'chips' ? 'No chip holders yet' : 'Waiting...'}</div>
           )}
           {leaderboard.map((entry, i) => (
             <div
               key={i}
               className={`flex justify-between text-[10px] font-mono px-1 py-0.5 rounded ${
-                entry.isPlayer ? 'text-green-400 bg-white/5' : 'text-white/70'
+                entry.isPlayer ? 'text-green-400 bg-white/5' : lbMode === 'chips' ? 'text-amber-300/80' : 'text-white/70'
               }`}
             >
-              <span>{i + 1}. {i === 0 && '\u{1F451}'}{entry.name}</span>
-              <span>{Math.floor(entry.score)}</span>
+              <span>{i + 1}. {i === 0 && lbMode === 'score' && '\u{1F451}'}{entry.name}</span>
+              <span className={lbMode === 'chips' ? 'text-amber-400' : ''}>{lbMode === 'chips' ? Math.floor(entry.carriedChips) : Math.floor(entry.score)}{lbMode === 'chips' ? 'c' : ''}</span>
             </div>
           ))}
         </div>
