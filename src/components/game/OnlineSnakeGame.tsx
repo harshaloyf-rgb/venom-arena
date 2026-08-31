@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X, Zap, CircleDot, Wifi, WifiOff, Trophy, Coins } from 'lucide-react';
+import { X, Zap, CircleDot, Wifi, WifiOff, Trophy, Coins, UserPlus, Swords, LogOut, Skull, Eye } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
 import { createGameSocket, type GameSnapshot, type ConnectionStatus } from '@/lib/game-socket';
 import { RemoteSnakeManager } from '@/lib/remote-snake-manager';
@@ -13,7 +13,7 @@ import { getArenaById } from '@/lib/game-config';
 import type { Snake, Camera, Viewport } from '@/lib/snake/types';
 import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrameWithDpr } from './render-snake-atlas';
 import { renderBackground, renderHUD, resetMinimapZoom, handleMinimapClick } from './hud';
-import { drawDeathOverlay, drawEliminatedBanner, drawControlsHint } from './renderer';
+import { drawEliminatedBanner, drawControlsHint } from './renderer';
 import { makeCoiledPath } from './coil-path';
 import { createExtractionState, updateExtractionProgress, drawExtractRing } from '@/lib/snake/extraction';
 import { InputHandler } from './input';
@@ -162,6 +162,36 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
   const [displayHighScore, setDisplayHighScore] = useState(0);
   const [isDead, setIsDead] = useState(false);
 
+  // ── Death screen data ──
+  const [deathData, setDeathData] = useState<{
+    killerName: string | null;
+    killerTag: string | null;
+    killerIsBot: boolean;
+    score: number;
+    kills: number;
+    durationSeconds: number;
+    chipsLost: number;
+    reason: string;
+  } | null>(null);
+  const [friendStatus, setFriendStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [rivalStatus, setRivalStatus] = useState<'idle' | 'adding' | 'added' | 'error'>('idle');
+  const showDeathScreenRef = useRef(false);
+  const [showDeathScreen, setShowDeathScreen] = useState(false);
+  useEffect(() => {
+    if (!isDead || !deathData) {
+      showDeathScreenRef.current = false;
+      return;
+    }
+    if (showDeathScreenRef.current) return;
+    const elapsed = performance.now() - deathTimeRef.current;
+    const delay = Math.max(0, 5000 - elapsed);
+    const t = setTimeout(() => {
+      showDeathScreenRef.current = true;
+      setShowDeathScreen(true);
+    }, delay);
+    return () => clearTimeout(t);
+  }, [isDead, deathData]);
+
   // ── Stable leaderboard callback ──
   const lbModeRef = useRef(lbMode);
   useEffect(() => { lbModeRef.current = lbMode; });
@@ -216,9 +246,20 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         }
         // Death detection
         if (state.matchEnd && !isDeadRef.current) {
+          console.log('[DeathScreen] matchEnd data:', JSON.stringify(state.matchEnd), 'killerName:', state.killerName);
           isDeadRef.current = true;
           deathTimeRef.current = performance.now();
           setIsDead(true);
+          setDeathData({
+            killerName: state.killerName,
+            killerTag: state.killerTag,
+            killerIsBot: state.killerIsBot,
+            score: state.matchEnd.score,
+            kills: state.matchEnd.kills || 0,
+            durationSeconds: state.matchEnd.durationSeconds || 0,
+            chipsLost: state.matchEnd.chipsLost ?? 0,
+            reason: state.matchEnd.reason || '',
+          });
         }
         if (state.status === 'disconnected' || state.status === 'error') {
           if (!isDeadRef.current) {
@@ -240,9 +281,12 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     };
   }, [arenaId]);
 
-  // ── Respawn handler (online: reload the page) ──
+  // ── Respawn handler (online: save arena and reload to rejoin) ──
   const handleRespawn = useCallback(() => {
-    if (arenaId) window.location.reload();
+    if (arenaId) {
+      sessionStorage.setItem('venom:rejoin-arena', arenaId);
+      window.location.reload();
+    }
   }, [arenaId]);
 
   // ── Canvas setup + render loop ──
@@ -609,14 +653,13 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         }
       }
 
-      // ── Death overlay (canvas-based, same as offline) ──
+      // ── Death overlay (elimination banner only; React death screen handles after 5s) ──
       if (isDeadRef.current) {
         const deathElapsed = now - deathTimeRef.current;
         if (deathElapsed < 5000) {
           drawEliminatedBanner(ctx, viewport, deathElapsed);
-        } else {
-          drawDeathOverlay(ctx, playerScoreRef.current, viewport);
         }
+        // After 5s: React overlay takes over, no canvas drawDeathOverlay
       }
 
       // ── Update leaderboard every ~0.5s ──
@@ -649,6 +692,52 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       window.removeEventListener('keydown', onRespawnKey);
     };
   }, [arenaId, onExit, handleRespawn]);
+
+  // ── Death screen actions ──
+  const handleAddFriend = useCallback(async () => {
+    if (!deathData?.killerTag) return;
+    setFriendStatus('sending');
+    try {
+      const res = await fetch('/api/friends/request', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userTag: deathData.killerTag }),
+      });
+      if (res.ok) setFriendStatus('sent');
+      else setFriendStatus('error');
+    } catch { setFriendStatus('error'); }
+  }, [deathData]);
+
+  const handleAddRival = useCallback(async () => {
+    if (!deathData?.killerTag || !deathData.killerName) return;
+    setRivalStatus('adding');
+    try {
+      const res = await fetch('/api/rivals', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag: deathData.killerTag, name: deathData.killerName, action: 'add' }),
+      });
+      if (res.ok) setRivalStatus('added');
+      else setRivalStatus('error');
+    } catch { setRivalStatus('error'); }
+  }, [deathData]);
+
+  const handleViewProfile = useCallback(() => {
+    if (!deathData?.killerTag) return;
+    onExit?.();
+    window.dispatchEvent(new CustomEvent('venom:view-profile', { detail: { tag: deathData.killerTag } }));
+  }, [deathData, onExit]);
+
+  const formatDuration = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  };
+
+  const getDeathCauseText = () => {
+    if (!deathData) return '';
+    if (deathData.reason === 'boundary') return 'Hit the arena boundary';
+    if (deathData.killerName) return `Killed by ${deathData.killerName}`;
+    return 'Collision';
+  };
 
   // ── Render (JSX) — NO stale death overlay, only UI controls ──
   return (
@@ -758,6 +847,117 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
           <span className="text-[10px] font-normal opacity-60">E / Right Click</span>
         </button>
       </div>
+
+      {/* ── Online Death Screen Overlay (after 5s elimination) ── */}
+      {showDeathScreen && deathData && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="w-[320px] max-w-[90vw] bg-[#111118] border border-white/10 rounded-2xl p-5 flex flex-col items-center gap-4 shadow-2xl">
+            {/* Title */}
+            <div className="flex items-center gap-2">
+              <Skull className="w-6 h-6 text-red-500" />
+              <span className="text-xl font-bold text-red-500 tracking-wide">ELIMINATED</span>
+            </div>
+
+            {/* Death cause / Killer info */}
+            {deathData.killerName && deathData.killerName !== 'collision' && deathData.reason !== 'boundary' ? (
+              <div className="w-full bg-white/5 rounded-xl p-3 flex flex-col items-center gap-1.5">
+                <span className="text-[11px] text-white/50 font-mono uppercase tracking-wider">Killed by</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
+                    <span className="text-lg">{deathData.killerIsBot ? '🤖' : '🐍'}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-bold text-white">{deathData.killerName}</span>
+                    {deathData.killerTag && (
+                      <span className="text-[10px] text-white/40 font-mono">{deathData.killerTag}</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Action buttons (only for real players) */}
+                {!deathData.killerIsBot && deathData.killerTag && (
+                  <div className="flex gap-2 mt-1 w-full">
+                    <button
+                      onClick={handleViewProfile}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white text-[11px] font-mono transition-colors cursor-pointer"
+                    >
+                      <Eye className="w-3 h-3" />Profile
+                    </button>
+                    <button
+                      onClick={handleAddFriend}
+                      disabled={friendStatus === 'sending' || friendStatus === 'sent'}
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border text-[11px] font-mono transition-colors cursor-pointer ${
+                        friendStatus === 'sent'
+                          ? 'bg-green-500/15 border-green-500/30 text-green-400 cursor-default'
+                          : friendStatus === 'error'
+                            ? 'bg-red-500/15 border-red-500/30 text-red-400'
+                            : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/70 hover:text-white'
+                      }`}
+                    >
+                      <UserPlus className="w-3 h-3" />{friendStatus === 'sent' ? 'Sent' : friendStatus === 'sending' ? '...' : 'Friend'}
+                    </button>
+                    <button
+                      onClick={handleAddRival}
+                      disabled={rivalStatus === 'adding' || rivalStatus === 'added'}
+                      className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg border text-[11px] font-mono transition-colors cursor-pointer ${
+                        rivalStatus === 'added'
+                          ? 'bg-red-500/15 border-red-500/30 text-red-400 cursor-default'
+                          : rivalStatus === 'error'
+                            ? 'bg-red-500/15 border-red-500/30 text-red-400'
+                            : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/70 hover:text-white'
+                      }`}
+                    >
+                      <Swords className="w-3 h-3" />{rivalStatus === 'added' ? 'Rival' : rivalStatus === 'adding' ? '...' : 'Rival'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="w-full bg-white/5 rounded-xl p-3 text-center">
+                <span className="text-sm text-white/60">{getDeathCauseText()}</span>
+              </div>
+            )}
+
+            {/* Match stats */}
+            <div className="w-full grid grid-cols-2 gap-2">
+              <div className="bg-white/5 rounded-lg px-3 py-2 text-center">
+                <div className="text-[10px] text-white/40 font-mono uppercase">Score</div>
+                <div className="text-base font-bold text-white font-mono">{Math.floor(deathData.score).toLocaleString()}</div>
+              </div>
+              <div className="bg-white/5 rounded-lg px-3 py-2 text-center">
+                <div className="text-[10px] text-white/40 font-mono uppercase">Kills</div>
+                <div className="text-base font-bold text-white font-mono">{deathData.kills}</div>
+              </div>
+              <div className="bg-white/5 rounded-lg px-3 py-2 text-center">
+                <div className="text-[10px] text-white/40 font-mono uppercase">Chips Lost</div>
+                <div className="text-base font-bold text-red-400 font-mono">{deathData.chipsLost.toLocaleString()}c</div>
+              </div>
+              <div className="bg-white/5 rounded-lg px-3 py-2 text-center">
+                <div className="text-[10px] text-white/40 font-mono uppercase">Survived</div>
+                <div className="text-base font-bold text-white font-mono">{formatDuration(deathData.durationSeconds)}</div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="w-full flex flex-col gap-2 mt-1">
+              <button
+                onClick={handleRespawn}
+                className="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-sm transition-colors cursor-pointer active:scale-[0.98]"
+              >
+                Play Again
+              </button>
+              {onExit && (
+                <button
+                  onClick={onExit}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 hover:text-white text-sm font-mono transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />Exit to Arena
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

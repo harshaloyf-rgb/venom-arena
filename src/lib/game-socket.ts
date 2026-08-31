@@ -69,8 +69,10 @@ export interface GameSocketState {
   status: ConnectionStatus;
   snapshot: GameSnapshot | null;
   error: string | null;
-  matchEnd: { outcome: string; score: number; kills: number } | null;
+  matchEnd: { outcome: string; score: number; kills: number; durationSeconds?: number; reason?: string; killerTag?: string | null; killerIsBot?: boolean; chipsLost?: number } | null;
   killerName: string | null;
+  killerTag: string | null;
+  killerIsBot: boolean;
   serverMapHalf: number | null;
 }
 
@@ -81,8 +83,10 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
   let currentSnapshot: GameSnapshot | null = null;
   let currentStatus: ConnectionStatus = 'disconnected';
   let currentError: string | null = null;
-  let matchEndData: { outcome: string; score: number; kills: number } | null = null;
+  let matchEndData: { outcome: string; score: number; kills: number; durationSeconds?: number; reason?: string; killerTag?: string | null; killerIsBot?: boolean; chipsLost?: number } | null = null;
   let killerName: string | null = null;
+  let killerTag: string | null = null;
+  let killerIsBot = true;
   let serverMapHalf: number | null = null;
   let inputSeq = 0;
 
@@ -98,6 +102,8 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       error: currentError,
       matchEnd: matchEndData,
       killerName,
+      killerTag,
+      killerIsBot,
       serverMapHalf,
     });
   }
@@ -153,6 +159,8 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       currentError = null;
       matchEndData = null;
       killerName = null;
+      killerTag = null;
+      killerIsBot = true;
       currentSnapshot = null;
       serverMapHalf = null;
       inputSeq = 0;
@@ -219,12 +227,15 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
           emit();
         });
 
-        socket.on('killed', (data: { killerName: string }) => {
+        socket.on('killed', (data: { killerName: string; killerTag?: string | null; killerIsBot?: boolean }) => {
           killerName = data.killerName;
+          killerTag = data.killerTag || null;
+          killerIsBot = data.killerIsBot ?? true;
           emit();
         });
 
-        socket.on('matchEnd', (data: { outcome: string; score: number; kills: number }) => {
+        socket.on('matchEnd', (data: { outcome: string; score: number; kills: number; durationSeconds?: number; reason?: string; killerTag?: string | null; killerIsBot?: boolean; chipsLost?: number }) => {
+          console.log('[GameSocket] matchEnd received:', JSON.stringify(data));
           matchEndData = data;
           emit();
         });

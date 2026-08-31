@@ -177,6 +177,20 @@ export default function Home() {
     return () => window.removeEventListener('admin:navigate', handleAdminNav);
   }, []);
 
+  // Auto-rejoin arena after "Play Again" (saved from death screen)
+  useEffect(() => {
+    if (!player) return;
+    const rejoinArena = sessionStorage.getItem('venom:rejoin-arena');
+    if (rejoinArena) {
+      sessionStorage.removeItem('venom:rejoin-arena');
+      const t = setTimeout(() => {
+        setActiveArenaId(rejoinArena);
+        setGameMode('online');
+      }, 100);
+      return () => clearTimeout(t);
+    }
+  }, [player]);
+
   const handleExitGame = useCallback(
     (result?: MatchResult) => {
       setActiveArenaId(null);

@@ -983,7 +983,7 @@ class ArenaInstance {
     }
 
     // 4. Kill boundary-hit snakes (no food drop for boundary deaths)
-    const playersToKill: { snakeId: string; socketId: string; reason: string }[] = [];
+    const playersToKill: { snakeId: string; socketId: string; reason: string; killerTag?: string; killerIsBot?: boolean }[] = [];
     for (const deadId of boundaryDead) {
       const deadSnake = state.snakes.get(deadId);
       if (deadSnake && deadSnake.alive) {
@@ -1099,10 +1099,28 @@ class ArenaInstance {
           if (socketId) {
             // Find killer info from kill events
             const killEvent = collisionResult.killEvents.find(e => e.victimId === deadId);
+            // Look up killer's userTag and isBot status
+            let killerTag: string | undefined;
+            let killerIsBot: boolean | undefined;
+            if (killEvent) {
+              const killerSnake = state.snakes.get(killEvent.killerId);
+              if (killerSnake) {
+                killerIsBot = killerSnake.isBot;
+                if (!killerSnake.isBot) {
+                  const killerSocketId = this.snakeToSocket.get(killEvent.killerId);
+                  if (killerSocketId) {
+                    const killerPlayer = this.players.get(killerSocketId);
+                    if (killerPlayer) killerTag = killerPlayer.userTag;
+                  }
+                }
+              }
+            }
             playersToKill.push({
               snakeId: deadId,
               socketId,
               reason: killEvent ? `killed by ${killEvent.killerName}` : 'collision',
+              killerTag,
+              killerIsBot,
             });
           }
         }
@@ -1121,7 +1139,7 @@ class ArenaInstance {
 
     // 10. Handle player deaths — emit events, call API, enter spectator mode
     for (const toKill of playersToKill) {
-      this.handlePlayerDeath(toKill.snakeId, toKill.socketId, toKill.reason);
+      this.handlePlayerDeath(toKill.snakeId, toKill.socketId, toKill.reason, toKill.killerTag, toKill.killerIsBot);
     }
 
     // 11. Broadcast snapshots every N ticks
@@ -1135,16 +1153,19 @@ class ArenaInstance {
     }
   }
 
-  private handlePlayerDeath(snakeId: string, socketId: string, reason: string): void {
+  private handlePlayerDeath(snakeId: string, socketId: string, reason: string, killerTag?: string, killerIsBot?: boolean): void {
     const player = this.players.get(socketId);
     const snake = this.state.snakes.get(snakeId);
-    if (!player || !snake) return;
+    if (!player || !snake) {
+      console.log(`[Arena ${this.arenaId}] handlePlayerDeath: missing player=${!player} snake=${!snake} snakeId=${snakeId} socketId=${socketId}`);
+      return;
+    }
 
     const durationSeconds = Math.floor((Date.now() - player.joinTime) / 1000);
     const score = snake.score;
     const kills = player.kills;
 
-    dbg(`[Arena ${this.arenaId}] Player ${player.name} died (${reason}) — score: ${score}, kills: ${kills}, duration: ${durationSeconds}s`);
+    console.log(`[Arena ${this.arenaId}] DEATH ${player.name} score=${score} kills=${kills} player.cc=${player.carriedChips} snake.cc=${snake.carriedChips} reason=${reason}`);
 
     // Save spectator camera position (before snake is deleted)
     player.spectatorHx = snake.path.headX;
@@ -1192,22 +1213,32 @@ class ArenaInstance {
 
     // Emit killed event (for killer name highlight) and matchEnd to client
     try {
-      // Extract killer name from reason string (format: "killed by <Name>")
       const killerMatch = reason.match(/^killed by (.+)$/);
       if (killerMatch) {
-        player.socket.emit('killed', { killerName: killerMatch[1] });
+        player.socket.emit('killed', {
+          killerName: killerMatch[1],
+          killerTag: killerTag || null,
+          killerIsBot: killerIsBot ?? true,
+        });
       }
+      // Use buyIn as minimum chipsLost (carriedChips may be 0 in edge cases)
+      const arenaBuyIn = getArenaById(this.arenaId)?.buyIn ?? 0;
+      const chipsLost = Math.max(snake.carriedChips, player.carriedChips, arenaBuyIn);
+      console.log(`[Arena ${this.arenaId}] EMIT matchEnd to ${player.name} chipsLost=${chipsLost} (snake.cc=${snake.carriedChips} player.cc=${player.carriedChips} buyIn=${arenaBuyIn})`);
       player.socket.emit('matchEnd', {
         outcome: 'death',
         score,
         kills,
         durationSeconds,
         reason,
+        killerTag: killerTag || null,
+        killerIsBot: killerIsBot ?? true,
+        chipsLost: chipsLost,
       });
     } catch {}
 
     // Report result to main server (fire and forget)
-    this.reportMatchResult(player, 'death', snake.carriedChips, kills, durationSeconds, score)
+    this.reportMatchResult(player, 'death', chipsLost, kills, durationSeconds, score)
       .catch(err => console.error(`[Arena ${this.arenaId}] Failed to report match result:`, err));
 
     // Schedule disconnect AFTER death screen period
@@ -1634,6 +1665,7 @@ io.on('connection', (socket) => {
       // Set buy-in as carried chips
       const buyIn = getArenaById(arenaId)?.buyIn ?? 0;
       playerInfo.carriedChips = buyIn;
+      console.log(`[Arena ${arenaId}] JOIN ${playerData.name} buyIn=${buyIn} arenaId=${arenaId}`);
 
       // Spawn player in arena
       const snake = arena.spawnPlayer(playerInfo);
