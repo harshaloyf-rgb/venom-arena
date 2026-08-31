@@ -54,8 +54,10 @@ server.log
 mini-services/game-server.log
 mini-services/game-server.pid
 
-# Skills directory
-/skills/tool-results/
-*.txt
+# Test/debug screenshots & uploads (never commit)
+/tool-results/
+/upload/
+*.png
+
 # Database (runtime data — never commit)
 db/*.db
