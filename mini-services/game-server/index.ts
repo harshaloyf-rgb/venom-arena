@@ -713,6 +713,7 @@ interface ConnectedPlayer {
   country?: string;
   level: number;
   clanTag?: string;
+  customSkinData?: { id: string; colors: string[]; bodyStyle: string; taperStyle: string; glow: boolean } | null;
   // ── Input validation state ──
   lastInputTime: number;
   lastAngle: number;
@@ -1710,6 +1711,7 @@ io.on('connection', (socket) => {
         country: playerData.country,
         level: playerData.level || 1,
         clanTag: playerData.clanTag,
+        customSkinData: playerData.customSkinData || null,
         // Validation state
         lastInputTime: 0,
         lastAngle: 0,
@@ -1754,6 +1756,15 @@ io.on('connection', (socket) => {
           mapHalf: arena.arenaConfig.mapHalf,
         },
       });
+
+      // Broadcast custom skin data to other players so they can render it
+      if (playerInfo.customSkinData) {
+        socket.broadcast.to(arenaId).emit('customSkin', {
+          snakeId: snake.id,
+          skinId: playerInfo.skinId,
+          data: playerInfo.customSkinData,
+        });
+      }
 
       // Register O(1) socket→arena lookup
       socketToArena.set(socket.id, arenaId);

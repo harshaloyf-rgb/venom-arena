@@ -62,6 +62,7 @@ model Player {
   currentDeath    String   @default("death-default")
   currentFlag     String?
   currentBanner   String?
+  customSkins     String   @default("[]") // JSON array of named custom skin configs (max 5)
 
   // Admin / moderation
   role            String   @default("player") // player | admin

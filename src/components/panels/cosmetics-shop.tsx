@@ -1,43 +1,18 @@
 'use client';
 
-/**
- * BUILD-11 — `CosmeticsShop` panel.
- *
- * Faithful replica of `/upload/extracted/src/components/CosmeticsShop.tsx`
- * (1810 lines). Adapted to the BUILD-2 server-authoritative stack:
- *
- *  - Premium ALL_COSMETICS items use `POST /api/player/cosmetic` with
- *    `{ action: 'buy' | 'equip', skinId }` and `useAuth().refresh()` after.
- *  - 20 free SLITHER_PRESETS and the Genetic Pattern Lab custom skin are
- *    persisted to `localStorage['venom_custom_skin_state']` (the server
- *    has no concept of custom-skin segments; the GameCanvas reads this
- *    key client-side to render the live wiggle preview).
- *
- * All textual strings — the H2 title, the subtitle, the two view-mode tabs,
- * the 7 category filters, the 20 preset descriptions, every "Active/Locked/
- * Equipped/Equip X/Unlock (N Chips)" button label, the 4-step Pattern Lab,
- * the TryOnPreview overlay caption "LAB HOLO-PREVIEW (STEER TO TEST)" and
- * every toast message — are preserved verbatim from the original audit
- * (AUDIT-C section A).
- *
- * The LIVE moving skin preview (`<SkinsCanvasPreview>` — 180×80 canvas, 10
- * segments, 60fps `requestAnimationFrame` loop using the exact
- * `Math.sin(time - i * 0.42) * 9` wiggle formula) and the interactive
- * `<TryOnPreview>` (450×180 canvas, 26 segments, mouse-steerable with
- * auto-patrol fallback) are both reproduced character-for-character from
- * the original so the "real-time wiggling skin" feeling is identical.
- */
-
 import { useState } from 'react';
 import {
   ArrowLeftRight,
+  Backpack,
   CheckCircle2,
   Palette,
   Plus,
+  Save,
   ShoppingBag,
   Sliders,
   Trash2,
   Wand2,
+  X,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
 import { ALL_COSMETICS, PASS_FREE_COSMETICS, PASS_ELITE_COSMETICS, type Skin } from '@/lib/game-config';
@@ -76,6 +51,7 @@ import {
 } from './cosmetics/cosmetics-cards';
 import { GameSnakePreview } from './cosmetics/game-snake-preview';
 import { CosmeticsSection } from './cosmetics/cosmetics-section';
+import type { CustomSkinEntry } from '@/lib/player-helpers';
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -85,10 +61,12 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
   const [shopView, setShopView] = useState<ShopView>('presets');
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>('all');
 
-  // DNA Lab custom states — initialized lazily from localStorage on the
-  // client so that the Lab tab reflects whatever the player last deployed.
-  // (The lab tab is hidden by default, so any hydration delta between
-  // SSR-default and client-stored values is invisible until interaction.)
+  // Lab save dialog
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // DNA Lab custom states
   const [customState, setCustomState] = useState<CustomSkinState | null>(
     () => readCustomSkinStateSafe(),
   );
@@ -117,13 +95,9 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
   if (loading) return <PanelSkeleton count={6} height="h-44" />;
   if (!player) return <NotSignedIn />;
 
-  // Bind to a const so TypeScript keeps the non-null narrowing inside the
-  // closures below.
   const p = player;
 
   // -- helpers --------------------------------------------------------------
-  // A manufactured skin is "active" only if no custom-skin (preset or DNA-lab)
-  // is currently overriding the server's `currentSkin` field.
   const isSkinActive = (item: Skin) =>
     !customState?.useCustomSkin && p.currentSkin === item.id;
 
@@ -131,7 +105,14 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
     customState?.useCustomSkin === true &&
     customState.currentSkin === preset.id;
 
+  const isCustomSkinActive = (entry: CustomSkinEntry) =>
+    customState?.useCustomSkin === true &&
+    customState.currentSkin === entry.id;
 
+  // -- active skin ID (used by CosmeticsSection) ----------------------------
+  const activeSkinId = customState?.useCustomSkin
+    ? customState.currentSkin
+    : p.currentSkin;
 
   async function postCosmetic(action: 'buy' | 'equip', skinId: string) {
     try {
@@ -158,16 +139,12 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
     const owned = p.unlockedSkins.includes(item.id);
     if (owned) {
       if (await postCosmetic('equip', item.id)) {
-        // Clear custom-skin flag when equipping a manufactured skin
         if (customState?.useCustomSkin) {
-          const next: CustomSkinState = {
-            ...customState,
-            useCustomSkin: false,
-          };
+          const next: CustomSkinState = { ...customState, useCustomSkin: false };
           writeCustomSkinState(next);
           setCustomState(next);
         }
-        refresh(); // re-fetch player so currentSkin updates immediately
+        refresh();
         notify(`Equipped Body Skin: ${item.name}`, 'success', onToast);
       }
     } else {
@@ -181,14 +158,11 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
       }
       if (await postCosmetic('buy', item.id)) {
         if (customState?.useCustomSkin) {
-          const next: CustomSkinState = {
-            ...customState,
-            useCustomSkin: false,
-          };
+          const next: CustomSkinState = { ...customState, useCustomSkin: false };
           writeCustomSkinState(next);
           setCustomState(next);
         }
-        refresh(); // re-fetch player so currentSkin + unlockedSkins update immediately
+        refresh();
         notify(
           `Unlocked & Equipped ${item.name}! -${item.cost} CHIPS`,
           'success',
@@ -212,7 +186,6 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
     };
     writeCustomSkinState(next);
     setCustomState(next);
-    // Sync to server so getPlayerSkinAsset() matchesServer check passes
     try {
       await fetch('/api/player/current-skin', {
         method: 'POST',
@@ -220,7 +193,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
         body: JSON.stringify({ skinId: preset.id }),
       });
       await refresh();
-    } catch { /* non-critical: skin works in offline mode via localStorage */ }
+    } catch { /* non-critical */ }
     notify(
       `Injected DNA: ${preset.name}! Equipped in Battle Arena.`,
       'success',
@@ -228,7 +201,58 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
     );
   }
 
+  async function handleEquipInventorySkin(skinId: string) {
+    // Check if it's a pass/premium manufactured skin
+    const allCosmetic = [...ALL_COSMETICS, ...PASS_FREE_COSMETICS, ...PASS_ELITE_COSMETICS];
+    const cosmetic = allCosmetic.find((c) => c.id === skinId);
+    if (cosmetic) {
+      if (customState?.useCustomSkin) {
+        const next: CustomSkinState = { ...customState, useCustomSkin: false };
+        writeCustomSkinState(next);
+        setCustomState(next);
+      }
+      await postCosmetic('equip', skinId);
+      notify(`Equipped: ${cosmetic.name}`, 'success', onToast);
+      return;
+    }
 
+    // Check if it's a saved custom skin from DB
+    const customEntry = p.customSkins?.find((s) => s.id === skinId);
+    if (customEntry) {
+      const segments = generateCustomSegments(
+        customEntry.colors,
+        customEntry.bodyStyle as BodyStyle,
+        customEntry.taperStyle as TaperStyle,
+        customEntry.glow,
+      );
+      const next: CustomSkinState = {
+        useCustomSkin: true,
+        currentSkin: customEntry.id,
+        customSkinSegments: segments,
+      };
+      writeCustomSkinState(next);
+      setCustomState(next);
+      try {
+        await fetch('/api/player/current-skin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ skinId: customEntry.id }),
+        });
+        await refresh();
+      } catch { /* non-critical */ }
+      notify(`Equipped: ${customEntry.name}`, 'success', onToast);
+      return;
+    }
+
+    // Check if it's a free preset
+    const preset = SLITHER_PRESETS.find((pr) => pr.id === skinId);
+    if (preset) {
+      await handleEquipSlitherPreset(preset);
+      return;
+    }
+
+    notify('Skin not found.', 'error', onToast);
+  }
 
   // -- genetic lab handlers -------------------------------------------------
   function handleAppendColor(hex: string) {
@@ -294,12 +318,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
       return;
     }
 
-    const segments = generateCustomSegments(
-      colorSequence,
-      bodyStyle,
-      taperStyle,
-      false,
-    );
+    const segments = generateCustomSegments(colorSequence, bodyStyle, taperStyle, false);
     const next: CustomSkinState = {
       useCustomSkin: true,
       currentSkin: 'custom-lab-skin',
@@ -307,7 +326,6 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
     };
     writeCustomSkinState(next);
     setCustomState(next);
-    // Sync to server so getPlayerSkinAsset() matchesServer check passes
     try {
       await fetch('/api/player/current-skin', {
         method: 'POST',
@@ -315,7 +333,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
         body: JSON.stringify({ skinId: 'custom-lab-skin' }),
       });
       await refresh();
-    } catch { /* non-critical: skin works in offline mode via localStorage */ }
+    } catch { /* non-critical */ }
     notify(
       '🧪 Genetic Custom Segment deployed! Equipped in Battle Arena.',
       'success',
@@ -323,8 +341,73 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
     );
   }
 
+  // -- save to inventory from lab -------------------------------------------
+  async function handleSaveToInventory() {
+    const name = saveName.trim();
+    if (!name) {
+      notify('Please enter a name for your skin.', 'error', onToast);
+      return;
+    }
+    if (colorSequence.length === 0) {
+      notify('Design a skin first before saving!', 'error', onToast);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch('/api/player/custom-skins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          colors: colorSequence,
+          bodyStyle,
+          taperStyle,
+          glow: false,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        notify((data as { error?: string }).error || 'Failed to save skin.', 'error', onToast);
+        return;
+      }
+      await refresh();
+      setSaveDialogOpen(false);
+      setSaveName('');
+      notify(`Saved "${name}" to your inventory!`, 'success', onToast);
+    } catch {
+      notify('Network error. Please try again.', 'error', onToast);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteCustomSkin(id: string, name: string) {
+    try {
+      const res = await fetch('/api/player/custom-skins', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        notify((data as { error?: string }).error || 'Failed to delete.', 'error', onToast);
+        return;
+      }
+      // If this was the currently equipped skin, clear it
+      if (customState?.useCustomSkin && customState.currentSkin === id) {
+        const next: CustomSkinState = { ...customState, useCustomSkin: false };
+        writeCustomSkinState(next);
+        setCustomState(next);
+      }
+      await refresh();
+      notify(`Deleted "${name}" from inventory.`, 'info', onToast);
+    } catch {
+      notify('Network error.', 'error', onToast);
+    }
+  }
+
   // -- derived lists --------------------------------------------------------
-  // Merge pass cosmetics that the player has already claimed (so they can re-equip)
   const passOwnedIds: Set<string> = new Set(player?.unlockedSkins ?? []);
   const passOwnedCosmetics = [...PASS_FREE_COSMETICS, ...PASS_ELITE_COSMETICS].filter(
     (c) => passOwnedIds.has(c.id),
@@ -333,14 +416,19 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
 
   const manufacturedSkins = allVisible.filter((c) => c.type === 'skin');
 
-  const showPresetsTab =
-    activeCategory === 'all' || activeCategory === 'presets';
-  const showPremiumTab =
-    activeCategory === 'all' || activeCategory === 'premium';
+  const showPresetsTab = activeCategory === 'all' || activeCategory === 'presets';
+  const showPremiumTab = activeCategory === 'all' || activeCategory === 'premium';
 
   const isCustomLabDeployed =
     customState?.useCustomSkin === true &&
     customState.currentSkin === 'custom-lab-skin';
+
+  const customSkinSlotsUsed = p.customSkins?.length ?? 0;
+  const MAX_CUSTOM = 5;
+
+  // -- inventory items: pass-claimed + custom skins --------------------------
+  const inventoryPassSkins = passOwnedCosmetics.filter((c) => c.type === 'skin');
+  const inventoryCustomSkins = p.customSkins ?? [];
 
   return (
     <div
@@ -366,6 +454,17 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
 
         {/* View-mode tabs */}
         <div className="flex bg-slate-950 p-1 lg:p-0.5 rounded-xl border border-slate-800/80 w-fit shrink-0">
+          <button
+            type="button"
+            onClick={() => setShopView('inventory')}
+            className={`px-4 py-2 lg:px-2 lg:py-1 rounded-lg text-xs lg:text-[11px] font-sans font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              shopView === 'inventory'
+                ? 'bg-emerald-600 text-white shadow'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Backpack className="w-4 h-4 lg:w-3 lg:h-3" /> My Inventory
+          </button>
           <button
             type="button"
             onClick={() => setShopView('presets')}
@@ -404,11 +503,135 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
 
       {/* BODY */}
       {shopView === 'cosmetics' ? (
-        <CosmeticsSection onToast={onToast} activeSkinId={
-          customState?.useCustomSkin
-            ? customState.currentSkin
-            : p.currentSkin
-        } />
+        <CosmeticsSection onToast={onToast} activeSkinId={activeSkinId} />
+      ) : shopView === 'inventory' ? (
+        /* ────────────── MY INVENTORY ────────────── */
+        <div className="animate-fade-in space-y-6 lg:space-y-1">
+          {/* Slot counter */}
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[11px] text-slate-400 font-mono">
+              CUSTOM SLOTS: <span className="text-emerald-400 font-black">{customSkinSlotsUsed}</span>/{MAX_CUSTOM}
+            </span>
+            <button
+              type="button"
+              onClick={() => { setSaveDialogOpen(true); setSaveName(''); }}
+              disabled={customSkinSlotsUsed >= MAX_CUSTOM}
+              className="px-3 py-1.5 lg:px-1.5 lg:py-0.5 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-bold text-[11px] rounded-lg transition flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed"
+            >
+              <Plus className="w-3.5 h-3.5" /> Save Current Lab Design
+            </button>
+          </div>
+
+          {/* Pass-claimed skins */}
+          {inventoryPassSkins.length > 0 && (
+            <div>
+              <h3 className="text-xs font-bold text-slate-300 mb-3 lg:mb-1 flex items-center gap-1.5">
+                🏆 Pass & Premium Skins
+                <span className="text-slate-500 font-normal">({inventoryPassSkins.length})</span>
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-1.5">
+                {inventoryPassSkins.map((item) => {
+                  const isActive = isSkinActive(item);
+                  return (
+                    <SkinCard
+                      key={item.id}
+                      item={item}
+                      unlocked={true}
+                      active={isActive}
+                      canAfford={true}
+                      accent="emerald"
+                      onClick={() => void handleEquipInventorySkin(item.id)}
+                      equipLabel={isActive ? 'Equipped' : 'Equip Skin'}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Custom lab skins from DB */}
+          {inventoryCustomSkins.length > 0 && (
+            <div>
+              <h3 className="text-xs font-bold text-slate-300 mb-3 lg:mb-1 flex items-center gap-1.5">
+                🧬 My Custom Designs
+                <span className="text-slate-500 font-normal">({inventoryCustomSkins.length})</span>
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-1.5">
+                {inventoryCustomSkins.map((entry) => {
+                  const isActive = isCustomSkinActive(entry);
+                  const segments = generateCustomSegments(
+                    entry.colors,
+                    entry.bodyStyle as BodyStyle,
+                    entry.taperStyle as TaperStyle,
+                    entry.glow,
+                  );
+                  return (
+                    <div
+                      key={entry.id}
+                      className={`bg-slate-950 border rounded-xl p-4 lg:p-1.5 transition-all ${
+                        isActive
+                          ? 'border-emerald-500 shadow shadow-emerald-950'
+                          : 'border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      {/* Mini preview */}
+                      <GameSnakePreview
+                        colors={entry.colors}
+                        bodyStyle={entry.bodyStyle as BodyStyle}
+                        taperStyle={entry.taperStyle as TaperStyle}
+                        glow={entry.glow}
+                        width={280}
+                        height={60}
+                        segments={14}
+                        speed={1.0}
+                        scale={0.9}
+                        responsive
+                      />
+                      <div className="mt-3 lg:mt-0.5 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-bold text-white truncate">{entry.name}</p>
+                          <p className="text-[10px] text-slate-500">Custom Design</p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteCustomSkin(entry.id, entry.name)}
+                            className="p-1.5 lg:p-0.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-950/20 transition cursor-pointer"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleEquipInventorySkin(entry.id)}
+                            className={`px-3 py-1.5 lg:px-1.5 lg:py-0.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                              isActive
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white'
+                            }`}
+                          >
+                            {isActive ? 'Equipped' : 'Equip'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {inventoryPassSkins.length === 0 && inventoryCustomSkins.length === 0 && (
+            <div className="text-center py-12">
+              <Backpack className="w-12 h-12 text-slate-700 mx-auto mb-3" />
+              <p className="text-slate-400 text-sm">Your inventory is empty.</p>
+              <p className="text-slate-500 text-xs mt-1">
+                Claim skins from the Season Pass or save designs from the Genetic Lab.
+              </p>
+            </div>
+          )}
+        </div>
       ) : shopView === 'presets' ? (
         <div className="animate-fade-in">
           {/* Category filters */}
@@ -474,14 +697,12 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
                   />
                 );
               })}
-
-
           </div>
         </div>
       ) : (
         /* GENETIC PATTERN LAB */
         <div className="animate-fade-in grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-1">
-          {/* LEFT COLUMN — Game-accurate roaming snake preview + Projector card */}
+          {/* LEFT COLUMN */}
           <div className="lg:col-span-5 flex flex-col gap-4 lg:gap-0.5">
             <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 lg:p-1.5">
               <GameSnakePreview
@@ -519,26 +740,43 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
                 </span>
               </div>
 
+              <div className="flex gap-2 mt-4 lg:mt-0.5">
+                <button
+                  type="button"
+                  onClick={handleDeployCustomSkin}
+                  className={`flex-1 py-3 lg:py-1.5 rounded-xl text-xs lg:text-[11px] font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md ${
+                    isCustomLabDeployed
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-emerald-950'
+                      : 'bg-purple-600 hover:bg-purple-500 text-white border border-purple-500 hover:shadow-purple-500/20'
+                  }`}
+                >
+                  {isCustomLabDeployed ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 lg:w-3 lg:h-3 text-emerald-100 animate-bounce" />{' '}
+                      DNA DEPLOYED &amp; EQUIPPED (ACTIVE)
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-4 h-4 lg:w-3 lg:h-3 text-purple-100" /> DEPLOY TO
+                      BATTLE-ARENA
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Save to Inventory button */}
               <button
                 type="button"
-                onClick={handleDeployCustomSkin}
-                className={`w-full mt-4 lg:mt-0.5 py-3 lg:py-1.5 rounded-xl text-xs lg:text-[11px] font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md ${
-                  isCustomLabDeployed
-                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-emerald-950'
-                    : 'bg-purple-600 hover:bg-purple-500 text-white border border-purple-500 hover:shadow-purple-500/20'
+                onClick={() => { setSaveDialogOpen(true); setSaveName(''); }}
+                disabled={customSkinSlotsUsed >= MAX_CUSTOM}
+                className={`w-full mt-2 py-2.5 lg:py-1.5 rounded-xl text-xs lg:text-[11px] font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border ${
+                  customSkinSlotsUsed >= MAX_CUSTOM
+                    ? 'bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed'
+                    : 'bg-slate-900 hover:bg-slate-800 border-emerald-800/40 text-emerald-400 hover:text-emerald-300 hover:border-emerald-600/50'
                 }`}
               >
-                {isCustomLabDeployed ? (
-                  <>
-                    <CheckCircle2 className="w-4 h-4 lg:w-3 lg:h-3 text-emerald-100 animate-bounce" />{' '}
-                    DNA DEPLOYED &amp; EQUIPPED (ACTIVE)
-                  </>
-                ) : (
-                  <>
-                    <Wand2 className="w-4 h-4 lg:w-3 lg:h-3 text-purple-100" /> DEPLOY TO
-                    BATTLE-ARENA
-                  </>
-                )}
+                <Save className="w-4 h-4 lg:w-3 lg:h-3" />
+                SAVE TO INVENTORY ({customSkinSlotsUsed}/{MAX_CUSTOM})
               </button>
             </div>
           </div>
@@ -717,6 +955,79 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── SAVE TO INVENTORY DIALOG ─── */}
+      {saveDialogOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Save className="w-4 h-4 text-emerald-400" /> Save to Inventory
+              </h3>
+              <button
+                type="button"
+                onClick={() => setSaveDialogOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Preview of current design */}
+            <div className="bg-slate-950 rounded-xl p-3 mb-4">
+              <GameSnakePreview
+                colors={colorSequence}
+                bodyStyle={bodyStyle}
+                taperStyle={taperStyle}
+                glow={false}
+                width={280}
+                height={50}
+                segments={16}
+                speed={1.0}
+                scale={0.8}
+                responsive
+              />
+            </div>
+
+            <label className="block text-[11px] text-slate-400 font-semibold mb-1.5">
+              NAME YOUR SKIN
+            </label>
+            <input
+              type="text"
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value.slice(0, 30))}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSaveToInventory(); }}
+              placeholder="e.g. Shadow Viper"
+              autoFocus
+              className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+            />
+
+            <div className="flex gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => setSaveDialogOpen(false)}
+                className="flex-1 py-2 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveToInventory}
+                disabled={saving || !saveName.trim()}
+                className="flex-1 py-2 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white transition cursor-pointer disabled:cursor-not-allowed"
+              >
+                {saving ? 'Saving...' : 'Save Skin'}
+              </button>
+            </div>
+
+            {customSkinSlotsUsed >= MAX_CUSTOM && (
+              <p className="text-[10px] text-amber-400 mt-2 text-center">
+                Inventory full! Delete a skin to make room.
+              </p>
+            )}
           </div>
         </div>
       )}

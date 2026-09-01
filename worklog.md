@@ -203,3 +203,35 @@ Stage Summary:
 - Extraction now always succeeds: effective amount = max(collected star chips, arena buy-in)
 - Commission calculated on effectiveChips (0% if ≤3 real players, 35% if ≥4)
 - Full flow: ring 100% → sendExtract → server accepts → matchEnd → extraction success screen
+---
+Task ID: 1
+Agent: Main
+Task: Add inventory system for skin shop and lab
+
+Work Log:
+- Added `customSkins` JSON field to Prisma schema (max 5 named custom skins per player)
+- Ran db:push to apply schema migration
+- Created `/api/player/custom-skins` API route with GET/POST/DELETE for custom skin CRUD
+- Added `CustomSkinEntry` type to `player-helpers.ts` and updated `toProfile()` to parse it
+- Added `customSkins` to `PlayerProfile` interface in `types.ts`
+- Added `'inventory'` to `ShopView` type in `cosmetics-types.ts`
+- Rebuilt `cosmetics-shop.tsx` with:
+  - New "My Inventory" tab (first tab, emerald color)
+  - Inventory view showing pass-claimed skins + custom lab skins with equip/delete buttons
+  - "Save to Inventory" button in Genetic Lab with naming dialog (max 5 slots)
+  - Full equip flow for all skin types (pass, premium, preset, custom DB)
+- Updated `skin-registry.ts` to handle custom DB skin IDs (starts with 'custom-'):
+  - Added `registerCustomSkinData()`, `getCustomSkinColors()`, `getCustomSkinSegments()`, `isCustomDBSkin()` exports
+  - Updated `getPlayerSkinAsset()` to resolve custom DB skins from localStorage segments
+  - Updated `getSegmentColor()` and `isMultiColorSkin()` for custom DB skins
+- Updated `render-snake-atlas.tsx` to check custom skin cache for remote player rendering
+- Updated `match/verify` route to include `customSkinData` in verify response
+- Updated game server `ConnectedPlayer` interface with `customSkinData` field
+- Added `customSkin` socket event broadcast when player joins arena
+- Updated `game-socket.ts` to handle `customSkin` events and register remote skins
+
+Stage Summary:
+- Players can now see all claimed pass skins + saved custom lab skins in "My Inventory" tab
+- Up to 5 custom skins can be saved from the Genetic Lab with user-given names
+- All skins (pass, premium, preset, custom) can be equipped and render in both online and offline modes
+- Custom skin data is synced through the game server so other online players can see custom skins

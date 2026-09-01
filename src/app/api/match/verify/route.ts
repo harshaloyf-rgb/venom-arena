@@ -32,23 +32,35 @@ export async function POST(req: NextRequest) {
     const skin = getCosmeticById(p.currentSkin);
 
     // Determine rarity from the cosmetic skin's cost, or from the skin ID.
-    // Preset skins (preset-*) and custom-lab-skin don't exist in the cosmetics DB,
-    // so their color/rarity are resolved client-side. The server only needs the
-    // skinId so the client can look up the correct local skin asset.
     let skinId = p.currentSkin || 'skin-default';
     let rarity = 'common';
     if (skin) {
-      // Cosmetic skin — use its color/rarity
       if (skin.cost <= 200) rarity = 'common';
       else if (skin.cost <= 500) rarity = 'rare';
       else if (skin.cost <= 1000) rarity = 'epic';
       else rarity = 'legendary';
     } else if (skinId.startsWith('preset-')) {
-      // Preset skin — colors resolved client-side from SLITHER_PRESETS
       rarity = 'common';
-    } else if (skinId === 'custom-lab-skin') {
-      // Custom lab skin — colors resolved client-side from localStorage
+    } else if (skinId === 'custom-lab-skin' || skinId.startsWith('custom-')) {
       rarity = 'rare';
+    }
+
+    // Resolve custom skin segment data if the player is using a custom DB skin
+    let customSkinData: { id: string; colors: string[]; bodyStyle: string; taperStyle: string; glow: boolean } | null = null;
+    if (skinId.startsWith('custom-')) {
+      try {
+        const customSkins = JSON.parse(p.customSkins || '[]') as any[];
+        const found = customSkins.find((s) => s.id === skinId);
+        if (found) {
+          customSkinData = {
+            id: found.id,
+            colors: found.colors,
+            bodyStyle: found.bodyStyle,
+            taperStyle: found.taperStyle,
+            glow: found.glow,
+          };
+        }
+      } catch {}
     }
 
     return NextResponse.json({
@@ -73,6 +85,7 @@ export async function POST(req: NextRequest) {
         clanTag: p.clanTag,
         clanRank: p.clanRank,
         role: p.role,
+        customSkinData,
       },
     });
   } catch (e) {

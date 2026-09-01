@@ -327,7 +327,7 @@ export const CUSTOM_SKIN_KEY = 'venom_custom_skin_state';
 // ---------------------------------------------------------------------------
 // Shop UI types & constants
 // ---------------------------------------------------------------------------
-export type ShopView = 'presets' | 'editor' | 'cosmetics';
+export type ShopView = 'inventory' | 'presets' | 'editor' | 'cosmetics';
 export type CategoryFilter =
   | 'all'
   | 'presets'

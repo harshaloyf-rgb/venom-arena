@@ -112,10 +112,7 @@ for (const preset of SLITHER_PRESETS) {
 }
 
 // ─── Built-in DEFAULT_SKINS from atlas.ts (already have SkinAsset format) ───
-// These are imported from atlas.ts by the game, registered here for completeness.
 
-// Pre-built map of DEFAULT_SKINS for getSkinAsset() lookup.
-// Populated by registerDefaultSkins() called from GameCanvas on mount.
 const _defaultSkinMap = new Map<string, SkinAsset>();
 
 /** Register the built-in default skins (called once from GameCanvas) */
@@ -125,11 +122,42 @@ export function registerDefaultSkins(skins: SkinAsset[]): void {
   }
 }
 
+// ─── Custom DB Skin cache ──────────────────────────────────────────────────
+// Custom skins from the inventory (saved via Genetic Lab) are stored in the DB
+// and loaded into this map at runtime. The segments are stored in localStorage
+// when equipped, so the game renderer can access them.
+
+const customSkinSegmentsCache = new Map<string, { colors: string[]; segments: any[] }>();
+
+/**
+ * Register a custom skin's segment data for the renderer.
+ * Called when a custom skin is equipped — stores segments in localStorage
+ * and caches the colors for getSegmentColor().
+ */
+export function registerCustomSkinData(skinId: string, colors: string[], segments: any[]): void {
+  customSkinSegmentsCache.set(skinId, { colors, segments });
+}
+
+/** Get cached custom skin colors for segment rendering */
+export function getCustomSkinColors(skinId: string): string[] | null {
+  return customSkinSegmentsCache.get(skinId)?.colors ?? null;
+}
+
+/** Get cached custom skin segments for full rendering */
+export function getCustomSkinSegments(skinId: string): any[] | null {
+  return customSkinSegmentsCache.get(skinId)?.segments ?? null;
+}
+
+/** Check if a skin ID is a custom DB skin (starts with 'custom-' but not 'custom-lab-skin') */
+export function isCustomDBSkin(skinId: string): boolean {
+  return skinId.startsWith('custom-') && skinId !== 'custom-lab-skin';
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
  * Get a SkinAsset for any skin ID.
- * Checks: cosmetic skins → presets → custom lab → returns default.
+ * Checks: cosmetic skins → presets → custom lab → custom DB skins → default.
  */
 export function getSkinAsset(skinId: string): SkinAsset {
   // 1. Check premium/cosmetic skins
@@ -140,16 +168,24 @@ export function getSkinAsset(skinId: string): SkinAsset {
   const preset = presetSkinMap.get(skinId);
   if (preset) return preset;
 
-  // 3. Check DEFAULT_SKINS from atlas (those are already SkinAsset format)
+  // 3. Check DEFAULT_SKINS from atlas
   const defaultSkin = _defaultSkinMap.get(skinId);
   if (defaultSkin) return defaultSkin;
 
-  // 4. Fallback: create a solid skin from the ID's hash if it's a custom skin
+  // 4. Custom lab skin from localStorage
   if (skinId === 'custom-lab-skin') {
     return getCustomLabSkin();
   }
 
-  // 5. Ultimate fallback — use skin-viper-green as the true default
+  // 5. Custom DB skin (starts with 'custom-' and has cached data)
+  if (isCustomDBSkin(skinId)) {
+    const cached = customSkinSegmentsCache.get(skinId);
+    if (cached?.segments?.length) {
+      return buildSkinAssetFromSegments(skinId, cached.segments);
+    }
+  }
+
+  // 6. Ultimate fallback
   const viper = _defaultSkinMap.get('skin-viper-green');
   if (viper) return { ...viper, id: skinId };
   return {
@@ -166,50 +202,49 @@ export function getSkinAsset(skinId: string): SkinAsset {
 
 /**
  * Read the player's currently active skin as a SkinAsset.
- * Priority: custom lab/preset from localStorage > server's currentSkin.
- *
- * @param serverSkinId - The skin ID stored on the server (player.currentSkin)
+ * Priority: custom skin from localStorage > server's currentSkin.
  */
 export function getPlayerSkinAsset(serverSkinId: string): SkinAsset {
-  // Only runs client-side (called from React components)
   if (typeof window === 'undefined') {
     return getSkinAsset(serverSkinId);
   }
 
-  // Check localStorage for custom skin override.
-  // FIX: Only use localStorage override when the server confirms the player is
-  // actually using that skin. Without this check, switching users on the same
-  // browser (e.g., admin → guest) would inherit the previous user's custom skin
-  // from localStorage, since localStorage is per-browser not per-user.
   try {
     const raw = localStorage.getItem(CUSTOM_SKIN_KEY);
     if (raw) {
       const state: CustomSkinState = JSON.parse(raw);
       if (state.useCustomSkin) {
-        const matchesServer = serverSkinId === state.currentSkin
-          || (state.currentSkin === 'custom-lab-skin' && serverSkinId === 'custom-lab-skin');
+        const matchesServer = serverSkinId === state.currentSkin;
         if (matchesServer) {
-          // Player has activated a custom skin (preset or DNA lab) and server confirms it
+          // Custom lab skin
           if (state.currentSkin === 'custom-lab-skin') {
             return getCustomLabSkinFromState(state);
           }
-          // It's a preset
+          // Preset
           const preset = presetSkinMap.get(state.currentSkin);
           if (preset) return preset;
+          // Custom DB skin — segments stored in localStorage via equip
+          if (isCustomDBSkin(state.currentSkin) && state.customSkinSegments?.length) {
+            // Register in cache so the renderer can use them
+            registerCustomSkinData(
+              state.currentSkin,
+              state.customSkinSegments.map(s => s.color),
+              state.customSkinSegments,
+            );
+            return buildSkinAssetFromSegments(state.currentSkin, state.customSkinSegments);
+          }
         }
       }
     }
   } catch {
-    // localStorage not available or corrupt — fall through
+    // localStorage not available or corrupt
   }
 
-  // Use server-side skin
   return getSkinAsset(serverSkinId);
 }
 
 // ─── Custom Lab Skin ─────────────────────────────────────────────────────────
 
-/** Build a SkinAsset from the DNA Lab's custom segments in localStorage */
 function getCustomLabSkin(): SkinAsset {
   try {
     const raw = localStorage.getItem(CUSTOM_SKIN_KEY);
@@ -234,30 +269,7 @@ function getCustomLabSkin(): SkinAsset {
 function getCustomLabSkinFromState(state: CustomSkinState): SkinAsset {
   const segs = state.customSkinSegments;
   if (segs && segs.length > 0) {
-    const bodyColor = segs[0].color;
-    const headColor = segs[0].color;
-    const accentColor = segs.length > 1 ? segs[1].color : lightenHex(bodyColor, 0.3);
-
-    // Detect pattern from segment shapes
-    const shapes = new Set(segs.map((s) => s.shape));
-    let pattern: SkinAsset['pattern'] = 'solid';
-    if (shapes.has('spike')) pattern = 'spotted';
-    else if (shapes.has('diamond')) pattern = 'gradient';
-    else if (shapes.has('square')) pattern = 'striped';
-
-    // Detect glow
-    const hasGlow = segs.some((s) => s.glow);
-
-    return {
-      id: 'custom-lab-skin',
-      name: 'Custom Lab Skin',
-      rarity: 'rare',
-      bodyColor,
-      headColor,
-      accentColor,
-      pattern,
-      animation: hasGlow ? 'glow' : 'none',
-    };
+    return buildSkinAssetFromSegments('custom-lab-skin', segs);
   }
 
   return {
@@ -272,17 +284,40 @@ function getCustomLabSkinFromState(state: CustomSkinState): SkinAsset {
   };
 }
 
+/** Build a SkinAsset from custom segment data */
+function buildSkinAssetFromSegments(skinId: string, segs: any[]): SkinAsset {
+  const bodyColor = segs[0].color;
+  const headColor = segs[0].color;
+  const accentColor = segs.length > 1 ? segs[1].color : lightenHex(bodyColor, 0.3);
+
+  const shapes = new Set(segs.map((s: any) => s.shape));
+  let pattern: SkinAsset['pattern'] = 'solid';
+  if (shapes.has('spike')) pattern = 'spotted';
+  else if (shapes.has('diamond')) pattern = 'gradient';
+  else if (shapes.has('square')) pattern = 'striped';
+  else if (segs.some((s: any) => s.color !== bodyColor)) pattern = 'striped';
+
+  const hasGlow = segs.some((s: any) => s.glow);
+
+  return {
+    id: skinId,
+    name: 'Custom Skin',
+    rarity: 'rare',
+    bodyColor,
+    headColor,
+    accentColor,
+    pattern,
+    animation: hasGlow ? 'glow' : 'none',
+  };
+}
+
 // ─── Multi-color pattern support ─────────────────────────────────────────────
-// For presets and custom skins with multiple colors, we generate alternating
-// body segment colors. The renderer uses the body region index, so we can
-// create multiple atlas entries.
 
 /**
  * Get the body color for a specific segment index of a multi-color skin.
- * Falls back to the skin's base bodyColor for single-color skins.
  */
 export function getSegmentColor(skinId: string, segmentIndex: number): string | null {
-  // Check presets (they have colors arrays)
+  // Check presets
   const preset = SLITHER_PRESETS.find((p) => p.id === skinId);
   if (preset) {
     return preset.colors[segmentIndex % preset.colors.length];
@@ -302,13 +337,31 @@ export function getSegmentColor(skinId: string, segmentIndex: number): string | 
     } catch { /* fall through */ }
   }
 
-  return null; // Use atlas default
+  // Check custom DB skins
+  if (isCustomDBSkin(skinId)) {
+    // First check localStorage (most up to date when equipped)
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(CUSTOM_SKIN_KEY);
+        if (raw) {
+          const state: CustomSkinState = JSON.parse(raw);
+          if (state.useCustomSkin && state.currentSkin === skinId && state.customSkinSegments?.length) {
+            return state.customSkinSegments[segmentIndex % state.customSkinSegments.length].color;
+          }
+        }
+      } catch { /* fall through */ }
+    }
+    // Then check runtime cache
+    const cached = customSkinSegmentsCache.get(skinId);
+    if (cached?.colors?.length) {
+      return cached.colors[segmentIndex % cached.colors.length];
+    }
+  }
+
+  return null;
 }
 
-/**
- * Register additional skins at runtime (e.g., DEFAULT_SKINS from atlas.ts).
- * This allows the game to register its built-in skins into the registry.
- */
+/** Register additional skins at runtime */
 export function registerSkinAsset(asset: SkinAsset): void {
   if (!cosmeticSkinMap.has(asset.id) && !presetSkinMap.has(asset.id)) {
     cosmeticSkinMap.set(asset.id, asset);
@@ -320,7 +373,6 @@ export function isMultiColorSkin(skinId: string): boolean {
   const preset = SLITHER_PRESETS.find((p) => p.id === skinId);
   if (preset && preset.colors.length > 1) return true;
   if (skinId === 'custom-lab-skin') return true;
+  if (isCustomDBSkin(skinId)) return true;
   return false;
 }
-
-

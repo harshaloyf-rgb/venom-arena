@@ -4,6 +4,8 @@
 // ============================================================================
 
 import { io, Socket } from 'socket.io-client';
+import { registerCustomSkinData } from '@/lib/snake/skin-registry';
+import { generateCustomSegments } from '@/components/panels/cosmetics/cosmetics-utils';
 
 // ─── Snapshot Types (compact format — shortened keys for bandwidth) ────────
 
@@ -249,6 +251,21 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
           console.log('[GameSocket] Joined arena:', data.arenaId, 'as', data.snakeId);
           serverMapHalf = data.config?.mapHalf ?? null;
           emit();
+        });
+
+        socket.on('customSkin', (data: { snakeId: string; skinId: string; data: { id: string; colors: string[]; bodyStyle: string; taperStyle: string; glow: boolean } }) => {
+          // Register remote player's custom skin so renderer can draw it
+          try {
+            const segments = generateCustomSegments(
+              data.data.colors,
+              data.data.bodyStyle as any,
+              data.data.taperStyle as any,
+              data.data.glow,
+            );
+            registerCustomSkinData(data.skinId, data.data.colors, segments);
+          } catch (e) {
+            console.warn('[GameSocket] Failed to register remote custom skin:', e);
+          }
         });
 
         socket.on('snapshot', (raw: any) => {

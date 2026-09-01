@@ -2,6 +2,44 @@ import { db } from './db';
 import type { Player } from '@prisma/client';
 import type { PlayerProfile } from './types';
 
+// ─── Custom Skin Entry ─────────────────────────────────────────────────────
+
+export interface CustomSkinEntry {
+  id: string;
+  name: string;
+  colors: string[];
+  bodyStyle: string;
+  taperStyle: string;
+  glow: boolean;
+  createdAt: string;
+}
+
+function parseCustomSkins(raw: string | null | undefined): CustomSkinEntry[] {
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr.filter(isValidEntry);
+  } catch {
+    return [];
+  }
+}
+
+function isValidEntry(e: unknown): e is CustomSkinEntry {
+  if (!e || typeof e !== 'object') return false;
+  const o = e as Record<string, unknown>;
+  return (
+    typeof o.id === 'string' &&
+    typeof o.name === 'string' &&
+    Array.isArray(o.colors) &&
+    o.colors.every((c: unknown) => typeof c === 'string') &&
+    typeof o.bodyStyle === 'string' &&
+    typeof o.taperStyle === 'string' &&
+    typeof o.glow === 'boolean' &&
+    typeof o.createdAt === 'string'
+  );
+}
+
 function safeParseArray(val: string | null | undefined): number[] {
   if (!val) return [];
   try {
@@ -80,6 +118,7 @@ export function toProfile(p: Player): PlayerProfile {
     currentDeath: p.currentDeath,
     currentFlag: p.currentFlag,
     currentBanner: p.currentBanner,
+    customSkins: parseCustomSkins(p.customSkins),
     hasElitePass: p.hasElitePass,
     passClaimedFree: safeParseArray(p.passClaimedFree),
     passClaimedElite: safeParseArray(p.passClaimedElite),

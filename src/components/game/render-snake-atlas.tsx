@@ -10,6 +10,7 @@ import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
 import { isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
 import { renderEquippedCosmetics, readEquippedCosmetics, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
 import { drawSegmentShape, readCustomSkinState, getSkinVisualProps, getPresetVisualProps, resolveShapeStyle, computeTaperRadius, setSpriteDpr, lightenHex, darkenHex } from '../panels/cosmetics/cosmetics-utils';
+import { isCustomDBSkin, getCustomSkinSegments } from '@/lib/snake/skin-registry';
 import type { CustomSkinState } from '@/components/panels/cosmetics/cosmetics-types';
 import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-types';
 import { incrementCoilFrame } from './coil-path';
@@ -1065,12 +1066,15 @@ export function renderSnakeFallback(
   // Multi-color skins alternate colors per segment
   const multiColor = cachedIsMultiColor(snake.skinId);
 
-  // Check for custom segments (presets or custom-lab-skin) with shapes/taper/glow
+  // Check for custom segments (presets, custom-lab-skin, or custom DB skins) with shapes/taper/glow
   let customSegments: CustomSegment[] | null = null;
   if (customState?.useCustomSkin === true &&
       customState.currentSkin === snake.skinId &&
       (customState.customSkinSegments?.length ?? 0) > 0) {
     customSegments = customState.customSkinSegments;
+  } else if (isCustomDBSkin(snake.skinId)) {
+    // Check runtime cache for custom DB skin segments (for online sync)
+    customSegments = getCustomSkinSegments(snake.skinId);
   }
 
   // Check for pattern-based visual props (manufactured skins with neon/rainbow/etc.)
