@@ -545,7 +545,6 @@ export function createInitialState(
   const state: GameState = {
     snakes: new Map(), foods: [], player: null,
     nextFoodId: 0, showControls: true, tickCount: 0,
-    extractionZone: { x: 0, y: 0, radius: 0, active: false },
     botsEnabled: false,
     arenaConfig,
     boundaryRadius: arenaConfig.mapHalf,

@@ -310,8 +310,6 @@ export interface GameState {
   showControls: boolean;
   /** Current tick count (monotonic, for snapshot sync) */
   tickCount: number;
-  /** Extraction zone: center x, center y, current radius */
-  extractionZone: { x: number; y: number; radius: number; active: boolean };
   /** Whether offline bots are enabled (false in online mode) */
   botsEnabled: boolean;
   /** Per-arena configuration (map size, food, bots, AI) */

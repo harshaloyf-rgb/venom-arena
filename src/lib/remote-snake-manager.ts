@@ -407,7 +407,6 @@ export class RemoteSnakeManager {
       nextFoodId: 0,
       showControls: false,
       tickCount: snap.tick,
-      extractionZone: { x: 0, y: 0, radius: 0, active: false },
       botsEnabled: true,
       arenaConfig,
       boundaryRadius: snap.boundaryRadius,

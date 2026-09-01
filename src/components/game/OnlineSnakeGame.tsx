@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X, Zap, CircleDot, Wifi, WifiOff, Trophy, Coins, UserPlus, Swords, LogOut, Skull, Eye } from 'lucide-react';
+import { X, Zap, CircleDot, Wifi, WifiOff, Trophy, Coins, UserPlus, Swords, LogOut, Skull, Eye, ShieldCheck, TrendingUp } from 'lucide-react';
+import { toast } from 'sonner';
 import { useAuth } from '@/components/providers/auth-provider';
 import { createGameSocket, type GameSnapshot, type ConnectionStatus } from '@/lib/game-socket';
 import { RemoteSnakeManager } from '@/lib/remote-snake-manager';
@@ -153,6 +154,10 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
   const controlsDismissedRef = useRef(false);
   const leaderboardTimerRef = useRef(0);
   const extractionRef = useRef(createExtractionState());
+  const extractDataRef = useRef<{
+    score: number; kills: number; durationSeconds: number;
+    carriedChips: number; commission: number; bankedAmount: number; chipsEarned: number;
+  } | null>(null);
 
   // ── React state (ONLY for JSX) ──
   const [displayStatus, setDisplayStatus] = useState<ConnectionStatus>('disconnected');
@@ -173,10 +178,23 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     chipsLost: number;
     reason: string;
   } | null>(null);
+
+  // ── Extraction success screen data ──
+  const [extractData, setExtractData] = useState<{
+    score: number;
+    kills: number;
+    durationSeconds: number;
+    carriedChips: number;
+    commission: number;
+    bankedAmount: number;
+    chipsEarned: number;
+  } | null>(null);
+  const [showExtractScreen, setShowExtractScreen] = useState(false);
   const [friendStatus, setFriendStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [rivalStatus, setRivalStatus] = useState<'idle' | 'adding' | 'added' | 'error'>('idle');
   const showDeathScreenRef = useRef(false);
   const [showDeathScreen, setShowDeathScreen] = useState(false);
+  const showExtractScreenRef = useRef(false);
   useEffect(() => {
     if (!isDead || !deathData) {
       showDeathScreenRef.current = false;
@@ -191,6 +209,12 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     }, delay);
     return () => clearTimeout(t);
   }, [isDead, deathData]);
+  useEffect(() => {
+    if (!extractData || showExtractScreenRef.current) return;
+    showExtractScreenRef.current = true;
+    const t = setTimeout(() => setShowExtractScreen(true), 800);
+    return () => clearTimeout(t);
+  }, [extractData]);
 
   // ── Stable leaderboard callback ──
   const lbModeRef = useRef(lbMode);
@@ -246,20 +270,50 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         }
         // Death detection
         if (state.matchEnd && !isDeadRef.current) {
-          console.log('[DeathScreen] matchEnd data:', JSON.stringify(state.matchEnd), 'killerName:', state.killerName);
+          console.log('[GameEnd] matchEnd data:', JSON.stringify(state.matchEnd));
           isDeadRef.current = true;
           deathTimeRef.current = performance.now();
           setIsDead(true);
-          setDeathData({
-            killerName: state.killerName,
-            killerTag: state.killerTag,
-            killerIsBot: state.killerIsBot,
-            score: state.matchEnd.score,
-            kills: state.matchEnd.kills || 0,
-            durationSeconds: state.matchEnd.durationSeconds || 0,
-            chipsLost: state.matchEnd.chipsLost ?? 0,
-            reason: state.matchEnd.reason || '',
-          });
+
+          if (state.matchEnd.outcome === 'extract') {
+            // Extraction success — no 5s elimination banner
+            const ed = {
+              score: state.matchEnd.score,
+              kills: state.matchEnd.kills || 0,
+              durationSeconds: state.matchEnd.durationSeconds || 0,
+              carriedChips: state.matchEnd.carriedChips ?? 0,
+              commission: state.matchEnd.commission ?? 0,
+              bankedAmount: state.matchEnd.bankedAmount ?? 0,
+              chipsEarned: state.matchEnd.chipsEarned ?? 0,
+            };
+            extractDataRef.current = ed;
+            setExtractData(ed);
+          } else {
+            // Death — 5s elimination banner then death screen
+            setDeathData({
+              killerName: state.killerName,
+              killerTag: state.killerTag,
+              killerIsBot: state.killerIsBot,
+              score: state.matchEnd.score,
+              kills: state.matchEnd.kills || 0,
+              durationSeconds: state.matchEnd.durationSeconds || 0,
+              chipsLost: state.matchEnd.chipsLost ?? 0,
+              reason: state.matchEnd.reason || '',
+            });
+          }
+        }
+        // Extract failed — reset extraction so player can retry
+        if (state.extractFailed && !extractData) {
+          const reason = state.extractFailed;
+          // Reset the completed guard so player can try extracting again
+          extractionRef.current.completed = false;
+          extractionRef.current.active = false;
+          extractionRef.current.progress = 0;
+          if (reason === 'no_chips') {
+            toast.error('No chips to extract! Collect star chips from eliminated players first.');
+          } else {
+            toast.error('Extraction failed: ' + reason);
+          }
         }
         if (state.status === 'disconnected' || state.status === 'error') {
           if (!isDeadRef.current) {
@@ -453,10 +507,12 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       sockRef.current?.sendInput(inputState.targetAngle, isBoosting);
 
       // ── Extraction progress (client-side, same as offline) ──
+      // When ring completes, emit 'extract' to server instead of calling onExit
       const frameElapsed = 16; // Approximate frame time
       updateExtractionProgress(
         extractionRef.current, input.isExtracting(), isDeadRef.current,
-        inputState.targetAngle, frameElapsed, onExit,
+        inputState.targetAngle, frameElapsed,
+        () => { sockRef.current?.sendExtract(); },
       );
 
       // ── Build synthetic GameState for shared renderers ──
@@ -653,8 +709,8 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         }
       }
 
-      // ── Death overlay (elimination banner only; React death screen handles after 5s) ──
-      if (isDeadRef.current) {
+      // ── Death overlay (elimination banner for death; extraction skips this) ──
+      if (isDeadRef.current && !extractDataRef.current) {
         const deathElapsed = now - deathTimeRef.current;
         if (deathElapsed < 5000) {
           drawEliminatedBanner(ctx, viewport, deathElapsed);
@@ -952,6 +1008,78 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
                   className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 hover:text-white text-sm font-mono transition-colors cursor-pointer"
                 >
                   <LogOut className="w-3.5 h-3.5" />Exit to Arena
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Online Extraction Success Screen ── */}
+      {showExtractScreen && extractData && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="w-[320px] max-w-[90vw] bg-[#111118] border border-amber-500/20 rounded-2xl p-5 flex flex-col items-center gap-4 shadow-2xl shadow-amber-500/5">
+            {/* Title */}
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-6 h-6 text-amber-400" />
+              <span className="text-xl font-bold text-amber-400 tracking-wide">EXTRACTION SUCCESSFUL</span>
+            </div>
+
+            {/* Chips extracted — big gold number */}
+            <div className="w-full bg-amber-500/5 border border-amber-500/15 rounded-xl p-4 text-center">
+              <div className="text-[10px] text-amber-400/60 font-mono uppercase tracking-wider mb-1">Chips Extracted</div>
+              <div className="text-2xl font-bold text-amber-400 font-mono">{extractData.carriedChips.toLocaleString()}c</div>
+            </div>
+
+            {/* Commission + Banked */}
+            {extractData.commission > 0 ? (
+              <div className="w-full flex flex-col gap-1.5">
+                <div className="flex justify-between items-center px-1">
+                  <span className="text-xs text-white/50 font-mono">Commission (35%)</span>
+                  <span className="text-sm font-bold text-red-400 font-mono">-{extractData.commission.toLocaleString()}c</span>
+                </div>
+                <div className="w-full h-px bg-white/5" />
+                <div className="flex justify-between items-center px-1">
+                  <span className="text-xs text-white/50 font-mono">You Banked</span>
+                  <span className="text-sm font-bold text-green-400 font-mono">+{extractData.bankedAmount.toLocaleString()}c</span>
+                </div>
+              </div>
+            ) : (
+              <div className="w-full flex justify-between items-center px-1 bg-green-500/5 rounded-lg py-2">
+                <span className="text-xs text-green-400/70 font-mono">You Banked (no commission)</span>
+                <span className="text-sm font-bold text-green-400 font-mono">+{extractData.bankedAmount.toLocaleString()}c</span>
+              </div>
+            )}
+
+            {/* Match stats */}
+            <div className="w-full grid grid-cols-3 gap-2">
+              <div className="bg-white/5 rounded-lg px-2 py-2 text-center">
+                <div className="text-[9px] text-white/40 font-mono uppercase">Score</div>
+                <div className="text-sm font-bold text-white font-mono">{Math.floor(extractData.score).toLocaleString()}</div>
+              </div>
+              <div className="bg-white/5 rounded-lg px-2 py-2 text-center">
+                <div className="text-[9px] text-white/40 font-mono uppercase">Kills</div>
+                <div className="text-sm font-bold text-white font-mono">{extractData.kills}</div>
+              </div>
+              <div className="bg-white/5 rounded-lg px-2 py-2 text-center">
+                <div className="text-[9px] text-white/40 font-mono uppercase">Time</div>
+                <div className="text-sm font-bold text-white font-mono">{formatDuration(extractData.durationSeconds)}</div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="w-full flex flex-col gap-2 mt-1">
+              <button
+                onClick={handleRespawn}
+                className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-sm transition-colors cursor-pointer active:scale-[0.98]"
+              >
+                Play Again
+              </button>
+              {onExit && (
+                <button
+                  onClick={onExit}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 hover:text-white text-sm font-mono transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />Back to Arenas
                 </button>
               )}
             </div>

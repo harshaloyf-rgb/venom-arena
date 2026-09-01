@@ -65,11 +65,23 @@ export interface GameSnapshot {
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'error' | 'disconnected';
 
+export interface ExtractData {
+  carriedChips: number;
+  commission: number;
+  bankedAmount: number;
+  chipsEarned: number;
+}
+
 export interface GameSocketState {
   status: ConnectionStatus;
   snapshot: GameSnapshot | null;
   error: string | null;
-  matchEnd: { outcome: string; score: number; kills: number; durationSeconds?: number; reason?: string; killerTag?: string | null; killerIsBot?: boolean; chipsLost?: number } | null;
+  extractFailed: string | null;
+  matchEnd: {
+    outcome: string; score: number; kills: number; durationSeconds?: number; reason?: string;
+    killerTag?: string | null; killerIsBot?: boolean; chipsLost?: number;
+    carriedChips?: number; commission?: number; bankedAmount?: number; chipsEarned?: number;
+  } | null;
   killerName: string | null;
   killerTag: string | null;
   killerIsBot: boolean;
@@ -83,7 +95,12 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
   let currentSnapshot: GameSnapshot | null = null;
   let currentStatus: ConnectionStatus = 'disconnected';
   let currentError: string | null = null;
-  let matchEndData: { outcome: string; score: number; kills: number; durationSeconds?: number; reason?: string; killerTag?: string | null; killerIsBot?: boolean; chipsLost?: number } | null = null;
+  let matchEndData: {
+    outcome: string; score: number; kills: number; durationSeconds?: number; reason?: string;
+    killerTag?: string | null; killerIsBot?: boolean; chipsLost?: number;
+    carriedChips?: number; commission?: number; bankedAmount?: number; chipsEarned?: number;
+  } | null = null;
+  let extractFailedReason: string | null = null;
   let killerName: string | null = null;
   let killerTag: string | null = null;
   let killerIsBot = true;
@@ -100,12 +117,15 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       status: currentStatus,
       snapshot: currentSnapshot,
       error: currentError,
+      extractFailed: extractFailedReason,
       matchEnd: matchEndData,
       killerName,
       killerTag,
       killerIsBot,
       serverMapHalf,
     });
+    // One-shot: clear after emitting so consumer only sees it once
+    extractFailedReason = null;
   }
 
   function parseCompactSnapshot(raw: any): GameSnapshot {
@@ -158,6 +178,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       currentStatus = 'connecting';
       currentError = null;
       matchEndData = null;
+      extractFailedReason = null;
       killerName = null;
       killerTag = null;
       killerIsBot = true;
@@ -185,6 +206,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
         console.log(`[GameSocket] Connecting to region=${playerRegion} port=${gamePort}`);
 
         // 2. Ensure the regional game server is running
+        let serverJustStarted = false;
         try {
           const ensureRes = await fetch(`/api/game-server/ensure?region=${playerRegion}`);
           if (!ensureRes.ok) {
@@ -195,9 +217,16 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
           } else {
             const ensureData = await ensureRes.json();
             if (ensureData.port) gamePort = ensureData.port;
+            if (ensureData.started) serverJustStarted = true;
           }
         } catch {
           console.warn('[GameSocket] Game server ensure check failed — will attempt connection anyway');
+        }
+
+        // 2b. If server was just spawned, wait for Socket.IO to fully initialize
+        if (serverJustStarted) {
+          console.log('[GameSocket] Server just started, waiting 2s for Socket.IO init...');
+          await new Promise(r => setTimeout(r, 2000));
         }
 
         // 3. Connect Socket.IO to the regional game server
@@ -234,7 +263,12 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
           emit();
         });
 
-        socket.on('matchEnd', (data: { outcome: string; score: number; kills: number; durationSeconds?: number; reason?: string; killerTag?: string | null; killerIsBot?: boolean; chipsLost?: number }) => {
+        socket.on('extractFailed', (data: { reason: string }) => {
+          extractFailedReason = data.reason;
+          emit();
+        });
+
+        socket.on('matchEnd', (data: { outcome: string; score: number; kills: number; durationSeconds?: number; reason?: string; killerTag?: string | null; killerIsBot?: boolean; chipsLost?: number; carriedChips?: number; commission?: number; bankedAmount?: number; chipsEarned?: number }) => {
           console.log('[GameSocket] matchEnd received:', JSON.stringify(data));
           matchEndData = data;
           emit();
@@ -253,8 +287,13 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
         });
 
         socket.on('connect_error', (err) => {
-          console.error('[GameSocket] Connect error:', err.message);
-          currentError = err.message;
+          // Transient — Socket.IO will auto-reconnect. Don't set error state.
+          console.warn('[GameSocket] Connect error (reconnecting):', err.message);
+        });
+
+        socket.on('reconnect_failed', () => {
+          console.error('[GameSocket] All reconnection attempts exhausted');
+          currentError = 'Unable to connect to game server';
           currentStatus = 'error';
           emit();
         });
@@ -269,6 +308,12 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       if (socket?.connected) {
         inputSeq++;
         socket.emit('input', { angle, boost, seq: inputSeq });
+      }
+    },
+
+    sendExtract() {
+      if (socket?.connected) {
+        socket.emit('extract');
       }
     },
 

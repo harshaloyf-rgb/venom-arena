@@ -91,7 +91,7 @@ export interface ArenaSnapshot {
   snakes: SnakeSnapshot[];
   foods: Array<{ id: number; x: number; y: number; size: FoodSize; value: number }>;
   starChips: Array<{ id: number; x: number; y: number; value: number }>;
-  extraction: { x: number; y: number; radius: number; active: boolean };
+  // extraction zone removed — not needed
 }
 
 export interface SpatialEntity {
@@ -375,10 +375,7 @@ export const BODY_DOWNSAMPLE_INTERVAL = 3;
 export const FOOD_DOWNSAMPLE_RADIUS = 500;
 export const MAX_SNAKES_PER_SNAPSHOT = 100;
 
-// EXTRACTION
-export const EXTRACTION_ZONE_RADIUS = 800;
-export const EXTRACTION_SCORE_THRESHOLD = 50;
-export const EXTRACTION_SPEED_BONUS = 1.5;
+// EXTRACTION (no zone — players extract anytime, anywhere)
 export const STAR_CHIP_VALUE = 10;
 export const STAR_CHIP_SPAWN_INTERVAL = 5000;
 export const STAR_CHIP_RADIUS = 12;
@@ -386,8 +383,7 @@ export const STAR_CHIP_GLOW = '#fbbf24';
 export const STAR_CHIP_COLORS: string[] = [
   '#fbbf24', '#f59e0b', '#d97706', '#eab308', '#facc15',
 ];
-export const EXTRACTION_ZONE_DURATION = 60000;
-export const EXTRACTION_ZONE_SPAWN_INTERVAL = 120000;
+// Extraction zone constants removed — extraction is zone-free
 
 // ─── Bot AI ─────────────────────────────────────────────────────────────────
 

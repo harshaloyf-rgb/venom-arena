@@ -25,10 +25,8 @@ import {
   SAFE_SPAWN_DIST, SAFE_SPAWN_ATTEMPTS,
   TIGHT_TURN_THRESHOLD, SPIRAL_DETECT_WINDOW, MAX_SPIRAL_ANGLE_DELTA,
   SPIRAL_A, SPIRAL_B,
-  EXTRACTION_ZONE_RADIUS, EXTRACTION_SCORE_THRESHOLD, EXTRACTION_SPEED_BONUS,
   STAR_CHIP_VALUE, STAR_CHIP_SPAWN_INTERVAL, STAR_CHIP_RADIUS,
   STAR_CHIP_GLOW, STAR_CHIP_COLORS,
-  EXTRACTION_ZONE_DURATION, EXTRACTION_ZONE_SPAWN_INTERVAL,
   BODY_DOWNSAMPLE_INTERVAL, FOOD_DOWNSAMPLE_RADIUS, MAX_SNAKES_PER_SNAPSHOT,
   // Utilities
   distSq, angleDirect, getBotTarget,
@@ -118,25 +116,13 @@ export class ArenaRoom {
   tickCount = 0;
   nextFoodId = 0;
   nextStarChipId = 0;
-  extractionZone: { x: number; y: number; radius: number; active: boolean; activatedAt: number };
-  /** Kill events generated this tick (broadcasted by index.ts) */
   pendingKills: KillEvent[] = [];
-  /** Track the extraction zone timer */
-  private lastExtractionSpawn = 0;
   /** Spatial hashes reused each tick */
   private foodHash: SpatialHash = new SpatialHash(SPATIAL_CELL_SIZE);
   private bodyHash: SpatialHash = new SpatialHash(SPATIAL_CELL_SIZE);
 
   constructor(id: string) {
     this.id = id;
-    this.extractionZone = {
-      x: 0,
-      y: 0,
-      radius: EXTRACTION_ZONE_RADIUS,
-      active: false,
-      activatedAt: 0,
-    };
-    this.lastExtractionSpawn = Date.now();
     this.initArena();
   }
 
@@ -293,15 +279,7 @@ export class ArenaRoom {
       this.spawnFoodBatch(Math.min(deficit, FOOD_RESPAWN_BATCH), cx, cy, FOOD_SPAWN_AREA_RADIUS);
     }
 
-    // 5. Extraction zone management
-    this.manageExtractionZone(now);
-
-    // 6. Star chip spawning in extraction zone
-    if (this.extractionZone.active && now % STAR_CHIP_SPAWN_INTERVAL < 20) {
-      this.spawnStarChip(now);
-    }
-
-    // 7. Collisions
+    // 5. Collisions
     this.checkCollisions(now);
 
     // 8. Respawn dead bots
@@ -368,16 +346,6 @@ export class ArenaRoom {
     snake.boosting = canBoost;
     snake.speed = canBoost ? BOOST_SPEED : BASE_SPEED;
 
-    // Extraction zone speed bonus
-    if (this.extractionZone.active && snake.score >= EXTRACTION_SCORE_THRESHOLD) {
-      const ez = this.extractionZone;
-      const dx = snake.path.headX - ez.x;
-      const dy = snake.path.headY - ez.y;
-      if (dx * dx + dy * dy < ez.radius * ez.radius) {
-        snake.speed *= EXTRACTION_SPEED_BONUS;
-      }
-    }
-
     // Move head forward
     const headX = snake.path.headX + Math.cos(snake.angle) * snake.speed;
     const headY = snake.path.headY + Math.sin(snake.angle) * snake.speed;
@@ -430,25 +398,7 @@ export class ArenaRoom {
 
   // ── Star Chips ────────────────────────────────────────────────────────
 
-  private spawnStarChip(now: number): void {
-    const ez = this.extractionZone;
-    if (!ez.active) return;
-
-    const a = Math.random() * Math.PI * 2;
-    const d = Math.random() * ez.radius * 0.8;
-    const colorIdx = Math.floor(Math.random() * STAR_CHIP_COLORS.length);
-
-    this.starChips.push({
-      id: this.nextStarChipId++,
-      x: ez.x + Math.cos(a) * d,
-      y: ez.y + Math.sin(a) * d,
-      value: STAR_CHIP_VALUE,
-      radius: STAR_CHIP_RADIUS,
-      glowColor: STAR_CHIP_GLOW,
-      color: STAR_CHIP_COLORS[colorIdx],
-      spawnTime: now,
-    });
-  }
+  // Star chips no longer spawned via extraction zone
 
   private checkStarChips(_now: number): void {
     if (this.starChips.length === 0) return;
@@ -472,33 +422,6 @@ export class ArenaRoom {
 
     if (collected.size > 0) {
       this.starChips = this.starChips.filter(c => !collected.has(c.id));
-    }
-  }
-
-  // ── Extraction Zone ────────────────────────────────────────────────────
-
-  private manageExtractionZone(now: number): void {
-    const ez = this.extractionZone;
-
-    if (!ez.active) {
-      // Check if it's time to spawn a new extraction zone
-      if (now - this.lastExtractionSpawn >= EXTRACTION_ZONE_SPAWN_INTERVAL) {
-        // Place extraction zone at a random position near snakes
-        const a = Math.random() * Math.PI * 2;
-        const d = Math.random() * ARENA_RADIUS * 0.5;
-        ez.x = Math.cos(a) * d;
-        ez.y = Math.sin(a) * d;
-        ez.radius = EXTRACTION_ZONE_RADIUS;
-        ez.active = true;
-        ez.activatedAt = now;
-        this.lastExtractionSpawn = now;
-      }
-    } else {
-      // Deactivate after duration
-      if (now - ez.activatedAt >= EXTRACTION_ZONE_DURATION) {
-        ez.active = false;
-        this.starChips = [];
-      }
     }
   }
 
@@ -848,12 +771,6 @@ export class ArenaRoom {
       snakes: snakeSnapshots,
       foods: filteredFoods,
       starChips,
-      extraction: {
-        x: this.extractionZone.x,
-        y: this.extractionZone.y,
-        radius: this.extractionZone.radius,
-        active: this.extractionZone.active,
-      },
     };
   }
 

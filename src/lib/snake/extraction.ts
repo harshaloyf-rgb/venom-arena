@@ -20,11 +20,13 @@ export interface ExtractionState {
   progress: number;
   /** Last target angle when extraction started/last reset */
   lastAngle: number;
+  /** Guard: once extraction completes, it can never restart */
+  completed: boolean;
 }
 
 /** Create a fresh extraction state */
 export function createExtractionState(): ExtractionState {
-  return { active: false, progress: 0, lastAngle: 0 };
+  return { active: false, progress: 0, lastAngle: 0, completed: false };
 }
 
 /** Duration of extraction in milliseconds */
@@ -55,6 +57,9 @@ export function updateExtractionProgress(
   frameElapsed: number,
   onExit?: () => void,
 ): boolean {
+  // Once extraction completes, never allow it to restart
+  if (state.completed) return false;
+
   if (isExtracting && !isDead) {
     if (!state.active) {
       state.active = true;
@@ -73,6 +78,7 @@ export function updateExtractionProgress(
       if (state.progress >= 1.0) {
         state.progress = 0;
         state.active = false;
+        state.completed = true;
         if (onExit) onExit();
         return true;
       }

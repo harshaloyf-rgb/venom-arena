@@ -764,7 +764,6 @@ class ArenaInstance {
       nextFoodId: 0,
       showControls: false,
       tickCount: 0,
-      extractionZone: { x: 0, y: 0, radius: 0, active: false },
       botsEnabled: true, // Server always has bots enabled
       arenaConfig: ac,
       boundaryRadius: ac.mapHalf,
@@ -1253,6 +1252,73 @@ class ArenaInstance {
     } catch {}
   }
 
+  // ── Extraction Handler ─────────────────────────────────────────────────
+  // Called when a client completes the 3-second extraction ring.
+  // Validates, calculates commission, credits chips, and emits matchEnd.
+  handlePlayerExtraction(socketId: string): void {
+    const player = this.players.get(socketId);
+    if (!player) return;
+    if (player.deadAt > 0) return; // already dead/spectating
+
+    const snake = this.state.snakes.get(player.snakeId);
+    if (!snake || !snake.alive) return;
+
+    const collectedChips = Math.max(player.carriedChips, snake.carriedChips);
+
+    // Player always extracts at least their buy-in (arena entry fee)
+    const arenaBuyIn = getArenaById(this.arenaId)?.buyIn ?? 0;
+    const effectiveChips = Math.max(collectedChips, arenaBuyIn);
+
+    const durationSeconds = Math.floor((Date.now() - player.joinTime) / 1000);
+    const score = snake.score;
+    const kills = player.kills;
+
+    // Commission: 0% if ≤3 real players, 35% if ≥4
+    const realPlayerCount = this.playerCount;
+    const commissionRate = realPlayerCount >= 4 ? 0.35 : 0;
+    const commission = Math.floor(effectiveChips * commissionRate);
+    const bankedAmount = effectiveChips - commission;
+
+    console.log(`[Arena ${this.arenaId}] EXTRACT ${player.name} collected=${collectedChips} buyIn=${arenaBuyIn} effective=${effectiveChips} commission=${commission} (${commissionRate * 100}%) banked=${bankedAmount} players=${realPlayerCount} score=${score} kills=${kills}`);
+
+    // Remove snake from arena (peaceful — no star chip drop)
+    this.state.snakes.delete(player.snakeId);
+    this.snakeToSocket.delete(player.snakeId);
+    if (this.state.player === snake) {
+      this.state.player = [...this.state.snakes.values()].find(s => s.isPlayer && s.alive) || null;
+    }
+
+    // Emit extraction success to client
+    try {
+      player.socket.emit('matchEnd', {
+        outcome: 'extract',
+        score,
+        kills,
+        durationSeconds,
+        carriedChips: effectiveChips,
+        commission,
+        bankedAmount,
+        chipsEarned: bankedAmount,
+      });
+    } catch {}
+
+    // Report result to main server
+    this.reportMatchResult(player, 'extract', effectiveChips, kills, durationSeconds, score, bankedAmount)
+      .catch(err => console.error(`[Arena ${this.arenaId}] Failed to report extract result:`, err));
+
+    // Mark as dead (spectator) and schedule disconnect
+    player.deadAt = Date.now();
+    player.spectatorHx = snake.path.headX;
+    player.spectatorHy = snake.path.headY;
+
+    try {
+      setTimeout(() => {
+        this.removePlayer(socketId);
+        try { player.socket.disconnect(true); } catch {}
+      }, DEATH_SCREEN_DELAY);
+    } catch {}
+  }
+
   private async reportMatchResult(
     player: ConnectedPlayer,
     outcome: 'death' | 'extract',
@@ -1260,6 +1326,7 @@ class ArenaInstance {
     kills: number,
     durationSeconds: number,
     score: number,
+    bankedAmount?: number,
   ): Promise<void> {
     try {
       const res = await fetch(`${MAIN_SERVER}/api/match/result`, {
@@ -1277,6 +1344,7 @@ class ArenaInstance {
           durationSeconds,
           score,
           timestamp: Date.now(),
+          ...(outcome === 'extract' && bankedAmount !== undefined ? { bankedAmount } : {}),
         }),
       });
       if (!res.ok) {
@@ -1757,6 +1825,16 @@ io.on('connection', (socket) => {
     // ── Boost validation ──
     player.input.angle = data.angle;
     player.input.boost = typeof data.boost === 'boolean' ? data.boost : false;
+  });
+
+  // ─── Extraction (client completes 3s hold) ─────────────────────────────
+
+  socket.on('extract', () => {
+    const arenaId = socketToArena.get(socket.id);
+    if (!arenaId) return;
+    const arena = arenas.get(arenaId);
+    if (!arena) return;
+    arena.handlePlayerExtraction(socket.id);
   });
 
   // ─── Stats ───────────────────────────────────────────────────────────
