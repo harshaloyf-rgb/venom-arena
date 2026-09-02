@@ -61,6 +61,7 @@ mini-services/game-server.pid
 # PWA icon set IS a shipped static asset (T4-M2) — exempt from *.png ban
 !public/icons/*.png
 !public/apple-touch-icon.png
+!android/app/src/main/res/**/*.png
 
 # Database (runtime data — never commit)
 db/*.db
