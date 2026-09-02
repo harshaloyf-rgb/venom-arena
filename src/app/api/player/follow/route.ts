@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
-// GET /api/player/follow?tag=VENOM-XXXX → { following: boolean, followersCount, followingCount }
+// GET /api/player/follow?tag=VM-XXXXXX → { following: boolean, followersCount, followingCount }
 export async function GET(req: NextRequest) {
   try {
     const session = await getSession();

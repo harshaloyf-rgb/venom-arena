@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getSession } from '@/lib/auth';
+import { getSession, clearSessionCookie } from '@/lib/auth';
 import { toProfile, encodeSkins } from '@/lib/player-helpers';
 import { COUNTRIES } from '@/lib/game-config';
 
@@ -176,6 +176,10 @@ export async function DELETE() {
         tokenVersion: { increment: 1 },
       },
     });
+    // Security (audit A9): also clear the session cookie server-side — the
+    // UI cleared it client-side only, leaving a still-valid copied token.
+    // (tokenVersion bump above revokes every copy of every session token.)
+    await clearSessionCookie();
     return NextResponse.json({ ok: true, message: 'Account deleted successfully.' });
   } catch (e) {
     console.error('[player/delete] error', e);

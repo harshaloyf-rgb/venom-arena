@@ -81,7 +81,15 @@ function foodHashRemove(fh: SpatialHash, f: FoodOrb, fhVis?: SpatialHash): void 
 // Constants
 // ============================================================================
 
-const INTERNAL_SECRET = process.env.INTERNAL_SECRET || 'dev-secret';
+const INTERNAL_SECRET = (() => {
+  const s = process.env.INTERNAL_SECRET;
+  // Fail-fast: a 'dev-secret' fallback lets anyone forge internal API calls.
+  if (!s || s === 'dev-secret') {
+    console.error('[GameServer] FATAL: INTERNAL_SECRET env var missing or insecure — refusing to start.');
+    process.exit(1);
+  }
+  return s;
+})();
 const dbg = process.env.DEBUG ? console.log : () => {};
 const MAIN_SERVER = 'http://localhost:3000';
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -759,6 +767,10 @@ interface ConnectedPlayer {
   lastPosCheckTime: number;
   lastPosCheckX: number;
   lastPosCheckY: number;
+  // ── Extraction hold-still validation (FIX E2) ──
+  // Flat [x0,y0,x1,y1,...] head-position ring sampled every tick; kept at
+  // EXTRACT_SAMPLE_CAPACITY numbers (= 3s of history at 60Hz).
+  extractSamples: number[];
   // ── Spectator mode (after death) ──
   deadAt: number;           // 0 = alive, >0 = Date.now() of death
   spectatorHx: number;      // last head X before death (for snapshot camera)
@@ -1025,6 +1037,12 @@ class ArenaInstance {
       // Save head position for potential spectator mode
       player.spectatorHx = snake.path.headX;
       player.spectatorHy = snake.path.headY;
+      // FIX E2: sample head positions for extraction hold-still validation
+      // (3s window at 60Hz = 180 points = 360 floats)
+      player.extractSamples.push(snake.path.headX, snake.path.headY);
+      if (player.extractSamples.length > 360) {
+        player.extractSamples.splice(0, player.extractSamples.length - 360);
+      }
       if (hitWall) boundaryDead.push(snake.id);
     }
 
@@ -1383,6 +1401,36 @@ class ArenaInstance {
     const snake = this.state.snakes.get(player.snakeId);
     if (!snake || !snake.alive) return;
 
+    // ── FIX E2: server-side extraction validation ──
+    // Previously OP.EXTRACT was fully client-trusted: a modified client could
+    // send the 1-byte packet mid-chase and bank chips instantly, skipping the
+    // entire 3-second stationary-ring risk window (EXTRACT_FAIL was dead code).
+    const durationSeconds0 = Math.floor((Date.now() - player.joinTime) / 1000);
+    if (durationSeconds0 < 3) {
+      try { player.socket.emit('extractFailed', { reason: 'Stay in the arena a bit longer before extracting.' }); } catch {}
+      return;
+    }
+    // Must have been (near-)stationary for the last ~3 seconds. 60Hz samples,
+    // 3s window = 180 points. Allow 50px tolerance (boundary pulse jitter).
+    const samples = player.extractSamples;
+    const EXTRACT_HOLD_TOLERANCE_PX = 50;
+    if (samples.length < 240) {
+      // Not enough movement history (joined < ~2s ago or spawn protection)
+      try { player.socket.emit('extractFailed', { reason: 'Hold still for 3 seconds to extract.' }); } catch {}
+      return;
+    }
+    const hx = snake.path.headX;
+    const hy = snake.path.headY;
+    for (let i = 0; i < samples.length; i += 2) {
+      const dx = samples[i] - hx;
+      const dy = samples[i + 1] - hy;
+      if (dx * dx + dy * dy > EXTRACT_HOLD_TOLERANCE_PX * EXTRACT_HOLD_TOLERANCE_PX) {
+        console.log(`[Arena ${this.arenaId}] EXTRACT REJECTED ${player.name}: moved within hold window`);
+        try { player.socket.emit('extractFailed', { reason: 'You must hold still for 3 seconds to extract.' }); } catch {}
+        return;
+      }
+    }
+
     const collectedChips = Math.max(player.carriedChips, snake.carriedChips);
 
     // Player always extracts at least their buy-in (arena entry fee)
@@ -1393,9 +1441,10 @@ class ArenaInstance {
     const score = snake.score;
     const kills = player.kills;
 
-    // Commission: 0% if ≤3 real players, 35% if ≥4
+    // Commission: 35% if ≥4 real players; 10% floor otherwise (FIX X10 —
+    // a 0% rate with ≤3 players enabled collusive chip laundering for free).
     const realPlayerCount = this.playerCount;
-    const commissionRate = realPlayerCount >= 4 ? 0.35 : 0;
+    const commissionRate = realPlayerCount >= 4 ? 0.35 : 0.10;
     const commission = Math.floor(effectiveChips * commissionRate);
     const bankedAmount = effectiveChips - commission;
 
@@ -2207,6 +2256,7 @@ async function handleJoin(ws: any, arenaId: string): Promise<void> {
       lastPosCheckTime: Date.now(),
       lastPosCheckX: NaN,
       lastPosCheckY: NaN,
+      extractSamples: [],
       // Spectator mode
       deadAt: 0,
       spectatorHx: 0,

@@ -82,6 +82,9 @@ export async function POST(req: NextRequest) {
     const region = regionOf(country);
 
     const passwordHash = await hashPassword(password);
+    // Security (audit A3): store the security PIN as a bcrypt hash, never
+    // plaintext — change-pin and forgot-password compare with bcrypt.compare.
+    const securityPinHash = pin ? await hashPassword(pin) : null;
     const userTag = await generateUniqueUserTag();
     const referralCode = generateReferralCode();
 
@@ -89,7 +92,7 @@ export async function POST(req: NextRequest) {
       data: {
         email,
         passwordHash,
-        securityPin: pin || null,
+        securityPin: securityPinHash,
         userTag,
         name,
         country,

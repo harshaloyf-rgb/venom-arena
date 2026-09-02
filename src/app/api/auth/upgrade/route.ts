@@ -92,6 +92,9 @@ export async function POST(req: NextRequest) {
     // Upgrade: set email, password, name, PIN — keep everything else
     // Grant chip bonus so total = REGISTERED_STARTER_CHIPS (they had 150 as guest = same)
     const passwordHash = await hashPassword(password);
+    // Security (audit A3): hash the security PIN (plaintext broke PIN change
+    // and PIN-based password recovery, which compare via bcrypt).
+    const securityPinHash = pin ? await hashPassword(pin) : null;
     const currentChips = player.bankedChips || 0;
     const chipBonus = Math.max(0, REGISTERED_STARTER_CHIPS - currentChips);
     const upgraded = await db.player.update({
@@ -100,7 +103,7 @@ export async function POST(req: NextRequest) {
         email,
         passwordHash,
         name,
-        securityPin: pin || null,
+        securityPin: securityPinHash,
         emailVerified: false,
         ...(chipBonus > 0 ? { bankedChips: { increment: chipBonus }, totalEarned: { increment: chipBonus } } : {}),
       },

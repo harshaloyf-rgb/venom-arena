@@ -146,7 +146,9 @@ export default function GameCanvas({
     const resize = () => {
       const parent = canvas.parentElement;
       if (!parent) return;
-      const dpr = window.devicePixelRatio || 1;
+      // FIX (mobile perf): cap DPR at 2 — raw devicePixelRatio (3.0 on many
+      // phones) quadruples fill-rate for marginal visual gain.
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       _cachedW = parent.clientWidth;
       _cachedH = parent.clientHeight;
       canvas.width = _cachedW * dpr;
@@ -220,14 +222,16 @@ export default function GameCanvas({
     inputRef.current = input;
     input.attach();
 
-    // Minimap zoom click handler
-    const onCanvasClick = (e: MouseEvent) => {
+    // Minimap zoom tap handler — FIX M4: 'click' never fires on touch because
+    // input.ts preventDefault()s touchstart (kills the synthetic click).
+    // 'pointerup' fires for BOTH mouse and touch.
+    const onCanvasClick = (e: PointerEvent) => {
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
       handleMinimapClick(x, y);
     };
-    canvas.addEventListener('click', onCanvasClick);
+    canvas.addEventListener('pointerup', onCanvasClick);
 
     // Reset minimap zoom on new game
     resetMinimapZoom();
@@ -529,11 +533,12 @@ export default function GameCanvas({
         if (canRespawn()) handleRespawn();
       }
     };
+    // FIX M4: pointerup instead of click so tap-to-respawn works on touch
     const onRespawnClick = () => {
       if (canRespawn()) handleRespawn();
     };
     window.addEventListener('keydown', onRespawnKey);
-    canvas.addEventListener('click', onRespawnClick);
+    canvas.addEventListener('pointerup', onRespawnClick);
 
     animFrameRef.current = requestAnimationFrame(loop);
 
@@ -542,10 +547,10 @@ export default function GameCanvas({
       cancelAnimationFrame(animFrameRef.current);
       input.detach();
       cleanupSafeArea();
-      canvas.removeEventListener('click', onCanvasClick);
+      canvas.removeEventListener('pointerup', onCanvasClick);
       window.removeEventListener('resize', resize);
       window.removeEventListener('keydown', onRespawnKey);
-      canvas.removeEventListener('click', onRespawnClick);
+      canvas.removeEventListener('pointerup', onRespawnClick);
     };
   // NOTE: authPlayer is NOT in the dependency array — it's captured via refs.
   // Adding it here caused the game to reset every time auth refreshed.

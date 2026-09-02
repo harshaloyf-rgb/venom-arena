@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
 /**
- * GET /api/player/public-profile?tag=VENOM-XXXX
+ * GET /api/player/public-profile?tag=VM-XXXXXX
  * Returns publicly-visible data for any player (no auth required).
  * Used by inspection modals (leaderboard, HOF, clan, etc.)
  */

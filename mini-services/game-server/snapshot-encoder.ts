@@ -189,7 +189,10 @@ export function encodeSnapshot(
   for (let i = 0; i + 4 < stars.length; i += 5) {
     wb.writeF32(Number(stars[i]) || 0);       // x
     wb.writeF32(Number(stars[i + 1]) || 0);   // y
-    wb.writeU16(Number(stars[i + 2]) || 0);   // value
+    // FIX E3: clamp star value to u16 — death stars carry baseValue =
+    // floor(chips/9) and buy-ins reach 750M+, so an unclamped value silently
+    // wraps mod 65536 on the client display (server math uses the true value).
+    wb.writeU16(Math.min(65535, Math.max(0, Math.trunc(Number(stars[i + 2]) || 0))));   // value
     wb.writeU16(Number(stars[i + 3]) || 0);   // id
     wb.writeU8(Number(stars[i + 4]) || 0);    // radius
   }

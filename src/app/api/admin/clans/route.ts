@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
           await tx.clanActivity.deleteMany({ where: { clanTag: tag } });
           await tx.clanChallenge.deleteMany({ where: { clanTag: tag } });
           await tx.clanMessage.deleteMany({ where: { clanTag: tag } });
-          await tx.player.updateMany({ where: { clanTag: tag }, data: { clanTag: null, clanRank: null } });
+          await tx.player.updateMany({ where: { clanTag: tag }, data: { clanTag: null, clanRank: null, clanDeposited: 0 } });
           await tx.clan.delete({ where: { tag } });
         });
 
@@ -225,7 +225,7 @@ export async function POST(req: NextRequest) {
         if (target.clanTag !== tag) return NextResponse.json({ error: 'Player is not in this clan.' }, { status: 400 });
 
         await db.$transaction(async (tx) => {
-          await tx.player.update({ where: { id: target.id }, data: { clanTag: null, clanRank: null } });
+          await tx.player.update({ where: { id: target.id }, data: { clanTag: null, clanRank: null, clanDeposited: 0 } });
           await tx.clanActivity.create({
             data: {
               clanTag: tag,

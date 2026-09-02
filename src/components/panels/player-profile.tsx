@@ -37,7 +37,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
-import { COUNTRIES, countryFlag, getCosmeticById, MILESTONE_TIERS, REFERRAL_REWARD, REFERRAL_MATCH_THRESHOLD, EMAIL_VERIFY_BONUS } from '@/lib/game-config';
+import { COUNTRIES, countryFlag, getCosmeticById, MILESTONE_TIERS, REFERRAL_REWARD, REFERRAL_MATCH_THRESHOLD, EMAIL_VERIFY_BONUS, xpForLevel } from '@/lib/game-config';
 import type { PlayerProfile } from '@/lib/types';
 import {
   PanelSkeleton,
@@ -577,8 +577,10 @@ function ProfileContent({
   }, [activeTab, matchFilter, fetchDbMatches]);
 
   // -- derived values
-  const xpNeeded = player.level * 200;
-  const xpPercent = Math.min(100, Math.floor((player.xp / xpNeeded) * 100));
+  // FIX U8: use xpForLevel (same as header/dashboard) — the old local formula
+  // `level * 200` showed a different XP % than the header for the same player.
+  const xpNeeded = xpForLevel(player.level + 1);
+  const xpPercent = Math.min(100, Math.floor((player.xp / Math.max(1, xpNeeded)) * 100));
   const deathsCount = player.lifetimeDeaths || 0;
   const killsCount = player.lifetimeKills || 0;
   const kdRatio = deathsCount > 0

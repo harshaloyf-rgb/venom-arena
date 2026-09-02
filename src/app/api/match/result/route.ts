@@ -7,6 +7,35 @@ import { verifyInternalSecret } from '@/lib/api-helpers';
 
 const TRACKABLE_TIERS = ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'omega'] as const;
 
+// ---------------------------------------------------------------------------
+// Replay dedupe (security hardening — audit finding X7):
+// The game server is the only legitimate caller of this route, but any holder
+// of the internal secret could previously re-post the same body forever (the
+// timestamp check was skipped when `timestamp` was absent) and mint chips on
+// every replay. Two defenses:
+//   1. `timestamp` is now MANDATORY (fresh within 5 min, not future-dated).
+//   2. A bounded in-memory dedupe of recent result signatures — identical
+//      content (player/outcome/amounts/kills/score/duration) within 10 min is
+//      rejected even with a freshly-minted timestamp.
+// Single-instance SQLite deploy: in-memory is sufficient. If this service is
+// ever scaled horizontally, move this set to Redis or a DB unique constraint.
+// ---------------------------------------------------------------------------
+const RECENT_RESULT_SIGNATURES = new Map<string, number>();
+const SIGNATURE_TTL_MS = 10 * 60 * 1000;
+const SIGNATURE_MAX_ENTRIES = 10000;
+
+function pruneSignatures(now: number) {
+  for (const [k, t] of RECENT_RESULT_SIGNATURES) {
+    if (now - t > SIGNATURE_TTL_MS) RECENT_RESULT_SIGNATURES.delete(k);
+  }
+  // Hard cap so a flood can't grow the map unbounded
+  while (RECENT_RESULT_SIGNATURES.size > SIGNATURE_MAX_ENTRIES) {
+    const oldest = RECENT_RESULT_SIGNATURES.keys().next().value;
+    if (oldest === undefined) break;
+    RECENT_RESULT_SIGNATURES.delete(oldest);
+  }
+}
+
 // Map PlayerMilestone tier IDs -> HallOfFameEntry milestoneTierId
 const MILESTONE_TO_HOF_TIER: Record<string, string> = {
   bronze:   't-1lakh',
@@ -157,11 +186,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'bankedAmount cannot exceed carriedChips.' }, { status: 400 });
   }
 
-  // Replay-attack protection: reject results older than 5 minutes (H-14)
+  // Replay-attack protection (X7 — now mandatory, previously skipped when absent):
   const matchTimestamp = Number(body.timestamp) || 0;
-  if (matchTimestamp && Date.now() - matchTimestamp > 5 * 60 * 1000) {
+  if (!matchTimestamp) {
+    return NextResponse.json({ error: 'Match result rejected: timestamp is required.' }, { status: 400 });
+  }
+  if (Date.now() - matchTimestamp > 5 * 60 * 1000) {
     return NextResponse.json({ error: 'Match result expired.' }, { status: 400 });
   }
+  if (matchTimestamp - Date.now() > 2 * 60 * 1000) {
+    return NextResponse.json({ error: 'Match result timestamp is in the future.' }, { status: 400 });
+  }
+
+  // Content-based replay dedupe: extracts (chip-minting) are deduped on the
+  // full result content — replaying with a freshly minted timestamp is still
+  // caught. Deaths mint no chips, so they include the timestamp in the
+  // signature (blocks exact replays, and two legitimately identical deaths
+  // within 10 min are still credited).
+  const nowMs = Date.now();
+  pruneSignatures(nowMs);
+  const contentKey = `${userTag}|${outcome}|${carriedChips}|${kills}|${durationSeconds}|${score}|${starsCollected}`;
+  const resultSignature = outcome === 'extract'
+    ? `${contentKey}|${bankedAmountFromBody}`
+    : `${contentKey}|${bankedAmountFromBody}|${matchTimestamp}`;
+  if (RECENT_RESULT_SIGNATURES.has(resultSignature)) {
+    return NextResponse.json({ error: 'Duplicate match result rejected.' }, { status: 409 });
+  }
+  RECENT_RESULT_SIGNATURES.set(resultSignature, nowMs);
 
   const chipsEarned = outcome === 'extract' ? bankedAmountFromBody : 0;
   const chipsLost = outcome === 'death' ? carriedChips : 0;

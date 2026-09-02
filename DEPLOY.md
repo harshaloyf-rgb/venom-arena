@@ -137,7 +137,7 @@ CAPACITOR_SERVER_URL=https://play.venomarena.gg npm run mobile:sync
 npm run mobile:open        # opens Android Studio
 ```
 
-Then in Android Studio: **Build → Build Bundle(s)/APK(s) → Build APK(s)**. Requires Android Studio + SDK locally (not buildable in the sandbox). `http://` targets enable cleartext automatically (dev-only convenience; release builds must use https).
+Then in Android Studio: **Build → Build Bundle(s)/APK(s) → Build APK(s)**. Requires Android Studio + SDK locally (not buildable in the sandbox). Note: the manifest sets `android:usesCleartextTraffic="true"` so the dev-emulator `http://10.0.2.2:3000` target works; **release builds must use `https://`** (cleartext is permitted, never required — and Apple forbids it on iOS entirely).
 
 Before a store release you also need: a signing keystore, version bump in `android/app/build.gradle`, and store listing assets (see section 7).
 

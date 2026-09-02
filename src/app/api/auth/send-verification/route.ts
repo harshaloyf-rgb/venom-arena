@@ -40,6 +40,10 @@ export async function POST() {
     },
   });
 
-  // In production this would send via Resend/SendGrid
-  return NextResponse.json({ sent: true, token });
+  // Security (audit X5): NEVER return the token in the response — no real
+  // email is delivered yet, so a response token = self-service verification
+  // and a free +850c bonus without owning the email. Until a mailer
+  // (Resend/SendGrid) is integrated, verification is effectively disabled.
+  // TODO: send `token` via email provider, then return { sent: true } only.
+  return NextResponse.json({ sent: true });
 }

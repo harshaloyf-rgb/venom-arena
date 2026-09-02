@@ -68,7 +68,7 @@ export function Section16_Profile() {
             <li><strong>Win Stats:</strong> Total runs, extractions, and extraction rate percentage</li>
             <li><strong>Account Age:</strong> Days since account creation</li>
             <li><strong>Milestone Tier:</strong> Current badge and next tier target</li>
-            <li><strong>Tag &amp; Referral:</strong> Copy your VENOM-XXXX tag and referral code</li>
+            <li><strong>Tag &amp; Referral:</strong> Copy your VM-XXXXXX tag and referral code</li>
           </ul>
         </InfoCard>
         <InfoCard title="📜 Match History Tab" accent="text-amber-300">
@@ -88,7 +88,7 @@ export function Section16_Profile() {
             <li>Guest accounts see an <strong>upgrade banner</strong> at the top of the Stats tab</li>
             <li>Click to add an email and password, converting to a registered account</li>
             <li>All progress carries over: chips, stats, cosmetics, streaks, friends, and clan memberships</li>
-            <li>You keep your VENOM-XXXX tag after upgrading</li>
+            <li>You keep your VM-XXXXXX tag after upgrading</li>
           </ul>
         </InfoCard>
         <InfoCard title="⚠️ Danger Zone — Delete Account" accent="text-rose-300">
@@ -106,7 +106,7 @@ export function Section16_Profile() {
         <ul className="list-disc pl-4 space-y-0.5">
           <li>Leaderboards display your <strong>current</strong> Challenger Handle and Faction Region (live, not historical snapshots)</li>
           <li>If you change your name or country, <strong>all leaderboards update immediately</strong> to show the new identity</li>
-          <li>Your <strong>VENOM-XXXX tag is always shown alongside your name</strong> — this is your permanent, unchangeable identity that links all your entries across time</li>
+          <li>Your <strong>VM-XXXXXX tag is always shown alongside your name</strong> — this is your permanent, unchangeable identity that links all your entries across time</li>
           <li>The <strong>cooldowns (30 days for name, 7 days for country)</strong> limit how often identity can change, keeping leaderboards stable during ranking periods</li>
           <li>Historical records like Hall of Fame entries snapshot your name and tag at the time of induction — those never change</li>
         </ul>

@@ -21,8 +21,20 @@ export interface SessionPayload {
 }
 
 export async function signSession(payload: Omit<SessionPayload, 'iat' | 'exp'>, expiresIn?: string): Promise<string> {
+  // Security (audit A1): ALWAYS embed the player's current tokenVersion so the
+  // revocation check in getSession() actually fires. Previously no route
+  // included the claim, so password changes / account deletion could not
+  // invalidate existing sessions (revocation was a silent no-op).
+  const claims: SessionPayload = { ...payload };
+  if (claims.tokenVersion === undefined) {
+    const p = await db.player.findUnique({
+      where: { id: payload.playerId },
+      select: { tokenVersion: true },
+    });
+    claims.tokenVersion = p?.tokenVersion ?? 0;
+  }
   // @ts-expect-error jwt.sign overload mismatch with SessionPayload
-  return jwt.sign(payload, getJwtSecret(), { expiresIn: expiresIn || `${SESSION_DAYS}d` });
+  return jwt.sign(claims, getJwtSecret(), { expiresIn: expiresIn || `${SESSION_DAYS}d` });
 }
 
 export function verifySession(token: string): SessionPayload | null {
@@ -44,7 +56,10 @@ export async function getSession(): Promise<SessionPayload | null> {
   // Also refresh role from DB (source of truth) so promotions/demotions take effect immediately
   const player = await db.player.findUnique({ where: { id: payload.playerId }, select: { banned: true, tokenVersion: true, role: true } });
   if (player?.banned === true) return null;
-  if (payload.tokenVersion !== undefined && player && payload.tokenVersion !== player.tokenVersion) return null;
+  // Security (audit A1): tokens WITHOUT a tokenVersion claim are legacy
+  // pre-hardening tokens — reject them outright so revocation is airtight.
+  if (payload.tokenVersion === undefined) return null;
+  if (player && payload.tokenVersion !== player.tokenVersion) return null;
   // Always use DB role as source of truth
   payload.role = (player?.role as 'player' | 'admin') || 'player';
 

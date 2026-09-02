@@ -16,7 +16,7 @@ export function Section00_Accounts() {
             <li>Choose a <strong>display name</strong> (up to 20 chars)</li>
             <li>Enter a valid <strong>email</strong> + password (min 6 chars)</li>
             <li>Set a <strong>4-digit Security PIN</strong> (needed for password recovery)</li>
-            <li>Receive a unique <strong>VENOM-XXXX</strong> tag (your permanent ID)</li>
+            <li>Receive a unique <strong>VM-XXXXXX</strong> tag (your permanent ID)</li>
             <li>Start with <strong>150 starter chips</strong> (free!)</li>
             <li>Your progress is <strong>saved permanently</strong></li>
           </ul>
@@ -28,7 +28,7 @@ export function Section00_Accounts() {
           <ul className="list-disc pl-4 space-y-1 text-slate-400 text-[11px]">
             <li>Sign in with <strong>Google</strong>, <strong>Facebook</strong>, or <strong>Apple</strong></li>
             <li>No password needed — uses your existing account</li>
-            <li>Also starts with <strong>150 starter chips</strong> and a VENOM-XXXX tag</li>
+            <li>Also starts with <strong>150 starter chips</strong> and a VM-XXXXXX tag</li>
             <li>If your social email matches an existing account, it <strong>links automatically</strong></li>
             <li>You can also set a password later in Profile → Security Settings</li>
           </ul>
@@ -40,7 +40,7 @@ export function Section00_Accounts() {
           <ul className="list-disc pl-4 space-y-1 text-slate-400 text-[11px]">
             <li><strong>No email needed</strong> — one-click to play</li>
             <li>Also starts with <strong>150 starter chips</strong></li>
-            <li>Gets a random VENOM-XXXX tag</li>
+            <li>Gets a random VM-XXXXXX tag</li>
             <li>Guest accounts can <strong>upgrade to registered</strong> later (in Profile panel)</li>
             <li>All progress carries over when upgrading</li>
           </ul>
@@ -77,11 +77,11 @@ export function Section00_Accounts() {
         <ul className="list-disc pl-4 space-y-0.5">
           <li><strong>Challenger Handle (Name):</strong> Can only be changed once every <strong>30 days</strong></li>
           <li><strong>Faction Region (Country):</strong> Can only be changed once every <strong>7 days</strong></li>
-          <li>Your <strong>VENOM-XXXX tag is permanent</strong> and can never be changed — it is your true identity</li>
+          <li>Your <strong>VM-XXXXXX tag is permanent</strong> and can never be changed — it is your true identity</li>
           <li>Avatar, socials, and cosmetics can be changed <strong>anytime</strong> (no cooldown)</li>
           <li>If you try to change during a cooldown, the save will be blocked with remaining time shown</li>
         </ul>
-        <p className="mt-1.5 text-amber-200/80 text-[10px]">⚠️ Leaderboards show your <strong>current</strong> name and country (live, not historical). Your VENOM-XXXX tag remains constant across all leaderboards. See Section 16 (Agent Profile) for full details.</p>
+        <p className="mt-1.5 text-amber-200/80 text-[10px]">⚠️ Leaderboards show your <strong>current</strong> name and country (live, not historical). Your VM-XXXXXX tag remains constant across all leaderboards. See Section 16 (Agent Profile) for full details.</p>
       </InfoCard>
     </Section>
   );

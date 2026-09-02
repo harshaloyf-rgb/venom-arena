@@ -143,6 +143,8 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
   const errorRef = useRef<string | null>(null);
   const managerRef = useRef<RemoteSnakeManager | null>(null);
   const serverMapHalfRef = useRef<number | null>(null);
+  // FIX E4: real frame-time tracking for the extraction ring
+  const lastFrameMsRef = useRef<number>(0);
 
   // ── Game state refs ──
   const isDeadRef = useRef(false);
@@ -361,7 +363,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     let _cachedW = 0;
     let _cachedH = 0;
     const resize = () => {
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2); // FIX (mobile perf): cap DPR
       _cachedW = parent.clientWidth;
       _cachedH = parent.clientHeight;
       canvas.width = _cachedW * dpr;
@@ -433,7 +435,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     const loop = () => {
       animRef.current = requestAnimationFrame(loop);
 
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2); // FIX (mobile perf): cap DPR
       const w = _cachedW || parent.clientWidth;
       const h = _cachedH || parent.clientHeight;
       if (w === 0 || h === 0) return;
@@ -515,7 +517,12 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
 
       // ── Extraction progress (client-side, same as offline) ──
       // When ring completes, emit 'extract' to server instead of calling onExit
-      const frameElapsed = 16; // Approximate frame time
+      // FIX E4: use REAL frame time — the hardcoded 16ms made the "3-second"
+      // extraction ring framerate-dependent (≈1.6s at 120Hz, ≈6s at 30fps).
+      // Same capped-elapsed pattern as the offline loop in GameCanvas.tsx.
+      const nowMs = performance.now();
+      const frameElapsed = Math.min(Math.max(nowMs - lastFrameMsRef.current, 0), 100);
+      lastFrameMsRef.current = nowMs;
       updateExtractionProgress(
         extractionRef.current, input.isExtracting(), isDeadRef.current,
         inputState.targetAngle, frameElapsed,

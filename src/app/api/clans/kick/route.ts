@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
       if (target.clanRank === 'Leader') throw new Error('CANNOT_KICK_LEADER');
       if (me.clanRank === 'Co-Leader' && target.clanRank === 'Co-Leader') throw new Error('CANNOT_KICK_COLEADER');
 
-      await tx.player.update({ where: { id: target.id }, data: { clanTag: null, clanRank: null } });
+      await tx.player.update({ where: { id: target.id }, data: { clanTag: null, clanRank: null, clanDeposited: 0 } });
 
       await tx.clanActivity.create({
         data: {

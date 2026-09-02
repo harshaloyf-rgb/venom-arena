@@ -23,7 +23,7 @@ export function Section13_Championships() {
           <ul className="list-disc pl-4 space-y-0.5">
             <li><strong>Auto-enrolled:</strong> Every registered player is automatically entered when they play their first online match of the year</li>
             <li><strong>Persistent:</strong> Your registration status, match history, and standings are stored server-side in the database</li>
-            <li><strong>One account per player:</strong> Duplicate or alt accounts are merged using your VENOM-XXXX tag</li>
+            <li><strong>One account per player:</strong> Duplicate or alt accounts are merged using your VM-XXXXXX tag</li>
             <li><strong>Guest players:</strong> Must register or link a social account before their championship stats are tracked</li>
           </ul>
         </InfoCard>

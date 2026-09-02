@@ -177,6 +177,27 @@ export default function Home() {
     return () => window.removeEventListener('admin:navigate', handleAdminNav);
   }, []);
 
+  // FIX U5: the death-screen "Profile" button dispatches venom:view-profile —
+  // nothing listened for it, so the button silently dead-ended. Open the
+  // player inspector (the modal fetches full data from public-profile by tag).
+  useEffect(() => {
+    function handleViewProfile(e: Event) {
+      const detail = (e as CustomEvent).detail as { tag?: string; name?: string } | null;
+      if (detail?.tag) {
+        setInspectedPlayer({
+          name: detail.name || detail.tag,
+          userTag: detail.tag,
+          country: '',
+          flag: '',
+          bankedChips: 0,
+          level: 0,
+        });
+      }
+    }
+    window.addEventListener('venom:view-profile', handleViewProfile);
+    return () => window.removeEventListener('venom:view-profile', handleViewProfile);
+  }, []);
+
   // Auto-rejoin arena after "Play Again" (saved from death screen)
   useEffect(() => {
     if (!player) return;
@@ -301,7 +322,7 @@ export default function Home() {
   return (
     <div className="min-h-dvh md:h-screen flex flex-col bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white md:overflow-hidden">
       {/* ===================== HEADER ===================== */}
-      <header className="sticky top-0 shrink-0 border-b border-slate-900 bg-slate-950/80 backdrop-blur-md z-40">
+      <header className="sticky top-0 shrink-0 border-b border-slate-900 bg-slate-950/80 backdrop-blur-md z-40 pt-[env(safe-area-inset-top)]">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-2 h-8 md:px-3 lg:px-4 md:h-auto md:py-0">
           {/* Logo */}
           <button
@@ -320,7 +341,7 @@ export default function Home() {
                 </span>
               </h1>
               <span className="text-[11px] text-slate-500 block font-mono hidden md:block">
-                STORES-SAFE COMPLIANT VERSION
+                Multiplayer Snake Arena
               </span>
             </div>
             <span className="sm:hidden text-[11px] font-extrabold text-white tracking-tight group-hover:text-indigo-400 transition-colors">

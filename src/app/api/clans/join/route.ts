@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
       if (!me) throw new Error('PLAYER_NOT_FOUND');
       if (me.clanTag) throw new Error('ALREADY_IN_CLAN');
 
-      await tx.player.update({ where: { id: me.id }, data: { clanTag: tag, clanRank: 'Viper' } });
+      await tx.player.update({ where: { id: me.id }, data: { clanTag: tag, clanRank: 'Viper', clanDeposited: 0 } });
 
       // Log activity
       await tx.clanActivity.create({

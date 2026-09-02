@@ -395,7 +395,7 @@ export function IdentityEditor(props: IdentityEditorProps) {
             placeholder="Enter nickname"
           />
           <span className="text-[11px] text-slate-500">
-            Max 20 characters. VENOM-XXXX tag is permanent.
+            Max 20 characters. VM-XXXXXX tag is permanent.
           </span>
           {nameCooldownText && (
             <span className="text-[11px] text-amber-400 font-bold flex items-center gap-1">
@@ -597,7 +597,7 @@ export function IdentityEditor(props: IdentityEditorProps) {
           <strong className="text-indigo-300 block mb-0.5">
             IDENTITY CHANGE COOLDOWN:
           </strong>
-          Handle locked <strong className="text-amber-400">30 days</strong>, Region locked <strong className="text-amber-400">7 days</strong> after each change. VENOM-XXXX tag is always permanent.
+          Handle locked <strong className="text-amber-400">30 days</strong>, Region locked <strong className="text-amber-400">7 days</strong> after each change. VM-XXXXXX tag is always permanent.
         </div>
       </div>
 

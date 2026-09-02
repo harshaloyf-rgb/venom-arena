@@ -548,18 +548,20 @@ function RegisterForm({
   const [showConfirm, setShowConfirm] = useState(false);
   const [pin, setPin] = useState('');
   const [referralCode, setReferralCode] = useState('');
+  const [confirmError, setConfirmError] = useState('');
 
   const strength = getPasswordStrength(password);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // FIX U3: surface mismatch via React state — the old code wrote textContent
+    // into a `hidden` span, so the error was never visible and the form
+    // silently did nothing.
     if (password !== confirmPassword) {
-      const errEl = document.querySelector('[data-register-error]');
-      if (errEl) errEl.textContent = 'Passwords do not match.';
+      setConfirmError('Passwords do not match.');
       return;
     }
-    const errEl = document.querySelector('[data-register-error]');
-    if (errEl) errEl.textContent = '';
+    setConfirmError('');
     onSubmit('/api/auth/register', { name, email, password, pin, referralCode: referralCode.trim() || undefined });
   }
 
@@ -686,8 +688,10 @@ function RegisterForm({
           <Shield className="w-3 h-3 shrink-0" /> {error}
         </p>
       )}
-      {!error && (
-        <span data-register-error className="hidden" hidden />
+      {!error && confirmError && (
+        <p className="text-xs text-destructive flex items-center gap-1">
+          <Shield className="w-3 h-3 shrink-0" /> {confirmError}
+        </p>
       )}
 
       <Button type="submit" size="sm" className="w-full text-xs" disabled={busy}>
@@ -753,7 +757,10 @@ function ForgotPasswordForm({
         body: JSON.stringify({ email, securityPin, newPassword }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
+      // FIX U4: the server deliberately returns 200 with { error } for wrong
+      // email/PIN (anti-enumeration). The old code only checked res.ok, so a
+      // wrong email/PIN closed the dialog as if the reset had succeeded.
+      if (!res.ok || data?.error) {
         setLocalError(data?.error || 'Failed to reset password.');
         return;
       }

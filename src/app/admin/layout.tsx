@@ -17,8 +17,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           router.replace('/');
           return;
         }
-        const data = (await res.json()) as { role?: string };
-        if (data.role !== 'admin') {
+        // FIX U1: /api/auth/me returns { player: { ...role } } — reading
+        // data.role directly was always undefined, so this layout redirected
+        // EVERYONE (including admins) away from /admin.
+        const data = (await res.json()) as { player?: { role?: string } };
+        if (data.player?.role !== 'admin') {
           router.replace('/');
           return;
         }

@@ -153,24 +153,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Score clan war if applicable (fire-and-forget) ──
-    if (safeKills > 0) {
-      try {
-        const warPlayer = await db.player.findUnique({
-          where: { id: session.playerId },
-          select: { clanTag: true },
-        });
-        if (warPlayer?.clanTag) {
-          await fetch((process.env.NEXT_PUBLIC_BASE_URL || '') + '/api/clans/war/score', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Cookie: req.headers.get('cookie') || '' },
-            body: JSON.stringify({ kills: safeKills }),
-          });
-        }
-      } catch {
-        // Non-critical — don't fail match recording
-      }
-    }
+    // ── Clan war scoring ──
+    // NOTE (security hardening): war kills are counted ONLY by the
+    // server-authoritative path (/api/match/result, internal-secret auth from
+    // the game server). The previous fire-and-forget call to
+    // /api/clans/war/score here let any client mint arbitrary war kills and
+    // steal the escrowed war pot, so it was removed. Offline match kills are
+    // client-reported and unverifiable, so they no longer score wars.
 
     return NextResponse.json({ id: entry.id, ok: true });
   } catch (e) {

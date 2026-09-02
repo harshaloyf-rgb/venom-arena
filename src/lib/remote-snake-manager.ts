@@ -172,6 +172,10 @@ export class RemoteSnakeManager {
       if (!seen.has(id)) {
         clearSmoothedSegs(id);
         this.snakes.delete(id);
+        // FIX E1: prune the adapter cache too — bot ids are RECYCLED (H9),
+        // and a stale cached adapter still references the dead snake's
+        // frozen PathBuffer, so a reused id would render a frozen body.
+        this._adapterCache.delete(id);
       }
     }
 
@@ -347,6 +351,10 @@ export class RemoteSnakeManager {
       this._adapterCache.set(id, a);
     }
     a.name = t.name;
+    // FIX E1: refresh the path reference EVERY update — rebuildPath() REPLACES
+    // tracked.path with a new PathBuffer whenever capacity is insufficient, so
+    // an adapter created earlier still points at the old (frozen) buffer.
+    a.path = t.path;
     a.angle = t.history.length > 0 ? t.history[0].angle : 0;
     // FIX H2 support: prevAngle = previous snapshot's angle so the renderer
     // can lerp head rotation between snapshots. Fallback to current angle
