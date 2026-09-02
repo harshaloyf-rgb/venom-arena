@@ -55,9 +55,15 @@ else
     if [ -z "$REMOTE_HASH" ]; then
       echo -e "${YELLOW}WARNING: Cannot reach GitHub. Cannot verify.${NC}"
     elif [ "$REMOTE_HASH" != "$LOCAL_HASH" ]; then
-      echo -e "${YELLOW}WARNING: Local HEAD (${LOCAL_HASH:0:7}) != GitHub (${REMOTE_HASH:0:7})${NC}"
-      echo -e "${YELLOW}GitHub is ahead. Restoring...${NC}"
-      NEED_RESTORE=1
+      # SAFETY: only restore if local is genuinely BEHIND GitHub.
+      # If local is AHEAD (unpushed commits), restoring would DESTROY local work.
+      if git merge-base --is-ancestor "$LOCAL_HASH" "$REMOTE_HASH" 2>/dev/null; then
+        echo -e "${YELLOW}WARNING: Local HEAD (${LOCAL_HASH:0:7}) is behind GitHub (${REMOTE_HASH:0:7}). Restoring...${NC}"
+        NEED_RESTORE=1
+      else
+        echo -e "${YELLOW}WARNING: Local is AHEAD of GitHub (${LOCAL_HASH:0:7}). Unpushed commits detected."
+        echo -e "${YELLOW}NOT restoring (would destroy unpushed work). PUSH as soon as possible!${NC}"
+      fi
     else
       echo -e "${GREEN}Local matches GitHub. Integrity OK.${NC}"
     fi
@@ -87,6 +93,14 @@ if [ "$NEED_RESTORE" -eq 1 ]; then
   [ -f /tmp/venom_env.backup ] && cp /tmp/venom_env.backup .env
   echo "Restored DB and .env"
   
+  # FALLBACK: /tmp does not survive sandbox resets. If no backup exists,
+  # seed the live DB from the git-restored repo copy (last committed state).
+  if [ ! -f /tmp/custom.db.backup ] && [ -f "$REPO_DIR/venom-arena/db/custom.db" ]; then
+    mkdir -p "$REPO_DIR/db"
+    cp "$REPO_DIR/venom-arena/db/custom.db" "$REPO_DIR/db/custom.db"
+    echo "Seeded live DB from git-restored repo copy (last committed state)."
+  fi
+  
   # Verify restore
   NEW_COMMITS=$(git log --oneline | wc -l)
   NEW_HASH=$(git rev-parse HEAD)
@@ -109,8 +123,11 @@ echo "Arena tiers: ${TIERS}"
 
 # --- 7. Check if .git-credentials has the token ---
 if [ -f "$GIT_CRED_FILE" ]; then
-  if grep -q "ghp_" "$GIT_CRED_FILE" 2>/dev/null; then
-    echo -e "${GREEN}GitHub token: present${NC}"
+  chmod 600 "$GIT_CRED_FILE" 2>/dev/null || true
+  # Auto-wire git to use the persistent credentials file (survives sandbox resets)
+  git config --global credential.helper "store --file=$GIT_CRED_FILE"
+  if grep -q "ghp_\|github_pat_" "$GIT_CRED_FILE" 2>/dev/null; then
+    echo -e "${GREEN}GitHub token: present (credential.helper wired)${NC}"
   else
     echo -e "${RED}GitHub token: MISSING from .git-credentials${NC}"
     echo -e "${YELLOW}Push will fail! You need to re-add your GitHub PAT.${NC}"
