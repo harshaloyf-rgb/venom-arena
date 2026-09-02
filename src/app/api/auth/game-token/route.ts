@@ -15,6 +15,7 @@ export async function GET() {
       playerId: session.playerId,
       userTag: session.userTag,
       role: session.role,
+      scope: 'game', // audit A2: 1h WS-only credential — rejected as a session cookie
     }, '1h');
     return NextResponse.json({ token });
   } catch (e) {

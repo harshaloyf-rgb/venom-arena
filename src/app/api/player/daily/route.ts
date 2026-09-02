@@ -4,11 +4,16 @@ import { getSession } from '@/lib/auth';
 import { toProfile } from '@/lib/player-helpers';
 import { utcToday } from '@/lib/date-utils';
 import { DAILY_REWARDS, levelRewardMultiplier, STREAK_MILESTONES, SEASONAL_BONUS_DAYS } from '@/lib/game-config';
+import { playerActionLimit } from '@/lib/api-helpers';
 
 // POST /api/player/daily  — claim today's daily reward (idempotent per day)
 export async function POST() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // Anti-hammer (X6): once/day reward, DB-guarded; limit is belt-and-braces
+  const rl = playerActionLimit(session.playerId, 'daily', 3, 60_000);
+  if (rl) return rl;
 
   const today = utcToday();
 

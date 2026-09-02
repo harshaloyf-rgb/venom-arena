@@ -149,6 +149,9 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
   // ── Game state refs ──
   const isDeadRef = useRef(false);
   const deathTimeRef = useRef<number>(0);
+  // Audit U6: auto-return once we've actually been in the arena and then dropped
+  const wasConnectedRef = useRef(false);
+  const autoReturnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const killerNameRef = useRef<string | null>(null);
   const highScoreRef = useRef(0);
   const playerScoreRef = useRef(0);
@@ -321,12 +324,30 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
             toast.error('Extraction failed: ' + reason);
           }
         }
+        if (state.status === 'connected') {
+          wasConnectedRef.current = true;
+        }
         if (state.status === 'disconnected' || state.status === 'error') {
           if (!isDeadRef.current) {
             isDeadRef.current = true;
             deathTimeRef.current = performance.now();
             setIsDead(true);
           }
+          // Audit U6: 'Disconnected — You will be returned to the arena' used to
+          // dead-end forever. Deliver on the promise: 5s after a REAL disconnect
+          // (i.e. we were connected), go back to the lobby via onExit, or reload
+          // to rejoin when standalone. Connecting state never triggers this.
+          if (state.status === 'disconnected' && wasConnectedRef.current && !autoReturnTimerRef.current) {
+            autoReturnTimerRef.current = setTimeout(() => {
+              autoReturnTimerRef.current = null;
+              if (onExit) onExit();
+              else window.location.reload();
+            }, 5000);
+          }
+        } else if (autoReturnTimerRef.current && state.status === 'connecting') {
+          // Socket is retrying on its own — cancel the scheduled return
+          clearTimeout(autoReturnTimerRef.current);
+          autoReturnTimerRef.current = null;
         }
         setDisplayStatus(state.status);
         setDisplayError(state.error);
@@ -338,6 +359,10 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     return () => {
       cancelled = true;
       sockRef.current?.disconnect();
+      if (autoReturnTimerRef.current) {
+        clearTimeout(autoReturnTimerRef.current);
+        autoReturnTimerRef.current = null;
+      }
     };
   }, [arenaId]);
 

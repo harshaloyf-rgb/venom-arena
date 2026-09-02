@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { utcMonday } from '@/lib/date-utils';
+import { playerActionLimit } from '@/lib/api-helpers';
 
 // POST /api/clans/deposit  body: { tag, amount }
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // Anti-hammer (X6): treasury movement
+  const rl = playerActionLimit(session.playerId, 'clan-deposit', 30, 60_000);
+  if (rl) return rl;
 
   const body = await req.json().catch(() => ({}));
   const tag = String(body.tag || '').toUpperCase().trim();

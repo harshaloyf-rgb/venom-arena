@@ -16,6 +16,10 @@ export interface SessionPayload {
   userTag: string;
   role: 'player' | 'admin';
   tokenVersion?: number;
+  // Audit A2: 'session' tokens are full API credentials (cookie-bound);
+  // 'game' tokens are 1h WS-only credentials and must never be accepted
+  // as session cookies. signSession defaults to 'session'.
+  scope?: 'session' | 'game';
   iat?: number;
   exp?: number;
 }
@@ -33,6 +37,9 @@ export async function signSession(payload: Omit<SessionPayload, 'iat' | 'exp'>, 
     });
     claims.tokenVersion = p?.tokenVersion ?? 0;
   }
+  // Audit A2: default scope is full session. The game-token route is the only
+  // caller that overrides this to 'game' (WS-only credential).
+  if (claims.scope === undefined) claims.scope = 'session';
   // @ts-expect-error jwt.sign overload mismatch with SessionPayload
   return jwt.sign(claims, getJwtSecret(), { expiresIn: expiresIn || `${SESSION_DAYS}d` });
 }
@@ -60,6 +67,10 @@ export async function getSession(): Promise<SessionPayload | null> {
   // pre-hardening tokens — reject them outright so revocation is airtight.
   if (payload.tokenVersion === undefined) return null;
   if (player && payload.tokenVersion !== player.tokenVersion) return null;
+  // Security (audit A2): a 1h game-scoped token must never act as a session
+  // cookie (same signing key — without this check it was a full credential).
+  // Tokens without a scope claim are legacy pre-hardening — reject as well.
+  if (payload.scope !== 'session') return null;
   // Always use DB role as source of truth
   payload.role = (player?.role as 'player' | 'admin') || 'player';
 

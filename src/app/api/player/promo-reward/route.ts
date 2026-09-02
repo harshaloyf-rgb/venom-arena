@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { toProfile } from '@/lib/player-helpers';
 import { PROMO_CODES } from '@/lib/game-config';
+import { playerActionLimit } from '@/lib/api-helpers';
 
 // POST /api/player/promo-reward  body: { code }
 export async function POST(req: Request) {
@@ -10,6 +11,10 @@ export async function POST(req: Request) {
   if (!session) {
     return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
   }
+
+  // Anti-hammer (X6): promo code brute-force damping
+  const rl = playerActionLimit(session.playerId, 'promo', 5, 60_000);
+  if (rl) return rl;
 
   const body = await req.json().catch(() => ({}));
   const code = String(body.code || '').trim().toUpperCase();

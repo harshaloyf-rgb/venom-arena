@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { toProfile } from '@/lib/player-helpers';
-import { SPIN_PRIZES, SPIN_FREE_PER_DAY, SPIN_COST, levelRewardMultiplier, SEASONAL_BONUS_DAYS } from '@/lib/game-config';
+import { SPIN_PRIZES, SPIN_FREE_PER_DAY, SPIN_COST, SPIN_LEVEL_MULTIPLIER_CAP, levelRewardMultiplier, SEASONAL_BONUS_DAYS } from '@/lib/game-config';
 import { utcToday } from '@/lib/date-utils';
+import { playerActionLimit } from '@/lib/api-helpers';
 
 function pickPrize() {
   // Build cumulative weight array
@@ -52,6 +53,10 @@ export async function POST(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  // Anti-hammer (X6): legit cadence is 1 spin per few seconds
+  const rl = playerActionLimit(session.playerId, 'spin', 15, 60_000);
+  if (rl) return rl;
+
   try {
     let body: { useFree?: boolean } = {};
     try {
@@ -98,12 +103,16 @@ export async function POST(request: Request) {
       const prize = pickPrize();
       const baseReward = Math.floor(Math.random() * (prize.max - prize.min + 1)) + prize.min;
 
-      // Level multiplier
-      const lvlMult = levelRewardMultiplier(player.level);
+      // Level multiplier — CAPPED for spins (audit X3): base prize EV is 86.5c
+      // (weighted mid of SPIN_PRIZES). Uncapped, L31+ (×4) paid spins were +146c/spin
+      // and a 2× seasonal day pushed it to 692c vs 200c cost. Cap at 2 → max EV 173c,
+      // house-positive at every level while keeping the jackpot exciting.
+      const lvlMult = Math.min(levelRewardMultiplier(player.level), SPIN_LEVEL_MULTIPLIER_CAP);
 
-      // Seasonal bonus
+      // Seasonal bonus applies to the FREE daily spin only — stacking promo multipliers
+      // on PAID spins is what made them a money printer. Free spin keeps the promo feel.
       const seasonal = SEASONAL_BONUS_DAYS[today] ?? null;
-      const seasonalMult = seasonal ? seasonal.multiplier : 1;
+      const seasonalMult = useFree && seasonal ? seasonal.multiplier : 1;
 
       // Final reward
       const reward = Math.floor(baseReward * lvlMult * seasonalMult);

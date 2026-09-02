@@ -27,14 +27,42 @@ function generateVerifyCode(): string {
   return `VN-${c}`;
 }
 
-// Build the profile URL for a platform
-function getProfileUrl(platform: string, username: string): string {
-  const clean = username.replace('@', '').trim();
+// Build the profile URL for a platform.
+// SSRF hardening (audit X9): previously any user-supplied http URL for youtube was
+// passed straight to page_reader (arbitrary URL fetch). Now the URL is ALWAYS
+// constructed server-side from a strictly validated handle — user URLs are never fetched.
+function getProfileUrl(platform: string, username: string): string | null {
+  const clean = username.replace(/^@+/, '').trim();
+  if (!clean) return null;
+
   switch (platform) {
-    case 'instagram': return `https://www.instagram.com/${clean}/`;
-    case 'youtube': return clean.startsWith('http') ? clean : `https://www.youtube.com/@${clean.replace('@', '')}`;
-    case 'twitch': return `https://www.twitch.tv/${clean}`;
-    default: return '';
+    case 'instagram':
+      // Instagram handles: letters/digits/._ up to 30 chars
+      if (!/^[A-Za-z0-9._]{1,30}$/.test(clean)) return null;
+      return `https://www.instagram.com/${clean}/`;
+    case 'twitch':
+      // Twitch handles: letters/digits/underscore, 4-25 chars
+      if (!/^[A-Za-z0-9_]{4,25}$/.test(clean)) return null;
+      return `https://www.twitch.tv/${clean}`;
+    case 'youtube': {
+      // Accept "@handle", a bare handle, or ONLY canonical youtube.com profile URLs —
+      // the handle/channel-id is extracted and the URL rebuilt; nothing else is fetched.
+      let handle = clean;
+      const handleUrl = clean.match(/^(?:https?:\/\/)?(?:www\.)?youtube\.com\/@([A-Za-z0-9._-]{3,30})\/?$/i);
+      const channelUrl = clean.match(/^(?:https?:\/\/)?(?:www\.)?youtube\.com\/channel\/(UC[A-Za-z0-9_-]{22})\/?$/i);
+      if (handleUrl) {
+        handle = handleUrl[1];
+      } else if (channelUrl) {
+        return `https://www.youtube.com/channel/${channelUrl[1]}`;
+      } else if (/^https?:\/\//i.test(clean)) {
+        // Any other URL form (watch?v=, youtu.be, other hosts) is rejected
+        return null;
+      }
+      if (!/^[A-Za-z0-9._-]{3,30}$/.test(handle)) return null;
+      return `https://www.youtube.com/@${handle}`;
+    }
+    default:
+      return null;
   }
 }
 

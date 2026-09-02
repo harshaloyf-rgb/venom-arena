@@ -156,6 +156,12 @@ async function handleOAuthLogin(provider: OAuthProvider, userInfo: OAuthUserInfo
     }
 
     // 2. Check if an account with this email already exists (merge/link)
+    // Audit A4: never auto-link by an email the provider hasn't verified —
+    // otherwise an attacker creates a social account with a victim's email and
+    // takes over the game account on first OAuth login.
+    if (userInfo.email && userInfo.emailVerified === false) {
+      return NextResponse.redirect(new URL('/?oauth_error=email_unverified', origin));
+    }
     if (userInfo.email) {
       const existingByEmail = await db.player.findUnique({
         where: { email: userInfo.email },

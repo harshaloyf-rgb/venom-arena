@@ -73,6 +73,25 @@ setInterval(() => {
 }, 10 * 60 * 1000).unref();
 
 /**
+ * Rate limit a per-player economy/reward action (audit X6/A5).
+ * Keyed on playerId (not IP) so authenticated spam is throttled per account.
+ * Call AFTER requireAuth/getSession so playerId is available.
+ * Returns null if allowed, or a 429 NextResponse if exceeded.
+ *
+ * Usage:
+ *   const rl = playerActionLimit(session.playerId, 'spin', 15, 60_000);
+ *   if (rl) return rl;
+ */
+export function playerActionLimit(
+  playerId: string,
+  action: string,
+  max: number,
+  windowMs: number,
+): NextResponse | null {
+  return rateLimit(`pa:${action}:${playerId}`, max, windowMs);
+}
+
+/**
  * Check rate limit for a given key (usually IP address).
  * Returns null if allowed, or a 429 NextResponse if exceeded.
  */

@@ -326,6 +326,10 @@ export const SPIN_PRIZES = [
 ];
 export const SPIN_FREE_PER_DAY = 1; // free daily spin
 export const SPIN_COST = 200; // chips for extra spins
+// Spin reward multiplier cap (audit X3): base prize EV = 86.5c (weighted mid of
+// SPIN_PRIZES). Uncapped levelRewardMultiplier made L31+ paid spins +EV (+146c/spin),
+// doubled by seasonal days. Capping at 2 keeps max paid-spin EV at 173c < 200c cost.
+export const SPIN_LEVEL_MULTIPLIER_CAP = 2;
 
 // Referral
 export const REFERRAL_REWARD = 2_500; // chips both players get when referred player completes 5 matches

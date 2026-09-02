@@ -1,6 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { playerActionLimit } from '@/lib/api-helpers';
+
+// ── URL allowlist (audit X8 — SSRF hardening) ──────────────────────────
+// Previously ANY http(s) URL was accepted, then SERVER-FETCHED for Instagram
+// thumbnails (SSRF on submit + on read-backfill), with redirects followed.
+// Now: https-only, public YouTube/Instagram hosts only, redirects rejected,
+// and stored thumbnails must point at public CDN hosts.
+const CLIP_URL_HOSTS = new Set([
+  'youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be',
+  'instagram.com', 'www.instagram.com',
+]);
+
+const THUMBNAIL_HOST_SUFFIXES = ['ytimg.com', 'youtube.com', 'ggpht.com', 'cdninstagram.com', 'fbcdn.net'];
+
+function isPrivateHost(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname.endsWith('.local') ||
+    hostname.endsWith('.internal') ||
+    /^127\.|^10\.|^0\.|^169\.254\.|^192\.168\.|^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+    /^(::1|f[cd][0-9a-f]{2}:|fe80:)/i.test(hostname)
+  );
+}
+
+function isAllowedClipUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'https:') return false;
+    return CLIP_URL_HOSTS.has(u.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+function isSafeThumbnailUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'https:') return false;
+    const h = u.hostname.toLowerCase();
+    if (isPrivateHost(h)) return false;
+    return THUMBNAIL_HOST_SUFFIXES.some((s) => h === s || h.endsWith('.' + s));
+  } catch {
+    return false;
+  }
+}
 
 // ── Word filter for prohibited / obscene content ──
 const BANNED_WORDS = [
@@ -43,12 +88,15 @@ function extractYoutubeThumbnail(url: string): string | null {
 
 // ── Instagram thumbnail: extract og:image from page HTML ──
 async function extractInstagramThumbnail(url: string): Promise<string | null> {
+  // Defense in depth: caller validates, but refuse non-allowlisted URLs here too
+  if (!isAllowedClipUrl(url)) return null;
   try {
     const res = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
         'Accept': 'text/html,application/xhtml+xml',
       },
+      redirect: 'error', // never follow redirects (SSRF via open redirects)
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) return null;
@@ -56,11 +104,11 @@ async function extractInstagramThumbnail(url: string): Promise<string | null> {
     // Match og:image from meta tags
     const match = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["'][^>]*>/i)
       || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["'][^>]*>/i);
-    if (match?.[1]) return match[1].replace(/&amp;/g, '&');
+    if (match?.[1] && isSafeThumbnailUrl(match[1].replace(/&amp;/g, '&'))) return match[1].replace(/&amp;/g, '&');
     // Fallback: try twitter:image
     const twMatch = html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["'][^>]*>/i)
       || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']twitter:image["'][^>]*>/i);
-    if (twMatch?.[1]) return twMatch[1].replace(/&amp;/g, '&');
+    if (twMatch?.[1] && isSafeThumbnailUrl(twMatch[1].replace(/&amp;/g, '&'))) return twMatch[1].replace(/&amp;/g, '&');
   } catch {}
   return null;
 }
@@ -163,8 +211,9 @@ export async function GET(req: NextRequest) {
   }
 
   // Backfill: for Instagram clips missing thumbnails, try to fetch og:image
+  // (only for URLs that pass the allowlist — legacy rows may hold junk URLs)
   const backfillPromises = clips
-    .filter((c) => !c.thumbnailUrl && c.platform === 'Instagram' && c.url)
+    .filter((c) => !c.thumbnailUrl && c.platform === 'Instagram' && c.url && isAllowedClipUrl(c.url))
     .map(async (c) => {
       try {
         const thumb = await extractInstagramThumbnail(c.url);
@@ -194,6 +243,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // Anti-spam (X6): clip submission triggers external fetches — keep it tight
+  const rl = playerActionLimit(session.playerId, 'clip-submit', 5, 10 * 60_000);
+  if (rl) return rl;
 
   const body = await req.json();
   const { title, platform, url, description, chipsExtracted, kills, arenaName, tags, matchId } = body;
@@ -225,15 +278,20 @@ export async function POST(req: NextRequest) {
   if (!isMatchCard && !url) {
     return NextResponse.json({ error: 'Video URL is required for clips.' }, { status: 400 });
   }
-  if (!isMatchCard && typeof url === 'string' && !url.startsWith('http')) {
-    return NextResponse.json({ error: 'URL must start with http.' }, { status: 400 });
+  if (!isMatchCard && typeof url === 'string' && !isAllowedClipUrl(url)) {
+    return NextResponse.json(
+      { error: 'Only public YouTube or Instagram video URLs (https) are allowed.' },
+      { status: 400 },
+    );
   }
 
   // Auto-detect platform from URL
   const resolvedPlatform = isMatchCard ? 'match-card' : detectPlatform(url || '', platform || 'other');
 
-  // Auto-extract thumbnail from YouTube (both videos and shorts)
-  let thumbnailUrl: string | null = body.thumbnailUrl || null;
+  // Auto-extract thumbnail from YouTube (both videos and shorts).
+  // Client-supplied thumbnails are only trusted if they point at public CDN hosts.
+  let thumbnailUrl: string | null =
+    typeof body.thumbnailUrl === 'string' && isSafeThumbnailUrl(body.thumbnailUrl) ? body.thumbnailUrl : null;
   if (!thumbnailUrl && url) {
     if (resolvedPlatform === 'YouTube' || resolvedPlatform === 'YouTube Shorts') {
       thumbnailUrl = extractYoutubeThumbnail(url);

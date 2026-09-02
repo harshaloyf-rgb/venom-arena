@@ -11,6 +11,10 @@ export interface OAuthUserInfo {
   email: string;
   name: string;
   avatar?: string;
+  // Audit A4: provider's email-verification claim. true/false when the provider
+  // reports it; null when the provider doesn't expose it (Facebook gates email
+  // issuance on verification server-side).
+  emailVerified?: boolean | null;
 }
 
 export interface OAuthConfig {
@@ -145,13 +149,14 @@ export async function getUserInfo(
           headers: { Authorization: `Bearer ${accessToken}` },
         });
         if (!res.ok) return null;
-        const data = (await res.json()) as Record<string, string>;
+        const data = (await res.json()) as Record<string, unknown>;
         return {
           provider: 'google',
-          providerId: data.id || data.sub || '',
-          email: data.email || '',
-          name: data.name || 'Player',
-          avatar: data.picture,
+          providerId: String(data.id || data.sub || ''),
+          email: String(data.email || ''),
+          name: String(data.name || 'Player'),
+          avatar: typeof data.picture === 'string' ? data.picture : undefined,
+          emailVerified: data.email_verified === true,
         };
       }
       case 'facebook': {
@@ -168,6 +173,7 @@ export async function getUserInfo(
           email: String(data.email || ''),
           name: String(data.name || 'Player'),
           avatar: picData?.url,
+          emailVerified: null, // FB doesn't expose the flag; it only issues verified emails
         };
       }
       case 'apple': {
@@ -185,6 +191,7 @@ export async function getUserInfo(
           providerId: String(payload.sub || ''),
           email,
           name: email ? email.split('@')[0] : 'Player',
+          emailVerified: payload.email_verified === true || payload.email_verified === 'true',
         };
       }
     }

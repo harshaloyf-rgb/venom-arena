@@ -377,6 +377,16 @@ export function checkCollisions(
   // Collect all head→body hits as (attackerId, bodyOwnerId) pairs
   const h2bHits: Array<[string, string]> = [];
 
+  // E5 fix: the PASS-2 broad-phase query uses a fixed SNAKE_RADIUS*8 (+3 entity
+  // radius ≈ 27px reach), but the narrow-phase crawl threshold grows with the
+  // target's bodyRadius (3 + bodyR - 2). At score ≳800K, bodyRadius ≈ 23 →
+  // needed reach ≈ 27.4px — the fixed query could miss a lethal crawl overlap.
+  // Track the largest grown body radius once per tick and extend the query.
+  let maxBodyR = SNAKE_RADIUS;
+  for (const [, s] of snakes) {
+    if (s.alive && (s.bodyRadius || SNAKE_RADIUS) > maxBodyR) maxBodyR = s.bodyRadius || SNAKE_RADIUS;
+  }
+
   for (const [, snake] of snakes) {
     if (!snake.alive || deadSnakes.has(snake.id)) continue;
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
@@ -403,7 +413,9 @@ export function checkCollisions(
     // Broad phase: find which snakes have body near this head
     const nearX = (hcx + prevHcx) * 0.5;
     const nearY = (hcy + prevHcy) * 0.5;
-    const nearby = bodyHash.query(nearX, nearY, SNAKE_RADIUS * 8);
+    // E5: fixed 8× base radius was marginal vs grown crawl thresholds — extend by
+    // the largest grown body radius so mega-snakes can't tunnel the broad phase.
+    const nearby = bodyHash.query(nearX, nearY, SNAKE_RADIUS * 8 + (maxBodyR - SNAKE_RADIUS));
     const checkedSnakes = _checkedSnakesSet;
     checkedSnakes.clear();
 

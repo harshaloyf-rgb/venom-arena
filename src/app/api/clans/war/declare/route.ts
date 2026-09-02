@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { playerActionLimit } from '@/lib/api-helpers';
 
 // POST /api/clans/war/declare  body: { tag, targetTag, wager }
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // Anti-hammer (X6): war declaration is rare — tight window (3/hour)
+  const rl = playerActionLimit(session.playerId, 'war-declare', 3, 60 * 60_000);
+  if (rl) return rl;
 
   const body = await req.json().catch(() => ({}));
   const tag = String(body.tag || '').toUpperCase().trim();

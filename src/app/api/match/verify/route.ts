@@ -22,9 +22,21 @@ export async function POST(req: NextRequest) {
     const session = verifySession(token);
     if (!session) return NextResponse.json({ ok: false, reason: 'invalid_token' });
 
+    // Scope check (audit A2): accept only session- or game-scoped tokens.
+    // (Both are signed by us; anything lacking scope is legacy pre-hardening.)
+    if (session.scope !== 'game' && session.scope !== 'session') {
+      return NextResponse.json({ ok: false, reason: 'invalid_token' });
+    }
+
     const p = await db.player.findUnique({ where: { id: session.playerId } });
     if (!p) return NextResponse.json({ ok: false, reason: 'player_not_found' });
     if (p.banned) return NextResponse.json({ ok: false, reason: 'banned' });
+
+    // Revocation (audit A1 follow-through): reject tokens whose tokenVersion
+    // predates a password change / account mutation.
+    if (session.tokenVersion === undefined || session.tokenVersion !== p.tokenVersion) {
+      return NextResponse.json({ ok: false, reason: 'invalid_token' });
+    }
 
     let unlocked: string[] = [];
     try { unlocked = JSON.parse(p.unlockedSkins || '[]') as string[]; } catch {}
