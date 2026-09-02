@@ -313,16 +313,20 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
 
   // Steering Inertia + Dynamic Speed Braking
   const turnAmount = diff * STEERING_LERP;
-  const clampedTurn = Math.max(-maxTurn, Math.min(maxTurn, turnAmount));
+
+  // FIX (hotfix-1.2): sharp-turn braking now applies BEFORE the clamp.
+  // The old code reduced maxTurn AFTER snake.angle was already updated, and
+  // the reduced local was never read again — the brake was dead code, so
+  // sharp turns never actually slowed the rotation. Kept in lockstep with
+  // the identical fix in src/lib/snake/engine.ts (offline/online parity).
+  const sharpness = maxTurn > 0 ? Math.min(Math.abs(turnAmount) / maxTurn, 1.0) : 0;
+  const smoothT = sharpness * sharpness * (3 - 2 * sharpness);
+  const effMaxTurn = maxTurn * (1 - SHARP_TURN_BRAKE * smoothT);
+
+  const clampedTurn = Math.max(-effMaxTurn, Math.min(effMaxTurn, turnAmount));
   snake.angle += clampedTurn;
   if (snake.angle > Math.PI) snake.angle -= 2 * Math.PI;
   else if (snake.angle < -Math.PI) snake.angle += 2 * Math.PI;
-
-  // Sharp turn braking (applied to turn rate, not speed)
-  const absClampedTurn = Math.abs(clampedTurn);
-  const sharpness = maxTurn > 0 ? Math.min(absClampedTurn / maxTurn, 1.0) : 0;
-  const smoothT = sharpness * sharpness * (3 - 2 * sharpness);
-  maxTurn *= (1 - SHARP_TURN_BRAKE * smoothT);
 
   // Detect boost transition
   const boostJustStarted = canBoost && !snake.boosting;
@@ -1901,9 +1905,12 @@ function toAB(msg: any): ArrayBuffer {
   if (msg instanceof ArrayBuffer) return msg;
   if (ArrayBuffer.isView(msg)) {
     const u8: Uint8Array = msg instanceof Uint8Array ? msg : new Uint8Array(msg.buffer, msg.byteOffset, msg.byteLength);
+    // FIX (hotfix-1.5b): TS lib types u8.buffer as ArrayBufferLike — the
+    // runtime object here is always a plain ArrayBuffer (Bun WS payloads),
+    // so cast instead of leaking SharedArrayBuffer into the type.
     return u8.buffer.byteLength === u8.byteLength && u8.byteOffset === 0
-      ? u8.buffer
-      : u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+      ? u8.buffer as ArrayBuffer
+      : u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
   }
   if (typeof msg === 'string') return new TextEncoder().encode(msg).buffer;
   return new Uint8Array(msg).buffer;

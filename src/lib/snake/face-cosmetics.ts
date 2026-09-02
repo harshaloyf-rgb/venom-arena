@@ -933,8 +933,8 @@ function drawCrown(ctx: CanvasRenderingContext2D, p: CosmeticDrawParams) {
   ctx.lineWidth = Math.max(1, hr * 0.03);
   ctx.stroke();
 
-  // Gems
-  const gems = [[-crownW * 0.5, -crownH * 0.5, '#ef4444'], [0, -crownH * 0.8, '#3b82f6'], [crownW * 0.5, -crownH * 0.5, '#22c55e']];
+  // Gems — typed as tuples so gx/gy stay numbers and col stays string
+  const gems: [number, number, string][] = [[-crownW * 0.5, -crownH * 0.5, '#ef4444'], [0, -crownH * 0.8, '#3b82f6'], [crownW * 0.5, -crownH * 0.5, '#22c55e']];
   for (const [gx, gy, col] of gems) {
     ctx.fillStyle = col;
     ctx.beginPath(); ctx.arc(gx, gy, hr * 0.06, 0, Math.PI * 2); ctx.fill();

@@ -324,19 +324,23 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
 
   // Steering Inertia + Dynamic Speed Braking
   const turnAmount = diff * STEERING_LERP;
-  const clampedTurn = Math.max(-maxTurn, Math.min(maxTurn, turnAmount));
+
+  // FIX (hotfix-1.2): sharp-turn braking now applies BEFORE the clamp.
+  // The old code reduced maxTurn AFTER snake.angle was already updated, and
+  // the reduced local was never read again — the brake was dead code, so
+  // sharp turns never actually slowed the rotation.
+  // Sharpness = raw steer demand vs unbraked max turn (identical value to the
+  // old formula: below the clamp clampedTurn == turnAmount; above it both
+  // saturate to 1.0). At full demand the effective turn rate drops by
+  // SHARP_TURN_BRAKE (30%) — realistic arc widening with zero speed change.
+  const sharpness = maxTurn > 0 ? Math.min(Math.abs(turnAmount) / maxTurn, 1.0) : 0;
+  const smoothT = sharpness * sharpness * (3 - 2 * sharpness);
+  const effMaxTurn = maxTurn * (1 - SHARP_TURN_BRAKE * smoothT);
+
+  const clampedTurn = Math.max(-effMaxTurn, Math.min(effMaxTurn, turnAmount));
   snake.angle += clampedTurn;
   if (snake.angle > Math.PI) snake.angle -= 2 * Math.PI;
   else if (snake.angle < -Math.PI) snake.angle += 2 * Math.PI;
-
-  // FIX 2: Apply sharp turn braking to TURN RATE instead of SPEED.
-  // Eliminates speed oscillation — the #1 cause of boost stutter.
-  // At full turn, maxTurn is reduced by SHARP_TURN_BRAKE (30%),
-  // making the snake turn more slowly (realistic) without speed variation.
-  const absClampedTurn = Math.abs(clampedTurn);
-  const sharpness = maxTurn > 0 ? Math.min(absClampedTurn / maxTurn, 1.0) : 0;
-  const smoothT = sharpness * sharpness * (3 - 2 * sharpness);
-  maxTurn *= (1 - SHARP_TURN_BRAKE * smoothT);
 
   // Detect boost transition for instant first drop
   const boostJustStarted = canBoost && !snake.boosting;

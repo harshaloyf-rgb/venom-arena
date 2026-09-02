@@ -241,6 +241,17 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
   let savedGamePort = 3001;
   let intentionalDisconnect = false;
 
+  // FIX (hotfix-1.3): auto-JOIN guard state.
+  // everConnected — this session completed AUTH_OK at least once.
+  // joinedInGame  — the server currently holds a LIVE snake for us:
+  //   set true on JOINED, cleared on KILLED / MATCH_END / disconnect.
+  // Used by handleAuthOk: a reconnect after death/extract must NOT silently
+  // auto-join a fresh snake (that re-charged the buy-in without the player
+  // pressing Play). A reconnect while alive mid-match SHOULD re-join — the
+  // server migrates the live snake to the new socket without charging.
+  let everConnected = false;
+  let joinedInGame = false;
+
   // FIX H5: heartbeat + lifecycle state
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   let lastPongAt = 0;
@@ -292,10 +303,22 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
     serverMapHalf = mapHalf;
     currentStatus = 'connected';
     reconnectAttempts = 0;
+    const firstAuth = !everConnected;
+    everConnected = true;
     emit();
-    // Send JOIN immediately after AUTH_OK
-    if (ws && ws.readyState === WebSocket.OPEN) {
+    // FIX (hotfix-1.3): auto-JOIN policy.
+    //  - First AUTH_OK of the session: JOIN immediately (player pressed Play).
+    //  - Reconnect while still alive mid-match (joinedInGame): JOIN again —
+    //    the server migrates the live snake to this socket WITHOUT charging
+    //    the buy-in a second time.
+    //  - Reconnect after death/extract (!joinedInGame): DO NOT join. The old
+    //    behavior auto-joined a fresh snake here and silently re-charged the
+    //    buy-in whenever the socket dropped after death or app backgrounding.
+    //    The death/match-end screen stays up; the player rejoins manually.
+    if (ws && ws.readyState === WebSocket.OPEN && (firstAuth || joinedInGame)) {
       ws.send(buildJoinMsg(savedArenaId));
+    } else if (!firstAuth && !joinedInGame) {
+      console.log('[GameSocket] Reconnected after match end — auto-JOIN skipped (buy-in guard)');
     }
   }
 
@@ -313,6 +336,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
     const mapHalf = r.f32v();
     console.log('[GameSocket] Joined arena as', snakeId, 'mapHalf:', mapHalf);
     serverMapHalf = mapHalf;
+    joinedInGame = true; // FIX (hotfix-1.3): live snake exists on the server
     emit();
   }
 
@@ -466,6 +490,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
   }
 
   function handleKilled(data: ArrayBuffer) {
+    joinedInGame = false; // FIX (hotfix-1.3): snake no longer live
     const r = new BinReader(data);
     r.u8v(); // skip opcode
     const killerNameLen = r.u8v();
@@ -478,6 +503,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
   }
 
   function handleMatchEnd(data: ArrayBuffer) {
+    joinedInGame = false; // FIX (hotfix-1.3): match over — no live snake
     const r = new BinReader(data);
     r.u8v(); // skip opcode
     const outcome = r.u8v();
@@ -788,6 +814,8 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       inputSeq = 0;
       reconnectAttempts = 0;
       intentionalDisconnect = false;
+      everConnected = false;   // FIX (hotfix-1.3): fresh session — first AUTH_OK joins again
+      joinedInGame = false;    // FIX (hotfix-1.3)
       savedToken = token;
       savedArenaId = arenaId;
       stringTable.length = 0;
@@ -878,6 +906,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       }
       currentStatus = 'disconnected';
       currentSnapshot = null;
+      joinedInGame = false; // FIX (hotfix-1.3)
       emit();
     },
   };

@@ -27,7 +27,9 @@ const cosmeticSkinMap = new Map<string, SkinAsset>();
 
 function registerCosmeticSkin(item: Skin): void {
   const bodyColor = item.color;
-  const headColor = item.secondaryColor;
+  // FIX (hotfix-1.5): secondaryColor is optional on Skin — fall back to the
+  // body color instead of leaking `undefined` into a required string field.
+  const headColor = item.secondaryColor ?? bodyColor;
   const accentColor = lightenHex(bodyColor, 0.4);
   const pattern = mapCosmeticPattern(item.pattern);
   const animation = mapCosmeticAnimation(item.pattern, item.cost);
