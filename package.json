@@ -6,7 +6,7 @@
     "dev": "bash start-game-server.sh && python3 next-supervisor.py 2>/dev/null || (next dev -p 3000 2>&1 | tee dev.log)",
     "dev:game-server": "cd mini-services/game-server && bun run dev",
     "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
-    "build:prod": "NEXT_PROD_BUILD=1 next build && cp -r .next-prod-build/static .next-prod-build/standalone/.next/ && cp -r public .next-prod-build/standalone/",
+    "build:prod": "NEXT_PROD_BUILD=1 next build && cp -r .next-prod-build/static .next-prod-build/standalone/.next-prod-build/ && cp -r public .next-prod-build/standalone/",
     "start:prod": "NODE_ENV=production bun .next-prod-build/standalone/server.js 2>&1 | tee server-prod.log",
     "mobile:sync": "cap sync android",
     "mobile:open": "cap open android",
