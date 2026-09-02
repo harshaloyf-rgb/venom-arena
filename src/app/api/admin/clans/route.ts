@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { logAdminAction } from '@/lib/audit';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -98,6 +99,9 @@ export async function POST(req: NextRequest) {
           await tx.clan.delete({ where: { tag } });
         });
 
+        // X11: audit trail
+        await logAdminAction(session!, 'clan_disband', 'clan', tag, { clanName: clan.name });
+
         return NextResponse.json({ ok: true, message: `Clan [${tag}] has been disbanded.` });
       }
 
@@ -127,6 +131,8 @@ export async function POST(req: NextRequest) {
         if (!clan) return NextResponse.json({ error: 'Clan not found.' }, { status: 404 });
 
         await db.clan.update({ where: { tag }, data });
+        // X11: audit trail
+        await logAdminAction(session!, 'clan_edit', 'clan', tag, { fields: Object.keys(data) });
         return NextResponse.json({ ok: true, message: `Clan [${tag}] updated.` });
       }
 
@@ -139,6 +145,8 @@ export async function POST(req: NextRequest) {
         const clan = await db.clan.findUnique({ where: { tag } });
         if (!clan) return NextResponse.json({ error: 'Clan not found.' }, { status: 404 });
         await db.clan.update({ where: { tag }, data: { level, xp: 0 } });
+        // X11: audit trail
+        await logAdminAction(session!, 'clan_set_level', 'clan', tag, { level });
         return NextResponse.json({ ok: true, message: `Clan [${tag}] set to level ${level}, XP reset to 0.` });
       }
 
@@ -151,6 +159,8 @@ export async function POST(req: NextRequest) {
         const clan = await db.clan.findUnique({ where: { tag } });
         if (!clan) return NextResponse.json({ error: 'Clan not found.' }, { status: 404 });
         await db.clan.update({ where: { tag }, data: { xp } });
+        // X11: audit trail
+        await logAdminAction(session!, 'clan_set_xp', 'clan', tag, { xp });
         return NextResponse.json({ ok: true, message: `Clan [${tag}] XP set to ${xp}.` });
       }
 
@@ -163,6 +173,8 @@ export async function POST(req: NextRequest) {
         const clan = await db.clan.findUnique({ where: { tag } });
         if (!clan) return NextResponse.json({ error: 'Clan not found.' }, { status: 404 });
         await db.clan.update({ where: { tag }, data: { bankedChips } });
+        // X11: audit trail
+        await logAdminAction(session!, 'clan_set_chips', 'clan', tag, { bankedChips, previous: clan.bankedChips });
         return NextResponse.json({ ok: true, message: `Clan [${tag}] banked chips set to ${bankedChips}.` });
       }
 
@@ -175,6 +187,8 @@ export async function POST(req: NextRequest) {
         const clan = await db.clan.findUnique({ where: { tag } });
         if (!clan) return NextResponse.json({ error: 'Clan not found.' }, { status: 404 });
         await db.clan.update({ where: { tag }, data: { totalDeposited } });
+        // X11: audit trail
+        await logAdminAction(session!, 'clan_set_total_deposited', 'clan', tag, { totalDeposited, previous: clan.totalDeposited });
         return NextResponse.json({ ok: true, message: `Clan [${tag}] total deposited set to ${totalDeposited}.` });
       }
 
@@ -245,10 +259,13 @@ export async function POST(req: NextRequest) {
           }
         });
 
+        // X11: audit trail
+        await logAdminAction(session!, 'clan_kick', 'player', targetTag, { clanTag: tag, targetName: target.name });
+
         return NextResponse.json({ ok: true, message: `Kicked ${target.name} from [${tag}].` });
       }
 
-      // ── PROMOTE / DEMOTE ───────────────────────────────────────
+      // ── PROMOTE / DEMOTE ───────────────────────────────────────────
       case 'promote': {
         const targetTag = String(body.targetTag || '').trim();
         const newRank = String(body.rank || '').trim();
@@ -293,6 +310,9 @@ export async function POST(req: NextRequest) {
             },
           });
         });
+
+        // X11: audit trail
+        await logAdminAction(session!, 'clan_set_rank', 'player', targetTag, { clanTag: tag, targetName: target.name, newRank });
 
         return NextResponse.json({ ok: true, message: `${target.name} is now ${newRank} of [${tag}].` });
       }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { toProfile } from '@/lib/player-helpers';
+import { logAdminAction } from '@/lib/audit';
 import type { PlayerProfile } from '@/lib/types';
 
 // POST /api/admin/modify-chips  body: { userTag: string, amount: number }
@@ -53,6 +54,12 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ error: 'Database error' }, { status: 500 });
   }
+
+  // X11: record the grant/deduction in the audit trail
+  await logAdminAction(session, 'modify_chips', 'player', userTag, {
+    amount,
+    newChips: profile.bankedChips,
+  });
 
   return NextResponse.json({ ok: true, player: profile });
 }

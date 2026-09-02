@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server'
 import { seedGameConfig } from '@/lib/game-config-db'
 import { getSession } from '@/lib/auth'
+import { logAdminAction } from '@/lib/audit'
 
 /**
  * POST /api/admin/config/seed
@@ -14,5 +15,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }
   await seedGameConfig()
+  // X11: audit trail
+  await logAdminAction(session, 'config_seed', 'config', '*', {})
   return NextResponse.json({ success: true })
 }

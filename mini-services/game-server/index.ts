@@ -1080,7 +1080,7 @@ class ArenaInstance {
     this._lastFoodLen = state.foods.length;
 
     // 4. Kill boundary-hit snakes (no food drop for boundary deaths)
-    const playersToKill: { snakeId: string; socketId: string; reason: string; killerTag?: string; killerIsBot?: boolean }[] = [];
+    const playersToKill: { snakeId: string; socketId: string; reason: string; killerId?: string; killerTag?: string; killerIsBot?: boolean }[] = [];
     for (const deadId of boundaryDead) {
       const deadSnake = state.snakes.get(deadId);
       if (deadSnake && deadSnake.alive) {
@@ -1222,10 +1222,12 @@ class ArenaInstance {
           if (socketId) {
             // Find killer info from kill events
             const killEvent = collisionResult.killEvents.find(e => e.victimId === deadId);
-            // Look up killer's userTag and isBot status
+            // Look up killer's snakeId (E6: exact highlight match), userTag and isBot status
+            let killerId: string | undefined;
             let killerTag: string | undefined;
             let killerIsBot: boolean | undefined;
             if (killEvent) {
+              killerId = killEvent.killerId;
               const killerSnake = state.snakes.get(killEvent.killerId);
               if (killerSnake) {
                 killerIsBot = killerSnake.isBot;
@@ -1242,6 +1244,7 @@ class ArenaInstance {
               snakeId: deadId,
               socketId,
               reason: killEvent ? `killed by ${killEvent.killerName}` : 'collision',
+              killerId,
               killerTag,
               killerIsBot,
             });
@@ -1268,7 +1271,7 @@ class ArenaInstance {
 
     // 10. Handle player deaths — emit events, call API, enter spectator mode
     for (const toKill of playersToKill) {
-      this.handlePlayerDeath(toKill.snakeId, toKill.socketId, toKill.reason, toKill.killerTag, toKill.killerIsBot);
+      this.handlePlayerDeath(toKill.snakeId, toKill.socketId, toKill.reason, toKill.killerTag, toKill.killerIsBot, toKill.killerId);
     }
 
     // Auto-scale snapshot mode based on player count
@@ -1289,7 +1292,7 @@ class ArenaInstance {
     }
   }
 
-  private handlePlayerDeath(snakeId: string, socketId: string, reason: string, killerTag?: string, killerIsBot?: boolean): void {
+  private handlePlayerDeath(snakeId: string, socketId: string, reason: string, killerTag?: string, killerIsBot?: boolean, killerId?: string): void {
     const player = this.players.get(socketId);
     const snake = this.state.snakes.get(snakeId);
     if (!player || !snake) {
@@ -1358,6 +1361,7 @@ class ArenaInstance {
       if (killerMatch) {
         player.socket.emit('killed', {
           killerName: killerMatch[1],
+          killerId: killerId || null,
           killerTag: killerTag || null,
           killerIsBot: killerIsBot ?? true,
         });

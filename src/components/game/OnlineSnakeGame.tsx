@@ -153,6 +153,8 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
   const wasConnectedRef = useRef(false);
   const autoReturnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const killerNameRef = useRef<string | null>(null);
+  // Audit E6: killer's snakeId — exact highlight match (names can collide)
+  const killerIdRef = useRef<string | null>(null);
   const highScoreRef = useRef(0);
   const playerScoreRef = useRef(0);
   const playerKillsRef = useRef(0);
@@ -255,7 +257,18 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
 
     (async () => {
       const tokenRes = await fetch('/api/auth/game-token');
-      if (!tokenRes.ok || cancelled) return;
+      if (!tokenRes.ok || cancelled) {
+        // Audit UX fix: a 401 here (expired/banned session) used to silently
+        // abort the connect and leave the player on the loading screen forever.
+        if (!cancelled) {
+          const errData = (await tokenRes.json().catch(() => ({}))) as { error?: string };
+          errorRef.current = errData.error === 'banned'
+            ? 'Account banned'
+            : 'Session expired — please sign in again';
+          statusRef.current = 'error';
+        }
+        return;
+      }
       const { token } = await tokenRes.json();
       if (!token || cancelled) return;
 
@@ -275,6 +288,9 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         }
         if (state.killerName && !killerNameRef.current) {
           killerNameRef.current = state.killerName;
+        }
+        if (state.killerId && !killerIdRef.current) {
+          killerIdRef.current = state.killerId;
         }
         // Death detection
         if (state.matchEnd && !isDeadRef.current) {
@@ -705,8 +721,13 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       if (isDeadRef.current && killerNameRef.current) {
         const deathElapsed = now - deathTimeRef.current;
         if (deathElapsed < 5000) {
-          for (const [, s] of gameState.snakes) {
-            if (!s.alive || s.name !== killerNameRef.current) continue;
+          for (const [sid, s] of gameState.snakes) {
+            // Audit E6: match the killer by snakeId when known (exact); fall
+            // back to name matching only for payloads without an id.
+            const isKiller = killerIdRef.current
+              ? sid === killerIdRef.current
+              : s.name === killerNameRef.current;
+            if (!s.alive || !isKiller) continue;
             if (s.path.length < 2) continue;
             const cam = camera;
             const zoom = cam.zoom;

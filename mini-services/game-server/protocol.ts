@@ -267,6 +267,7 @@ export class WSPlayerConnection {
   private _sendKilled(data: any): void {
     const wb = new WriteBuffer(128);
     const killerName: string = data.killerName ?? '';
+    const killerId: string = data.killerId ?? '';
     const killerIsBot: boolean = data.killerIsBot ?? false;
     const killerTag: string = data.killerTag ?? '';
 
@@ -274,9 +275,10 @@ export class WSPlayerConnection {
     const flags: number = killerIsBot ? 0x01 : 0x00;
 
     // Field order MUST match the client parser (game-socket.ts handleKilled):
-    //   killerName → killerTag (ALWAYS written, may be empty) → flags
+    //   killerName → killerId (E6, ALWAYS written, may be empty) → killerTag (ALWAYS written, may be empty) → flags
     wb.writeU8(OP.KILLED);
     wb.writeStringWithLen(killerName);
+    wb.writeStringWithLen(killerId);
     wb.writeStringWithLen(killerTag);
     wb.writeU8(flags);
 

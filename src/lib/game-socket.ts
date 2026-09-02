@@ -86,6 +86,7 @@ export interface GameSocketState {
     carriedChips?: number; commission?: number; bankedAmount?: number; chipsEarned?: number;
   } | null;
   killerName: string | null;
+  killerId: string | null;
   killerTag: string | null;
   killerIsBot: boolean;
   serverMapHalf: number | null;
@@ -223,6 +224,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
   } | null = null;
   let extractFailedReason: string | null = null;
   let killerName: string | null = null;
+  let killerId: string | null = null;
   let killerTag: string | null = null;
   let killerIsBot = true;
   let serverMapHalf: number | null = null;
@@ -279,6 +281,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       extractFailed: extractFailedReason,
       matchEnd: matchEndData,
       killerName,
+      killerId,
       killerTag,
       killerIsBot,
       serverMapHalf,
@@ -496,6 +499,9 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
     r.u8v(); // skip opcode
     const killerNameLen = r.u8v();
     killerName = r.utf8(killerNameLen);
+    // E6: killer snakeId — exact highlight match on the death screen
+    const killerIdLen = r.u8v();
+    killerId = killerIdLen > 0 ? r.utf8(killerIdLen) : null;
     const killerTagLen = r.u8v();
     killerTag = killerTagLen > 0 ? r.utf8(killerTagLen) : null;
     const kFlags = r.u8v();

@@ -188,13 +188,31 @@ function GuestPlaySection({ busy, onPlay }: { busy: boolean; onPlay: (country: s
 // AuthGate — loading skeleton → AuthScreen
 // ---------------------------------------------------------------------------
 export default function AuthGate() {
-  const { loading } = useAuth();
+  const { loading, banned } = useAuth();
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Loading arena…</p>
+        </div>
+      </div>
+    );
+  }
+  // Audit U10: banned accounts get an explicit notice instead of being
+  // silently dropped back to the sign-in screen with no explanation.
+  if (banned) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="w-full max-w-sm rounded-xl border border-red-500/30 bg-red-500/5 p-6 text-center space-y-3">
+          <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-red-500/15 border border-red-500/30">
+            <Skull className="w-5 h-5 text-red-400" />
+          </div>
+          <h1 className="text-lg font-bold text-red-400">Account Banned</h1>
+          <p className="text-sm text-muted-foreground">
+            This account has been suspended for violating the arena rules. If you believe this is a
+            mistake, contact support with your player tag.
+          </p>
         </div>
       </div>
     );

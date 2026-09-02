@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { Shield, Users, Castle, BookOpen, Search, UserPlus, Settings, LayoutDashboard, ShieldCheck } from 'lucide-react';
+import { Shield, Users, Castle, BookOpen, Search, UserPlus, Settings, LayoutDashboard, ShieldCheck, History } from 'lucide-react';
 import { PlayersTab } from '@/components/panels/admin/players-tab';
 import { ClipsTab } from '@/components/panels/admin/clips-tab';
 import GuideTab from '@/components/panels/admin/guide-tab';
 import ClansTab from '@/components/panels/admin/clans-tab';
+import { AuditTab } from '@/components/panels/admin/audit-tab';
 import type { ToastFn } from './_panel-primitives';
 
 const tabs = [
@@ -13,6 +14,7 @@ const tabs = [
   { id: 'clips', label: 'Clips', icon: ShieldCheck },
   { id: 'players', label: 'Players', icon: Users },
   { id: 'clans', label: 'Clans', icon: Castle },
+  { id: 'audit', label: 'Audit', icon: History },
   { id: 'guide', label: 'Guide', icon: BookOpen },
 ] as const;
 
@@ -177,6 +179,7 @@ export function AdminPanel({ onToast }: { onToast?: ToastFn }) {
         {activeTab === 'clips' && <ClipsTab onToast={onToast} />}
         {activeTab === 'players' && <PlayersTab onToast={onToast} />}
         {activeTab === 'clans' && <ClansTab onToast={onToast} />}
+        {activeTab === 'audit' && <AuditTab />}
         {activeTab === 'guide' && <GuideTab />}
       </div>
     </div>

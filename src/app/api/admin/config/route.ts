@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { seedGameConfig } from '@/lib/game-config-db'
 import { getSession } from '@/lib/auth'
+import { logAdminAction } from '@/lib/audit'
 
 /**
  * GET /api/admin/config
@@ -64,6 +65,14 @@ export async function PUT(req: NextRequest) {
     await db.gameConfig.update({
       where: { key: u.key },
       data: { value: JSON.stringify(u.value) },
+    })
+  }
+
+  // X11: audit trail — log which keys changed (values may be bulky; log keys + values)
+  const valid = updates.filter((u) => u.key)
+  if (valid.length > 0) {
+    await logAdminAction(session, 'config_update', 'config', valid.map((u) => u.key).join(','), {
+      updates: valid.map((u) => ({ key: u.key, value: u.value })),
     })
   }
 

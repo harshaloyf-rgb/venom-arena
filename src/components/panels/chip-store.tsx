@@ -90,7 +90,8 @@ export function ChipStore({ onToast }: ChipStoreProps) {
     }
     setBusyId(pack.id);
     try {
-      notify(`Initializing secure App Store/Play Store sandboxed billing for ₹${pack.priceINR} (${pack.priceUSD})...`, 'info', onToast);
+      // Audit U12: no fake "Initializing secure billing" toast — real billing
+      // is not integrated; the server response is the only source of truth.
       const res = await fetch('/api/chips/pack', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

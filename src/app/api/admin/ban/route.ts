@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { logAdminAction } from '@/lib/audit';
 
 // POST /api/admin/ban  body: { userTag: string, banned: boolean }
 // Admin-only. Sets the target player's `banned` field.
@@ -33,6 +34,11 @@ export async function POST(req: NextRequest) {
   await db.player.update({
     where: { userTag },
     data: { banned, lastSeenAt: new Date() },
+  });
+
+  // X11: record the ban/unban in the audit trail
+  await logAdminAction(session, banned ? 'ban' : 'unban', 'player', userTag, {
+    targetName: target.name,
   });
 
   return NextResponse.json({ ok: true, userTag, banned });

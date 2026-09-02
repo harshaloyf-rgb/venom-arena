@@ -211,9 +211,12 @@ export async function GET(req: NextRequest) {
   }
 
   // Backfill: for Instagram clips missing thumbnails, try to fetch og:image
-  // (only for URLs that pass the allowlist — legacy rows may hold junk URLs)
+  // (only for URLs that pass the allowlist — legacy rows may hold junk URLs).
+  // Hardening: cap attempts per request — rows whose og:image never resolves
+  // would otherwise be re-fetched by EVERY public GET of this endpoint.
   const backfillPromises = clips
     .filter((c) => !c.thumbnailUrl && c.platform === 'Instagram' && c.url && isAllowedClipUrl(c.url))
+    .slice(0, 3)
     .map(async (c) => {
       try {
         const thumb = await extractInstagramThumbnail(c.url);

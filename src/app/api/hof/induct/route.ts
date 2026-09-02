@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { HALL_OF_FAME_TIERS, CHAMPIONSHIP_PRIZE_TIERS } from '@/lib/game-config';
 import { verifyInternalSecret } from '@/lib/api-helpers';
+import { logAdminAction } from '@/lib/audit';
 
 // POST /api/hof/induct
 // Internal + admin-only endpoint for creating HOF entries.
@@ -130,6 +131,17 @@ export async function POST(req: Request) {
           title: resolvedTitle,
           chipsAtInduction,
         },
+      });
+    }
+
+    // X11: audit trail — only for admin-driven inductions (internal milestone
+    // automation has no session and runs on schedule; logging it would spam).
+    if (isAdmin) {
+      await logAdminAction(session!, 'hof_induct', 'hof', userTag, {
+        inductionType,
+        milestoneTierId: milestoneTierId ?? null,
+        championshipYear: championshipYear ?? null,
+        championshipRank: championshipRank ?? null,
       });
     }
 

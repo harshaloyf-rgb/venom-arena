@@ -604,3 +604,20 @@ model VerificationToken {
   @@index([email])
   @@index([token])
 }
+
+// X11: append-only admin action audit trail. Deliberately has NO relation to
+// Player — admin accounts can be deleted/anonymized and the log must survive.
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  adminId    String   // Player.id of the acting admin
+  adminTag   String   // denormalized VM-XXXXXX tag for quick display
+  action     String   // e.g. 'ban', 'modify_chips', 'clan_disband', 'config_update'
+  targetType String?  // 'player' | 'clan' | 'config' | 'clip' | 'hof'
+  targetId   String?  // userTag / clan tag / config key / clip id
+  details    String?  // JSON string with action-specific payload summary
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([adminId])
+  @@index([action])
+}

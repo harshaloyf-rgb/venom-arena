@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { logAdminAction } from '@/lib/audit';
 
 // All endpoints require admin role.
 async function requireAdmin() {
@@ -93,6 +94,8 @@ export async function POST(req: NextRequest) {
       where: { id: clipId },
       data: { featured: isFeaturing },
     });
+    // X11: audit trail
+    await logAdminAction(session, `clip_${action}`, 'clip', clipId, { title: clip.title });
     return NextResponse.json({ ok: true, featured: isFeaturing });
   }
 
@@ -111,6 +114,9 @@ export async function POST(req: NextRequest) {
       reviewedAt: new Date(),
     },
   });
+
+  // X11: audit trail
+  await logAdminAction(session, `clip_${action}`, 'clip', clipId, { title: clip.title });
 
   return NextResponse.json({ ok: true, status: newStatus });
 }
@@ -142,6 +148,9 @@ export async function PUT(req: NextRequest) {
       reviewedAt: new Date(),
     },
   });
+
+  // X11: audit trail
+  await logAdminAction(session, `clip_bulk_${action}`, 'clip', clipIds.join(','), { count: clipIds.length });
 
   return NextResponse.json({ ok: true, updated: clipIds.length, status: newStatus });
 }
