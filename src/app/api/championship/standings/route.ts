@@ -115,7 +115,13 @@ export async function GET(req: NextRequest) {
   });
 
   /* ── Player summary (for My Championship card) ────────────── */
-  let playerStatus = null;
+  type PlayerStatus = {
+    rank: number; bankedChips: number; gamesPlayed: number; efficiency: number;
+    prize: { chipsReward: number; crownTitle: string } | null;
+    gapAbove: number | null; gapBelow: number | null;
+    aboveName: string | null; belowName: string | null;
+  };
+  let playerStatus: PlayerStatus | null = null;
   if (session) {
     const me = sorted.find(c => c.isPlayer);
     if (me) {

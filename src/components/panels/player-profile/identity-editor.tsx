@@ -254,7 +254,7 @@ function SocialVerifyField({ platform, currentValue, currentVerified, onVerified
       )}
 
       {/* Code shown — user needs to add to bio */}
-      {stage === 'code_shown' && (
+      {(stage === 'code_shown' || stage === 'confirming') && (
         <div className="rounded-lg bg-indigo-500/5 border border-indigo-500/10 p-2 lg:p-1.5 space-y-2">
           <p className="text-[11px] text-indigo-300 font-semibold">Step 1: Copy this code</p>
           <div className="flex items-center gap-2">
@@ -556,7 +556,7 @@ export function IdentityEditor(props: IdentityEditorProps) {
         <div className="md:col-span-2 flex flex-col gap-3 lg:gap-1.5 border-t border-slate-900/60 pt-5 lg:pt-2">
           <label className="text-xs lg:text-[11px] font-bold text-slate-400 uppercase tracking-wider font-sans flex items-center gap-2">
             <Globe className="w-4 h-4 lg:w-3 lg:h-3 text-purple-400" /> Creator Social Channels
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" title="Verification required to link accounts" />
+            <span className="inline-flex" title="Verification required to link accounts"><ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /></span>
           </label>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-2">

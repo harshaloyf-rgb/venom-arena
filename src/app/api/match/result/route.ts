@@ -253,7 +253,9 @@ export async function POST(req: NextRequest) {
           });
 
           // Auto-induct into Hall of Fame on first-time tier achievement
-          if (milestoneCreated.createdAt.getTime() === milestoneCreated.updatedAt.getTime()) {
+          // PlayerMilestone has no updatedAt — a fresh upsert creation has createdAt ≈ now,
+          // while a re-achieved milestone keeps its ORIGINAL createdAt.
+          if (Date.now() - milestoneCreated.createdAt.getTime() < 2000) {
             const hofTierId = MILESTONE_TO_HOF_TIER[tierId];
             if (hofTierId) {
               const hofTier = HALL_OF_FAME_TIERS.find(t => t.id === hofTierId);

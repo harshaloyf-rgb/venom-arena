@@ -621,7 +621,7 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
       }
     };
     setClips(prev => prev.map(c => c.id === clip.id ? optimistic(c) : c));
-    if (featured?.id === clip.id) setFeatured(f => f ? optimistic({ ...f, likes: (f as any).likes ?? f.upvotes, dislikes: (f as any).dislikes ?? 0, myVote: (f as any).myVote ?? null }) : f);
+    if (featured?.id === clip.id) setFeatured(f => f ? optimistic({ ...f, likes: (f as any).likes ?? (f as any).upvotes ?? 0, dislikes: (f as any).dislikes ?? 0, myVote: (f as any).myVote ?? null }) : f);
     setExpandedClips(prev => prev.map(c => c.id === clip.id ? optimistic(c) : c));
     try {
       const r = await fetch('/api/clips/vote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clipId: clip.id, vote }) });
@@ -804,8 +804,14 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
                 ? <ScrollRow title="Instagram Reels" icon={<Instagram className="w-4 h-4 lg:w-3 lg:h-3 text-pink-400" />} onViewAll={() => handleViewAll('instagram')} showViewAll={showViewAllTab}>{igReels.map((c) => <VideoCardVertical key={c.id} clip={c} onVote={handleVote} onInspect={handleInspectCreator} canVote={isLoggedIn} />)}</ScrollRow>
                 : <PlatformEmpty label="Instagram Reels" />
             )}
-            {/* Matches Tab — vertical feed */}
-            {filterType === 'match-card' && (
+          </>
+        )}
+
+        {/* Matches Tab — T3: moved OUT of the isPlatformTab gate (TS-aliased narrowing
+            proved it unreachable there — match-card can never be a platform tab) */}
+        {!loading && !isExpanded && filterType === 'match-card' && (
+          <>
+          {filterType === 'match-card' && (
               matchCards.length > 0
                 ? <>
                     <ScrollRow title="Match Cards" icon={<Trophy className="w-4 h-4 lg:w-3 lg:h-3 text-amber-400" />} onViewAll={() => handleViewAll('match-card')} showViewAll={showViewAllTab}>

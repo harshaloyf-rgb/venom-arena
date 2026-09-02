@@ -10,7 +10,7 @@ export async function GET() {
 
   const groups = await db.player.groupBy({
     by: ['country'],
-    where: { country: { not: null, not: '' } },
+    where: { country: { not: '' } },
     _count: true,
     orderBy: { _count: { country: 'desc' } },
   });

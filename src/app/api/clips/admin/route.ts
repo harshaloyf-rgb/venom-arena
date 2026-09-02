@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const { error, session } = await requireAdmin();
   if (error) return error;
-  if (!session) return error.error;
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json();
   const { clipId, action } = body;
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const { error, session } = await requireAdmin();
   if (error) return error;
-  if (!session) return error.error;
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json();
   const { clipIds, action } = body;

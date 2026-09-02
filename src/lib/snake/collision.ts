@@ -23,6 +23,8 @@
 import type { Snake } from './types';
 import { SpatialHash, type SpatialEntity } from './spatial-hash';
 import { SPAWN_PROTECTION_MS, HEAD_ON_HEAD_BOOST_WINS, SNAKE_RADIUS, SEGMENT_SPACING } from './config';
+import { collectFreezeAnchors, nearestAnchorDistSq, isFreezeDistSq, type FreezeAnchor } from './freeze';
+import { getBotIsHunter } from './bot-ai';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -45,6 +47,10 @@ export interface CollisionResult {
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const DOT_DIST_FACTOR = 0.75;
+/** Head-dot offset from head center (inlined in hot loops — T3 zero-alloc). */
+const DOT_OFF = SNAKE_RADIUS * DOT_DIST_FACTOR;
+/** T3: single-player fallback anchor (no per-call allocation). */
+const _singleAnchorScratch: FreezeAnchor[] = [{ x: 0, y: 0 }];
 // Proximity uses head CENTER (not dot) against body spine.
 // Head surface touches body surface when center-to-spine distance <=
 // headRadius + bodyRadius. We allow 2px grace so collision triggers at
@@ -163,34 +169,6 @@ function distPointToSegSq(
   return cx * cx + cy * cy;
 }
 
-// ─── Get head dot position (offset forward from head center) ───────────────
-
-function getHeadDot(snake: Snake): { x: number; y: number } {
-  return {
-    x: snake.path.headX + Math.cos(snake.angle) * SNAKE_RADIUS * DOT_DIST_FACTOR,
-    y: snake.path.headY + Math.sin(snake.angle) * SNAKE_RADIUS * DOT_DIST_FACTOR,
-  };
-}
-
-// ─── Get PREVIOUS head dot position (from path history) ────────────────────
-
-function getPrevHeadDot(snake: Snake): { x: number; y: number } {
-  if (snake.path.length < 2) {
-    // No history yet — use current position as fallback
-    return getHeadDot(snake);
-  }
-  const prevHX = snake.path.getX(1);
-  const prevHY = snake.path.getY(1);
-  // Estimate previous angle from the direction path[1] → path[0]
-  const dx = snake.path.headX - prevHX;
-  const dy = snake.path.headY - prevHY;
-  const prevAngle = (dx * dx + dy * dy > 0.01) ? Math.atan2(dy, dx) : snake.angle;
-  return {
-    x: prevHX + Math.cos(prevAngle) * SNAKE_RADIUS * DOT_DIST_FACTOR,
-    y: prevHY + Math.sin(prevAngle) * SNAKE_RADIUS * DOT_DIST_FACTOR,
-  };
-}
-
 // ─── Collision Detection ───────────────────────────────────────────────────
 
 /**
@@ -209,18 +187,39 @@ export function checkCollisions(
   // far from the player (player can't see them, so precision doesn't matter).
   playerX?: number,
   playerY?: number,
+  // T3 (Tier-3): ALL alive real players — collision culling is measured
+  // against the NEAREST player, not one arbitrary player. The online server
+  // passes every connected player; with a single anchor, bots near ANOTHER
+  // player were culled from the body hash entirely (pass-through hole).
+  playerAnchors?: FreezeAnchor[],
 ): CollisionResult {
   const scratch = _scratch;
   const VIEWPORT_COLLISION_RANGE_SQ = 2000 * 2000;
   // PERF: Clear per-tick caches
   _tailIdxCache.clear();
-  // FIX: Body hash optimization — skip segments for bots far from the player.
-  // Increased from 8000 to 12000: a snake with bodyLength 300+ at SEGMENT_SPACING=8
-  // has a body that extends 2400+ px behind its head. At 8000px range, a bot
-  // whose head is at 8001px but whose body trails toward the player was excluded,
-  // causing the player to pass through the body without collision detection.
-  const BODY_HASH_RANGE_SQ = 12000 * 12000;
+  // T3: body-hash insert range tightened from 12000px to 5000px.
+  // With G1 freeze, heads beyond 2000px are static; a static snake's body
+  // trails at most ~2600px behind its head (computeBodyLength(1e6) ≈ 324
+  // segments × 8px). Range = freeze(2000) + max trail(~2600) + margin(400)
+  // = 5000px guarantees every body pixel that can reach the 2000px live
+  // zone still has its snake inserted. 12000² → 5000² removes ~85% of the
+  // frozen-body hash inserts.
+  const BODY_HASH_RANGE_SQ = (2000 + 3000) * (2000 + 3000);
   const hasPlayerRef = playerX !== undefined && playerY !== undefined;
+
+  // T3: resolve anchor list — explicit anchors, else single player, else
+  // collect from the snakes map (covers all callers).
+  let anchors: FreezeAnchor[];
+  if (playerAnchors !== undefined && playerAnchors.length > 0) {
+    anchors = playerAnchors;
+  } else if (hasPlayerRef) {
+    _singleAnchorScratch[0].x = playerX!;
+    _singleAnchorScratch[0].y = playerY!;
+    anchors = _singleAnchorScratch;
+  } else {
+    anchors = collectFreezeAnchors(snakes);
+  }
+  const hasAnchors = anchors.length > 0;
 
   // ── Build body spatial hash (broad phase) ──
   bodyHash.clear();
@@ -228,10 +227,8 @@ export function checkCollisions(
   for (const [, snake] of snakes) {
     if (!snake.alive) continue;
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
-    if (hasPlayerRef && snake.isBot) {
-      const dx = snake.path.headX - playerX!;
-      const dy = snake.path.headY - playerY!;
-      if (dx * dx + dy * dy > BODY_HASH_RANGE_SQ) continue;
+    if (hasAnchors && snake.isBot) {
+      if (nearestAnchorDistSq(anchors, snake.path.headX, snake.path.headY) > BODY_HASH_RANGE_SQ) continue;
     }
     // PERF: Use cached visual tail idx (avoids sqrt-walk every tick).
     // Recompute only when score changed (cachedVisualTailIdx === -1).
@@ -257,12 +254,12 @@ export function checkCollisions(
   }
 
   // ── Build head hash (for head-on-head broad phase) ──
+  // T3: inlined head-dot math (getHeadDot allocated {x,y} per snake per tick)
   headHash.clear();
   for (const [, snake] of snakes) {
     if (!snake.alive) continue;
-    const dot = getHeadDot(snake);
-    scratch.x = dot.x;
-    scratch.y = dot.y;
+    scratch.x = snake.path.headX + Math.cos(snake.angle) * DOT_OFF;
+    scratch.y = snake.path.headY + Math.sin(snake.angle) * DOT_OFF;
     scratch.radius = SNAKE_RADIUS;
     scratch.id = snake.id;
     headHash.insert(scratch);
@@ -271,37 +268,74 @@ export function checkCollisions(
   // Reuse pre-allocated Sets/Maps (Issue #6 GC fix)
   const deadSnakes = _deadSnakesSet;
   deadSnakes.clear();
-  const hohChecked = _hohCheckedSet;
-  hohChecked.clear();
   const killEvents: KillEvent[] = [];
 
+  // ═══════════════ PASS 1: HEAD-ON-HEAD ═══════════════
+  // T3 zero-alloc + freeze-aware rewrite:
+  //  - head dots computed inline (getHeadDot/getPrevHeadDot allocated 2-4K
+  //    {x,y} objects per tick)
+  //  - pairs processed in CANONICAL order (snake.id < otherId) — the pair is
+  //    seen from exactly one side, so the hohChecked Set + `${a}|${b}` string
+  //    keys (~2-4K allocations/tick) are GONE. Symmetry is guaranteed: the
+  //    head hash query radius is the same from both sides.
+  //  - FROZEN bots skip the outer loop: they don't move, so no crossing can
+  //    START from their side; movers still detect frozen heads via the hash
+  //    (degenerate-segment branch in segsIntersect keeps the kill live).
   for (const [, snake] of snakes) {
     if (!snake.alive || deadSnakes.has(snake.id)) continue;
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
+    if (hasAnchors && snake.isBot && !getBotIsHunter(snake.id)
+        && isFreezeDistSq(nearestAnchorDistSq(anchors, snake.path.headX, snake.path.headY))) {
+      continue; // frozen — no self-initiated movement, no crossings from this side
+    }
 
-    const dot = getHeadDot(snake);
-    const prevDot = getPrevHeadDot(snake);
+    // Inline head dot (movement END point)
+    const hx = snake.path.headX;
+    const hy = snake.path.headY;
+    const dotX = hx + Math.cos(snake.angle) * DOT_OFF;
+    const dotY = hy + Math.sin(snake.angle) * DOT_OFF;
 
-    const nearby = headHash.query(dot.x, dot.y, SNAKE_RADIUS * 4);
+    // Inline previous head dot (movement START point)
+    let prevDotX = dotX, prevDotY = dotY;
+    if (snake.path.length >= 2) {
+      const pX = snake.path.getX(1);
+      const pY = snake.path.getY(1);
+      const dx = hx - pX, dy = hy - pY;
+      const pAngle = (dx * dx + dy * dy > 0.01) ? Math.atan2(dy, dx) : snake.angle;
+      prevDotX = pX + Math.cos(pAngle) * DOT_OFF;
+      prevDotY = pY + Math.sin(pAngle) * DOT_OFF;
+    }
+
+    const nearby = headHash.query(dotX, dotY, SNAKE_RADIUS * 4);
     for (let i = 0; i < nearby.length; i++) {
       const otherId = nearby[i].id as string;
       if (otherId === snake.id || deadSnakes.has(otherId)) continue;
-      // Prevent checking the same pair twice (A→B and B→A)
-      const pairKey = snake.id < otherId ? `${snake.id}|${otherId}` : `${otherId}|${snake.id}`;
-      if (hohChecked.has(pairKey)) continue;
-      hohChecked.add(pairKey);
+      // Canonical pair order: process only from the smaller id — exactly once.
+      if (!(snake.id < otherId)) continue;
 
       const otherSnake = snakes.get(otherId);
       if (!otherSnake || !otherSnake.alive) continue;
       if (now - otherSnake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
-      const otherDot = getHeadDot(otherSnake);
-      const otherPrevDot = getPrevHeadDot(otherSnake);
+      // Inline other snake's head dot + prev dot
+      const ohx = otherSnake.path.headX;
+      const ohy = otherSnake.path.headY;
+      const otherDotX = ohx + Math.cos(otherSnake.angle) * DOT_OFF;
+      const otherDotY = ohy + Math.sin(otherSnake.angle) * DOT_OFF;
+      let otherPrevDotX = otherDotX, otherPrevDotY = otherDotY;
+      if (otherSnake.path.length >= 2) {
+        const opX = otherSnake.path.getX(1);
+        const opY = otherSnake.path.getY(1);
+        const odx = ohx - opX, ody = ohy - opY;
+        const opAngle = (odx * odx + ody * ody > 0.01) ? Math.atan2(ody, odx) : otherSnake.angle;
+        otherPrevDotX = opX + Math.cos(opAngle) * DOT_OFF;
+        otherPrevDotY = opY + Math.sin(opAngle) * DOT_OFF;
+      }
 
       // Only movement line crossing — no proximity death (eyes can touch)
       if (segsIntersect(
-        prevDot.x, prevDot.y, dot.x, dot.y,
-        otherPrevDot.x, otherPrevDot.y, otherDot.x, otherDot.y,
+        prevDotX, prevDotY, dotX, dotY,
+        otherPrevDotX, otherPrevDotY, otherDotX, otherDotY,
       )) {
         const scoreA = snake.score;
         const scoreB = otherSnake.score;
@@ -347,15 +381,23 @@ export function checkCollisions(
     if (!snake.alive || deadSnakes.has(snake.id)) continue;
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
-    const dot = getHeadDot(snake);
-    const prevDot = getPrevHeadDot(snake);
+    // T3: inlined dot math (no {x,y} allocations per snake per tick)
+    const hx = snake.path.headX;
+    const hy = snake.path.headY;
+    const dotX = hx + Math.cos(snake.angle) * DOT_OFF;
+    const dotY = hy + Math.sin(snake.angle) * DOT_OFF;
     // Head CENTER for proximity (crawl detection) — symmetric, no dot-offset bias
-    const hcx = snake.path.headX;
-    const hcy = snake.path.headY;
+    const hcx = hx;
+    const hcy = hy;
     let prevHcx = hcx, prevHcy = hcy;
+    let prevDotX = dotX, prevDotY = dotY;
     if (snake.path.length >= 2) {
       prevHcx = snake.path.getX(1);
       prevHcy = snake.path.getY(1);
+      const dx = hx - prevHcx, dy = hy - prevHcy;
+      const pAngle = (dx * dx + dy * dy > 0.01) ? Math.atan2(dy, dx) : snake.angle;
+      prevDotX = prevHcx + Math.cos(pAngle) * DOT_OFF;
+      prevDotY = prevHcy + Math.sin(pAngle) * DOT_OFF;
     }
 
     // Broad phase: find which snakes have body near this head
@@ -375,16 +417,11 @@ export function checkCollisions(
       if (!otherSnake || !otherSnake.alive || deadSnakes.has(otherId)) continue;
       if (now - otherSnake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
-      // P2 FIX #8: Skip expensive narrow-phase for bot-vs-bot pairs
-      // where BOTH are far from the player viewport.
-      if (playerX !== undefined && playerY !== undefined
-          && snake.isBot && otherSnake.isBot) {
-        const dxA = hcx - playerX;
-        const dyA = hcy - playerY;
-        const dxB = otherSnake.path.headX - playerX;
-        const dyB = otherSnake.path.headY - playerY;
-        if (dxA * dxA + dyA * dyA > VIEWPORT_COLLISION_RANGE_SQ
-            && dxB * dxB + dyB * dyB > VIEWPORT_COLLISION_RANGE_SQ) {
+      // P2 FIX #8 + T3: Skip expensive narrow-phase for bot-vs-bot pairs
+      // where BOTH are far from EVERY player's viewport (nearest-anchor).
+      if (hasAnchors && snake.isBot && otherSnake.isBot) {
+        if (nearestAnchorDistSq(anchors, hcx, hcy) > VIEWPORT_COLLISION_RANGE_SQ
+            && nearestAnchorDistSq(anchors, otherSnake.path.headX, otherSnake.path.headY) > VIEWPORT_COLLISION_RANGE_SQ) {
           continue;
         }
       }
@@ -414,7 +451,7 @@ export function checkCollisions(
         //    Catches perpendicular/angled approaches (tunneling prevention).
         //    No distance threshold — any geometric crossing = death.
         if (segsIntersect(
-          prevDot.x, prevDot.y, dot.x, dot.y,
+          prevDotX, prevDotY, dotX, dotY,
           sx, sy, ex, ey,
         )) {
           hit = true;

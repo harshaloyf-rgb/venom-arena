@@ -110,7 +110,6 @@ interface EnrichedEntry extends LeaderboardEntry {
   isHOF?: boolean;
   championshipPrize?: { label: string; color: string } | null;
   rankChange?: number;
-  region?: string;
   milestoneBadge?: string;
   milestoneColor?: string;
   isDemo?: boolean;
@@ -618,7 +617,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
   ];
 
   // Reusable per-tab toolbar (count + Find Me + tie-break info)
-  function TabToolbar({ countLabel, tabColor }: { countLabel: string; tabColor: string }) {
+  function TabToolbar({ countLabel, tabColor }: { countLabel?: string; tabColor: string }) {
     return (
       <div className="flex items-center justify-between flex-wrap gap-2 lg:gap-1">
         <span className="text-[10px] lg:text-[11px] font-mono text-slate-500">{countLabel}</span>

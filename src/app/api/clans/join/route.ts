@@ -10,10 +10,12 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const tag = String(body.tag || '').toUpperCase().trim();
 
+  let clanMaxMembers = 0;
   try {
     await db.$transaction(async (tx) => {
       const clan = await tx.clan.findUnique({ where: { tag }, include: { _count: { select: { members: true } } } });
       if (!clan) throw new Error('CLAN_NOT_FOUND');
+      clanMaxMembers = clan.maxMembers;
       if (clan._count.members >= clan.maxMembers) throw new Error('CLAN_FULL');
 
       const me = await tx.player.findUnique({ where: { id: session.playerId } });
@@ -45,7 +47,7 @@ export async function POST(req: NextRequest) {
     const msg = e instanceof Error ? e.message : String(e);
     const errorMap: Record<string, { error: string; status: number }> = {
       CLAN_NOT_FOUND: { error: 'Clan not found.', status: 404 },
-      CLAN_FULL: { error: `Clan is full (max ${clan.maxMembers}).`, status: 400 },
+      CLAN_FULL: { error: `Clan is full (max ${clanMaxMembers}).`, status: 400 },
       PLAYER_NOT_FOUND: { error: 'Not found', status: 404 },
       ALREADY_IN_CLAN: { error: 'Leave your current clan first.', status: 400 },
     };

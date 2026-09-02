@@ -1172,6 +1172,7 @@ class ArenaInstance {
     const collisionResult = checkCollisions(
       state.snakes, this.bodyHash, this.headHash, now,
       playerHx, playerHy,
+      freezeAnchors, // T3: nearest-of-all-players culling (multiplayer-safe)
     );
 
     // 8. Process collision deaths — drop food for collision kills

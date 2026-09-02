@@ -62,7 +62,7 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
   const [mileLoading, setMileLoading] = useState(false);
   const [mileTierFilter, setMileTierFilter] = useState<string>('all');
   const [mileSearch, setMileSearch] = useState('');
-  const mileListRef = useRef<HTMLDivElement | null>(null);
+  const mileListRef = useRef<HTMLOListElement | null>(null);
   const [mileEntries, setMileEntries] = useState<InducteeEntry[]>([]);
   const [mileTotal, setMileTotal] = useState(0);
   const [mileFirstAchievers, setMileFirstAchievers] = useState<Record<string, { playerName: string; userTag: string; country: string; inductedAt: string } | null>>({});

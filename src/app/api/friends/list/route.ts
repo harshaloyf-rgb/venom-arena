@@ -16,10 +16,11 @@ export async function GET() {
   });
   if (!me) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const friends = [];
-  const pendingReceived = [];
-  const pendingSent = [];
-  const blocked = [];
+  type FriendRow = ReturnType<typeof toFriend>;
+  const friends: FriendRow[] = [];
+  const pendingReceived: FriendRow[] = [];
+  const pendingSent: FriendRow[] = [];
+  const blocked: FriendRow[] = [];
 
   for (const f of me.friendsFrom) {
     if (f.status === 'accepted') {

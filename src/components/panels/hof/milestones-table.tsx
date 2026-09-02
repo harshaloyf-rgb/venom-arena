@@ -13,7 +13,7 @@ interface MilestonesFlatTableProps {
   tierFilter: string;
   search: string;
   firstAchievers: Record<string, { playerName: string; userTag: string; country: string; inductedAt: string } | null>;
-  listRef: React.RefObject<HTMLDivElement | null>;
+  listRef: React.RefObject<HTMLOListElement | null>;
   myPlayerTag: string | null;
   onInspectPlayer?: (p: InspectedPlayer) => void;
 }

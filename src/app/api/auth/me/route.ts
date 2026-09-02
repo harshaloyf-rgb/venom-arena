@@ -20,7 +20,9 @@ export async function GET() {
     // Auto-generate referral code for existing users who don't have one
     if (!player.referralCode) {
       await ensureReferralCode(player.id);
-      player = await db.player.findUnique({ where: { id: session.playerId } })!;
+      const refreshed = await db.player.findUnique({ where: { id: session.playerId } });
+      if (!refreshed) return NextResponse.json({ player: null }, { status: 500 });
+      player = refreshed;
     }
 
     return NextResponse.json({ player: toProfile(player) });

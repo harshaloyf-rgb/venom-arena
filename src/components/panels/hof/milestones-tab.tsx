@@ -15,7 +15,7 @@ interface MilestonesTabProps {
   search: string;
   entries: InducteeEntry[];
   firstAchievers: Record<string, { playerName: string; userTag: string; country: string; inductedAt: string } | null>;
-  listRef: React.RefObject<HTMLDivElement | null>;
+  listRef: React.RefObject<HTMLOListElement | null>;
   myPlayerTag: string | null;
   onToast?: ToastFn;
   onTierFilterChange: (filter: string) => void;

@@ -650,8 +650,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
                   type="button"
                   onClick={handleClick}
                   className={`px-3.5 py-1.5 lg:px-2 lg:py-1 rounded-lg text-xs lg:text-[11px] font-sans font-semibold transition-all cursor-pointer ${
-                    (tab.id === 'cosmetics' && shopView === 'cosmetics')
-                      || (tab.id !== 'cosmetics' && activeCategory === tab.id)
+                    (tab.id !== 'cosmetics' && activeCategory === tab.id)
                       ? 'bg-slate-800 text-white border border-slate-700 shadow-md font-bold'
                       : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-transparent'
                   }`}

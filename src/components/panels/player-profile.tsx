@@ -263,7 +263,7 @@ function EmailVerificationBanner({ onRefresh, onToast }: { onRefresh: () => void
         </button>
       )}
 
-      {step === 'sent' && (
+      {(step === 'sent' || step === 'verifying') && (
         <div className="ml-6 space-y-1.5">
           <p className="text-[11px] text-slate-400">Check your email! (or paste the token below for dev testing)</p>
           <div className="flex items-center gap-1.5">

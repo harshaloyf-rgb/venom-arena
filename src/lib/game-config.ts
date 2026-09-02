@@ -119,6 +119,7 @@ export function getArenaById(id: string): ArenaTier | undefined {
 // ----------------------------------------------------------------------------
 export type CosmeticType = 'skin';
 export type SkinPattern =
+  | 'gradient'
   | 'rainbow'
   | 'neon'
   | 'glow'

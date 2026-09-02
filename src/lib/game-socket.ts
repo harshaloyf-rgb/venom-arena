@@ -782,7 +782,14 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
 
   function createWsConnection() {
     try {
-      ws = new WebSocket(`/?XTransformPort=${savedGamePort}`);
+      // T3 (static-export readiness): the WS URL is now configurable via
+      // NEXT_PUBLIC_GAME_WS_URL. The default keeps the historical platform
+      // behavior (same-origin relative URL + XTransformPort port routing),
+      // which also works in the z preview proxy. For a static export
+      // (Capacitor shell / CDN-hosted client), set the env var to the
+      // absolute game-server origin, e.g. wss://ws.example.com.
+      const wsUrl = process.env.NEXT_PUBLIC_GAME_WS_URL || `/?XTransformPort=${savedGamePort}`;
+      ws = new WebSocket(wsUrl);
       ws.binaryType = 'arraybuffer';
       ws.onopen = onOpen;
       ws.onmessage = onMessage;

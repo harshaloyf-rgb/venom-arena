@@ -197,7 +197,7 @@ function GuestUpgradeBanner({
       <div className="border-t border-slate-800/60 pt-3 lg:pt-1.5">
         <div className="flex items-center gap-1.5 mb-2 lg:mb-1">
           <span className="text-[11px] text-slate-500 font-sans uppercase tracking-wider font-bold">Or quick sign-up with</span>
-          <Info className="w-3 h-3 text-slate-600" title="Social login creates a new account. Your guest progress (chips, skins, levels) will NOT carry over. Use the form above to preserve your progress." />
+          <span className="inline-flex" title="Social login creates a new account. Your guest progress (chips, skins, levels) will NOT carry over. Use the form above to preserve your progress."><Info className="w-3 h-3 text-slate-600" /></span>
         </div>
         <div className="grid grid-cols-3 gap-2 lg:gap-1">
           <button

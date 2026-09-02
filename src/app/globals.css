@@ -158,3 +158,44 @@ canvas.va-game-canvas {
   overflow: hidden;
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════════
+   T3 MOBILE SHELL (audit M1-M6)
+   Pairs with the viewport export in layout.tsx (viewportFit=cover).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* M6: kill pull-to-refresh + rubber-band scrolling (page-level).
+   The game canvas keeps its own touch-action:none (see .va-game-canvas). */
+html {
+  overscroll-behavior: none;
+}
+body {
+  -webkit-text-size-adjust: 100%; /* M1: no auto text inflation on mobile */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* M6: iOS Safari ignores user-scalable=no — double-tap zoom is killed by
+   touch-action: manipulation on interactive elements (allows pan, disables
+   the double-tap-to-zoom gesture). */
+button,
+a,
+[role="button"],
+input,
+select,
+textarea,
+label {
+  touch-action: manipulation;
+}
+
+/* M2: safe-area utilities — notch / home-indicator insets. On desktop
+   env() resolves to 0, so these are safe to apply unconditionally. */
+.pt-safe { padding-top: env(safe-area-inset-top); }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.pl-safe { padding-left: env(safe-area-inset-left); }
+.pr-safe { padding-right: env(safe-area-inset-right); }
+
+/* M2: true full-height (mobile URL bars) — 100dvh with vh fallback */
+.h-dvh { height: 100dvh; }
+@supports not (height: 100dvh) {
+  .h-dvh { height: 100vh; }
+}

@@ -35,11 +35,11 @@ import { chipShort, chipFull } from '@/lib/format-chips';
 
 // ── Difficulty filter groups ──────────────────────────────────────────
 
-const DIFFICULTY_GROUPS = [
-  { label: 'All',       difficulty: null as const,            accent: 'text-slate-400' },
-  { label: 'Beginner',   difficulty: 'Beginner' as const,    accent: 'text-emerald-400' },
-  { label: 'Medium',     difficulty: 'Medium' as const,      accent: 'text-amber-400' },
-  { label: 'High Stakes', difficulty: 'High Stakes' as const, accent: 'text-rose-400' },
+const DIFFICULTY_GROUPS: { label: string; difficulty: string | null; accent: string }[] = [
+  { label: 'All',       difficulty: null,            accent: 'text-slate-400' },
+  { label: 'Beginner',   difficulty: 'Beginner',    accent: 'text-emerald-400' },
+  { label: 'Medium',     difficulty: 'Medium',      accent: 'text-amber-400' },
+  { label: 'High Stakes', difficulty: 'High Stakes', accent: 'text-rose-400' },
   { label: 'Extreme',    difficulty: 'Extreme' as const,     accent: 'text-red-400' },
   { label: 'Legendary',  difficulty: 'Legendary' as const,  accent: 'text-yellow-400' },
 ] as const;

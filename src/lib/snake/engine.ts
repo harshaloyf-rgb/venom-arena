@@ -781,8 +781,9 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
     maintainMapFood(state, foodIdRef);
   }
 
-  // 6. Check collisions (shared)
-  const collisionResult = checkCollisions(state.snakes, bodyHash, headHash, now, state.player?.path.headX, state.player?.path.headY);
+  // 6. Check collisions (shared) — T3: pass ALL player anchors so body-hash
+  // inserts and viewport culling measure distance to the NEAREST player.
+  const collisionResult = checkCollisions(state.snakes, bodyHash, headHash, now, state.player?.path.headX, state.player?.path.headY, freezeAnchors);
   for (const deadId of collisionResult.deadIds) {
     const deadSnake = state.snakes.get(deadId);
     if (deadSnake) {

@@ -75,6 +75,7 @@ export interface LeaderboardEntry {
   level: number;
   rank: number;
   isPlayer?: boolean;
+  clanTag?: string | null;
 }
 
 export interface MatchResult {

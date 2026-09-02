@@ -592,7 +592,7 @@ export default function GameCanvas({
       </div>
 
       {/* ── Bottom Left: Boost + Extract Buttons ── */}
-      <div className="absolute bottom-6 left-5 z-10 flex flex-col gap-3 pointer-events-none">
+      <div className="absolute bottom-[calc(1.5rem_+_env(safe-area-inset-bottom))] left-[calc(1.25rem_+_env(safe-area-inset-left))] z-10 flex flex-col gap-3 pointer-events-none">
         {/* Boost Button */}
         <button
           onPointerDown={(e) => { e.stopPropagation(); externalBoostRef.current = true; }}

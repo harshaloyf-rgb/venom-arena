@@ -27,7 +27,6 @@ export async function signSession(payload: Omit<SessionPayload, 'iat' | 'exp'>, 
 
 export function verifySession(token: string): SessionPayload | null {
   try {
-    // @ts-expect-error jwt.verify return type
     return jwt.verify(token, getJwtSecret()) as SessionPayload;
   } catch {
     return null;
