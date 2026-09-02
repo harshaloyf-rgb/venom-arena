@@ -16,7 +16,7 @@ export default function OfflinePage() {
         </h1>
         <p className="max-w-sm text-sm leading-relaxed text-slate-400">
           Venom Arena needs a live link to the arena server. Check your
-          connection and slither back in — your banked chips are safe.
+          connection and slide back in — your banked chips are safe.
         </p>
       </div>
       <Link

@@ -39,7 +39,7 @@ const BOT_NAMES = [
   'Sidewinder', 'Boa', 'Asp', 'Taipan', 'Krait', 'Copperhead',
   'KingSnake', 'Coral', 'Adder', 'Basilisk', 'Hydra', 'Ouroboros',
   'Naga', 'Serpent', 'Jormungandr', 'Apep', 'Quetzal', 'Coatl',
-  'Wiggles', 'Slithers', 'Fang', 'Venom', 'Toxin', 'Striker',
+  'Wiggles', 'Sidewinder', 'Fang', 'Venom', 'Toxin', 'Striker',
 ];
 
 const SNAKE_PALETTES: [string, string][] = [

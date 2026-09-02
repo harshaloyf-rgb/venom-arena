@@ -80,7 +80,7 @@ cp android/keystore.properties.template android/keystore.properties   # fill it 
 2. Upload the signed **.aab** (Build → Generate Signed Bundle) to internal testing first.
 3. Store listing copy, ready to paste:
 
-   - **Short (80 chars):** `Slither, boost, and outplay rivals in a fast multiplayer snake arena.`
+   - **Short (80 chars):** `Weave, boost, and outplay rivals in a fast multiplayer snake arena.`
    - **Full:** `Venom Arena is a real-time multiplayer snake io game. Grow by collecting chips, boost to cut off rivals, survive the shrinking arena, and climb the global leaderboard. Season passes, daily rewards, clans, and tournaments keep the arena alive.`
 
 4. Required graphic assets: app icon (already generated: `public/icons/icon-512.png`), 2+ phone screenshots (take from the game), 1024×500 feature graphic.

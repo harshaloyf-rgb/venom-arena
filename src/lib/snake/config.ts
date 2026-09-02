@@ -537,7 +537,7 @@ export function getArenaConfig(arenaId?: string): ArenaConfig {
 // ============================================================================
 // Used by both offline (engine.ts) and online (game-server) to assign
 // visually diverse colors to bots. Each entry: [bodyColor, headColor].
-// Extracted from SLITHER_PRESETS so the server (no client deps) can use them.
+// Extracted from SKIN_PRESETS so the server (no client deps) can use them.
 // ============================================================================
 
 export const BOT_SKIN_PALETTES: [string, string][] = [
@@ -572,7 +572,7 @@ export function getRandomBotPalette(): [string, string] {
 // ============================================================================
 // 15. BOT SKIN OVERRIDES — real skinId assignments for bots (server-safe)
 // ============================================================================
-// Mirrors SLITHER_PRESETS from cosmetics-types.ts so the server (which cannot
+// Mirrors SKIN_PRESETS from cosmetics-types.ts so the server (which cannot
 // import client-only modules) can assign real preset skins to bots.
 // Each entry: { skinId, bodyColor, headColor }. The client's renderSnakeFallback
 // will look up getPresetVisualProps(skinId) to get the full multi-color pattern.

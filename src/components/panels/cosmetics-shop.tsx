@@ -29,12 +29,12 @@ import type {
   CategoryFilter,
   CustomSkinState,
   ShopView,
-  SlitherPreset,
+  SkinPreset,
   TaperStyle,
 } from './cosmetics/cosmetics-types';
 import {
   PALETTE_COLORS,
-  SLITHER_PRESETS,
+  SKIN_PRESETS,
   BODY_STYLE_OPTIONS,
   TAPER_OPTIONS,
   CATEGORY_TABS,
@@ -101,7 +101,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
   const isSkinActive = (item: Skin) =>
     !customState?.useCustomSkin && p.currentSkin === item.id;
 
-  const isPresetActive = (preset: SlitherPreset) =>
+  const isPresetActive = (preset: SkinPreset) =>
     customState?.useCustomSkin === true &&
     customState.currentSkin === preset.id;
 
@@ -172,7 +172,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
     }
   }
 
-  async function handleEquipSlitherPreset(preset: SlitherPreset) {
+  async function handleEquipSkinPreset(preset: SkinPreset) {
     const segments = generateCustomSegments(
       preset.colors,
       preset.shape,
@@ -245,9 +245,9 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
     }
 
     // Check if it's a free preset
-    const preset = SLITHER_PRESETS.find((pr) => pr.id === skinId);
+    const preset = SKIN_PRESETS.find((pr) => pr.id === skinId);
     if (preset) {
-      await handleEquipSlitherPreset(preset);
+      await handleEquipSkinPreset(preset);
       return;
     }
 
@@ -663,16 +663,16 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
 
           {/* Gallery grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 lg:gap-1.5">
-            {/* A. FREE SLITHER PRESETS */}
+            {/* A. FREE SKIN PRESETS */}
             {showPresetsTab &&
-              SLITHER_PRESETS.map((preset) => {
+              SKIN_PRESETS.map((preset) => {
                 const active = isPresetActive(preset);
                 return (
                   <PresetCard
                     key={preset.id}
                     preset={preset}
                     active={active}
-                    onClick={() => handleEquipSlitherPreset(preset)}
+                    onClick={() => handleEquipSkinPreset(preset)}
                   />
                 );
               })}

@@ -1,7 +1,7 @@
 // ============================================================================
 // Input Handler — Tracks mouse, keyboard, and touch input for snake control.
 //
-// Mouse steering (slither.io style):
+// Mouse steering (classic .io style):
 //   The angle from the VIEWPORT CENTER to the MOUSE CURSOR determines the
 //   snake's target direction. This is intuitive — point where you want to go.
 //   Listens on `window` so it works across the full browser viewport.
@@ -145,7 +145,7 @@ export class InputHandler {
       return;
     }
 
-    // Mouse input (slither.io style): angle from viewport center to cursor
+    // Mouse input (classic .io style): angle from viewport center to cursor
     // No mouseInView guard — if mouse has moved at all, use its position.
     // When mouse leaves the viewport, mousemove stops, and we keep the last
     // known direction (snake keeps turning toward where mouse was).
@@ -179,7 +179,7 @@ export class InputHandler {
     this.keys.delete(e.key.toLowerCase());
   };
 
-  /** Track cursor position relative to viewport (slither.io style) */
+  /** Track cursor position relative to viewport (classic .io style) */
   private onMouseMove = (e: MouseEvent): void => {
     this.mouseClientX = e.clientX;
     this.mouseClientY = e.clientY;

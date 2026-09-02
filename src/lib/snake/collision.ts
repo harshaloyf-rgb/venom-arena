@@ -371,7 +371,7 @@ export function checkCollisions(
   // MUTUAL KILL RESOLUTION: If both A hits B's body AND B hits A's body
   // in the same tick (common in head-on approaches where each head enters
   // the other's neck zone), only the shorter snake dies. Longer snake
-  // survives. Equal length = both die. This matches slither.io convention:
+  // survives. Equal length = both die. This matches classic .io convention:
   // the body-owner has right-of-way; shorter snake is the aggressor.
 
   // Collect all head→body hits as (attackerId, bodyOwnerId) pairs

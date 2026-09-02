@@ -158,7 +158,7 @@ function getCachedGradientCircle(color: string, r: number, dpr: number): Offscre
   return oc;
 }
 
-// ─── Pre-rendered boost glow sprite cache (slither.io-style per-segment glow) ──
+// ─── Pre-rendered boost glow sprite cache (classic .io-style per-segment glow) ──
 // Soft radial gradient circle drawn behind each segment when boosting.
 // Replaces the old line-stroke aura which looked like ugly straight lines.
 const _boostGlowCache = new Map<string, OffscreenCanvas | HTMLCanvasElement>();
@@ -645,7 +645,7 @@ export function renderSnakeAtlas(
   const vpDiag = Math.sqrt(cw * cw + ch * ch) / zoom;
   const walked = walkPathFixedStep(effectivePath, step, maxSegs, snake.angle, vpDiag + 500);
 
-  // ── BOOST GLOW: Per-segment soft glow (slither.io style) ──
+  // ── BOOST GLOW: Per-segment soft glow (classic .io style) ──
   if (snake.boosting && walked.count > 0) {
     const boostGlow = getCachedBoostGlow(snake.color, segRadius, _cachedDpr);
     const glowR = segRadius * 2.5;
@@ -1063,7 +1063,7 @@ export function renderSnakeFallback(
   // Bot walk cache was removed to eliminate head-body separation bug.
   const walked = walkPathFixedStep(path, step, maxSegs, snake.angle, walkDistLimit);
 
-  // ── BOOST GLOW: Per-segment soft glow (slither.io style) ──
+  // ── BOOST GLOW: Per-segment soft glow (classic .io style) ──
   if (snake.boosting && walked.count > 0) {
     const boostGlow = getCachedBoostGlow(snake.color, segRadius, _cachedDpr);
     const glowR = segRadius * 2.5;

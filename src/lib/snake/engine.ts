@@ -13,7 +13,7 @@ import {
   BOT_TYPE_COLORS, type BotType, type BotSpawnConfig, DEFAULT_BOT_MIX,
 } from './bot-ai';
 import { collectFreezeAnchors, nearestAnchorDistSq, isFreezeDistSq, type FreezeAnchor } from './freeze';
-import { SLITHER_PRESETS } from '@/components/panels/cosmetics/cosmetics-types';
+import { SKIN_PRESETS } from '@/components/panels/cosmetics/cosmetics-types';
 import {
   // MOVEMENT
   BASE_SPEED, BOOST_SPEED, BASE_TURN_RATE, MIN_TURN_RATE, SEGMENT_SPACING,
@@ -92,7 +92,7 @@ const headHash = new SpatialHash();
 
 // ─── Bot Skin Pool ───────────────────────────────────────────────────────────
 /** Pre-computed skin overrides from all free presets for random bot assignment */
-const BOT_SKIN_POOL: PlayerSkinOverride[] = SLITHER_PRESETS.map((p) => ({
+const BOT_SKIN_POOL: PlayerSkinOverride[] = SKIN_PRESETS.map((p) => ({
   skinId: p.id,
   bodyColor: p.colors[0],
   headColor: p.colors[0],
@@ -827,7 +827,7 @@ export function initBots(state: GameState, config?: BotSpawnConfig): void {
 }
 
 // ==========================================================================
-// Food Management (density-based, slither.io style)
+// Food Management (density-based, classic .io style)
 // ==========================================================================
 
 function maintainFoodAroundPlayer(state: GameState, nextIdRef: { value: number }, fh: SpatialHash): void {

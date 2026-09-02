@@ -1,5 +1,5 @@
 // ============================================================================
-// Bot AI v2 — Slither-style intelligent bots
+// Bot AI v2 — Arena-style intelligent bots
 // ============================================================================
 // Core principle: Head hits body = death.
 //   - Bot head must NEVER touch any body (survival)

@@ -4,7 +4,7 @@
 // Standalone Bun mini-service (port 3001) for multiplayer snake game.
 // Reuses shared types, config, collision, and bot-ai from parent project.
 // Engine functions (moveSnake, killSnake, checkFoodEating, food management)
-// are reimplemented here because engine.ts imports client-side SLITHER_PRESETS.
+// are reimplemented here because engine.ts imports client-side SKIN_PRESETS.
 // ============================================================================
 
 declare const Bun: any;

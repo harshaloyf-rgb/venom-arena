@@ -56,7 +56,7 @@ export type BodyStyle =
   | 'phantom';
 export type TaperStyle = 'natural' | 'uniform' | 'wave' | 'heavy';
 
-export interface SlitherPreset {
+export interface SkinPreset {
   id: string;
   name: string;
   colors: string[];
@@ -69,9 +69,9 @@ export interface SlitherPreset {
 }
 
 // ---------------------------------------------------------------------------
-// SLITHER_PRESETS (20 free presets) — exact from AUDIT-C C.3
+// SKIN_PRESETS (20 free presets) — exact from AUDIT-C C.3
 // ---------------------------------------------------------------------------
-export const SLITHER_PRESETS: SlitherPreset[] = [
+export const SKIN_PRESETS: SkinPreset[] = [
   {
     id: 'preset-fish',
     name: 'The Fish Snake',

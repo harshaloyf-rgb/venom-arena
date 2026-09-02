@@ -5,7 +5,7 @@
 import type { SkinAsset, SkinRarity } from './types';
 import { ALL_COSMETICS, PASS_FREE_COSMETICS, PASS_ELITE_COSMETICS } from '@/lib/game-config';
 import type { Skin } from '@/lib/game-config';
-import { SLITHER_PRESETS, CUSTOM_SKIN_KEY } from '@/components/panels/cosmetics/cosmetics-types';
+import { SKIN_PRESETS, CUSTOM_SKIN_KEY } from '@/components/panels/cosmetics/cosmetics-types';
 import type { CustomSkinState } from '@/components/panels/cosmetics/cosmetics-types';
 import { lightenHex } from '../../components/panels/cosmetics/cosmetics-utils';
 
@@ -79,12 +79,12 @@ for (const item of PASS_ELITE_COSMETICS) {
   if (item.type === 'skin') registerCosmeticSkin(item);
 }
 
-// ─── Build registry from SLITHER_PRESETS ────────────────────────────────────
+// ─── Build registry from SKIN_PRESETS ────────────────────────────────────
 
 /** Map from preset ID → SkinAsset */
 const presetSkinMap = new Map<string, SkinAsset>();
 
-for (const preset of SLITHER_PRESETS) {
+for (const preset of SKIN_PRESETS) {
   const colors = preset.colors;
   const bodyColor = colors[0];
   const headColor = colors[0]; // head same as first body color
@@ -320,7 +320,7 @@ function buildSkinAssetFromSegments(skinId: string, segs: any[]): SkinAsset {
  */
 export function getSegmentColor(skinId: string, segmentIndex: number): string | null {
   // Check presets
-  const preset = SLITHER_PRESETS.find((p) => p.id === skinId);
+  const preset = SKIN_PRESETS.find((p) => p.id === skinId);
   if (preset) {
     return preset.colors[segmentIndex % preset.colors.length];
   }
@@ -372,7 +372,7 @@ export function registerSkinAsset(asset: SkinAsset): void {
 
 /** List of all alternating-color skin IDs (need special per-segment rendering) */
 export function isMultiColorSkin(skinId: string): boolean {
-  const preset = SLITHER_PRESETS.find((p) => p.id === skinId);
+  const preset = SKIN_PRESETS.find((p) => p.id === skinId);
   if (preset && preset.colors.length > 1) return true;
   if (skinId === 'custom-lab-skin') return true;
   if (isCustomDBSkin(skinId)) return true;

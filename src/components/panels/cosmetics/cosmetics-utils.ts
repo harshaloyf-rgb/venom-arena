@@ -3,10 +3,10 @@ import type {
   CustomSegment,
   CustomSkinState,
   SegShape,
-  SlitherPreset,
+  SkinPreset,
   TaperStyle,
 } from './cosmetics-types';
-import { CUSTOM_SKIN_KEY, SLITHER_PRESETS } from './cosmetics-types';
+import { CUSTOM_SKIN_KEY, SKIN_PRESETS } from './cosmetics-types';
 import { ALL_COSMETICS, PASS_FREE_COSMETICS, PASS_ELITE_COSMETICS } from '@/lib/game-config';
 import type { SkinPattern } from '@/lib/game-config';
 
@@ -266,9 +266,9 @@ export function getSkinVisualProps(skinId: string): SkinVisualProps | null {
   return { colors, bodyStyle, taperStyle, glow };
 }
 
-/** Build a flat lookup: skinId → SlitherPreset for fast preset resolution */
-const presetLookupMap = new Map<string, SlitherPreset>();
-for (const p of SLITHER_PRESETS) {
+/** Build a flat lookup: skinId → SkinPreset for fast preset resolution */
+const presetLookupMap = new Map<string, SkinPreset>();
+for (const p of SKIN_PRESETS) {
   presetLookupMap.set(p.id, p);
 }
 

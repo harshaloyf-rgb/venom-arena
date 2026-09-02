@@ -1,6 +1,6 @@
 import { Check, Flame, Lock, Sparkles } from 'lucide-react';
 import type { Skin } from '@/lib/game-config';
-import type { SlitherPreset } from './cosmetics-types';
+import type { SkinPreset } from './cosmetics-types';
 import { GameSnakePreview } from './game-snake-preview';
 import { getSkinVisualProps } from './cosmetics-utils';
 
@@ -92,7 +92,7 @@ export function PresetCard({
   onClick,
   onMouseEnter,
 }: {
-  preset: SlitherPreset;
+  preset: SkinPreset;
   active: boolean;
   onClick: () => void;
   onMouseEnter?: () => void;

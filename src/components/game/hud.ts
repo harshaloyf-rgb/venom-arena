@@ -488,7 +488,7 @@ function drawArenaBoundary(
 }
 
 // ============================================================================
-// Mouse cursor indicator (slither.io style — subtle crosshair)
+// Mouse cursor indicator (classic .io style — subtle crosshair)
 // ============================================================================
 
 export function drawMouseCursor(
