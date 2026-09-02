@@ -14,6 +14,7 @@ import { getArenaById } from '@/lib/game-config';
 import type { Snake, Camera, Viewport } from '@/lib/snake/types';
 import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrameWithDpr, clearAllSmoothedSegs } from './render-snake-atlas';
 import { renderBackground, renderHUD, resetMinimapZoom, handleMinimapClick } from './hud';
+import { initSafeAreaTracking } from './safe-area';
 import { drawEliminatedBanner, drawControlsHint } from './renderer';
 import { makeCoiledPath } from './coil-path';
 import { createExtractionState, updateExtractionProgress, drawExtractRing } from '@/lib/snake/extraction';
@@ -401,6 +402,9 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     }
     resetMinimapZoom();
 
+    // T4-M5: track notch/home-indicator insets for the canvas HUD
+    const cleanupSafeArea = initSafeAreaTracking();
+
     // ── High score ──
     const highScoreKey = `venom-high-score-online-${arenaId || 'default'}`;
     try { highScoreRef.current = parseInt(localStorage.getItem(highScoreKey) || '0', 10); setDisplayHighScore(highScoreRef.current); } catch {}
@@ -752,6 +756,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     return () => {
       cancelAnimationFrame(animRef.current);
       input.detach();
+      cleanupSafeArea();
       window.removeEventListener('resize', resize);
       canvas.removeEventListener('click', onCanvasClick);
       window.removeEventListener('keydown', onRespawnKey);

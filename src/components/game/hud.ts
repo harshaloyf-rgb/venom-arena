@@ -3,6 +3,7 @@ import type { MinimapDot } from '@/lib/game-socket';
 import { drawGrid, drawFood } from './renderer';
 import { cleanupSnakeParticles, clearSmoothedSegs } from './render-snake-atlas';
 import { InputHandler } from './input';
+import { getSafeInsets } from './safe-area';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -23,6 +24,16 @@ let minimapCurrentRadius = 1.0; // animated fraction of mapHalf (starts at full)
 let minimapLabelTime = 0;
 let minimapLabelText = 'FULL';
 
+/**
+ * Minimap top-left origin, shifted into the notch-safe area (T4-M5).
+ * Shared by the renderer AND the click hit-test so they can never drift
+ * apart on devices with nonzero insets.
+ */
+function minimapOrigin(): { x: number; y: number } {
+  const inset = getSafeInsets();
+  return { x: MAP_PAD + inset.left, y: MAP_PAD + inset.top };
+}
+
 /** Reset minimap zoom when starting a new game */
 export function resetMinimapZoom(): void {
   minimapZoomLevel = 2;
@@ -33,8 +44,9 @@ export function resetMinimapZoom(): void {
 
 /** Check if a canvas click hits the minimap zoom button. Returns true if consumed. */
 export function handleMinimapClick(canvasX: number, canvasY: number): boolean {
-  const mx = MAP_PAD;
-  const my = MAP_PAD;
+  const mm = minimapOrigin();
+  const mx = mm.x;
+  const my = mm.y;
   // Zoom button: 18px circle at bottom-right of minimap
   const btnSize = 18;
   const btnCx = mx + MAP_SIZE - btnSize / 2 - 3;
@@ -111,9 +123,12 @@ export function renderHUD(
   if (!state.player) return;
   const cw = viewport.width;
   const ch = viewport.height;
+  // T4-M5: keep HUD elements clear of notch / home indicator (0 on desktop)
+  const inset = getSafeInsets();
+  const mm = minimapOrigin();
 
   // ── Minimap: top-left (use minimapDots for online, state.snakes for offline) ──
-  drawMinimapTopLeft(ctx, state, cw, ch, minimapDots);
+  drawMinimapTopLeft(ctx, state, mm, minimapDots);
 
   // ── Rank below minimap ──
   // In online mode, use minimapDots for total count (state.snakes only has visible ones)
@@ -129,16 +144,16 @@ export function renderHUD(
       if (s.alive && s.score > state.player.score) rank++;
     }
   }
-  const rankY = MAP_PAD + MAP_SIZE + 6;
+  const rankY = mm.y + MAP_SIZE + 6;
   ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
   ctx.beginPath();
-  ctx.roundRect(MAP_PAD, rankY, MAP_SIZE, 24, 6);
+  ctx.roundRect(mm.x, rankY, MAP_SIZE, 24, 6);
   ctx.fill();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = '9px monospace';
   ctx.fillStyle = '#94a3b8';
-  ctx.fillText(`Rank ${rank} / ${aliveSnakes}`, MAP_PAD + MAP_SIZE / 2, rankY + 12);
+  ctx.fillText(`Rank ${rank} / ${aliveSnakes}`, mm.x + MAP_SIZE / 2, rankY + 12);
 
   // ── Carried Chips: below rank (online mode only) ──
   if (buyIn !== undefined && carriedChips !== undefined) {
@@ -146,23 +161,23 @@ export function renderHUD(
     const chipY = rankY + 24 + 4;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
     ctx.beginPath();
-    ctx.roundRect(MAP_PAD, chipY, MAP_SIZE, 36, 6);
+    ctx.roundRect(mm.x, chipY, MAP_SIZE, 36, 6);
     ctx.fill();
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.font = '8px monospace';
     ctx.fillStyle = '#94a3b8';
-    ctx.fillText('CARRIED CHIPS', MAP_PAD + MAP_SIZE / 2, chipY + 4);
+    ctx.fillText('CARRIED CHIPS', mm.x + MAP_SIZE / 2, chipY + 4);
 
     ctx.font = 'bold 11px monospace';
     ctx.fillStyle = '#fbbf24';
-    ctx.fillText(carriedChips.toLocaleString() + 'c', MAP_PAD + MAP_SIZE / 2, chipY + 16);
+    ctx.fillText(carriedChips.toLocaleString() + 'c', mm.x + MAP_SIZE / 2, chipY + 16);
 
     ctx.font = '7px monospace';
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ctx.textBaseline = 'bottom';
-    ctx.fillText(`${buyIn} buy-in + ${starsCollected.toLocaleString()} stars`, MAP_PAD + MAP_SIZE / 2, chipY + 34);
+    ctx.fillText(`${buyIn} buy-in + ${starsCollected.toLocaleString()} stars`, mm.x + MAP_SIZE / 2, chipY + 34);
   }
 
   // ── Score: bottom-center ──
@@ -174,26 +189,28 @@ export function renderHUD(
   ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
   const tw = ctx.measureText(scoreText).width;
   const boxW = Math.max(tw + 28, 120);
+  const scoreBottom = ch - 44 - inset.bottom;
   ctx.beginPath();
-  ctx.roundRect(cw / 2 - boxW / 2, ch - 44, boxW, 32, 8);
+  ctx.roundRect(cw / 2 - boxW / 2, scoreBottom, boxW, 32, 8);
   ctx.fill();
   ctx.fillStyle = '#ffffff';
-  ctx.fillText(scoreText, cw / 2, ch - 18);
+  ctx.fillText(scoreText, cw / 2, scoreBottom + 26);
 
   // ── Kills: bottom-right ──
-  const krPad = 12;
+  const krPad = 12 + inset.right; // horizontal inset rides on the pad
+  const krBottom = 12 + inset.bottom;
   ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
   ctx.beginPath();
-  ctx.roundRect(cw - krPad - 100, ch - krPad - 34, 100, 28, 6);
+  ctx.roundRect(cw - krPad - 100, ch - krBottom - 34, 100, 28, 6);
   ctx.fill();
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
   ctx.font = '9px monospace';
   ctx.fillStyle = '#a0a0a0';
-  ctx.fillText('Kills', cw - krPad - 52, ch - krPad - 20);
+  ctx.fillText('Kills', cw - krPad - 52, ch - krBottom - 20);
   ctx.fillStyle = '#f87171';
   ctx.font = 'bold 10px monospace';
-  ctx.fillText(String(kills), cw - krPad - 10, ch - krPad - 20);
+  ctx.fillText(String(kills), cw - krPad - 10, ch - krBottom - 20);
 }
 
 // ============================================================================
@@ -203,14 +220,12 @@ export function renderHUD(
 function drawMinimapTopLeft(
   ctx: CanvasRenderingContext2D,
   state: GameState,
-  _cw: number,
-  _ch: number,
+  mm: { x: number; y: number },
   minimapDots?: MinimapDot[],
 ): void {
   const size = MAP_SIZE;
-  const pad = MAP_PAD;
-  const mx = pad;
-  const my = pad;
+  const mx = mm.x;
+  const my = mm.y;
   const player = state.player;
   const mapHalf = state.arenaConfig.mapHalf;
   const boundaryR = state.boundaryRadius;

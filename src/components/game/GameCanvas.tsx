@@ -12,6 +12,7 @@ import { FIXED_DT } from '@/lib/snake/config';
 import { drawDeathOverlay, drawEliminatedBanner, drawControlsHint } from './renderer';
 import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrameWithDpr } from './render-snake-atlas';
 import { cleanupDeadSnakeParticles, renderBackground, renderHUD, handleMinimapClick, resetMinimapZoom } from './hud';
+import { initSafeAreaTracking } from './safe-area';
 import { InputHandler } from './input';
 import { makeCoiledPath } from './coil-path';
 import { SEGMENT_SPACING } from '@/lib/snake/config';
@@ -230,6 +231,9 @@ export default function GameCanvas({
 
     // Reset minimap zoom on new game
     resetMinimapZoom();
+
+    // T4-M5: track notch/home-indicator insets for the canvas HUD
+    const cleanupSafeArea = initSafeAreaTracking();
 
     // ── Game loop ──
     let running = true;
@@ -537,6 +541,7 @@ export default function GameCanvas({
       running = false;
       cancelAnimationFrame(animFrameRef.current);
       input.detach();
+      cleanupSafeArea();
       canvas.removeEventListener('click', onCanvasClick);
       window.removeEventListener('resize', resize);
       window.removeEventListener('keydown', onRespawnKey);

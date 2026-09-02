@@ -5,6 +5,7 @@
 
 import { registerCustomSkinData } from '@/lib/snake/skin-registry';
 import { generateCustomSegments } from '@/components/panels/cosmetics/cosmetics-utils';
+import { apiUrl } from '@/lib/api-base';
 
 // ─── Snapshot Types (compact format — shortened keys for bandwidth) ────────
 
@@ -835,7 +836,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
         let gamePort = 3001; // fallback to default
         let playerRegion = 'UNKNOWN';
         try {
-          const regionRes = await fetch('/api/player/region-server');
+          const regionRes = await fetch(apiUrl('/api/player/region-server'));
           if (regionRes.ok) {
             const data = await regionRes.json();
             if (data?.server?.port) {
@@ -854,11 +855,11 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
         // in a match on that server. The route only spawns when the port is down.
         let serverJustStarted = false;
         try {
-          const ensureRes = await fetch(`/api/game-server/ensure?region=${playerRegion}`);
+          const ensureRes = await fetch(apiUrl(`/api/game-server/ensure?region=${playerRegion}`));
           if (!ensureRes.ok) {
             console.warn('[GameSocket] Game server ensure check failed:', ensureRes.status);
             // Fallback: try without region param (starts default server on 3001)
-            await fetch('/api/game-server/ensure');
+            await fetch(apiUrl('/api/game-server/ensure'));
             gamePort = 3001;
             savedGamePort = gamePort;
           } else {

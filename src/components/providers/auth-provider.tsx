@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { PlayerProfile } from '@/lib/types';
+import { apiUrl } from '@/lib/api-base';
 
 interface AuthCtx {
   player: PlayerProfile | null;
@@ -25,7 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch('/api/auth/me', { cache: 'no-store' });
+      const res = await fetch(apiUrl('/api/auth/me'), { cache: 'no-store' });
       if (!res.ok) {
         setPlayer(null);
         return;
@@ -41,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await fetch(apiUrl('/api/auth/logout'), { method: 'POST' });
     } catch {}
     setPlayer(null);
   }, []);
