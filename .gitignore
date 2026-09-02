@@ -33,6 +33,15 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# secrets & local data — NEVER track (audit 8-d fix A8/X13)
+auth.json
+auth-state.json
+db/custom.db
+db/*.db
+*.zip
+*.jks
+*.keystore
+
 # vercel
 .vercel
 
