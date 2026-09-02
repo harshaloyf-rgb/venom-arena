@@ -12,7 +12,7 @@ import { getPlayerSkinAsset, registerSkinAsset, registerDefaultSkins } from '@/l
 import { getArenaConfig, SEGMENT_SPACING } from '@/lib/snake/config';
 import { getArenaById } from '@/lib/game-config';
 import type { Snake, Camera, Viewport } from '@/lib/snake/types';
-import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrameWithDpr } from './render-snake-atlas';
+import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrameWithDpr, clearAllSmoothedSegs } from './render-snake-atlas';
 import { renderBackground, renderHUD, resetMinimapZoom, handleMinimapClick } from './hud';
 import { drawEliminatedBanner, drawControlsHint } from './renderer';
 import { makeCoiledPath } from './coil-path';
@@ -253,6 +253,8 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       const { token } = await tokenRes.json();
       if (!token || cancelled) return;
 
+      clearAllSmoothedSegs();
+
       const sock = createGameSocket((state) => {
         if (cancelled) return;
         snapRef.current = state.snapshot;
@@ -274,6 +276,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
           isDeadRef.current = true;
           deathTimeRef.current = performance.now();
           setIsDead(true);
+          clearAllSmoothedSegs();
 
           if (state.matchEnd.outcome === 'extract') {
             // Extraction success — no 5s elimination banner

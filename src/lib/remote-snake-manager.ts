@@ -15,6 +15,7 @@ import { PathBuffer } from '@/lib/snake/pool';
 import type { Snake, FoodOrb, SkinRarity } from '@/lib/snake/types';
 import type { RemoteFood, GameSnapshot } from './game-socket';
 import { SEGMENT_SPACING, BASE_SPEED, FOOD_COLORS, FOOD_GLOW_COLORS } from '@/lib/snake/config';
+import { clearSmoothedSegs } from '@/components/game/render-snake-atlas';
 
 // ─── History entry per snapshot ──────────────────────────────────────────────
 
@@ -157,6 +158,7 @@ export class RemoteSnakeManager {
     // Remove snakes not in snapshot
     for (const [id] of this.snakes) {
       if (!seen.has(id)) {
+        clearSmoothedSegs(id);
         this.snakes.delete(id);
       }
     }
@@ -336,6 +338,14 @@ export class RemoteSnakeManager {
       _prevHx: typeof t.prevHeadX === 'number' && isFinite(t.prevHeadX) ? t.prevHeadX : safeHeadX,
       _prevHy: typeof t.prevHeadY === 'number' && isFinite(t.prevHeadY) ? t.prevHeadY : safeHeadY,
     };
+  }
+
+  /** Clear all tracked snakes and their smoothed segment caches. */
+  clearAll() {
+    for (const id of this.snakes.keys()) {
+      clearSmoothedSegs(id);
+    }
+    this.snakes.clear();
   }
 
   /** Get all tracked snake IDs */

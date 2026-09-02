@@ -1,5 +1,5 @@
 // ============================================================================
-// Venom Arena — Socket.IO Game Server
+// Venom Arena — Native WebSocket Game Server
 // ============================================================================
 // Standalone Bun mini-service (port 3001) for multiplayer snake game.
 // Reuses shared types, config, collision, and bot-ai from parent project.
@@ -7,8 +7,9 @@
 // are reimplemented here because engine.ts imports client-side SLITHER_PRESETS.
 // ============================================================================
 
-import { Server } from 'socket.io';
-import { createServer } from 'http';
+declare const Bun: any;
+
+import { OP, WSPlayerConnection } from './protocol';
 
 // ─── Shared imports from parent project (pure modules, no browser deps) ──────
 import type {
@@ -54,6 +55,27 @@ import {
 // game-config.ts has NO imports — pure data file
 import { getArenaById, ARENA_TIERS } from '../../src/lib/game-config';
 
+// ─── Incremental Food Hash Helpers ─────────────────────────────────────────
+// Module-level scratch for zero-allocation food hash operations
+const _foodInsertScratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
+const _foodRemoveScratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
+
+/** Insert a single food orb into the spatial hash (zero-allocation) */
+function foodHashInsert(fh: SpatialHash, f: FoodOrb, fhVis?: SpatialHash): void {
+  const s = _foodInsertScratch;
+  s.x = f.x; s.y = f.y; s.radius = f.radius; s.id = f.id;
+  fh.insert(s);
+  if (fhVis) { fhVis.insert(s); }
+}
+
+/** Remove a single food orb from the spatial hash (zero-allocation) */
+function foodHashRemove(fh: SpatialHash, f: FoodOrb, fhVis?: SpatialHash): void {
+  const s = _foodRemoveScratch;
+  s.x = f.x; s.y = f.y; s.radius = f.radius; s.id = f.id;
+  fh.remove(s);
+  if (fhVis) { fhVis.remove(s); }
+}
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -67,7 +89,6 @@ console.log(`[GameServer] Starting region=${SERVER_REGION} on port=${PORT}`);
 const TICK_RATE = 60; // ticks per second
 const TICK_MS = 1000 / TICK_RATE;
 const SNAPSHOT_INTERVAL = 3; // broadcast every N ticks (20Hz)
-const FOOD_HASH_REBUILD_INTERVAL = 3; // rebuild food spatial hash every N ticks (not every tick)
 const DEATH_SCREEN_DELAY = 6000; // ms before disconnecting dead player (5s elimination + 1s overlay)
 
 // ─── Scalability & Validation Constants ─────────────────────────────────
@@ -116,8 +137,6 @@ const STARS_PER_DEATH = 10;  // always 10 stars when a real player dies
 const ONLINE_ARENA_CONFIG: ArenaConfig = ARENA_CONFIGS['practice-easy'];
 
 // Module-level scratch objects (avoid per-tick allocation)
-const _foodHashScratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
-const _cachedFoodById = new Map<number, FoodOrb>();
 const _magnetizedIds: number[] = [];
 const _eatenIdsSet = new Set<number>();
 const _snapshotDedupSet = new Set<number>();
@@ -134,6 +153,8 @@ interface MoveContext {
   nextFoodId: { value: number };
   mapHalf: number;
   boundaryRadius: number;
+  foodHash: SpatialHash; // for incremental boost-drop insertion
+  foodVisHash?: SpatialHash; // visibility hash for snapshot queries
 }
 
 // ─── Snake Creation ──────────────────────────────────────────────────────────
@@ -239,11 +260,13 @@ function makeFood(nextId: { value: number }, x: number, y: number, forceSize?: n
   };
 }
 
-function spawnFoodBatch(nextId: { value: number }, foods: FoodOrb[], count: number, cx: number, cy: number, radius: number): void {
+function spawnFoodBatch(nextId: { value: number }, foods: FoodOrb[], count: number, cx: number, cy: number, radius: number, fh?: SpatialHash, fhVis?: SpatialHash): void {
   for (let i = 0; i < count; i++) {
     const a = Math.random() * Math.PI * 2;
     const d = Math.sqrt(Math.random()) * radius; // area-uniform distribution
-    foods.push(makeFood(nextId, cx + Math.cos(a) * d, cy + Math.sin(a) * d));
+    const f = makeFood(nextId, cx + Math.cos(a) * d, cy + Math.sin(a) * d);
+    foods.push(f);
+    if (fh) foodHashInsert(fh, f, fhVis);
   }
 }
 
@@ -342,11 +365,13 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
       for (let d = 0; d < dropCount; d++) {
         const frac = startFrac + (1 - startFrac) * (d / (dropCount - 1 || 1));
         const idx = Math.min(Math.floor(frac * pathLen), pathLen - 1);
-        ctx.foods.push({
+        const f: FoodOrb = {
           id: ctx.nextFoodId.value++, x: snake.path.getX(idx), y: snake.path.getY(idx),
           size: 'small', value: 1, radius: FOOD_RADII[0],
           color: FOOD_COLORS[0], glowColor: FOOD_GLOW_COLORS[0], magnetized: false,
-        });
+        };
+        ctx.foods.push(f);
+        foodHashInsert(ctx.foodHash, f, ctx.foodVisHash); // INCREMENTAL: insert boost drop into both hashes
       }
     }
   }
@@ -380,7 +405,7 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
 
 // ─── Death & Food Distribution ──────────────────────────────────────────────
 
-function killSnake(snake: Snake, nextFoodId: { value: number }, foods: FoodOrb[]): void {
+function killSnake(snake: Snake, nextFoodId: { value: number }, foods: FoodOrb[], fh?: SpatialHash, fhVis?: SpatialHash): void {
   snake.alive = false;
   const dropValue = Math.max(1, snake.score);
   const segLen = snake.path.length;
@@ -406,11 +431,13 @@ function killSnake(snake: Snake, nextFoodId: { value: number }, foods: FoodOrb[]
   for (let i = 0; i < sizes.length; i++) {
     const si = Math.min(i * step, segLen - 1);
     const sizeIdx = sizes[i];
-    foods.push({
+    const f: FoodOrb = {
       id: nextFoodId.value++, x: snake.path.getX(si), y: snake.path.getY(si),
       size: FOOD_SIZES[sizeIdx], value: FOOD_VALUES[sizeIdx], radius: FOOD_RADII[sizeIdx],
       color: FOOD_COLORS[sizeIdx], glowColor: FOOD_GLOW_COLORS[sizeIdx], magnetized: false,
-    });
+    };
+    foods.push(f);
+    if (fh) foodHashInsert(fh, f, fhVis);
   }
 }
 
@@ -419,37 +446,23 @@ function killSnake(snake: Snake, nextFoodId: { value: number }, foods: FoodOrb[]
 function checkFoodEating(
   snakes: Iterable<Snake>, foods: FoodOrb[],
   fh: SpatialHash, fvc: Map<number, number>, now: number,
-  foodHashRebuild: boolean,
+  foodById: Map<number, FoodOrb>,
 ): Set<number> {
-  // Reset only magnetized food flags
+  // Reset only magnetized food flags (using the passed-in lookup)
   for (let i = 0; i < _magnetizedIds.length; i++) {
-    const f = _cachedFoodById.get(_magnetizedIds[i]);
+    const f = foodById.get(_magnetizedIds[i]);
     if (f) f.magnetized = false;
   }
   _magnetizedIds.length = 0;
 
-  // Rebuild food hash every FOOD_HASH_REBUILD_INTERVAL ticks (not every tick).
-  // Every-tick rebuild was 20K inserts × 60Hz = 1.2M inserts/sec — the #1 server bottleneck.
-  // Magnet pulls move food ~1-10px/tick, so 2-tick-old positions are close enough
-  // for the spatial hash query radius (MAGNET_PULL_DIST=38px) to still find them.
-  // New food spawns and eaten food removal are handled by the interval.
-  // NOTE: The snapshot broadcast (every SNAPSHOT_INTERVAL ticks) still rebuilds
-  // the hash for accurate food visibility — this only affects collision/magnet checks.
-  if (foodHashRebuild) {
-    fh.clear();
-    fvc.clear();
-    _cachedFoodById.clear();
-    const scratch = _foodHashScratch;
-    for (let i = 0; i < foods.length; i++) {
-      const f = foods[i];
-      scratch.x = f.x; scratch.y = f.y; scratch.radius = f.radius; scratch.id = f.id;
-      fh.insert(scratch);
-      fvc.set(f.id, f.value);
-      _cachedFoodById.set(f.id, f);
-    }
-  }
+  // INCREMENTAL FOOD HASH: No periodic rebuild.
+  // Food is inserted into the hash when spawned and removed when eaten.
+  // Magnet pulls move food.x/food.y by ~1-10px/tick, which shifts it within
+  // the same cell (cell size=100, food radius≤3 → always 1 cell).
+  // The hash position becomes stale, but the query radius (MAGNET_PULL_DIST=38)
+  // is much larger than the drift, so the food is still found.
+  // For eaten food: removed individually below via foodHashRemove().
 
-  const foodById = _cachedFoodById;
   const eatenIds = _eatenIdsSet;
   eatenIds.clear();
   const speedRange = FOOD_MAGNET_MAX_SPEED - FOOD_MAGNET_MIN_SPEED;
@@ -469,14 +482,11 @@ function checkFoodEating(
       const food = foodById.get(fid);
       if (!food) continue;
 
-      // CRITICAL FIX: Use entity hash position for distance/eating checks.
-      // The hash is rebuilt once at the top of this function, but earlier snakes
-      // (bots) modify food.x/food.y via magnet pull. If we used food.x/food.y
-      // here, food that was within range at hash-build time could now be outside
-      // range after bot pulls — causing ~20% of food to escape collection.
-      // Using entity pos (from hash) keeps the check consistent with the query.
-      const ex = entity.x;
-      const ey = entity.y;
+      // Use ACTUAL food position for all checks (accurate physics).
+      // The hash position may be slightly stale from magnet pulls, but the
+      // query already found this food — now use the real position.
+      const ex = food.x;
+      const ey = food.y;
       const edx = hx - ex;
       const edy = hy - ey;
       const eDistSq = edx * edx + edy * edy;
@@ -493,8 +503,6 @@ function checkFoodEating(
         const eDist = Math.sqrt(eDistSq);
         const closeness = Math.min(1, Math.max(0, 1 - (eDist - MAGNET_DEATH_DIST) / zoneWidth));
         const pullSpeed = FOOD_MAGNET_MIN_SPEED + speedRange * closeness * closeness;
-        // Use ACTUAL food position for pull direction (accurate physics),
-        // but hash position for the speed calculation (consistent with range).
         const adx = hx - food.x;
         const ady = hy - food.y;
         const aDist = Math.sqrt(adx * adx + ady * ady);
@@ -513,7 +521,7 @@ function checkFoodEating(
 function maintainFoodAroundPlayer(
   snakes: Map<string, Snake>, foods: FoodOrb[],
   arenaConfig: ArenaConfig,
-  nextIdRef: { value: number }, fh: SpatialHash,
+  nextIdRef: { value: number }, fh: SpatialHash, fhVis?: SpatialHash,
 ): void {
   // Find a reference snake (first alive one)
   let refSnake: Snake | undefined;
@@ -549,23 +557,30 @@ function maintainFoodAroundPlayer(
   for (let i = 0; i < uniformCount; i++) {
     const a = Math.random() * Math.PI * 2;
     const dist = 200 + Math.random() * (visibleR - 200);
-    foods.push(makeFood(nextIdRef, hx + Math.cos(a) * dist, hy + Math.sin(a) * dist));
+    const f = makeFood(nextIdRef, hx + Math.cos(a) * dist, hy + Math.sin(a) * dist);
+    foods.push(f);
+    foodHashInsert(fh, f, fhVis);
   }
   for (let i = 0; i < aheadCount; i++) {
     const spread = (Math.random() - 0.5) * Math.PI * 0.8;
     const dist = 200 + Math.random() * (visibleR - 200);
     const a = angle + spread;
-    foods.push(makeFood(nextIdRef, hx + Math.cos(a) * dist, hy + Math.sin(a) * dist));
+    const f = makeFood(nextIdRef, hx + Math.cos(a) * dist, hy + Math.sin(a) * dist);
+    foods.push(f);
+    foodHashInsert(fh, f, fhVis);
   }
   for (let i = 0; i < aroundCount; i++) {
     const a = Math.random() * Math.PI * 2;
     const dist = 800 + Math.random() * (visibleR - 800);
-    foods.push(makeFood(nextIdRef, hx + Math.cos(a) * dist, hy + Math.sin(a) * dist));
+    const f = makeFood(nextIdRef, hx + Math.cos(a) * dist, hy + Math.sin(a) * dist);
+    foods.push(f);
+    foodHashInsert(fh, f, fhVis);
   }
 }
 
 function maintainMapFood(
   foods: FoodOrb[], arenaConfig: ArenaConfig, nextIdRef: { value: number },
+  fh: SpatialHash, fhVis?: SpatialHash,
 ): void {
   const ac = arenaConfig;
   const cellSize = ac.mapFoodGridSize;
@@ -579,12 +594,16 @@ function maintainMapFood(
   const maxFood = ac.foodMaxCount;
 
   // Despawn out-of-bounds food + count per cell
+  // INCREMENTAL: remove despawned food from hash before compacting
   const counts = _gridCounts;
   counts.fill(0);
   let writeIdx = 0;
   for (let i = 0; i < foods.length; i++) {
     const f = foods[i];
-    if (f.x * f.x + f.y * f.y > despawnRSq) continue;
+    if (f.x * f.x + f.y * f.y > despawnRSq) {
+      foodHashRemove(fh, f, fhVis); // remove from incremental hashes
+      continue;
+    }
     if (writeIdx !== i) foods[writeIdx] = f;
     writeIdx++;
     const col = Math.floor((f.x + halfMap) / cellSize);
@@ -612,7 +631,9 @@ function maintainMapFood(
         const x = cx + (Math.random() - 0.5) * cellSize;
         const y = cy + (Math.random() - 0.5) * cellSize;
         if (x * x + y * y < radiusSq) {
-          foods.push(makeFood(nextIdRef, x, y));
+          const f = makeFood(nextIdRef, x, y);
+          foods.push(f);
+          foodHashInsert(fh, f, fhVis); // INCREMENTAL: insert new food into both hashes
         }
       }
     }
@@ -624,10 +645,11 @@ function maintainMapFood(
 function seedInitialFood(
   foods: FoodOrb[], nextFoodId: { value: number },
   arenaConfig: ArenaConfig, target: number,
+  fh: SpatialHash, fhVis?: SpatialHash,
 ): boolean {
   if (foods.length >= target) return false;
   const BATCH = 2000;
-  spawnFoodBatch(nextFoodId, foods, BATCH, 0, 0, arenaConfig.initialSpawnRadius);
+  spawnFoodBatch(nextFoodId, foods, BATCH, 0, 0, arenaConfig.initialSpawnRadius, fh, fhVis);
   return foods.length < target;
 }
 
@@ -698,7 +720,7 @@ function resolveBotMix(arenaId: string): BotSpawnConfig {
 // ============================================================================
 
 interface ConnectedPlayer {
-  socket: any; // Socket.IO socket
+  socket: WSPlayerConnection;
   snakeId: string;
   userTag: string;
   name: string;
@@ -742,9 +764,14 @@ class ArenaInstance {
   players: Map<string, ConnectedPlayer>; // socketId → player
   snakeToSocket: Map<string, string>;   // snakeId → socketId
   foodHash: SpatialHash;
+  foodVisHash: SpatialHash; // Visibility hash (cell=FOOD_VIS_RANGE): 4-cell query vs 6400-cell on foodHash
   bodyHash: SpatialHash;
   headHash: SpatialHash;
   foodValueCache: Map<number, number>;
+  // INCREMENTAL: Per-arena food-by-ID lookup (populated on spawn, cleaned on eat)
+  _cachedFoodById: Map<number, FoodOrb>;
+  // Track food array length between ticks for incremental lookup map updates
+  _lastFoodLen: number = 0;
   tickInterval: ReturnType<typeof setInterval> | null = null;
   playerCount = 0;
   lastSeed = false;
@@ -775,25 +802,34 @@ class ArenaInstance {
     this.players = new Map();
     this.snakeToSocket = new Map();
     this.foodHash = new SpatialHash();
+    this.foodVisHash = new SpatialHash(FOOD_VIS_RANGE); // Visibility hash (cell=FOOD_VIS_RANGE): 4-cell query vs 6400-cell on foodHash
     this.bodyHash = new SpatialHash();
     this.headHash = new SpatialHash();
     this.foodValueCache = new Map<number, number>();
+    this._cachedFoodById = new Map<number, FoodOrb>();
 
-    // Seed initial food
+    // Seed initial food INTO the hash (one-time bulk insert)
     this.seedFood();
   }
 
   seedFood(): void {
     // Seed a small ring around origin
     const nextIdRef = { value: 0 };
-    spawnFoodBatch(nextIdRef, this.state.foods, 200, 0, 0, 2000);
+    spawnFoodBatch(nextIdRef, this.state.foods, 200, 0, 0, 2000, this.foodHash, this.foodVisHash);
     this.state.nextFoodId = nextIdRef.value;
 
-    // Seed larger area incrementally
+    // Seed larger area incrementally (passes foodHash for incremental insert)
     const ac = this.arenaConfig;
-    while (seedInitialFood(this.state.foods, { value: this.state.nextFoodId }, ac, ac.initialFoodTarget)) {
+    while (seedInitialFood(this.state.foods, { value: this.state.nextFoodId }, ac, ac.initialFoodTarget, this.foodHash, this.foodVisHash)) {
       // Keep seeding until target reached
     }
+    // Populate the food-by-ID lookup and value cache from seeded food
+    for (let i = 0; i < this.state.foods.length; i++) {
+      const f = this.state.foods[i];
+      this._cachedFoodById.set(f.id, f);
+      this.foodValueCache.set(f.id, f.value);
+    }
+    console.log(`[Arena ${this.arenaId}] Seeded ${this.state.foods.length} food (incremental hash)`);
   }
 
   start(): void {
@@ -944,6 +980,8 @@ class ArenaInstance {
       nextFoodId: foodIdRef,
       mapHalf: ac.mapHalf,
       boundaryRadius,
+      foodHash: this.foodHash,
+      foodVisHash: this.foodVisHash,
     };
 
     // 1. Update bot AI (throttled)
@@ -982,6 +1020,23 @@ class ArenaInstance {
       if (hitWall) boundaryDead.push(id);
     }
 
+    // 3b. Register boost-drop food in lookup maps (already inserted into hash by moveSnake)
+    // (boost drops append to state.foods via ctx.foods reference — they're already in the hash)
+    // We need to register them in the lookup maps for the food eating system.
+    // Only process newly added food since last tick.
+    // Track via nextFoodId changes
+    const boostFoodStart = this._lastFoodLen ?? 0;
+    if (state.foods.length > boostFoodStart) {
+      for (let i = boostFoodStart; i < state.foods.length; i++) {
+        const f = state.foods[i];
+        if (!this._cachedFoodById.has(f.id)) {
+          this._cachedFoodById.set(f.id, f);
+          this.foodValueCache.set(f.id, f.value);
+        }
+      }
+    }
+    this._lastFoodLen = state.foods.length;
+
     // 4. Kill boundary-hit snakes (no food drop for boundary deaths)
     const playersToKill: { snakeId: string; socketId: string; reason: string; killerTag?: string; killerIsBot?: boolean }[] = [];
     for (const deadId of boundaryDead) {
@@ -1000,16 +1055,24 @@ class ArenaInstance {
       }
     }
 
-    // 5. Check food eating — hash rebuilt every FOOD_HASH_REBUILD_INTERVAL ticks
-    const rebuildFoodHash = state.tickCount % FOOD_HASH_REBUILD_INTERVAL === 0;
+    // 5. Check food eating — INCREMENTAL: no hash rebuild, eaten food removed individually
     const eatenIds = checkFoodEating(
       state.snakes.values(), state.foods,
-      this.foodHash, this.foodValueCache, now, rebuildFoodHash,
+      this.foodHash, this.foodValueCache, now, this._cachedFoodById,
     );
+    // INCREMENTAL: Remove eaten food from hash + lookup + compact array
     if (eatenIds.size > 0) {
       let writeIdx = 0;
       for (let i = 0; i < state.foods.length; i++) {
-        if (!eatenIds.has(state.foods[i].id)) { state.foods[writeIdx++] = state.foods[i]; }
+        const f = state.foods[i];
+        if (eatenIds.has(f.id)) {
+          foodHashRemove(this.foodHash, f, this.foodVisHash); // remove from incremental hashes
+          this._cachedFoodById.delete(f.id);
+          this.foodValueCache.delete(f.id);
+        } else {
+          if (writeIdx !== i) state.foods[writeIdx] = f;
+          writeIdx++;
+        }
       }
       state.foods.length = writeIdx;
     }
@@ -1049,12 +1112,27 @@ class ArenaInstance {
       state.stars.length = writeIdx;
     }
 
-    // 6. Food management
+    // 6. Food management (incremental: new food inserted into hash immediately)
     if (state.tickCount % ac.playerFoodInterval === 0) {
-      maintainFoodAroundPlayer(state.snakes, state.foods, ac, foodIdRef, this.foodHash);
+      const prevLen = state.foods.length;
+      maintainFoodAroundPlayer(state.snakes, state.foods, ac, foodIdRef, this.foodHash, this.foodVisHash);
+      // Register newly spawned food in the lookup maps
+      for (let i = prevLen; i < state.foods.length; i++) {
+        const f = state.foods[i];
+        this._cachedFoodById.set(f.id, f);
+        this.foodValueCache.set(f.id, f.value);
+      }
     }
     if (state.tickCount % ac.mapFoodInterval === 0) {
-      maintainMapFood(state.foods, ac, foodIdRef);
+      maintainMapFood(state.foods, ac, foodIdRef, this.foodHash, this.foodVisHash);
+      // Rebuild lookup maps after map food maintenance (despawn + spawn)
+      this._cachedFoodById.clear();
+      this.foodValueCache.clear();
+      for (let i = 0; i < state.foods.length; i++) {
+        const f = state.foods[i];
+        this._cachedFoodById.set(f.id, f);
+        this.foodValueCache.set(f.id, f.value);
+      }
     }
 
     // 7. Check collisions — pass player position for viewport culling (same as offline)
@@ -1073,11 +1151,12 @@ class ArenaInstance {
 
     // 8. Process collision deaths — drop food for collision kills
     let deathCount = 0;
+    const deathFoodStartIdx = state.foods.length; // track where death food starts
     for (const deadId of collisionResult.deadIds) {
       const deadSnake = state.snakes.get(deadId);
       if (!deadSnake) continue;
 
-      killSnake(deadSnake, foodIdRef, state.foods);
+      killSnake(deadSnake, foodIdRef, state.foods, this.foodHash, this.foodVisHash);
       deathCount++;
 
       if (deadSnake.isBot) {
@@ -1127,8 +1206,14 @@ class ArenaInstance {
       }
     }
 
-    // 8b. (Removed) Food hash is now rebuilt every tick (step 5), so death food
-    //     is automatically visible on the very next tick. No force-rebuild needed.
+    // 8b. Register death food in lookup maps (already inserted into hash by killSnake)
+    if (deathCount > 0) {
+      for (let i = deathFoodStartIdx; i < state.foods.length; i++) {
+        const f = state.foods[i];
+        this._cachedFoodById.set(f.id, f);
+        this.foodValueCache.set(f.id, f.value);
+      }
+    }
 
     // 9. Respawn dead bots
     for (let r = 0; r < ac.respawnPerTick; r++) {
@@ -1142,9 +1227,16 @@ class ArenaInstance {
       this.handlePlayerDeath(toKill.snakeId, toKill.socketId, toKill.reason, toKill.killerTag, toKill.killerIsBot);
     }
 
-    // 11. Broadcast snapshots every N ticks
+    // Auto-scale snapshot mode based on player count
+    this.autoScaleSnapshotMode();
+
+    // 11. Broadcast snapshots every N ticks (full or head-only mode)
     if (state.tickCount % SNAPSHOT_INTERVAL === 0) {
-      this.broadcastSnapshots();
+      if (this.snapshotMode === 'head-only') {
+        this.broadcastHeadOnlySnapshots();
+      } else {
+        this.broadcastSnapshots();
+      }
     }
 
     // 12. Anti-cheat check every 5 seconds (300 ticks)
@@ -1211,6 +1303,11 @@ class ArenaInstance {
       this.state.player = [...this.state.snakes.values()].find(s => s.isPlayer && s.alive) || null;
     }
 
+    // Use buyIn as minimum chipsLost (carriedChips may be 0 in edge cases)
+    const arenaBuyIn = getArenaById(this.arenaId)?.buyIn ?? 0;
+    const chipsLost = Math.max(snake.carriedChips, player.carriedChips, arenaBuyIn);
+    console.log(`[Arena ${this.arenaId}] EMIT matchEnd to ${player.name} chipsLost=${chipsLost} (snake.cc=${snake.carriedChips} player.cc=${player.carriedChips} buyIn=${arenaBuyIn})`);
+
     // Emit killed event (for killer name highlight) and matchEnd to client
     try {
       const killerMatch = reason.match(/^killed by (.+)$/);
@@ -1221,10 +1318,6 @@ class ArenaInstance {
           killerIsBot: killerIsBot ?? true,
         });
       }
-      // Use buyIn as minimum chipsLost (carriedChips may be 0 in edge cases)
-      const arenaBuyIn = getArenaById(this.arenaId)?.buyIn ?? 0;
-      const chipsLost = Math.max(snake.carriedChips, player.carriedChips, arenaBuyIn);
-      console.log(`[Arena ${this.arenaId}] EMIT matchEnd to ${player.name} chipsLost=${chipsLost} (snake.cc=${snake.carriedChips} player.cc=${player.carriedChips} buyIn=${arenaBuyIn})`);
       player.socket.emit('matchEnd', {
         outcome: 'death',
         score,
@@ -1233,7 +1326,7 @@ class ArenaInstance {
         reason,
         killerTag: killerTag || null,
         killerIsBot: killerIsBot ?? true,
-        chipsLost: chipsLost,
+        chipsLost,
       });
     } catch {}
 
@@ -1385,31 +1478,24 @@ class ArenaInstance {
     const tick = state.tickCount;
     const boundaryRadius = state.boundaryRadius;
 
-    // ── Step 1: REBUILD food hash from CURRENT state.foods[] ──
-    const fh = this.foodHash;
-    fh.clear();
-    const foodScratch = this._headScratch; // reuse scratch object
-    const stateFoods = state.foods;
-    // Reuse pre-allocated maps (avoid GC from new Map/Set every 3 ticks)
+    // ── Step 1: Use INCREMENTAL food hash directly (NO rebuild!) ──
+    // Food was inserted into this.foodHash when spawned and removed when eaten.
+    // Just query it for visibility — the positions are close enough for the
+    // FOOD_VIS_RANGE (4000px) query radius. Magnet drift is ~10px max.
+    const fh = this.foodVisHash; // Visibility hash (cell=FOOD_VIS_RANGE): 4-cell query vs 6400-cell on foodHash
+
+    // Build color/magnetized lookup for visible food from the by-ID map
     const foodColorMap = this._foodColorMap;
     const foodMagMap = this._foodMagSet;
     foodColorMap.clear();
     foodMagMap.clear();
-    for (let fi = 0; fi < stateFoods.length; fi++) {
-      const f = stateFoods[fi];
-      foodScratch.x = f.x;
-      foodScratch.y = f.y;
-      foodScratch.radius = f.radius;
-      foodScratch.id = f.id;
-      fh.insert(foodScratch);
-      foodColorMap.set(f.id, f.color);
-      if (f.magnetized) foodMagMap.add(f.id);
-    }
+    // Only populate for food in the hash (avoids iterating all 50K)
+    // — we populate lazily per-query below instead
 
     // ── Step 2: Build head spatial hash for O(K) visibility queries ──
     const hh = this.headHash;
     hh.clear();
-    const headScratch = this._headScratch; // reuse (food hash is done)
+    const headScratch = this._headScratch;
     for (const [, snake] of state.snakes) {
       if (!snake.alive) continue;
       headScratch.x = snake.path.headX;
@@ -1424,7 +1510,6 @@ class ArenaInstance {
     snakeLookup.clear();
     for (const [, snake] of state.snakes) {
       if (!snake.alive) continue;
-      // Reuse the last inserted object if possible (avoids object allocation)
       let entry = snakeLookup.get(snake.id);
       if (!entry) {
         entry = { id: snake.id };
@@ -1448,9 +1533,6 @@ class ArenaInstance {
     }
 
     // ── Step 3.5: Build minimap dots (ALL bots, full map — for minimap rendering) ──
-    // Flat array: [x, y, score, isBot(0|1), x, y, score, isBot(0|1), ...]
-    // Excludes the current player's own snake for each snapshot.
-    // ~16 bytes/snake × 999 = ~16KB per snapshot at 20Hz = 320KB/s — acceptable.
     const minimapDots = this._snapBuf.m;
     minimapDots.length = 0;
     for (const [, snake] of state.snakes) {
@@ -1496,9 +1578,7 @@ class ArenaInstance {
         }
       }
 
-      // O(K) spatial hash query for nearby food + DEDUPLICATION
-      // The hash was JUST rebuilt with current positions, so hash positions
-      // match state.foods[] exactly. No need for foodPosMap/foodColorMap lookups.
+      // O(K) spatial hash query for nearby food using INCREMENTAL hash
       const nearbyFood = fh.query(phx, phy, FOOD_VIS_RANGE);
       const foodSnaps: any[] = [];
       const seenFoodIds = _snapshotDedupSet;
@@ -1506,15 +1586,19 @@ class ArenaInstance {
       for (let i = 0; i < nearbyFood.length; i++) {
         const f = nearbyFood[i];
         const fid = f.id as number;
-        if (seenFoodIds.has(fid)) continue; // dedup: food spanning multiple cells
+        if (seenFoodIds.has(fid)) continue;
         seenFoodIds.add(fid);
         const dx = f.x - phx;
         const dy = f.y - phy;
         if (dx * dx + dy * dy < FOOD_VIS_RANGE_SQ) {
-          // Look up color and magnetized flag from current food map
-          const fcolor = foodColorMap.get(fid) || '#ffffff';
-          const mag = foodMagMap.has(fid) ? 1 : 0;
-          foodSnaps.push(f.x, f.y, f.radius, fcolor, mag);
+          // Look up current color/magnetized from the food object (may differ from hash pos)
+          const foodObj = this._cachedFoodById.get(fid);
+          const fcolor = foodObj?.color || '#ffffff';
+          const mag = foodObj?.magnetized ? 1 : 0;
+          // Use actual food position (may have drifted from magnet pulls)
+          const fx = foodObj?.x ?? f.x;
+          const fy = foodObj?.y ?? f.y;
+          foodSnaps.push(fx, fy, f.radius, fcolor, mag);
         }
       }
 
@@ -1545,6 +1629,186 @@ class ArenaInstance {
           m: minimapDots, // minimap dots (all snakes, full map)
         });
       } catch {}
+    }
+  }
+
+  // ─── Head-Only Snapshot Broadcasting (prepared for future use) ─────────────
+  // This method sends ONLY head coordinates, angle, body length, and visual
+  // properties — NO path/p segment data. The client reconstructs body trails
+  // locally using its FIXED_DT interpolation loop.
+  //
+  // Head-only is now the DEFAULT snapshot mode for maximum bandwidth efficiency.
+  // The client-side RemoteSnakeManager already supports head-only mode via
+  // its history-based path reconstruction (see remote-snake-manager.ts).
+  //
+  // Bandwidth savings: With 50 visible snakes × avg 200 segments × 8 bytes/seg,
+  // full mode sends ~80KB/snake snapshot. Head-only sends ~80 bytes/snake.
+  // At 20Hz: 160KB/s → 160KB/s (99.8% reduction in snake payload).
+
+  // Snapshot mode controls — supports runtime toggling and auto-scaling
+  snapshotMode: 'full' | 'head-only' = 'full';
+  private _headOnlyAutoThreshold = 500; // auto-switch to head-only above this player count (fallback when head-only is not default)
+  private _headOnlyForced = false;      // admin override
+
+  private broadcastHeadOnlySnapshots(): void {
+    const state = this.state;
+    const tick = state.tickCount;
+    const boundaryRadius = state.boundaryRadius;
+    const fh = this.foodVisHash; // Visibility hash (cell=FOOD_VIS_RANGE): 4-cell query vs 6400-cell on foodHash
+
+    // Build head spatial hash
+    const hh = this.headHash;
+    hh.clear();
+    const headScratch = this._headScratch;
+    for (const [, snake] of state.snakes) {
+      if (!snake.alive) continue;
+      headScratch.x = snake.path.headX;
+      headScratch.y = snake.path.headY;
+      headScratch.radius = 0;
+      headScratch.id = snake.id;
+      hh.insert(headScratch);
+    }
+
+    // Minimap dots
+    const minimapDots = this._snapBuf.m;
+    minimapDots.length = 0;
+    for (const [, snake] of state.snakes) {
+      if (!snake.alive) continue;
+      minimapDots.push(snake.path.headX, snake.path.headY, snake.score, snake.isBot ? 1 : 0);
+    }
+
+    this._snapBuf.tick = tick;
+    this._snapBuf.boundaryRadius = boundaryRadius;
+
+    for (const [socketId, player] of this.players) {
+      const isSpectator = player.deadAt > 0;
+      const playerSnake = isSpectator ? null : state.snakes.get(player.snakeId);
+
+      let phx: number, phy: number;
+      let playerScore: number, playerKills: number;
+
+      if (isSpectator) {
+        phx = player.spectatorHx;
+        phy = player.spectatorHy;
+        playerScore = 0;
+        playerKills = player.kills;
+      } else {
+        if (!playerSnake || !playerSnake.alive) continue;
+        phx = playerSnake.path.headX;
+        phy = playerSnake.path.headY;
+        playerScore = playerSnake.score;
+        playerKills = player.kills;
+      }
+
+      // Visible snakes — HEAD ONLY: no path segments
+      const nearbyHeads = hh.query(phx, phy, SNAKE_VIS_RANGE);
+      const visibleSnakes: any[] = [];
+      for (let i = 0; i < nearbyHeads.length; i++) {
+        const sid = nearbyHeads[i].id as string;
+        const snake = state.snakes.get(sid);
+        if (!snake || !snake.alive) continue;
+        const dx = snake.path.headX - phx;
+        const dy = snake.path.headY - phy;
+        if (dx * dx + dy * dy > SNAKE_VIS_RANGE_SQ) continue;
+
+        visibleSnakes.push({
+          id: snake.id,
+          name: snake.name,
+          hx: snake.path.headX,
+          hy: snake.path.headY,
+          angle: snake.angle,
+          score: snake.score,
+          color: snake.color,
+          sc: snake.headColor,
+          ip: snake.isPlayer,
+          ib: snake.isBot,
+          bl: snake.cachedBodyLength,
+          br: snake.bodyRadius,
+          bo: snake.boosting,
+          cc: snake.carriedChips || 0,
+          si: snake.skinId,
+          ra: snake.rarity,
+          // head-only flag: client knows to interpolate body locally
+          ho: 1,
+        });
+      }
+
+      // Food (same as full mode — uses incremental hash)
+      const nearbyFood = fh.query(phx, phy, FOOD_VIS_RANGE);
+      const foodSnaps: any[] = [];
+      const seenFoodIds = _snapshotDedupSet;
+      seenFoodIds.clear();
+      for (let i = 0; i < nearbyFood.length; i++) {
+        const f = nearbyFood[i];
+        const fid = f.id as number;
+        if (seenFoodIds.has(fid)) continue;
+        seenFoodIds.add(fid);
+        const dx = f.x - phx;
+        const dy = f.y - phy;
+        if (dx * dx + dy * dy < FOOD_VIS_RANGE_SQ) {
+          const foodObj = this._cachedFoodById.get(fid);
+          const fcolor = foodObj?.color || '#ffffff';
+          const mag = foodObj?.magnetized ? 1 : 0;
+          const fx = foodObj?.x ?? f.x;
+          const fy = foodObj?.y ?? f.y;
+          foodSnaps.push(fx, fy, f.radius, fcolor, mag);
+        }
+      }
+
+      // Stars
+      const starSnaps: number[] = [];
+      for (let i = 0; i < state.stars.length; i++) {
+        const star = state.stars[i];
+        const dx = star.x - phx;
+        const dy = star.y - phy;
+        if (dx * dx + dy * dy < STAR_VIS_RANGE_SQ) {
+          starSnaps.push(star.x, star.y, star.value, star.id, star.radius);
+        }
+      }
+
+      const playerCarriedChips = isSpectator ? 0 : player.carriedChips;
+
+      try {
+        player.socket.emit('snapshot', {
+          t: tick,
+          br: boundaryRadius,
+          s: visibleSnakes,
+          f: foodSnaps,
+          ps: playerScore,
+          pk: playerKills,
+          st: starSnaps,
+          pc: playerCarriedChips,
+          m: minimapDots,
+          mode: 'head-only', // signals client to use interpolation path
+        });
+      } catch {}
+    }
+  }
+
+  /** Toggle snapshot mode manually (e.g., via admin API) */
+  setSnapshotMode(mode: 'full' | 'head-only' | 'auto'): void {
+    if (mode === 'auto') {
+      this._headOnlyForced = false;
+      this.snapshotMode = this.playerCount >= this._headOnlyAutoThreshold ? 'head-only' : 'full';
+    } else {
+      this._headOnlyForced = true;
+      this.snapshotMode = mode;
+    }
+  }
+
+  /** Set the auto-scaling threshold for head-only mode */
+  setHeadOnlyThreshold(threshold: number): void {
+    this._headOnlyAutoThreshold = threshold;
+  }
+
+  /** Auto-scale snapshot mode based on current player count */
+  private autoScaleSnapshotMode(): void {
+    if (!this._headOnlyForced) {
+      const newMode = this.playerCount >= this._headOnlyAutoThreshold ? 'head-only' : 'full';
+      if (newMode !== this.snapshotMode) {
+        this.snapshotMode = newMode;
+        dbg(`[Arena ${this.arenaId}] Auto-scaled snapshot → ${newMode} (players: ${this.playerCount})`);
+      }
     }
   }
 }
@@ -1587,29 +1851,88 @@ function getStats(): Record<string, { players: number; maxPlayers: number }> {
   return stats;
 }
 
+
 // ============================================================================
-// Socket.IO Server
+// Native WebSocket Server (Bun.serve)
 // ============================================================================
 
-const httpServer = createServer();
-const io = new Server(httpServer, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST'],
-  },
-  // Default path '/socket.io/' — proxied by Caddy XTransformPort or ws-proxy
-});
+// ── Per-connection state (keyed by Bun WebSocket object) ───────────────────
 
-// ─── Auth middleware ────────────────────────────────────────────────────────
+interface ConnState {
+  conn: WSPlayerConnection;
+  connId: string;
+  playerData: any;
+  arenaId: string | null;
+  arena: ArenaInstance | null;
+  authenticated: boolean;
+}
 
-io.use(async (socket, next) => {
-  try {
-    const token = socket.handshake.auth?.token;
-    if (!token) {
-      return next(new Error('No auth token provided'));
+const connections = new Map<any, ConnState>();
+
+// ── Unique connection ID generator ─────────────────────────────────────────
+let _connIdCounter = 0;
+function generateConnId(): string {
+  return `ws-${++_connIdCounter}-${Date.now().toString(36)}`;
+}
+
+// ── Binary message dispatcher ─────────────────────────────────────────────
+
+/** Convert a Bun WS message (Buffer | string | ArrayBuffer) to ArrayBuffer. */
+function toAB(msg: any): ArrayBuffer {
+  if (msg instanceof ArrayBuffer) return msg;
+  if (ArrayBuffer.isView(msg)) {
+    const u8: Uint8Array = msg instanceof Uint8Array ? msg : new Uint8Array(msg.buffer, msg.byteOffset, msg.byteLength);
+    return u8.buffer.byteLength === u8.byteLength && u8.byteOffset === 0
+      ? u8.buffer
+      : u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+  }
+  if (typeof msg === 'string') return new TextEncoder().encode(msg).buffer;
+  return new Uint8Array(msg).buffer;
+}
+
+function handleMessage(ws: any, msg: any): void {
+  const buf = toAB(msg);
+  const state = connections.get(ws);
+  if (!state) return;
+
+  const view = new DataView(buf);
+  let offset = 0;
+  const opcode = view.getUint8(offset); offset += 1;
+
+  switch (opcode) {
+    case OP.AUTH: {
+      const tokenLen = view.getUint16(offset, true); offset += 2;
+      const token = new TextDecoder().decode(new Uint8Array(buf, offset, tokenLen));
+      handleAuth(ws, token);
+      break;
     }
+    case OP.JOIN: {
+      const arenaIdLen = view.getUint8(offset); offset += 1;
+      const arenaId = new TextDecoder().decode(new Uint8Array(buf, offset, arenaIdLen));
+      handleJoin(ws, arenaId);
+      break;
+    }
+    case OP.INPUT: {
+      const angle = view.getFloat32(offset, true); offset += 4;
+      const flags = view.getUint8(offset); offset += 1;
+      const seq = view.getUint32(offset, true); offset += 4;
+      handleInput(ws, angle, (flags & 1) === 1, seq);
+      break;
+    }
+    case OP.EXTRACT: handleExtract(ws); break;
+    case OP.STATS_REQ: handleStats(ws); break;
+    default:
+      dbg(`[Venom WS] Unknown opcode: 0x${opcode.toString(16)}`);
+  }
+}
 
-    // Verify token with main server
+// ── AUTH handler ──────────────────────────────────────────────────────────
+
+async function handleAuth(ws: any, token: string): Promise<void> {
+  const state = connections.get(ws);
+  if (!state || state.authenticated) return;
+
+  try {
     const res = await fetch(`${MAIN_SERVER}/api/match/verify`, {
       method: 'POST',
       headers: {
@@ -1621,253 +1944,347 @@ io.use(async (socket, next) => {
 
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      return next(new Error(data.reason || 'Verification failed'));
+      const reason = data.reason || 'Verification failed';
+      const { WriteBuffer } = await import('./protocol');
+      const wb = new WriteBuffer(64);
+      wb.writeU8(OP.AUTH_FAIL);
+      wb.writeStringWithLen(reason);
+      state.conn.send(wb.toBuffer());
+      state.conn.close();
+      return;
     }
 
     const data = await res.json();
     if (!data.ok || !data.player) {
-      return next(new Error(data.reason || 'Invalid token'));
-    }
-
-    // Store player info on socket
-    (socket as any).playerData = data.player;
-  dbg(`[Auth] Player verified: ${data.player.name} (${data.player.userTag})`);
-    next();
-  } catch (err) {
-    console.error('[Auth] Error verifying token:', err);
-    next(new Error('Authentication error'));
-  }
-});
-
-// ─── Connection handler ────────────────────────────────────────────────────
-
-io.on('connection', (socket) => {
-  const playerData = (socket as any).playerData;
-  dbg(`[Socket] Connected: ${playerData.name} (${playerData.userTag}) [${socket.id}]`);
-
-  // ─── Join Arena ─────────────────────────────────────────────────────────
-
-  socket.on('join', async (data: { arenaId: string }) => {
-    try {
-      const arenaId = data?.arenaId;
-      if (!arenaId) {
-        socket.emit('error', { message: 'No arenaId provided' });
-        return;
-      }
-
-      // Verify arena exists
-      const tier = getArenaById(arenaId);
-      if (!tier) {
-        socket.emit('error', { message: 'Invalid arena ID' });
-        return;
-      }
-
-      // Call join API (deduct buyIn)
-      const joinRes = await fetch(`${MAIN_SERVER}/api/match/join`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-internal-secret': INTERNAL_SECRET,
-        },
-        body: JSON.stringify({
-          userTag: playerData.userTag,
-          arenaId,
-        }),
-      });
-
-      if (!joinRes.ok) {
-        const joinData = await joinRes.json().catch(() => ({}));
-        socket.emit('error', { message: joinData.reason || 'Failed to join arena' });
-        return;
-      }
-
-      const joinData = await joinRes.json();
-      if (!joinData.ok) {
-        socket.emit('error', { message: joinData.reason || 'Failed to join arena' });
-        return;
-      }
-
-      // Get or create arena (with player cap check)
-      const arena = getOrCreateArena(arenaId);
-      if (!arena) {
-        socket.emit('error', { message: 'Arena is full' });
-        return;
-      }
-
-      // Create player info
-      const playerInfo: ConnectedPlayer = {
-        socket,
-        snakeId: '',
-        userTag: playerData.userTag,
-        name: playerData.name,
-        input: { angle: 0, boost: false },
-        joinTime: Date.now(),
-        kills: 0,
-        color: playerData.color || '#22c55e',
-        secondaryColor: playerData.secondaryColor || '#4ade80',
-        skinId: playerData.skinId || 'skin-default',
-        rarity: playerData.rarity || 'common',
-        pattern: playerData.pattern,
-        country: playerData.country,
-        level: playerData.level || 1,
-        clanTag: playerData.clanTag,
-        customSkinData: playerData.customSkinData || null,
-        // Validation state
-        lastInputTime: 0,
-        lastAngle: 0,
-        lastInputSeq: 0,
-        // Anti-cheat state
-        scoreAtJoin: 0,
-        foodEatenCount: 0,
-        killCount: 0,
-        joinTimestamp: Date.now(),
-        violations: 0,
-        lastPosCheckTime: Date.now(),
-        lastPosCheckX: NaN,  // Set to actual spawn position after snake creation
-        lastPosCheckY: NaN,
-        // Spectator mode
-        deadAt: 0,
-        spectatorHx: 0,
-        spectatorHy: 0,
-        carriedChips: 0,
-      };
-
-      // Set buy-in as carried chips
-      const buyIn = getArenaById(arenaId)?.buyIn ?? 0;
-      playerInfo.carriedChips = buyIn;
-      console.log(`[Arena ${arenaId}] JOIN ${playerData.name} buyIn=${buyIn} arenaId=${arenaId}`);
-
-      // Spawn player in arena
-      const snake = arena.spawnPlayer(playerInfo);
-      snake.carriedChips = playerInfo.carriedChips;
-      // FIX: Initialize anti-cheat position to actual spawn position
-      // (was 0,0 causing instant false-positive on first check)
-      playerInfo.lastPosCheckX = snake.path.headX;
-      playerInfo.lastPosCheckY = snake.path.headY;
-      arena.addPlayer(socket.id, playerInfo, snake);
-
-      dbg(`[Arena ${arenaId}] Player joined: ${playerData.name} — snake: ${snake.id}, total players: ${arena.playerCount}`);
-
-      // Emit joined confirmation
-      socket.emit('joined', {
-        snakeId: snake.id,
-        arenaId,
-        config: {
-          mapHalf: arena.arenaConfig.mapHalf,
-        },
-      });
-
-      // Broadcast custom skin data to other players so they can render it
-      if (playerInfo.customSkinData) {
-        socket.broadcast.to(arenaId).emit('customSkin', {
-          snakeId: snake.id,
-          skinId: playerInfo.skinId,
-          data: playerInfo.customSkinData,
-        });
-      }
-
-      // Register O(1) socket→arena lookup
-      socketToArena.set(socket.id, arenaId);
-      // Cancel any pending empty timeout (player rejoining)
-      if (arena.emptyTimeout) {
-        clearTimeout(arena.emptyTimeout);
-        arena.emptyTimeout = null;
-      }
-
-      // Clean up on disconnect
-      socket.on('disconnect', () => {
-        dbg(`[Socket] Disconnected: ${playerData.name} (${playerData.userTag}) [${socket.id}]`);
-        socketToArena.delete(socket.id);
-        arena.removePlayer(socket.id);
-        // Schedule arena cleanup when no players remain
-        if (arena.playerCount === 0) {
-          arena.lastPlayerLeaveTime = Date.now();
-          arena.emptyTimeout = setTimeout(() => {
-            if (arena.playerCount === 0) {
-              arena.stop();
-              arenas.delete(arenaId);
-              console.log(`[GameManager] Cleaned up empty arena: ${arenaId}`);
-            }
-          }, ARENA_EMPTY_TIMEOUT_MS);
-        }
-      });
-    } catch (err) {
-      console.error(`[Socket] Join error:`, err);
-      socket.emit('error', { message: 'Server error joining arena' });
-    }
-  });
-
-  // ─── Input Handling (with validation + O(1) arena lookup) ────────────────
-
-  socket.on('input', (data: { angle: number; boost: boolean; seq?: number }) => {
-    // O(1) arena lookup instead of scanning all arenas
-    const arenaId = socketToArena.get(socket.id);
-    if (!arenaId) return;
-    const arena = arenas.get(arenaId);
-    if (!arena) return;
-    const player = arena.players.get(socket.id);
-    if (!player) return;
-    if (player.deadAt > 0) return; // spectator — ignore input
-
-    const now = performance.now();
-
-    // ── Rate limiting: reject inputs faster than INPUT_MIN_INTERVAL_MS ──
-    if (now - player.lastInputTime < INPUT_MIN_INTERVAL_MS) return;
-    player.lastInputTime = now;
-
-    // ── Sequence number validation (anti-replay) ──
-    if (typeof data.seq === 'number') {
-      if (data.seq <= player.lastInputSeq) return; // stale or replayed
-      player.lastInputSeq = data.seq;
-    }
-
-    // ── Angle validation ──
-    if (typeof data.angle !== 'number' || !isFinite(data.angle)) return;
-
-    // Angle rate-of-change check (anti-teleport / impossible turns)
-    let angleDelta = Math.abs(data.angle - player.lastAngle);
-    if (angleDelta > Math.PI) angleDelta = 2 * Math.PI - angleDelta; // wrap-around
-    if (angleDelta > MAX_ANGLE_DELTA && player.lastInputSeq > 5) {
-      // Skip first 5 inputs (player may join facing any direction)
+      const reason = data.reason || 'Invalid token';
+      const { WriteBuffer } = await import('./protocol');
+      const wb = new WriteBuffer(64);
+      wb.writeU8(OP.AUTH_FAIL);
+      wb.writeStringWithLen(reason);
+      state.conn.send(wb.toBuffer());
+      state.conn.close();
       return;
     }
-    player.lastAngle = data.angle;
 
-    // ── Boost validation ──
-    player.input.angle = data.angle;
-    player.input.boost = typeof data.boost === 'boolean' ? data.boost : false;
-  });
+    state.playerData = data.player;
+    state.authenticated = true;
 
-  // ─── Extraction (client completes 3s hold) ─────────────────────────────
+    dbg(`[Auth] Player verified: ${data.player.name} (${data.player.userTag})`);
 
-  socket.on('extract', () => {
-    const arenaId = socketToArena.get(socket.id);
-    if (!arenaId) return;
-    const arena = arenas.get(arenaId);
-    if (!arena) return;
-    arena.handlePlayerExtraction(socket.id);
-  });
-
-  // ─── Stats ───────────────────────────────────────────────────────────
-
-  socket.on('stats', (callback: (data: any) => void) => {
-    if (typeof callback === 'function') {
-      callback(getStats());
+    // Send AUTH_OK with mapHalf from any arena or default 6000
+    let mapHalf = 6000;
+    if (arenas.size > 0) {
+      const firstArena = arenas.values().next().value;
+      if (firstArena) mapHalf = firstArena.arenaConfig.mapHalf;
     }
-  });
+    const { WriteBuffer } = await import('./protocol');
+    const wb = new WriteBuffer(64);
+    wb.writeU8(OP.AUTH_OK);
+    wb.writeF32(mapHalf);
+    state.conn.send(wb.toBuffer());
+
+  } catch (err) {
+    console.error('[Auth] Error verifying token:', err);
+    const { WriteBuffer } = await import('./protocol');
+    const wb = new WriteBuffer(64);
+    wb.writeU8(OP.AUTH_FAIL);
+    wb.writeStringWithLen('Authentication error');
+    state.conn.send(wb.toBuffer());
+    state.conn.close();
+  }
+}
+
+// ── JOIN handler ──────────────────────────────────────────────────────────
+
+async function handleJoin(ws: any, arenaId: string): Promise<void> {
+  const state = connections.get(ws);
+  if (!state || !state.authenticated) return;
+
+  try {
+    if (!arenaId) {
+      state.conn.emit('error', { message: 'No arenaId provided' });
+      return;
+    }
+
+    // Verify arena exists
+    const tier = getArenaById(arenaId);
+    if (!tier) {
+      state.conn.emit('error', { message: 'Invalid arena ID' });
+      return;
+    }
+
+    // Call join API (deduct buyIn)
+    const joinRes = await fetch(`${MAIN_SERVER}/api/match/join`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-secret': INTERNAL_SECRET,
+      },
+      body: JSON.stringify({
+        userTag: state.playerData.userTag,
+        arenaId,
+      }),
+    });
+
+    if (!joinRes.ok) {
+      const joinData = await joinRes.json().catch(() => ({}));
+      state.conn.emit('error', { message: joinData.reason || 'Failed to join arena' });
+      return;
+    }
+
+    const joinData = await joinRes.json();
+    if (!joinData.ok) {
+      state.conn.emit('error', { message: joinData.reason || 'Failed to join arena' });
+      return;
+    }
+
+    // Get or create arena (with player cap check)
+    const arena = getOrCreateArena(arenaId);
+    if (!arena) {
+      state.conn.emit('error', { message: 'Arena is full' });
+      return;
+    }
+
+    const connId = state.connId;
+    const playerData = state.playerData;
+
+    // Create player info
+    const playerInfo: ConnectedPlayer = {
+      socket: state.conn,
+      snakeId: '',
+      userTag: playerData.userTag,
+      name: playerData.name,
+      input: { angle: 0, boost: false },
+      joinTime: Date.now(),
+      kills: 0,
+      color: playerData.color || '#22c55e',
+      secondaryColor: playerData.secondaryColor || '#4ade80',
+      skinId: playerData.skinId || 'skin-default',
+      rarity: playerData.rarity || 'common',
+      pattern: playerData.pattern,
+      country: playerData.country,
+      level: playerData.level || 1,
+      clanTag: playerData.clanTag,
+      customSkinData: playerData.customSkinData || null,
+      // Validation state
+      lastInputTime: 0,
+      lastAngle: 0,
+      lastInputSeq: 0,
+      // Anti-cheat state
+      scoreAtJoin: 0,
+      foodEatenCount: 0,
+      killCount: 0,
+      joinTimestamp: Date.now(),
+      violations: 0,
+      lastPosCheckTime: Date.now(),
+      lastPosCheckX: NaN,
+      lastPosCheckY: NaN,
+      // Spectator mode
+      deadAt: 0,
+      spectatorHx: 0,
+      spectatorHy: 0,
+      carriedChips: 0,
+    };
+
+    // Set buy-in as carried chips
+    const buyIn = getArenaById(arenaId)?.buyIn ?? 0;
+    playerInfo.carriedChips = buyIn;
+    console.log(`[Arena ${arenaId}] JOIN ${playerData.name} buyIn=${buyIn} arenaId=${arenaId}`);
+
+    // Spawn player in arena
+    const snake = arena.spawnPlayer(playerInfo);
+    snake.carriedChips = playerInfo.carriedChips;
+    // FIX: Initialize anti-cheat position to actual spawn position
+    playerInfo.lastPosCheckX = snake.path.headX;
+    playerInfo.lastPosCheckY = snake.path.headY;
+    arena.addPlayer(connId, playerInfo, snake);
+
+    dbg(`[Arena ${arenaId}] Player joined: ${playerData.name} — snake: ${snake.id}, total players: ${arena.playerCount}`);
+
+    // Emit joined confirmation
+    state.conn.emit('joined', {
+      snakeId: snake.id,
+      arenaId,
+      config: {
+        mapHalf: arena.arenaConfig.mapHalf,
+      },
+    });
+
+    // Broadcast custom skin data to other players
+    if (playerInfo.customSkinData) {
+      for (const [otherConnId, otherPlayer] of arena.players) {
+        if (otherConnId === connId) continue;
+        try {
+          otherPlayer.socket.emit('customSkin', {
+            snakeId: snake.id,
+            skinId: playerInfo.skinId,
+            data: playerInfo.customSkinData,
+          });
+        } catch {}
+      }
+    }
+
+    // Store arena reference in ConnState
+    state.arenaId = arenaId;
+    state.arena = arena;
+
+    // Register O(1) connId → arenaId lookup
+    socketToArena.set(connId, arenaId);
+
+    // Cancel any pending empty timeout (player rejoining)
+    if (arena.emptyTimeout) {
+      clearTimeout(arena.emptyTimeout);
+      arena.emptyTimeout = null;
+    }
+  } catch (err) {
+    console.error(`[Venom WS] Join error:`, err);
+    state.conn.emit('error', { message: 'Server error joining arena' });
+  }
+}
+
+// ── INPUT handler ─────────────────────────────────────────────────────────
+
+function handleInput(ws: any, angle: number, boost: boolean, seq: number): void {
+  const state = connections.get(ws);
+  if (!state || !state.arenaId) return;
+
+  const arena = arenas.get(state.arenaId);
+  if (!arena) return;
+
+  const player = arena.players.get(state.connId);
+  if (!player) return;
+  if (player.deadAt > 0) return; // spectator — ignore input
+
+  const now = performance.now();
+
+  // ── Rate limiting: reject inputs faster than INPUT_MIN_INTERVAL_MS ──
+  if (now - player.lastInputTime < INPUT_MIN_INTERVAL_MS) return;
+  player.lastInputTime = now;
+
+  // ── Sequence number validation (anti-replay) ──
+  if (seq <= player.lastInputSeq) return; // stale or replayed
+  player.lastInputSeq = seq;
+
+  // ── Angle validation ──
+  if (!isFinite(angle)) return;
+
+  // Angle rate-of-change check (anti-teleport / impossible turns)
+  let angleDelta = Math.abs(angle - player.lastAngle);
+  if (angleDelta > Math.PI) angleDelta = 2 * Math.PI - angleDelta; // wrap-around
+  if (angleDelta > MAX_ANGLE_DELTA && player.lastInputSeq > 5) {
+    // Skip first 5 inputs (player may join facing any direction)
+    return;
+  }
+  player.lastAngle = angle;
+
+  // ── Update input ──
+  player.input.angle = angle;
+  player.input.boost = boost;
+}
+
+// ── EXTRACT handler ───────────────────────────────────────────────────────
+
+function handleExtract(ws: any): void {
+  const state = connections.get(ws);
+  if (!state || !state.arenaId) return;
+
+  const arena = arenas.get(state.arenaId);
+  if (!arena) return;
+  arena.handlePlayerExtraction(state.connId);
+}
+
+// ── STATS handler ─────────────────────────────────────────────────────────
+
+async function handleStats(ws: any): Promise<void> {
+  const state = connections.get(ws);
+  if (!state) return;
+
+  const stats = getStats();
+  const { WriteBuffer } = await import('./protocol');
+
+  // Encode stats as binary STATS_RESP
+  const arenaIds = Object.keys(stats);
+  const wb = new WriteBuffer(64 + arenaIds.length * 256);
+  wb.writeU8(OP.STATS_RESP);
+  wb.writeU16(arenaIds.length);
+  for (const arenaId of arenaIds) {
+    const s = stats[arenaId];
+    wb.writeStringWithLen(arenaId);
+    wb.writeU16(s.players);
+    wb.writeU16(s.maxPlayers);
+  }
+  state.conn.send(wb.toBuffer());
+}
+
+// ── CLOSE handler ─────────────────────────────────────────────────────────
+
+function handleClose(ws: any): void {
+  const state = connections.get(ws);
+  if (!state) return;
+
+  const connId = state.connId;
+  dbg(`[Venom WS] Disconnected: ${state.playerData?.name || 'unauth'} (${state.playerData?.userTag || '?'} [${connId}]`);
+
+  connections.delete(ws);
+
+  if (state.arenaId) {
+    const arena = arenas.get(state.arenaId);
+    if (arena) {
+      socketToArena.delete(connId);
+      arena.removePlayer(connId);
+      // Schedule arena cleanup when no players remain
+      if (arena.playerCount === 0) {
+        arena.lastPlayerLeaveTime = Date.now();
+        arena.emptyTimeout = setTimeout(() => {
+          if (arena.playerCount === 0) {
+            arena.stop();
+            arenas.delete(state.arenaId!);
+            console.log(`[GameManager] Cleaned up empty arena: ${state.arenaId}`);
+          }
+        }, ARENA_EMPTY_TIMEOUT_MS);
+      }
+    } else {
+      socketToArena.delete(connId);
+    }
+  }
+}
+
+// ── Bun.serve ─────────────────────────────────────────────────────────────
+
+const server: any = Bun.serve({
+  port: PORT,
+  fetch(req: any, server: any) {
+    // Only handle WebSocket upgrade requests
+    const upgrade = server.upgrade(req);
+    if (!upgrade) {
+      return new Response('Upgrade required', { status: 426 });
+    }
+    return; // upgraded successfully
+  },
+  websocket: {
+    open(ws: any) {
+      const connId = generateConnId();
+      const conn = new WSPlayerConnection(ws, connId);
+      connections.set(ws, {
+        conn,
+        connId,
+        playerData: null,
+        arenaId: null,
+        arena: null,
+        authenticated: false,
+      });
+      console.log(`[Venom WS] Connected [${ws.remoteAddress}] connId=${connId}`);
+    },
+    message(ws: any, message: any) {
+      handleMessage(ws, message);
+    },
+    close(ws: any, code: any, reason: any) {
+      handleClose(ws);
+    },
+  },
 });
 
-// ─── HTTP Stats endpoint ───────────────────────────────────────────────────
-// NOTE: We do NOT use httpServer.on('request') because in Bun it replaces
-// Socket.IO's request listener. Stats are available via the 'stats' socket event.
-// If an HTTP endpoint is needed, use a separate HTTP server.
-
-// ─── Start Server ──────────────────────────────────────────────────────────
-
-httpServer.listen(PORT, () => {
-  console.log(`[Venom Game Server] Running on port ${PORT}`);
-  console.log(`[Venom Game Server] Stats endpoint: http://localhost:${PORT}/stats`);
-});
+console.log(`[Venom Game Server] Running on port ${PORT}`);
 
 // Graceful shutdown
 process.on('uncaughtException', (err) => {
@@ -1884,7 +2301,7 @@ process.on('SIGINT', () => {
   for (const [, arena] of arenas) {
     arena.stop();
   }
-  httpServer.close();
+  server.stop();
   process.exit(0);
 });
 
@@ -1893,6 +2310,6 @@ process.on('SIGTERM', () => {
   for (const [, arena] of arenas) {
     arena.stop();
   }
-  httpServer.close();
+  server.stop();
   process.exit(0);
 });

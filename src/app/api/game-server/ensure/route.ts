@@ -18,6 +18,13 @@ function isPortOpen(port: number): Promise<boolean> {
   });
 }
 
+/** Kill any process listening on a port */
+function killPort(port: number): Promise<void> {
+  return new Promise((resolve) => {
+    exec(`fuser -k ${port}/tcp 2>/dev/null; true`, { timeout: 3000 }, () => resolve());
+  });
+}
+
 /** Spawn a regional game server process */
 function spawnServer(port: number, region: string): Promise<boolean> {
   const key = `${port}:${region}`;
@@ -25,10 +32,9 @@ function spawnServer(port: number, region: string): Promise<boolean> {
     if (spawnLocks.get(key)) { resolve(false); return; }
     spawnLocks.set(key, true);
 
-    const envVars = `PORT=${port} REGION=${region}`;
     const logFile = `/home/z/my-project/game-server-${region.toLowerCase()}.log`;
     const child = exec(
-      `cd ${GAME_SERVER_DIR} && ${envVars} nohup bun index.ts > ${logFile} 2>&1 &`,
+      `cd ${GAME_SERVER_DIR} && setsid env PORT=${port} REGION=${region} bun index.ts > ${logFile} 2>&1 &`,
       { timeout: 5000 },
       (err) => {
         spawnLocks.delete(key);
@@ -40,13 +46,15 @@ function spawnServer(port: number, region: string): Promise<boolean> {
 }
 
 /**
- * GET /api/game-server/ensure?region=SA
+ * GET /api/game-server/ensure?region=SA&force=1
  *
- * Ensures the game server for a specific region is running.
+ * Ensures the game server for a specific region is running with the latest code.
  * If no region is specified, starts the default server (port 3001).
+ * Pass force=1 to kill any existing server and restart.
  */
 export async function GET(req: NextRequest) {
   const regionParam = req.nextUrl.searchParams.get('region');
+  const forceRestart = req.nextUrl.searchParams.get('force') === '1';
 
   // Determine which server to ensure
   let port: number;
@@ -62,10 +70,23 @@ export async function GET(req: NextRequest) {
     port = 3001;
   }
 
-  // Check if already running
+  // Check if already running (skip early return when force-restarting)
   const isOpen = await isPortOpen(port);
-  if (isOpen) {
+  if (isOpen && !forceRestart) {
     return NextResponse.json({ ok: true, running: true, port, region });
+  }
+
+  // When force=1, ALWAYS kill any existing process on that port first.
+  // This handles edge cases where a process is running but not accepting
+  // connections (zombie/stuck state) — isPortOpen returns false but the
+  // port is still held, preventing the new server from binding.
+  if (forceRestart) {
+    await killPort(port);
+    await new Promise((r) => setTimeout(r, 500)); // let port release
+  } else if (isOpen) {
+    // Port is stale (no response) — kill the zombie process
+    await killPort(port);
+    await new Promise((r) => setTimeout(r, 500));
   }
 
   // Try to spawn it

@@ -65,6 +65,11 @@ export function clearSmoothedSegs(snakeId: string): void {
   _smoothSegs.delete(snakeId);
 }
 
+/** Clear ALL smoothed segment entries (e.g. on new game or disconnect). */
+export function clearAllSmoothedSegs(): void {
+  _smoothSegs.clear();
+}
+
 /** Get smoothed maxSegs — lerps toward raw target, returns rounded int. */
 function getSmoothedMaxSegs(snakeId: string, rawMaxSegs: number): number {
   const prev = _smoothSegs.get(snakeId);

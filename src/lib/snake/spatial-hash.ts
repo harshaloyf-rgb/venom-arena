@@ -7,6 +7,8 @@
 //   3. Count-based clear (no Map.clear() → no GC)
 //   4. Pre-allocated entity pool in query() — ZERO object allocations after warmup
 //   5. Fast clear() — only resets counts, no Map.delete iteration
+//   6. O(1) swap-remove in remove() — no array shifting
+//   7. Incremental insert/remove for static entities (food) — eliminates periodic rebuilds
 // ============================================================================
 
 import { SPATIAL_CELL_SIZE } from './config';
@@ -163,5 +165,52 @@ export class SpatialHash {
     for (let i = 0; i < entities.length; i++) {
       this.insert(entities[i]);
     }
+  }
+
+  /** Remove an entity by its position and ID using O(1) swap-remove.
+   *  Works for static entities (food) that don't move — recomputes cell coords
+   *  from the entity's current x/y/radius to find which cells it occupies.
+   *  For a food pellet (radius 1.5-3, cell size 100), this spans exactly 1 cell → O(1).
+   */
+  remove(entity: SpatialEntity): void {
+    const inv = this.invCellSize;
+    const r = entity.radius;
+    const minCx = Math.floor((entity.x - r) * inv);
+    const maxCx = Math.floor((entity.x + r) * inv);
+    const minCy = Math.floor((entity.y - r) * inv);
+    const maxCy = Math.floor((entity.y + r) * inv);
+    const id = entity.id;
+    const map = this.cellMap;
+
+    for (let cx = minCx; cx <= maxCx; cx++) {
+      for (let cy = minCy; cy <= maxCy; cy++) {
+        const key = this.toCellKey(cx, cy);
+        const cell = map.get(key);
+        if (!cell) continue;
+        const c = cell.count;
+        for (let i = 0; i < c; i++) {
+          if (cell.ids[i] === id) {
+            // Swap-remove: move last element into the removed slot
+            const last = c - 1;
+            if (i !== last) {
+              cell.xs[i] = cell.xs[last];
+              cell.ys[i] = cell.ys[last];
+              cell.rs[i] = cell.rs[last];
+              cell.ids[i] = cell.ids[last];
+            }
+            cell.count = last;
+            break; // entity should only appear once per cell
+          }
+        }
+      }
+    }
+  }
+
+  /** Update an entity's position: remove from old cells, insert into new cells.
+   *  More efficient than remove+insert for entities that rarely move.
+   *  NOT used for food (static), but provided for future use with moving entities. */
+  update(oldEntity: SpatialEntity, newEntity: SpatialEntity): void {
+    this.remove(oldEntity);
+    this.insert(newEntity);
   }
 }
