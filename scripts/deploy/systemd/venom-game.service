@@ -1,0 +1,22 @@
+[Unit]
+Description=Venom Arena game server (bun, Socket.IO-compatible WS)
+After=network.target
+
+[Service]
+# Deploy layout (see scripts/deploy/deploy.sh):
+#   /opt/venom-arena/game-server/         <- mini-services/game-server + .env
+# INTERNAL_SECRET + DATABASE_URL come from the EnvironmentFile.
+WorkingDirectory=/opt/venom-arena/game-server
+EnvironmentFile=/opt/venom-arena/game-server/.env
+Environment=NODE_ENV=production
+Environment=PORT=3001
+Environment=REGION=DEFAULT
+# ExecStart path is rewritten to the remote `which bun` by deploy.sh.
+ExecStart=/usr/bin/bun index.ts
+Restart=always
+RestartSec=3
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
