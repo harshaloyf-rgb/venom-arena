@@ -6,6 +6,10 @@
     "dev": "bash start-game-server.sh && python3 next-supervisor.py 2>/dev/null || (next dev -p 3000 2>&1 | tee dev.log)",
     "dev:game-server": "cd mini-services/game-server && bun run dev",
     "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
+    "build:prod": "NEXT_PROD_BUILD=1 next build && cp -r .next-prod-build/static .next-prod-build/standalone/.next/ && cp -r public .next-prod-build/standalone/",
+    "start:prod": "NODE_ENV=production bun .next-prod-build/standalone/server.js 2>&1 | tee server-prod.log",
+    "mobile:sync": "cap sync android",
+    "mobile:open": "cap open android",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
     "lint": "eslint .",
     "db:push": "prisma db push --accept-data-loss",
@@ -14,6 +18,8 @@
     "db:reset": "prisma migrate reset"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/core": "^8.5.1",
     "@prisma/client": "^6.11.1",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
@@ -70,6 +76,7 @@
     "zustand": "^5.0.6"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.1",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^3.0.0",
     "@types/jsonwebtoken": "^9.0.10",

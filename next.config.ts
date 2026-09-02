@@ -2,6 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // T5: production verification builds write to .next-prod-build so they
+  // never clobber the live dev server's .next (zero-downtime `npm run
+  // build:prod` while `next dev` keeps running). Normal dev/build untouched.
+  distDir: process.env.NEXT_PROD_BUILD === "1" ? ".next-prod-build" : ".next",
   typescript: {
     ignoreBuildErrors: true,
   },

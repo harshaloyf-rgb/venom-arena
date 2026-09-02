@@ -65,3 +65,16 @@ mini-services/game-server.pid
 # Database (runtime data — never commit)
 db/*.db
 next-dev.pid
+
+# T5 zero-downtime prod verification build output
+/.next-prod-build/
+server-prod.log
+
+# Capacitor android platform — build outputs & machine-specific files (T5)
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/capacitor-cordova-android-plugins/
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
