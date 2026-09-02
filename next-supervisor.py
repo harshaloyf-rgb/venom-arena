@@ -2,9 +2,10 @@
 """Persistent supervisor for Next.js dev server (port 3000). Double-fork daemon."""
 import os, sys, time, subprocess, signal
 
-PROJECT = "/home/z/my-project"
-LOG = "/home/z/my-project/next-dev.log"
-PIDFILE = "/home/z/my-project/next-dev.pid"
+# Project root = folder containing THIS script (works on any machine/checkout)
+PROJECT = os.path.dirname(os.path.abspath(__file__))
+LOG = os.path.join(PROJECT, "next-dev.log")
+PIDFILE = os.path.join(PROJECT, "next-dev.pid")
 MAX_RESTARTS = 100
 RESTART_DELAY = 3
 

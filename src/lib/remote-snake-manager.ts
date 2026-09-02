@@ -304,13 +304,27 @@ export class RemoteSnakeManager {
     const safeHeadX = typeof headX === 'number' && isFinite(headX) ? headX : 0;
     const safeHeadY = typeof headY === 'number' && isFinite(headY) ? headY : 0;
 
+    // FIX H1: prevHeadX/Y must be the PREVIOUS snapshot's head (t.prevHeadX),
+    // NOT the current head. The old code set prevHeadX = current head, which made
+    // the render-time interpolation a no-op: renderOff = (prev + (cur-prev)*a) - cur = 0.
+    // That caused the camera AND every remote snake to move in discrete 20Hz
+    // steps (~9px jumps) instead of gliding smoothly between snapshots.
+    // The manager already tracks the true previous head in t.prevHeadX/Y —
+    // it just was never wired into the adapter (the phantom _prevHx/_prevHy
+    // fields were written but never read anywhere, and were TS errors).
+    const safePrevX = typeof t.prevHeadX === 'number' && isFinite(t.prevHeadX) ? t.prevHeadX : safeHeadX;
+    const safePrevY = typeof t.prevHeadY === 'number' && isFinite(t.prevHeadY) ? t.prevHeadY : safeHeadY;
+
     // Build the Snake adapter object
     return {
       id: t.id,
       name: t.name,
       path: t.path,
       angle: t.history.length > 0 ? t.history[0].angle : 0,
-      prevAngle: t.history.length > 1 ? t.history[1].angle : 0,
+      // FIX H2 support: prevAngle = previous snapshot's angle so the renderer
+      // can lerp head rotation between snapshots. Fallback to current angle
+      // when history is short — NEVER 0 (that would spin the head from east).
+      prevAngle: t.history.length > 1 ? t.history[1].angle : (t.history.length > 0 ? t.history[0].angle : 0),
       speed: BASE_SPEED,
       score: t.score,
       carriedChips: t.carriedChips,
@@ -328,15 +342,11 @@ export class RemoteSnakeManager {
       cachedBodyLength: t.bodyLen,
       cachedBodyScore: t.score,
       cachedVisualTailIdx: 0,
-      prevHeadX: safeHeadX,
-      prevHeadY: safeHeadY,
+      prevHeadX: safePrevX,
+      prevHeadY: safePrevY,
       smoothBrakeFactor: 1.0,
       skinId: t.skinId,
       rarity: t.rarity,
-      _headX: safeHeadX,
-      _headY: safeHeadY,
-      _prevHx: typeof t.prevHeadX === 'number' && isFinite(t.prevHeadX) ? t.prevHeadX : safeHeadX,
-      _prevHy: typeof t.prevHeadY === 'number' && isFinite(t.prevHeadY) ? t.prevHeadY : safeHeadY,
     };
   }
 

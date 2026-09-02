@@ -1865,9 +1865,28 @@ interface ConnState {
   arenaId: string | null;
   arena: ArenaInstance | null;
   authenticated: boolean;
+  // FIX H5: last time this socket sent ANY packet (input/ping/auth/join).
+  // Backgrounded mobile clients stop sending → swept as ghosts after 30s.
+  lastActiveAt: number;
 }
 
 const connections = new Map<any, ConnState>();
+
+// ── FIX H5: idle-socket sweep (ghost-player cleanup) ─────────────────────────
+// Backgrounded phones stop sending input but keep the TCP socket half-open.
+// Without this sweep the dead player's snake stays in the arena forever
+// (visible, killable, holding leaderboard rank). Foreground clients send
+// input at 60Hz and are never touched. The sweep ONLY closes the socket —
+// handleClose() then runs the full arena/player cleanup.
+const IDLE_SOCKET_TIMEOUT_MS = 30_000;
+setInterval(() => {
+  const now = Date.now();
+  for (const [ws, state] of connections) {
+    if (now - state.lastActiveAt <= IDLE_SOCKET_TIMEOUT_MS) continue;
+    dbg(`[Venom WS] Idle timeout (${IDLE_SOCKET_TIMEOUT_MS / 1000}s silent) — closing ${state.connId}`);
+    try { state.conn.close(); } catch { /* ignore */ }
+  }
+}, 10_000).unref?.();
 
 // ── Unique connection ID generator ─────────────────────────────────────────
 let _connIdCounter = 0;
@@ -1890,39 +1909,79 @@ function toAB(msg: any): ArrayBuffer {
   return new Uint8Array(msg).buffer;
 }
 
+/** Max incoming packet size — AUTH/JOIN/INPUT are all tiny (≤ a few hundred bytes). */
+const MAX_PACKET_BYTES = 8192;
+
 function handleMessage(ws: any, msg: any): void {
-  const buf = toAB(msg);
+  // SECURITY: a malformed packet must never crash the whole server.
+  // Everything below is guarded: size checks BEFORE every read + try/catch around all parsing.
+  let buf: ArrayBuffer;
+  try {
+    buf = toAB(msg);
+  } catch {
+    return; // not binary / unreadable — drop it
+  }
+
   const state = connections.get(ws);
   if (!state) return;
 
+  // FIX H5: any packet counts as activity (input, ping, auth, join).
+  state.lastActiveAt = Date.now();
+
+  if (buf.byteLength < 1 || buf.byteLength > MAX_PACKET_BYTES) {
+    dbg(`[Venom WS] Dropped malformed packet (${buf.byteLength} bytes) from ${state.connId}`);
+    return;
+  }
+
   const view = new DataView(buf);
   let offset = 0;
-  const opcode = view.getUint8(offset); offset += 1;
+  let opcode = -1;
+  try {
+    opcode = view.getUint8(offset); offset += 1;
 
-  switch (opcode) {
-    case OP.AUTH: {
-      const tokenLen = view.getUint16(offset, true); offset += 2;
-      const token = new TextDecoder().decode(new Uint8Array(buf, offset, tokenLen));
-      handleAuth(ws, token);
-      break;
+    switch (opcode) {
+      case OP.AUTH: {
+        if (buf.byteLength < 3) return; // 1 opcode + 2 length
+        const tokenLen = view.getUint16(offset, true); offset += 2;
+        if (buf.byteLength < offset + tokenLen) return;
+        const token = new TextDecoder().decode(new Uint8Array(buf, offset, tokenLen));
+        handleAuth(ws, token);
+        break;
+      }
+      case OP.JOIN: {
+        if (buf.byteLength < 2) return; // 1 opcode + 1 length
+        const arenaIdLen = view.getUint8(offset); offset += 1;
+        if (buf.byteLength < offset + arenaIdLen) return;
+        const arenaId = new TextDecoder().decode(new Uint8Array(buf, offset, arenaIdLen));
+        handleJoin(ws, arenaId);
+        break;
+      }
+      case OP.INPUT: {
+        if (buf.byteLength < 10) return; // 1 opcode + 4 angle + 1 flags + 4 seq
+        const angle = view.getFloat32(offset, true); offset += 4;
+        const flags = view.getUint8(offset); offset += 1;
+        const seq = view.getUint32(offset, true); offset += 4;
+        handleInput(ws, angle, (flags & 1) === 1, seq);
+        break;
+      }
+      case OP.EXTRACT: handleExtract(ws); break;
+      case OP.STATS_REQ: handleStats(ws); break;
+      case OP.PING: {
+        // FIX H5: heartbeat reply — 1-byte PONG. Also refreshes liveness
+        // for clients waiting in menus (no input flow there).
+        try {
+          const pong = new ArrayBuffer(1);
+          new DataView(pong).setUint8(0, OP.PONG);
+          state.conn.send(pong);
+        } catch { /* ignore */ }
+        break;
+      }
+      default:
+        dbg(`[Venom WS] Unknown opcode: 0x${opcode.toString(16)}`);
     }
-    case OP.JOIN: {
-      const arenaIdLen = view.getUint8(offset); offset += 1;
-      const arenaId = new TextDecoder().decode(new Uint8Array(buf, offset, arenaIdLen));
-      handleJoin(ws, arenaId);
-      break;
-    }
-    case OP.INPUT: {
-      const angle = view.getFloat32(offset, true); offset += 4;
-      const flags = view.getUint8(offset); offset += 1;
-      const seq = view.getUint32(offset, true); offset += 4;
-      handleInput(ws, angle, (flags & 1) === 1, seq);
-      break;
-    }
-    case OP.EXTRACT: handleExtract(ws); break;
-    case OP.STATS_REQ: handleStats(ws); break;
-    default:
-      dbg(`[Venom WS] Unknown opcode: 0x${opcode.toString(16)}`);
+  } catch (err) {
+    // Never let a bad packet kill the server — log and drop.
+    console.warn(`[Venom WS] Bad packet (opcode 0x${opcode >= 0 ? opcode.toString(16) : '?'} ) from ${state.connId}:`, err);
   }
 }
 
@@ -2011,6 +2070,46 @@ async function handleJoin(ws: any, arenaId: string): Promise<void> {
     if (!tier) {
       state.conn.emit('error', { message: 'Invalid arena ID' });
       return;
+    }
+
+    // ── Duplicate-join guard: never charge buy-in twice ──────────────────
+    // The client auto-sends JOIN after every reconnect, so a duplicate JOIN
+    // must resume the existing snake instead of charging again.
+    const existingArena = arenas.get(arenaId);
+    if (existingArena) {
+      for (const [oldConnId, existingPlayer] of existingArena.players) {
+        if (existingPlayer.userTag !== state.playerData.userTag) continue;
+        if (existingPlayer.deadAt > 0) continue; // spectating a finished match → allow fresh join
+
+        const mapHalf = existingArena.arenaConfig.mapHalf;
+
+        if (oldConnId === state.connId) {
+          // Same connection re-sent JOIN — just re-confirm, no charge.
+          state.conn.emit('joined', { snakeId: existingPlayer.snakeId, arenaId, config: { mapHalf } });
+          return;
+        }
+
+        // Reconnect case: same userTag still alive in this arena.
+        // Migrate the player record to the NEW connection (keeps snake, score, chips).
+        existingArena.players.delete(oldConnId);
+        socketToArena.delete(oldConnId);
+        existingPlayer.socket = state.conn; // snapshots now flow to the new socket
+        existingArena.players.set(state.connId, existingPlayer);
+        existingArena.snakeToSocket.set(existingPlayer.snakeId, state.connId);
+
+        state.arenaId = arenaId;
+        state.arena = existingArena;
+        socketToArena.set(state.connId, arenaId);
+
+        if (existingArena.emptyTimeout) {
+          clearTimeout(existingArena.emptyTimeout);
+          existingArena.emptyTimeout = null;
+        }
+
+        dbg(`[Arena ${arenaId}] RECONNECT ${existingPlayer.name} — resumed snake ${existingPlayer.snakeId} (no double charge)`);
+        state.conn.emit('joined', { snakeId: existingPlayer.snakeId, arenaId, config: { mapHalf } });
+        return;
+      }
     }
 
     // Call join API (deduct buyIn)
@@ -2272,6 +2371,7 @@ const server: any = Bun.serve({
         arenaId: null,
         arena: null,
         authenticated: false,
+        lastActiveAt: Date.now(), // FIX H5
       });
       console.log(`[Venom WS] Connected [${ws.remoteAddress}] connId=${connId}`);
     },

@@ -211,6 +211,9 @@ export function drawDeathOverlay(
   ctx: CanvasRenderingContext2D,
   score: number,
   viewport: Viewport,
+  // FIX H7: killedBy is now actually displayed. GameCanvas has always passed
+  // it as a 4th argument, but the old 3-param signature silently dropped it.
+  killedBy?: string,
 ): void {
   const { width, height } = viewport;
 
@@ -224,13 +227,19 @@ export function drawDeathOverlay(
   ctx.font = 'bold 48px sans-serif';
   ctx.fillText('You died!', width / 2, height / 2 - 40);
 
+  if (killedBy) {
+    ctx.fillStyle = '#f87171';
+    ctx.font = '18px sans-serif';
+    ctx.fillText(`Killed by ${killedBy}`, width / 2, height / 2 - 8);
+  }
+
   ctx.fillStyle = '#ffffff';
   ctx.font = '24px sans-serif';
-  ctx.fillText(`Score: ${Math.floor(score)}`, width / 2, height / 2 + 10);
+  ctx.fillText(`Score: ${Math.floor(score)}`, width / 2, height / 2 + (killedBy ? 22 : 10));
 
   ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
   ctx.font = '16px sans-serif';
-  ctx.fillText('Press Space or Click to respawn', width / 2, height / 2 + 50);
+  ctx.fillText('Press Space or Click to respawn', width / 2, height / 2 + (killedBy ? 60 : 50));
 }
 
 // ==========================================================================

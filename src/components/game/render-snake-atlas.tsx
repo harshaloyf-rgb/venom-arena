@@ -3,7 +3,7 @@
 // ============================================================================
 
 import type { Camera, Snake, Viewport } from '@/lib/snake/types';
-import { SEGMENT_SPACING, SPAWN_PROTECTION_MS, LEGENDARY_GLOW_SIZE } from '@/lib/snake/config';
+import { SEGMENT_SPACING, SPAWN_PROTECTION_MS, LEGENDARY_GLOW_SIZE, lerpAngle } from '@/lib/snake/config';
 import { worldToScreen, computeCamTransform, w2sXS, w2sYS, w2sX, w2sY } from '@/lib/snake/camera';
 import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
@@ -13,10 +13,25 @@ import { drawSegmentShape, readCustomSkinState, getSkinVisualProps, getPresetVis
 import { isCustomDBSkin, getCustomSkinSegments } from '@/lib/snake/skin-registry';
 import type { CustomSkinState } from '@/components/panels/cosmetics/cosmetics-types';
 import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-types';
-import { incrementCoilFrame } from './coil-path';
+import { incrementCoilFrame, type PathLike } from './coil-path';
 
 // ─── Per-frame skin prop & lighten caches (avoid repeated Map.get per bot) ──
 const _multiColorCache = new Map<string, boolean>();
+
+/** FIX H2: Interpolated head angle for rendering.
+ *  snake.angle only updates on physics ticks (offline) or snapshots (online).
+ *  Rotating the head sprite directly to snake.angle makes the head SNAP by the
+ *  full per-tick turn (up to ~5.7° while boosting) while its position glides
+ *  smoothly — the classic "head tilt/snap when turning" artifact.
+ *  Pairing snake.prevAngle (already tracked per tick/snapshot) with the render
+ *  alpha gives a continuous rotation on every frame.
+ *  alpha >= 1 (bots today, or missing data) → raw angle, zero behavior change. */
+function computeRenderAngle(snake: Snake, alpha: number): number {
+  if (alpha >= 1) return snake.angle;
+  const prev = snake.prevAngle;
+  if (!Number.isFinite(prev)) return snake.angle;
+  return lerpAngle(prev, snake.angle, alpha);
+}
 const _patternVisCache = new Map<string, ReturnType<typeof getSkinVisualProps>>();
 const _presetVisCache = new Map<string, ReturnType<typeof getPresetVisualProps>>();
 const _lightenCache = new Map<string, string>(); // grows only, max ~100 unique colors
@@ -498,6 +513,9 @@ export function renderSnakeAtlas(
   const pathLen = effectivePath.length;
   if (pathLen < 2) return;
 
+  // FIX H2: continuous head rotation for this frame (see computeRenderAngle)
+  const renderAngle = computeRenderAngle(snake, alpha);
+
   const headWx = effectivePath.headX;
   const headWy = effectivePath.headY;
 
@@ -776,7 +794,8 @@ export function renderSnakeAtlas(
 
     ctx.save();
     ctx.translate(hsx, hsy);
-    ctx.rotate(snake.angle);
+    // FIX H2: interpolated angle instead of raw snake.angle — no more snap/tilt
+    ctx.rotate(renderAngle);
 
     if (isLegendary && animation && snake.boosting) {
       atlasManager.applyEpicEffect(ctx, animation, time, 0, 0, headDrawSize, snake.headColor);
@@ -816,7 +835,7 @@ export function renderSnakeAtlas(
 
     // Direction pointer — player only, shows where snake is steering (arrow replaces mouse cursor)
     if (snake.isPlayer) {
-      drawDirectionPointer(ctx, snake.id, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting);
+      drawDirectionPointer(ctx, snake.id, hsx, hsy, renderAngle, snake.targetAngle, headDrawSize / 2, snake.boosting);
     }
 
     // Ultra-responsive eyes — track raw mouse position relative to head
@@ -824,11 +843,11 @@ export function renderSnakeAtlas(
     const equipped = getCachedEquipped();
     const hasCustomEyes = equipped.eyes && equipped.eyes !== 'none';
     if (!hasCustomEyes) {
-      drawResponsiveEyes(ctx, hsx, hsy, snake.angle, snake.targetAngle, headDrawSize / 2, snake.boosting, snake.id, time);
+      drawResponsiveEyes(ctx, hsx, hsy, renderAngle, snake.targetAngle, headDrawSize / 2, snake.boosting, snake.id, time);
     }
 
     // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
-    renderEquippedCosmetics(ctx, { hx: hsx, hy: hsy, hr: headDrawSize / 2, angle: snake.angle, time, boosting: snake.boosting, mouseScreenX, mouseScreenY });
+    renderEquippedCosmetics(ctx, { hx: hsx, hy: hsy, hr: headDrawSize / 2, angle: renderAngle, time, boosting: snake.boosting, mouseScreenX, mouseScreenY });
 
     // Head glow pulse when boosting
     if (snake.boosting && segRadius > 3) {
@@ -921,6 +940,10 @@ export function renderSnakeFallback(
   const path = (coiledPath && !isFar) ? coiledPath : snake.path;
   const pathLen = path.length;
   if (pathLen < 2) return;
+
+  // FIX H2: continuous head angle (drives pointer/eyes; fallback heads are
+  // flat circles with no rotation, so no rotate() needed here)
+  const renderAngle = computeRenderAngle(snake, alpha);
 
   // Guard against non-finite values (online mode)
   const headWorldX = path.headX;
@@ -1236,7 +1259,7 @@ export function renderSnakeFallback(
 
     // Direction pointer — player only, not bots
     if (snake.isPlayer) {
-      drawDirectionPointer(ctx, snake.id, headSX, headSY, snake.angle, snake.targetAngle, headRadius, snake.boosting);
+      drawDirectionPointer(ctx, snake.id, headSX, headSY, renderAngle, snake.targetAngle, headRadius, snake.boosting);
     }
 
     // Responsive eyes — P8: skip for far LOD bots
@@ -1245,11 +1268,11 @@ export function renderSnakeFallback(
       const eq2 = getCachedEquipped();
       const hasCustomEyes2 = eq2.eyes && eq2.eyes !== 'none';
       if (!hasCustomEyes2) {
-        drawResponsiveEyes(ctx, headSX, headSY, snake.angle, snake.targetAngle, headRadius, snake.boosting, snake.id, now);
+        drawResponsiveEyes(ctx, headSX, headSY, renderAngle, snake.targetAngle, headRadius, snake.boosting, snake.id, now);
       }
 
       // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
-      renderEquippedCosmetics(ctx, { hx: headSX, hy: headSY, hr: headRadius, angle: snake.angle, time: now, boosting: snake.boosting, mouseScreenX, mouseScreenY });
+      renderEquippedCosmetics(ctx, { hx: headSX, hy: headSY, hr: headRadius, angle: renderAngle, time: now, boosting: snake.boosting, mouseScreenX, mouseScreenY });
     }
 
     // Name — P8: skip for far LOD bots

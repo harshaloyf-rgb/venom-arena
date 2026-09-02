@@ -770,7 +770,8 @@ function updateBaiter(snake: Snake, data: BotAIData, state: GameState): void {
   // After 120+ ticks of being chased, CUT!
   if (bs.chaseTicks > 120) {
     // Cut across the chaser's path
-    const chaser = state.snakes.get(bs.chaserId);
+    // FIX (TS): bs.chaserId is string|null — guard before Map.get
+    const chaser = bs.chaserId ? state.snakes.get(bs.chaserId) : null;
     if (chaser && chaser.alive) {
       const cutLeft = normalizeAngle(chaser.angle + Math.PI / 2);
       const cutRight = normalizeAngle(chaser.angle - Math.PI / 2);
@@ -1173,7 +1174,7 @@ function buildAIHeadHash(snakes: Map<string, Snake>): void {
 // without duplicating the code. Only the personal-space repulsion and
 // player-flee logic — no body proximity scan (that's expensive).
 function runCollisionAvoidance(
-  snake: Snake, data: BotData, state: GameState,
+  snake: Snake, data: BotAIData, state: GameState,
   isFarFromPlayer: boolean, isRanked: boolean, playerFleeRangeSq: number,
   skipBodyProximity = false,
 ): void {
@@ -1411,7 +1412,14 @@ let nameCounters: Record<BotType, number> = { predator: 0, coiler: 0, baiter: 0,
 // Monotonic counter for unique bot IDs.
 // Previous: Date.now() caused ID collisions when two bots died in the same millisecond.
 // Fixed: Monotonic counter guarantees uniqueness.
+// FIX H9: IDs are now ALSO recycled via _freeBotIds on death (see removeBot)
+// so respawn storms no longer grow the online string table forever.
 let _botIdCounter = 0;
+
+/** Free pool of dead bot IDs per type — recycled by respawnDeadBots (FIX H9). */
+const _freeBotIds: Record<BotType, string[]> = {
+  predator: [], coiler: [], baiter: [], interceptor: [], grazer: [], trapper: [], ranked: [],
+};
 
 function pickBotName(type: BotType): string {
   const names = BOT_NAMES[type];
@@ -1703,7 +1711,9 @@ export function respawnDeadBots(
     // Use fast head-only check when filling in (< 50% of target) to avoid
     // expensive body segment scans during initial bot population.
     const massSpawn = aliveBots < targetCount * 0.5;
-    let pos: { x: number; y: number };
+    // FIX (TS): findBotSpawnPos returns null when no safe spot is found —
+    // the declaration must allow null (the code already checks `if (!pos) return`).
+    let pos: { x: number; y: number } | null;
     let respawnScore: number;
     if (bestType === 'ranked') {
       // Find which rank slot is empty and respawn it
@@ -1717,7 +1727,9 @@ export function respawnDeadBots(
       if (!pos) return; // Skip this tick — try again next tick rather than overlapping
       respawnScore = generateNormalBotScore(state);
     }
-    const id = `bot-${bestType}-${_botIdCounter++}`;
+    const id = _freeBotIds[bestType].length > 0
+      ? _freeBotIds[bestType].pop()! // FIX H9: recycled id — bounded string table
+      : `bot-${bestType}-${_botIdCounter++}`;
     const name = pickBotName(bestType);
     const snake = createSnakeFn(id, name, respawnScore, pos.x, pos.y, now, bestType);
     snake.isBot = true; snake.isPlayer = false;
@@ -1726,4 +1738,18 @@ export function respawnDeadBots(
   }
 }
 
-export function removeBot(snakeId: string): void { removeBotData(snakeId); }
+export function removeBot(snakeId: string): void {
+  // FIX H9: recycle the ID of the dead bot instead of minting new unique IDs
+  // forever. In ONLINE mode every new bot id is a NEW string-table entry on
+  // every client connection (respawned bots have unique ids like
+  // "bot-grazer-1234"), so the per-connection string table grew unboundedly.
+  // Recycled ids keep the table, the client smooth-seg maps, and the snakes
+  // Map bounded. Safe: every removeBot call site deletes the old snake from
+  // state.snakes in the same tick, so a recycled id is never alive twice.
+  const data = botStates.get(snakeId);
+  if (data) {
+    const free = _freeBotIds[data.type];
+    if (free.length < 512) free.push(snakeId);
+  }
+  removeBotData(snakeId);
+}

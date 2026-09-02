@@ -63,6 +63,22 @@ export function computeBodyLength(score: number): number {
   return Math.floor(START_LENGTH + LENGTH_GROWTH_RATE * Math.log(1 + score / LENGTH_GROWTH_OFFSET));
 }
 
+/** FIX H2: Shortest-path angle interpolation ("lerpAngle").
+ *  Interpolates from angle `a` to angle `b` by fraction `t` (0–1), always taking
+ *  the SHORT way around the circle (handles the ±π wrap correctly).
+ *  Used by the renderer to interpolate head rotation between physics ticks
+ *  (offline, alpha = accumulator fraction) or snapshots (online, alpha = time
+ *  since last snapshot / interval). Without this, the head sprite snaps to the
+ *  post-tick angle each tick while its position glides — the "head tilt/snap"
+ *  artifact. Snake.prevAngle already stores the pre-tick angle; this pairs
+ *  with it. Server-safe (pure function, no DOM). */
+export function lerpAngle(a: number, b: number, t: number): number {
+  let d = b - a;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  return a + d * t;
+}
+
 /** Dual-logarithmic radius growth — two logarithmic terms for balanced growth.
  *  Primary: fast early growth (RATE_1=2.36 / OFFSET_1=300)
  *  Secondary: slow continuous growth at high scores (RATE_2=0.65 / OFFSET_2=100K)

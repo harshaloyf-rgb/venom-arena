@@ -209,7 +209,10 @@ export function encodeSnapshot(
 
     wb.writeI16(cx);
     wb.writeI16(cy);
-    wb.writeU16(mscore);
+    // FIX H8: clamp score to u16 range. Ranked bots carry up to 100K score;
+    // writeU16 silently wraps (v & 0xffff), so a 70,000 score displayed as
+    // 4,464 on every client minimap. Clamp instead of wrap.
+    wb.writeU16(Math.max(0, Math.min(65535, Math.trunc(mscore))));
     wb.writeU8(misBot);
   }
 

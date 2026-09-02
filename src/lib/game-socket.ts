@@ -107,6 +107,16 @@ const OP_EXTRACT_FAIL = 0x33;
 const OP_ERROR      = 0x34;
 const OP_CUSTOM_SKIN = 0x40;
 const OP_STRING_TABLE = 0x41;
+// FIX H5: heartbeat — client pings every 10s, server pongs. Detects half-dead
+// mobile connections that keep readyState OPEN after backgrounding.
+const OP_PING       = 0x60;
+const OP_PONG       = 0x61;
+
+// ─── Heartbeat / lifecycle tuning (FIX H5) ─────────────────────────────────
+
+const HEARTBEAT_INTERVAL_MS = 10000;      // client ping cadence
+const PONG_TIMEOUT_MS = 30000;            // no pong for 30s → zombie socket
+const MAX_SNAPSHOT_STALENESS_MS = 2500;   // snapshots stopped → force reconnect on resume
 
 // ─── Binary Reader Helper ───────────────────────────────────────────────────
 
@@ -123,14 +133,26 @@ class BinReader {
   get offset() { return this.pos; }
   get remaining() { return this.u8.length - this.pos; }
 
-  u8v(): number { const v = this.u8[this.pos]; this.pos += 1; return v; }
-  i8v(): number { const v = this.dv.getInt8(this.pos); this.pos += 1; return v; }
-  u16v(): number { const v = this.dv.getUint16(this.pos, true); this.pos += 2; return v; }
-  i16v(): number { const v = this.dv.getInt16(this.pos, true); this.pos += 2; return v; }
-  u32v(): number { const v = this.dv.getUint32(this.pos, true); this.pos += 4; return v; }
-  f32v(): number { const v = this.dv.getFloat32(this.pos, true); this.pos += 4; return v; }
+  /** FIX H4: bounds-check EVERY read. A truncated snapshot (mobile network
+   *  handoff, proxy hiccup) used to read undefined bytes silently or throw a
+   *  raw RangeError deep inside parse code — the exact crash class fixed on
+   *  the server. Now it throws immediately with context, and the message
+   *  dispatcher catches + drops it. */
+  private _need(n: number): void {
+    if (this.pos + n > this.u8.length) {
+      throw new RangeError(`BinReader OOB: need ${n} byte(s) at offset ${this.pos}, buffer is ${this.u8.length}`);
+    }
+  }
+
+  u8v(): number { this._need(1); const v = this.u8[this.pos]; this.pos += 1; return v; }
+  i8v(): number { this._need(1); const v = this.dv.getInt8(this.pos); this.pos += 1; return v; }
+  u16v(): number { this._need(2); const v = this.dv.getUint16(this.pos, true); this.pos += 2; return v; }
+  i16v(): number { this._need(2); const v = this.dv.getInt16(this.pos, true); this.pos += 2; return v; }
+  u32v(): number { this._need(4); const v = this.dv.getUint32(this.pos, true); this.pos += 4; return v; }
+  f32v(): number { this._need(4); const v = this.dv.getFloat32(this.pos, true); this.pos += 4; return v; }
 
   utf8(len: number): string {
+    this._need(len);
     const bytes = this.u8.slice(this.pos, this.pos + len);
     this.pos += len;
     return new TextDecoder().decode(bytes);
@@ -179,6 +201,13 @@ function buildExtractMsg(): ArrayBuffer {
   return buf;
 }
 
+/** FIX H5: 1-byte heartbeat ping. */
+function buildPingMsg(): ArrayBuffer {
+  const buf = new ArrayBuffer(1);
+  new DataView(buf).setUint8(0, OP_PING);
+  return buf;
+}
+
 // ─── Connection Manager ────────────────────────────────────────────────────
 
 export function createGameSocket(onStateChange: (state: GameSocketState) => void) {
@@ -202,13 +231,21 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
   const stringTable: string[] = [];
 
   // Reconnection state
+  // FIX H5: exponential backoff with jitter instead of 5 fixed 1s retries.
+  // A 10-second phone call used to burn all 5 attempts in 5 seconds while
+  // backgrounded, leaving the game permanently stuck in 'error'.
   let reconnectAttempts = 0;
-  const MAX_RECONNECT = 5;
-  const RECONNECT_DELAY = 1000;
+  const MAX_RECONNECT = 8;
   let savedToken = '';
   let savedArenaId = '';
   let savedGamePort = 3001;
   let intentionalDisconnect = false;
+
+  // FIX H5: heartbeat + lifecycle state
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  let lastPongAt = 0;
+  let lastSnapshotAt = 0;
+  let visibilityHandler: (() => void) | null = null;
 
   // Pre-allocated parse buffers (avoid GC from array creation every 50ms)
   const _parseFoods: RemoteFood[] = [];
@@ -297,10 +334,12 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
     // bit 0: isSpectator (reserved), bit 1: head-only mode
     const isHeadOnly = (flags & 0x02) !== 0;
 
-    const snakeCount = r.u16v();
-    const foodCount = r.u16v();
-    const starCount = r.u16v();
-    const minimapCount = r.u16v();
+    const snakeCount = Math.min(r.u16v(), 4096);
+    const foodCount = Math.min(r.u16v(), 8192);
+    const starCount = Math.min(r.u16v(), 4096);
+    const minimapCount = Math.min(r.u16v(), 4096);
+    // FIX H4: caps above are cheap insurance — a corrupted count byte can no
+    // longer drive a huge parse loop even before the bounds checker fires.
 
     // ── Parse snakes ──
     // Reuse array if possible, otherwise allocate new
@@ -422,6 +461,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
     // Skip opcode byte
     r.u8v();
     currentSnapshot = parseBinarySnapshot(r);
+    lastSnapshotAt = performance.now(); // FIX H5: staleness tracking
     emit();
   }
 
@@ -536,61 +576,77 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
   function onMessage(event: MessageEvent) {
     if (!(event.data instanceof ArrayBuffer)) return;
     const u8 = new Uint8Array(event.data);
+    if (u8.length < 1) return;
     const opcode = u8[0];
 
-    switch (opcode) {
-      case OP_STRING_TABLE: {
-        const r = new BinReader(event.data);
-        r.u8v(); // skip opcode
-        handleStringTable(r);
-        break;
+    // FIX H4: wrap the whole dispatch. Any malformed server message now gets
+    // logged and dropped instead of throwing inside the WS event chain.
+    try {
+      switch (opcode) {
+        case OP_PONG:
+          lastPongAt = performance.now(); // FIX H5: heartbeat liveness
+          break;
+        case OP_STRING_TABLE: {
+          const r = new BinReader(event.data);
+          r.u8v(); // skip opcode
+          handleStringTable(r);
+          break;
+        }
+        case OP_AUTH_OK: {
+          const r = new BinReader(event.data);
+          r.u8v();
+          handleAuthOk(r);
+          break;
+        }
+        case OP_AUTH_FAIL: {
+          const r = new BinReader(event.data);
+          r.u8v();
+          handleAuthFail(r);
+          break;
+        }
+        case OP_JOINED: {
+          const r = new BinReader(event.data);
+          r.u8v();
+          handleJoined(r);
+          break;
+        }
+        case OP_JOIN_ERROR: {
+          const r = new BinReader(event.data);
+          r.u8v();
+          handleJoinError(r);
+          break;
+        }
+        case OP_SNAPSHOT:
+          handleSnapshot(event.data);
+          break;
+        case OP_KILLED:
+          handleKilled(event.data);
+          break;
+        case OP_MATCH_END:
+          handleMatchEnd(event.data);
+          break;
+        case OP_EXTRACT_FAIL:
+          handleExtractFail(event.data);
+          break;
+        case OP_ERROR:
+          handleError(event.data);
+          break;
+        case OP_CUSTOM_SKIN:
+          handleCustomSkin(event.data);
+          break;
       }
-      case OP_AUTH_OK: {
-        const r = new BinReader(event.data);
-        r.u8v();
-        handleAuthOk(r);
-        break;
-      }
-      case OP_AUTH_FAIL: {
-        const r = new BinReader(event.data);
-        r.u8v();
-        handleAuthFail(r);
-        break;
-      }
-      case OP_JOINED: {
-        const r = new BinReader(event.data);
-        r.u8v();
-        handleJoined(r);
-        break;
-      }
-      case OP_JOIN_ERROR: {
-        const r = new BinReader(event.data);
-        r.u8v();
-        handleJoinError(r);
-        break;
-      }
-      case OP_SNAPSHOT:
-        handleSnapshot(event.data);
-        break;
-      case OP_KILLED:
-        handleKilled(event.data);
-        break;
-      case OP_MATCH_END:
-        handleMatchEnd(event.data);
-        break;
-      case OP_EXTRACT_FAIL:
-        handleExtractFail(event.data);
-        break;
-      case OP_ERROR:
-        handleError(event.data);
-        break;
-      case OP_CUSTOM_SKIN:
-        handleCustomSkin(event.data);
-        break;
+    } catch (err) {
+      console.warn(`[GameSocket] Dropped malformed message (opcode 0x${opcode.toString(16)}):`, err);
     }
   }
 
   function onOpen() {
+    // FIX H9: reset the string table on EVERY socket open (including
+    // reconnects). The server keeps a FRESH per-connection table and resends
+    // every string the client needs as deltas on the first snapshot, so a
+    // stale table (server restarted mid-session → indices shifted) can only
+    // produce wrong names/colors. Clearing is always safe here.
+    stringTable.length = 0;
     // Send AUTH immediately on connect
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(buildAuthMsg(savedToken));
@@ -598,9 +654,16 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
   }
 
   function onClose() {
+    stopHeartbeat(); // FIX H5: no interval leak across reconnects
     if (intentionalDisconnect) return;
     console.log('[GameSocket] WebSocket closed, attempting reconnect...');
     attemptReconnect();
+  }
+
+  /** FIX H5: exponential backoff with jitter — 1s, 2s, 4s … capped at 15s. */
+  function reconnectDelayMs(attempt: number): number {
+    const base = Math.min(1000 * Math.pow(2, Math.max(0, attempt - 1)), 15000);
+    return Math.floor(base + Math.random() * 300);
   }
 
   function attemptReconnect() {
@@ -613,14 +676,82 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
     }
 
     reconnectAttempts++;
-    console.log(`[GameSocket] Reconnect attempt ${reconnectAttempts}/${MAX_RECONNECT} in ${RECONNECT_DELAY}ms`);
+    const delay = reconnectDelayMs(reconnectAttempts);
+    console.log(`[GameSocket] Reconnect attempt ${reconnectAttempts}/${MAX_RECONNECT} in ${delay}ms`);
 
     setTimeout(() => {
       if (intentionalDisconnect) return;
       currentStatus = 'connecting';
       emit();
       createWsConnection();
-    }, RECONNECT_DELAY);
+    }, delay);
+  }
+
+  // ── FIX H5: heartbeat + visibility lifecycle ────────────────────────────
+
+  function startHeartbeat(): void {
+    stopHeartbeat();
+    lastPongAt = performance.now();
+    heartbeatTimer = setInterval(() => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      const now = performance.now();
+      if (now - lastPongAt > PONG_TIMEOUT_MS) {
+        // Zombie socket: readyState OPEN but no pong for 30s (typical after
+        // mobile network handoff). Force close — onClose triggers reconnect.
+        console.warn('[GameSocket] Heartbeat timeout (no pong for 30s) — forcing reconnect');
+        try { ws.close(); } catch { /* ignore */ }
+        return;
+      }
+      try { ws.send(buildPingMsg()); } catch { /* ignore — onClose will handle */ }
+    }, HEARTBEAT_INTERVAL_MS);
+  }
+
+  function stopHeartbeat(): void {
+    if (heartbeatTimer !== null) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+  }
+
+  /** FIX H5: when the app returns to the foreground (phone call ended, app
+   *  switched back), verify the socket is actually usable instead of staring
+   *  at a frozen world:
+   *  - socket dead → reconnect immediately (attempts reset — user is watching)
+   *  - socket "open" but snapshots stale > 2.5s → force fresh reconnect */
+  function handleVisibilityChange(): void {
+    if (typeof document === 'undefined') return;
+    if (document.visibilityState !== 'visible') return; // hidden: rAF pauses naturally
+    if (intentionalDisconnect) return;
+
+    const readyState = ws ? ws.readyState : WebSocket.CLOSED;
+    if (readyState !== WebSocket.OPEN) {
+      reconnectAttempts = 0;
+      currentStatus = 'connecting';
+      emit();
+      stopHeartbeat();
+      createWsConnection();
+      return;
+    }
+
+    if (currentStatus === 'connected'
+        && lastSnapshotAt > 0
+        && performance.now() - lastSnapshotAt > MAX_SNAPSHOT_STALENESS_MS) {
+      console.warn('[GameSocket] Stale snapshots on resume — forcing reconnect');
+      try { ws!.close(); } catch { /* ignore */ }
+    }
+  }
+
+  function attachVisibility(): void {
+    if (visibilityHandler || typeof document === 'undefined') return;
+    visibilityHandler = handleVisibilityChange;
+    document.addEventListener('visibilitychange', visibilityHandler);
+  }
+
+  function detachVisibility(): void {
+    if (visibilityHandler && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', visibilityHandler);
+    }
+    visibilityHandler = null;
   }
 
   function createWsConnection() {
@@ -633,6 +764,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       ws.onerror = () => {
         // onclose will fire after this and handle reconnect
       };
+      startHeartbeat(); // FIX H5
     } catch (err: any) {
       console.warn('[GameSocket] Failed to create WebSocket:', err.message);
       attemptReconnect();
@@ -659,6 +791,8 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       savedToken = token;
       savedArenaId = arenaId;
       stringTable.length = 0;
+      lastSnapshotAt = 0; // FIX H5
+      attachVisibility(); // FIX H5: resume health-check while connected
       emit();
 
       try {
@@ -681,13 +815,15 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
         savedGamePort = gamePort;
 
         // 2. Ensure the regional game server is running
+        // NOTE: no force=1 — force-restarting would kick every player already
+        // in a match on that server. The route only spawns when the port is down.
         let serverJustStarted = false;
         try {
-          const ensureRes = await fetch(`/api/game-server/ensure?region=${playerRegion}&force=1`);
+          const ensureRes = await fetch(`/api/game-server/ensure?region=${playerRegion}`);
           if (!ensureRes.ok) {
             console.warn('[GameSocket] Game server ensure check failed:', ensureRes.status);
             // Fallback: try without region param (starts default server on 3001)
-            await fetch('/api/game-server/ensure?force=1');
+            await fetch('/api/game-server/ensure');
             gamePort = 3001;
             savedGamePort = gamePort;
           } else {
@@ -733,6 +869,8 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
     disconnect() {
       intentionalDisconnect = true;
       reconnectAttempts = MAX_RECONNECT; // prevent auto-reconnect
+      stopHeartbeat(); // FIX H5
+      detachVisibility(); // FIX H5
       if (ws) {
         ws.onclose = null; // prevent onClose from triggering reconnect
         ws.close();

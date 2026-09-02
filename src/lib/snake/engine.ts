@@ -124,6 +124,64 @@ function rebuildFoodHash(fh: SpatialHash, foods: FoodOrb[]): void {
   }
 }
 
+// FIX G2: Incremental food-hash maintenance.
+// The hash used to be rebuilt from scratch every N ticks; food spawned between
+// rebuilds was invisible to spatial queries, and the renderer scanned the FULL
+// 20K food array every frame. Now every spawn indexes into the hash immediately
+// and every eat/despawn unindexes — the hash + id-cache stay accurate enough
+// for rendering culling at all times (the eat path still does its periodic
+// full rebuild as a source-of-truth resync).
+// NOTE on stale entries: magnet pull moves food without updating its hash
+// cell. Ghost entries are harmless — both the eat path and the render path
+// resolve hash ids through _cachedFoodById (always accurate) and skip
+// unknown ids.
+function indexFood(f: FoodOrb): void {
+  _foodHashScratch.x = f.x; _foodHashScratch.y = f.y;
+  _foodHashScratch.radius = f.radius; _foodHashScratch.id = f.id;
+  foodHash.insert(_foodHashScratch);
+  _cachedFoodById.set(f.id, f);
+  // Keeps boost-cost/food-value scoring correct for food eaten BEFORE the
+  // next periodic rebuild (previously such food scored 1 via `?? 1`).
+  foodValueCache.set(f.id, f.value);
+}
+
+function unindexFood(f: FoodOrb): void {
+  _foodHashScratch.x = f.x; _foodHashScratch.y = f.y;
+  _foodHashScratch.radius = f.radius; _foodHashScratch.id = f.id;
+  foodHash.remove(_foodHashScratch);
+  _cachedFoodById.delete(f.id);
+  foodValueCache.delete(f.id);
+}
+
+// FIX G2: Reused buffer for render-side food culling (zero allocation per frame).
+const _visibleFoodBuf: FoodOrb[] = [];
+// Dedupe set for queryVisibleFoods — a food orb at a spatial-cell boundary is
+// inserted into 2 cells (correct for collision queries) and would otherwise be
+// returned twice per query. Rendering the same orb twice is invisible, but the
+// clean contract is one entry per orb.
+const _querySeenIds = new Set<number>();
+
+/** Query alive food orbs near a world point (for render culling).
+ *  Returns a SHARED reused array — valid until the next call. Callers must
+ *  not retain it across frames. */
+export function queryVisibleFoods(cx: number, cy: number, radius: number): FoodOrb[] {
+  const buf = _visibleFoodBuf;
+  buf.length = 0;
+  if (!Number.isFinite(cx) || !Number.isFinite(cy) || !(radius > 0)) return buf;
+  const nearby = foodHash.query(cx, cy, radius);
+  if (nearby.length === 0) return buf;
+  const seen = _querySeenIds;
+  seen.clear();
+  for (let i = 0; i < nearby.length; i++) {
+    const id = nearby[i].id as number;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const orb = _cachedFoodById.get(id);
+    if (orb) buf.push(orb);
+  }
+  return buf;
+}
+
 // NOTE: MAP_FOOD_GRID_SIZE, MAP_HALF, MAP_GRID_COLS/ROWS, MAP_RADIUS_SQ, DESPAWN_RADIUS_SQ,
 // VISIBLE_RADIUS_SQ, MAP_FOOD_TARGET_PER_CELL, MAP_FOOD_SPAWN_PER_CELL are now per-arena
 // and read from state.arenaConfig. Module-level fallbacks kept for spatial hash sizing.
@@ -182,6 +240,7 @@ function createSnake(
     cachedVisualTailIdx: 0,
     skinId, rarity,
     prevHeadX: posX, prevHeadY: posY, smoothBrakeFactor: 1.0,
+    carriedChips: 0,
   };
 }
 
@@ -322,11 +381,13 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
       for (let d = 0; d < dropCount; d++) {
         const frac = startFrac + (1 - startFrac) * (d / (dropCount - 1 || 1));
         const idx = Math.min(Math.floor(frac * pathLen), pathLen - 1);
-        ctx.foods.push({
+        const drop: FoodOrb = {
           id: ctx.nextFoodId.value++, x: snake.path.getX(idx), y: snake.path.getY(idx),
           size: 'small', value: 1, radius: FOOD_RADII[0],
           color: FOOD_COLORS[0], glowColor: FOOD_GLOW_COLORS[0], magnetized: false,
-        });
+        };
+        ctx.foods.push(drop);
+        indexFood(drop); // FIX G2: boost drops are visible immediately
       }
     }
   }
@@ -387,11 +448,20 @@ function makeFood(nextId: { value: number }, x: number, y: number, forceSize?: n
   };
 }
 
+/** Post-processing wrapper: create + index into the spatial hash (FIX G2).
+ *  makeFood stays pure (no side effects) for any future non-arena use; every
+ *  arena spawn path goes through makeFoodIndexed instead. */
+function makeFoodIndexed(nextId: { value: number }, x: number, y: number, forceSize?: number): FoodOrb {
+  const f = makeFood(nextId, x, y, forceSize);
+  indexFood(f);
+  return f;
+}
+
 function spawnFoodBatch(nextId: { value: number }, foods: FoodOrb[], count: number, cx: number, cy: number, radius: number): void {
   for (let i = 0; i < count; i++) {
     const a = Math.random() * Math.PI * 2;
     const d = Math.sqrt(Math.random()) * radius; // area-uniform distribution
-    foods.push(makeFood(nextId, cx + Math.cos(a) * d, cy + Math.sin(a) * d));
+    foods.push(makeFoodIndexed(nextId, cx + Math.cos(a) * d, cy + Math.sin(a) * d));
   }
 }
 
@@ -519,11 +589,13 @@ function killSnake(snake: Snake, nextFoodId: { value: number }, foods: FoodOrb[]
   for (let i = 0; i < sizes.length; i++) {
     const si = Math.min(i * step, segLen - 1);
     const sizeIdx = sizes[i];
-    foods.push({
+    const drop: FoodOrb = {
       id: nextFoodId.value++, x: snake.path.getX(si), y: snake.path.getY(si),
       size: FOOD_SIZES[sizeIdx], value: FOOD_VALUES[sizeIdx], radius: FOOD_RADII[sizeIdx],
       color: FOOD_COLORS[sizeIdx], glowColor: FOOD_GLOW_COLORS[sizeIdx], magnetized: false,
-    });
+    };
+    foods.push(drop);
+    indexFood(drop); // FIX G2: death drops are visible immediately
   }
 }
 
@@ -542,10 +614,20 @@ export function createInitialState(
   arenaId?: string,
 ): GameState {
   const arenaConfig = getArenaConfig(arenaId);
+  // FIX G2: reset module-level food index state — the hash/cache are module
+  // singletons that survive across game restarts (arena switch, respawn menu).
+  // Without this reset, a new game would inherit ghost entries from the old one
+  // until the first periodic rebuild.
+  foodHash.clear();
+  _cachedFoodById.clear();
+  foodValueCache.clear();
+  _magnetizedIds.length = 0;
   const state: GameState = {
     snakes: new Map(), foods: [], player: null,
     nextFoodId: 0, showControls: true, tickCount: 0,
     botsEnabled: false,
+    stars: [],
+    nextStarId: 0,
     arenaConfig,
     boundaryRadius: arenaConfig.mapHalf,
   };
@@ -648,6 +730,12 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   const rebuildHash = state.tickCount % ac.foodHashRebuildInterval === 0;
   const eatenIds = checkFoodEating(state.snakes.values(), state.foods, foodHash, foodValueCache, now, rebuildHash);
   if (eatenIds.size > 0) {
+    // FIX G2: unindex eaten food so the hash/id-cache stay render-accurate
+    // (no ghost orbs between periodic rebuilds).
+    for (const fid of eatenIds) {
+      const f = _cachedFoodById.get(fid);
+      if (f) unindexFood(f);
+    }
     let writeIdx = 0;
     for (let i = 0; i < state.foods.length; i++) {
       if (!eatenIds.has(state.foods[i].id)) { state.foods[writeIdx++] = state.foods[i]; }
@@ -749,18 +837,18 @@ function maintainFoodAroundPlayer(state: GameState, nextIdRef: { value: number }
   for (let i = 0; i < uniformCount; i++) {
     const a = Math.random() * Math.PI * 2;
     const dist = 200 + Math.random() * (visibleR - 200);
-    foods.push(makeFood(nextIdRef, hx + Math.cos(a) * dist, hy + Math.sin(a) * dist));
+    foods.push(makeFoodIndexed(nextIdRef, hx + Math.cos(a) * dist, hy + Math.sin(a) * dist));
   }
   for (let i = 0; i < aheadCount; i++) {
     const spread = (Math.random() - 0.5) * Math.PI * 0.8;
     const dist = 200 + Math.random() * (visibleR - 200);
     const a = angle + spread;
-    foods.push(makeFood(nextIdRef, hx + Math.cos(a) * dist, hy + Math.sin(a) * dist));
+    foods.push(makeFoodIndexed(nextIdRef, hx + Math.cos(a) * dist, hy + Math.sin(a) * dist));
   }
   for (let i = 0; i < aroundCount; i++) {
     const a = Math.random() * Math.PI * 2;
     const dist = 800 + Math.random() * (visibleR - 800);
-    foods.push(makeFood(nextIdRef, hx + Math.cos(a) * dist, hy + Math.sin(a) * dist));
+    foods.push(makeFoodIndexed(nextIdRef, hx + Math.cos(a) * dist, hy + Math.sin(a) * dist));
   }
 }
 
@@ -786,7 +874,10 @@ function maintainMapFood(state: GameState, nextIdRef: { value: number }): void {
   let writeIdx = 0;
   for (let i = 0; i < foods.length; i++) {
     const f = foods[i];
-    if (f.x * f.x + f.y * f.y > despawnRSq) continue;
+    if (f.x * f.x + f.y * f.y > despawnRSq) {
+      unindexFood(f); // FIX G2: keep hash/cache in sync with despawns
+      continue;
+    }
     if (writeIdx !== i) foods[writeIdx] = f;
     writeIdx++;
     const col = Math.floor((f.x + halfMap) / cellSize);
@@ -814,7 +905,7 @@ function maintainMapFood(state: GameState, nextIdRef: { value: number }): void {
         const x = cx + (Math.random() - 0.5) * cellSize;
         const y = cy + (Math.random() - 0.5) * cellSize;
         if (x * x + y * y < radiusSq) {
-          foods.push(makeFood(nextIdRef, x, y));
+          foods.push(makeFoodIndexed(nextIdRef, x, y));
         }
       }
     }

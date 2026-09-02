@@ -25,6 +25,12 @@ export const OP = {
 
   STATS_REQ: 0x50,
   STATS_RESP: 0x51,
+
+  // FIX H5: heartbeat. Client pings every 10s; server pongs immediately.
+  // Lets the server detect ghost (backgrounded) connections via activity
+  // timestamps, and lets the client detect zombie sockets (OPEN but dead).
+  PING: 0x60,
+  PONG: 0x61,
 } as const;
 
 // ── StringTable ───────────────────────────────────────────────────────────────
@@ -267,14 +273,12 @@ export class WSPlayerConnection {
     // flags bit 0: killerIsBot
     const flags: number = killerIsBot ? 0x01 : 0x00;
 
+    // Field order MUST match the client parser (game-socket.ts handleKilled):
+    //   killerName → killerTag (ALWAYS written, may be empty) → flags
     wb.writeU8(OP.KILLED);
     wb.writeStringWithLen(killerName);
+    wb.writeStringWithLen(killerTag);
     wb.writeU8(flags);
-
-    // killerTag sent as stringWithLen if present
-    if (killerTag.length > 0) {
-      wb.writeStringWithLen(killerTag);
-    }
 
     this.send(wb.toBuffer());
   }
@@ -307,6 +311,7 @@ export class WSPlayerConnection {
       // Death outcome
       const reason: string = data.reason ?? '';
       const killerTag: string = data.killerTag ?? '';
+      const killerIsBot: boolean = data.killerIsBot ?? false;
       const chipsLost: number = data.chipsLost ?? 0;
 
       wb.writeU8(0x00); // outcome = death
@@ -315,8 +320,8 @@ export class WSPlayerConnection {
       wb.writeU32(duration);
       wb.writeStringWithLen(reason);
       wb.writeStringWithLen(killerTag);
-      // flags reserved for future use
-      wb.writeU8(0x00);
+      // flags bit 0: killerIsBot — MUST reflect the real value (client reads it)
+      wb.writeU8(killerIsBot ? 0x01 : 0x00);
       wb.writeF32(chipsLost);
     }
 

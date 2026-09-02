@@ -604,8 +604,12 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
           const dx = headWx - camX;
           const dy = headWy - camY;
           const lodFar = dx * dx + dy * dy > 1500 * 1500 ? 1 : 0;
+          // FIX H3: pass the snapshot alpha (was hardcoded 1). Remote adapters
+          // now carry the true previous-snapshot head (FIX H1), so renderOff
+          // glides each snake smoothly between 20Hz snapshots instead of
+          // stepping ~9px at the snapshot rate against the interpolated camera.
           try {
-            renderSnakeFallback(ctx, snake, camera, viewport, now, undefined, undefined, true, 1, undefined, lodFar);
+            renderSnakeFallback(ctx, snake, camera, viewport, now, undefined, undefined, true, mgr.getPlayerAlpha(), undefined, lodFar);
           } catch (e: any) { console.error('[Online] bot render:', id, e.message); }
         }
 

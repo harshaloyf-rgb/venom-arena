@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { exec } from 'child_process';
 import net from 'net';
+import path from 'path';
 import { getRegionServer, VALID_REGIONS } from '@/lib/game-config';
+import { requireAuth } from '@/lib/api-helpers';
 
-const GAME_SERVER_DIR = '/home/z/my-project/mini-services/game-server';
+// Repo root at runtime — works in dev AND production regardless of checkout location.
+const PROJECT_ROOT = process.cwd();
+const GAME_SERVER_DIR = path.join(PROJECT_ROOT, 'mini-services', 'game-server');
 const spawnLocks = new Map<string, boolean>();
 
 /** Check if port is listening */
@@ -32,9 +36,9 @@ function spawnServer(port: number, region: string): Promise<boolean> {
     if (spawnLocks.get(key)) { resolve(false); return; }
     spawnLocks.set(key, true);
 
-    const logFile = `/home/z/my-project/game-server-${region.toLowerCase()}.log`;
+    const logFile = path.join(PROJECT_ROOT, `game-server-${region.toLowerCase()}.log`);
     const child = exec(
-      `cd ${GAME_SERVER_DIR} && setsid env PORT=${port} REGION=${region} bun index.ts > ${logFile} 2>&1 &`,
+      `cd ${GAME_SERVER_DIR} && setsid env PORT=${port} REGION=${region} INTERNAL_SECRET="${process.env.INTERNAL_SECRET || ''}" bun index.ts > ${logFile} 2>&1 &`,
       { timeout: 5000 },
       (err) => {
         spawnLocks.delete(key);
@@ -50,11 +54,23 @@ function spawnServer(port: number, region: string): Promise<boolean> {
  *
  * Ensures the game server for a specific region is running with the latest code.
  * If no region is specified, starts the default server (port 3001).
- * Pass force=1 to kill any existing server and restart.
+ * SECURITY:
+ *   - Requires a logged-in session (this endpoint can spawn/kill processes).
+ *   - force=1 (kill + restart) is ONLY honored for admin sessions.
+ *     Regular players never force-restart — that would kick every
+ *     connected player mid-match and trigger re-join charges.
  */
 export async function GET(req: NextRequest) {
+  const { session, error } = await requireAuth();
+  if (error) return error;
+
   const regionParam = req.nextUrl.searchParams.get('region');
-  const forceRestart = req.nextUrl.searchParams.get('force') === '1';
+  let forceRestart = req.nextUrl.searchParams.get('force') === '1';
+
+  // Only admins may force-restart a live server
+  if (forceRestart && session.role !== 'admin') {
+    forceRestart = false;
+  }
 
   // Determine which server to ensure
   let port: number;

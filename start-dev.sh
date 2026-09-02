@@ -1,5 +1,5 @@
 #!/bin/bash
-cd /home/z/my-project
+cd "$(dirname "$0")"
 rm -rf .next
 nohup node node_modules/.bin/next dev -p 3000 > /tmp/next-server.log 2>&1 &
 echo $! > /tmp/next-server.pid

@@ -1,4 +1,4 @@
-import type { GameState, Camera, Viewport } from '@/lib/snake/types';
+import type { GameState, Camera, Viewport, FoodOrb } from '@/lib/snake/types';
 import type { MinimapDot } from '@/lib/game-socket';
 import { drawGrid, drawFood } from './renderer';
 import { cleanupSnakeParticles, clearSmoothedSegs } from './render-snake-atlas';
@@ -70,6 +70,10 @@ export function renderBackground(
   viewport: Viewport,
   _fps: number,
   _now: number,
+  // FIX G2: pre-culled food list (offline mode queries the spatial hash).
+  // When omitted (online mode), falls back to the snapshot's food array,
+  // which the server already viewport-filters.
+  foodsOverride?: FoodOrb[],
 ): void {
   const { width, height } = viewport;
 
@@ -81,7 +85,7 @@ export function renderBackground(
   drawGrid(ctx, camera, viewport);
 
   // Food
-  drawFood(ctx, state.foods, camera, viewport);
+  drawFood(ctx, foodsOverride ?? state.foods, camera, viewport);
 
   // Arena boundary wall — visible glowing red ring at map edge
   drawArenaBoundary(ctx, state, camera, viewport);

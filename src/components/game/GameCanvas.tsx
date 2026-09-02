@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Zap, CircleDot } from 'lucide-react';
 import { createExtractionState, updateExtractionProgress, drawExtractRing } from '@/lib/snake/extraction';
-import { createInitialState, gameTick, respawnPlayer, seedInitialFood, type PlayerSkinOverride } from '@/lib/snake/engine';
+import { createInitialState, gameTick, respawnPlayer, seedInitialFood, queryVisibleFoods, type PlayerSkinOverride } from '@/lib/snake/engine';
 import { createCamera, updateCameraInterpolated, getViewport } from '@/lib/snake/camera';
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, registerSkinAsset, registerDefaultSkins } from '@/lib/snake/skin-registry';
@@ -304,16 +304,18 @@ export default function GameCanvas({
       const maxAccum = tickMs * 6;
       if (accumulatorRef.current > maxAccum) accumulatorRef.current = maxAccum;
 
-      // Save prevHeadX/Y BEFORE any ticks run (standard fixed-timestep interpolation).
-      // The camera interpolates: cam = prevHead + (curHead - prevHead) * alpha,
-      // where alpha = remaining accumulator / tickMs (0→1 toward next tick).
-      // Previously this was gated behind ticksThisFrame === maxTicks-1, which only
-      // fired when 6 ticks ran in one frame (100ms spike) — effectively never
-      // at 60fps. The camera froze at spawn, causing world teleporting.
-      const player = gameState.player;
-      if (player && player.alive) {
-        player.prevHeadX = player.path.headX;
-        player.prevHeadY = player.path.headY;
+      // FIX H3: Save prevHeadX/Y for ALL alive snakes (not just the player)
+      // BEFORE any ticks run, once per FRAME (standard fixed-timestep interpolation).
+      // Bots previously kept their spawn-position prevHead forever, which made
+      // per-bot render interpolation impossible (alpha=1 was forced as a
+      // workaround — that's what made the whole world step 3px/tick while the
+      // camera glided → the "camera shake" shimmer).
+      // Saving per FRAME (not per tick) keeps every snake's interpolation span
+      // identical to the camera's span, even when 2+ ticks run in one frame.
+      for (const [, s] of gameState.snakes) {
+        if (!s.alive) continue;
+        s.prevHeadX = s.path.headX;
+        s.prevHeadY = s.path.headY;
       }
 
       let ticksThisFrame = 0;
@@ -361,6 +363,7 @@ export default function GameCanvas({
       // Camera interpolation — only valid when player is alive
       // alpha = how far we are toward the next tick (0 to 1).
       const alpha = Math.max(0, Math.min(accumulatorRef.current / tickMs, 1.0));
+      const player = gameState.player;
       if (player && player.alive) {
         updateCameraInterpolated(cameraRef.current, player, w, h, alpha);
       }
@@ -376,7 +379,12 @@ export default function GameCanvas({
       const dpr = window.devicePixelRatio || 1;
       beginRenderFrameWithDpr(dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      renderBackground(ctx, gameState, cameraRef.current, viewport, fc.fps, now);
+      // FIX G2: cull food via the spatial hash before drawing. The old path
+      // iterated ALL food (up to 20K orbs) every frame with per-item bounds
+      // checks — 1.2M+ iterations/sec of which ~400 were visible.
+      const viewRadius = Math.hypot(w, h) / (2 * cameraRef.current.zoom) + 120;
+      const visibleFoods = queryVisibleFoods(cameraRef.current.x, cameraRef.current.y, viewRadius);
+      renderBackground(ctx, gameState, cameraRef.current, viewport, fc.fps, now, visibleFoods);
 
       // ── Render snakes: bots use fallback, player uses atlas ──
       // Culling: use body-aware margin so long snakes don't pop in/out.
@@ -397,13 +405,14 @@ export default function GameCanvas({
           // know heading per-axis, use the full margin in all directions.
           if (s.path.headX < viewport.left - margin || s.path.headX > viewport.right + margin ||
               s.path.headY < viewport.top - margin || s.path.headY > viewport.bottom + margin) continue;
-          // P0 FIX #1: Bots do NOT get alpha interpolation — only the player needs it.
-          // Applying alpha to bots causes head-body separation: head renders ahead
-          // of path position while body is at fixed tick positions. alpha=1 => offset=0.
+          // FIX H3: bots get the SAME alpha as the camera. renderOff is applied
+          // to head AND body identically inside the renderer (rigid shift), so
+          // there is no head-body separation risk — but now bots glide in sync
+          // with the camera instead of stepping 3px/tick against it.
           const dx = s.path.headX - camX;
           const dy = s.path.headY - camY;
           const lodFar = dx * dx + dy * dy > 1500 * 1500 ? 1 : 0;
-          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, 1, undefined, lodFar);
+          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, alpha, undefined, lodFar);
         }
       }
       if (gameState.player && gameState.player.alive) {
