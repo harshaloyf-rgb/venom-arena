@@ -316,6 +316,12 @@ export default function GameCanvas({
         if (!s.alive) continue;
         s.prevHeadX = s.path.headX;
         s.prevHeadY = s.path.headY;
+        // Tier-2: same per-frame pattern for head ROTATION. moveSnake
+        // overwrites prevAngle every tick, so with 2+ ticks per frame the
+        // render lerp spanned only the LAST tick's turn — heads lagged
+        // their position at low FPS. Saving per frame makes the rotation
+        // span identical to the position/camera span.
+        s.renderPrevAngle = s.angle;
       }
 
       let ticksThisFrame = 0;

@@ -9,9 +9,10 @@ import { PathBuffer } from './pool';
 import { SpatialHash, type SpatialEntity } from './spatial-hash';
 import { checkCollisions, type KillEvent } from './collision';
 import {
-  updateAllBotAI, getBotBoost, spawnBots, respawnDeadBots, removeBot,
+  updateAllBotAI, getBotBoost, getBotIsHunter, spawnBots, respawnDeadBots, removeBot,
   BOT_TYPE_COLORS, type BotType, type BotSpawnConfig, DEFAULT_BOT_MIX,
 } from './bot-ai';
+import { collectFreezeAnchors, nearestAnchorDistSq, isFreezeDistSq, type FreezeAnchor } from './freeze';
 import { SLITHER_PRESETS } from '@/components/panels/cosmetics/cosmetics-types';
 import {
   // MOVEMENT
@@ -477,6 +478,9 @@ function checkFoodEating(
   snakes: Iterable<Snake>, foods: FoodOrb[],
   fh: SpatialHash, fvc: Map<number, number>, now: number,
   useCachedHash: boolean,
+  // G1 (Tier-2): when provided, frozen bots (beyond BOT_FREEZE_DIST of every
+  // player, hunters exempt) skip eating/magnet queries entirely.
+  freezeAnchors?: FreezeAnchor[],
 ): Set<number> {
   // FIX #10: Instead of resetting ALL food magnetized flags (O(20K-50K) writes/tick),
   // only reset the ones that were magnetized last tick. Track them in _magnetizedIds.
@@ -515,6 +519,9 @@ function checkFoodEating(
     const hx = snake.path.headX;
     const hy = snake.path.headY;
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
+    // G1: frozen bots don't eat and don't pull food (they don't move).
+    if (freezeAnchors && snake.isBot && !getBotIsHunter(snake.id) &&
+        isFreezeDistSq(nearestAnchorDistSq(freezeAnchors, hx, hy))) continue;
 
     const nearby = fh.query(hx, hy, MAGNET_PULL_DIST);
     for (let i = 0; i < nearby.length; i++) {
@@ -701,6 +708,10 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   // Collect boundary-killed snakes (separate from collision kills)
   const boundaryDead: string[] = [];
 
+  // G1 (Tier-2): freeze anchors — alive real players. Collected once per tick,
+  // shared by the movement loop and the food-eating pass below.
+  const freezeAnchors = collectFreezeAnchors(state.snakes);
+
   // 2. Move player
   const player = state.player;
   if (player && player.alive) {
@@ -710,8 +721,22 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
 
   // 3. Move all bots — offline only
   if (state.botsEnabled) {
+    // G1 (Tier-2): bots beyond BOT_FREEZE_DIST of every real player are
+    // FROZEN — no moveSnake, no AI motion, no boost cost. They remain static
+    // world geometry (bodies still collide via the shared body hash).
+    // Hunters are exempt (they hunt the player from anywhere on the map).
+    const boundarySq = boundaryRadius * boundaryRadius;
     for (const [id, snake] of state.snakes) {
       if (!snake.isBot || !snake.alive) continue;
+      if (!getBotIsHunter(id) &&
+          isFreezeDistSq(nearestAnchorDistSq(freezeAnchors, snake.path.headX, snake.path.headY))) {
+        // FROZEN — but the pulsing boundary can still swallow a static bot.
+        // Compare squared distance from center (no sqrt needed).
+        const hx = snake.path.headX;
+        const hy = snake.path.headY;
+        if (hx * hx + hy * hy >= boundarySq) boundaryDead.push(id);
+        continue;
+      }
       const botBoost = getBotBoost(id);
       const hitWall = moveSnake(snake, snake.targetAngle, botBoost, now, moveCtx);
       if (hitWall) boundaryDead.push(id);
@@ -732,7 +757,7 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
 
   // 4. Check food eating (rebuild spatial hash per arena config)
   const rebuildHash = state.tickCount % ac.foodHashRebuildInterval === 0;
-  const eatenIds = checkFoodEating(state.snakes.values(), state.foods, foodHash, foodValueCache, now, rebuildHash);
+  const eatenIds = checkFoodEating(state.snakes.values(), state.foods, foodHash, foodValueCache, now, rebuildHash, freezeAnchors);
   if (eatenIds.size > 0) {
     // FIX G2: unindex eaten food so the hash/id-cache stay render-accurate
     // (no ghost orbs between periodic rebuilds).

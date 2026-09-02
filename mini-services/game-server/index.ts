@@ -21,9 +21,10 @@ import {
   checkCollisions, type KillEvent,
 } from '../../src/lib/snake/collision';
 import {
-  updateAllBotAI, getBotBoost, spawnBots, respawnDeadBots, removeBot,
+  updateAllBotAI, getBotBoost, getBotIsHunter, spawnBots, respawnDeadBots, removeBot,
   BOT_TYPE_COLORS, type BotType, type BotSpawnConfig, DEFAULT_BOT_MIX,
 } from '../../src/lib/snake/bot-ai';
+import { collectFreezeAnchors, nearestAnchorDistSq, isFreezeDistSq, type FreezeAnchor } from '../../src/lib/snake/freeze';
 import {
   // MOVEMENT
   BASE_SPEED, BOOST_SPEED, BASE_TURN_RATE, MIN_TURN_RATE, SEGMENT_SPACING,
@@ -451,6 +452,8 @@ function checkFoodEating(
   snakes: Iterable<Snake>, foods: FoodOrb[],
   fh: SpatialHash, fvc: Map<number, number>, now: number,
   foodById: Map<number, FoodOrb>,
+  // G1 (Tier-2): when provided, frozen bots skip eating/magnet queries.
+  freezeAnchors?: FreezeAnchor[],
 ): Set<number> {
   // Reset only magnetized food flags (using the passed-in lookup)
   for (let i = 0; i < _magnetizedIds.length; i++) {
@@ -477,6 +480,9 @@ function checkFoodEating(
     const hx = snake.path.headX;
     const hy = snake.path.headY;
     if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
+    // G1: frozen bots don't eat and don't pull food (they don't move).
+    if (freezeAnchors && snake.isBot && !getBotIsHunter(snake.id) &&
+        isFreezeDistSq(nearestAnchorDistSq(freezeAnchors, hx, hy))) continue;
 
     const nearby = fh.query(hx, hy, MAGNET_PULL_DIST);
     for (let i = 0; i < nearby.length; i++) {
@@ -1004,6 +1010,12 @@ class ArenaInstance {
     // 3. Move all snakes
     const boundaryDead: string[] = [];
 
+    // G1 (Tier-2): freeze anchors — every alive real player. Bots beyond
+    // BOT_FREEZE_DIST of ALL of them are frozen (no movement, no eating).
+    // Hunters are exempt. Static frozen bots still die to the pulsing boundary.
+    const freezeAnchors = collectFreezeAnchors(state.snakes);
+    const freezeBoundarySq = boundaryRadius * boundaryRadius;
+
     // Move connected players (skip spectators)
     for (const [socketId, player] of this.players) {
       if (player.deadAt > 0) continue; // spectator — no movement
@@ -1019,6 +1031,14 @@ class ArenaInstance {
     // Move bots
     for (const [id, snake] of state.snakes) {
       if (!snake.isBot || !snake.alive) continue;
+      // G1: frozen — skip movement entirely; boundary can still swallow them
+      if (!getBotIsHunter(id) &&
+          isFreezeDistSq(nearestAnchorDistSq(freezeAnchors, snake.path.headX, snake.path.headY))) {
+        const fhx = snake.path.headX;
+        const fhy = snake.path.headY;
+        if (fhx * fhx + fhy * fhy >= freezeBoundarySq) boundaryDead.push(id);
+        continue;
+      }
       const botBoost = getBotBoost(id);
       const hitWall = moveSnake(snake, snake.targetAngle, botBoost, now, moveCtx);
       if (hitWall) boundaryDead.push(id);
@@ -1063,6 +1083,7 @@ class ArenaInstance {
     const eatenIds = checkFoodEating(
       state.snakes.values(), state.foods,
       this.foodHash, this.foodValueCache, now, this._cachedFoodById,
+      freezeAnchors,
     );
     // INCREMENTAL: Remove eaten food from hash + lookup + compact array
     if (eatenIds.size > 0) {

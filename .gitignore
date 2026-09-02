@@ -61,3 +61,4 @@ mini-services/game-server.pid
 
 # Database (runtime data — never commit)
 db/*.db
+next-dev.pid

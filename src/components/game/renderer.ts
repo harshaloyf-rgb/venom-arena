@@ -4,7 +4,7 @@
 
 import type { Camera, FoodOrb, Viewport } from '@/lib/snake/types';
 import { ARENA_GRID_SIZE, FOOD_COLORS, FOOD_GLOW_COLORS } from '@/lib/snake/config';
-import { computeCamTransform, w2sXS, w2sYS } from '@/lib/snake/camera';
+import { computeCamTransform, w2sX, w2sY } from '@/lib/snake/camera';
 
 // ==========================================================================
 // Grid
@@ -93,8 +93,11 @@ export function drawFood(
     if (f.x < viewport.left - 20 || f.x > viewport.right + 20) continue;
     if (f.y < viewport.top - 20 || f.y > viewport.bottom + 20) continue;
 
-    const sx = w2sXS(f.x, ct);
-    const sy = w2sYS(f.y, ct);
+    // Tier-2 (world-to-screen unify): exact float transform — same family as
+    // player/bots. The old snapped variant made food step in whole-pixel
+    // quanta against the smoothly-gliding snakes (shimmer at low zoom).
+    const sx = w2sX(f.x, ct);
+    const sy = w2sY(f.y, ct);
     let baseR = f.radius * zoom;
     let r = f.magnetized ? baseR / 3 : baseR;
     if (r < 0.5) continue;

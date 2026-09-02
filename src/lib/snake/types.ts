@@ -132,6 +132,14 @@ export interface Snake {
   angle: number;
   /** Previous tick's angle (for turn detection) */
   prevAngle: number;
+  /**
+   * Tier-2 (render): angle saved ONCE PER RENDER FRAME (before the tick
+   * batch) by the game loops. moveSnake overwrites prevAngle on every tick,
+   * so with 2+ ticks per frame the render lerp only spanned the LAST tick's
+   * rotation — heads lagged behind their position at low FPS. Renderers
+   * prefer this field and fall back to prevAngle when absent (online
+   * adapters use snapshot angles). */
+  renderPrevAngle?: number;
   /** Current movement speed */
   speed: number;
   /** Accumulated score from eating food */

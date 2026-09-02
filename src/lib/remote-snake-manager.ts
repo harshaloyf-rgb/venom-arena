@@ -71,6 +71,18 @@ export class RemoteSnakeManager {
   private lastProcessedTick = 0;
   private mapHalf: number;
 
+  // ── Tier-2: zero-allocation per-frame reuse ──
+  // buildGameState() previously allocated a NEW Map, a NEW adapter object per
+  // snake, a NEW array + FoodOrb per food, and a NEW state object EVERY FRAME
+  // (~60K objects/sec at 60fps with ~1000 foods) — constant GC churn.
+  // All of it is now cached and mutated in place. Consumers use the results
+  // within the frame only (renderers never retain across frames).
+  private _adapterCache = new Map<string, Snake>();   // stable adapter per snake id
+  private _snakeMap = new Map<string, Snake>();       // reused snake map
+  private _foodPool: FoodOrb[] = [];                  // FoodOrb free pool (max-ever size)
+  private _foodArray: FoodOrb[] = [];                 // reused food array
+  private _state: any = null;                         // reused state object
+
   constructor(mapHalf: number) {
     this.mapHalf = mapHalf;
   }
@@ -282,7 +294,9 @@ export class RemoteSnakeManager {
     return Math.min(1, elapsed / SNAPSHOT_INTERVAL_MS);
   }
 
-  /** Build a Snake adapter for a remote snake (for the shared renderer) */
+  /** Build a Snake adapter for a remote snake (for the shared renderer).
+   *  Tier-2: adapters are CACHED per snake id and mutated in place — the old
+   *  code allocated a fresh ~30-field object per snake per frame. */
   buildSnakeAdapter(id: string): Snake | null {
     const t = this.snakes.get(id);
     if (!t || !t.pathReady) return null;
@@ -315,39 +329,43 @@ export class RemoteSnakeManager {
     const safePrevX = typeof t.prevHeadX === 'number' && isFinite(t.prevHeadX) ? t.prevHeadX : safeHeadX;
     const safePrevY = typeof t.prevHeadY === 'number' && isFinite(t.prevHeadY) ? t.prevHeadY : safeHeadY;
 
-    // Build the Snake adapter object
-    return {
-      id: t.id,
-      name: t.name,
-      path: t.path,
-      angle: t.history.length > 0 ? t.history[0].angle : 0,
-      // FIX H2 support: prevAngle = previous snapshot's angle so the renderer
-      // can lerp head rotation between snapshots. Fallback to current angle
-      // when history is short — NEVER 0 (that would spin the head from east).
-      prevAngle: t.history.length > 1 ? t.history[1].angle : (t.history.length > 0 ? t.history[0].angle : 0),
-      speed: BASE_SPEED,
-      score: t.score,
-      carriedChips: t.carriedChips,
-      boosting: t.boosting,
-      alive: true,
-      isBot: t.isBot,
-      isPlayer: t.isPlayer,
-      spawnTime: t.spawnTime,
-      color: t.color,
-      headColor: t.headColor,
-      lastBoostDrop: 0,
-      targetAngle: t.history.length > 0 ? t.history[0].angle : 0,
-      spiral: { active: false, consecutiveTurns: 0, ticksElapsed: 0, direction: 1 },
-      bodyRadius: t.bodyRadius,
-      cachedBodyLength: t.bodyLen,
-      cachedBodyScore: t.score,
-      cachedVisualTailIdx: 0,
-      prevHeadX: safePrevX,
-      prevHeadY: safePrevY,
-      smoothBrakeFactor: 1.0,
-      skinId: t.skinId,
-      rarity: t.rarity,
-    };
+    // Build (or reuse) the Snake adapter object
+    let a = this._adapterCache.get(id);
+    if (!a) {
+      a = {
+        id: t.id, name: t.name, path: t.path, angle: 0, prevAngle: 0,
+        renderPrevAngle: 0, speed: BASE_SPEED, score: 0, carriedChips: 0,
+        boosting: false, alive: true, isBot: t.isBot, isPlayer: t.isPlayer,
+        spawnTime: t.spawnTime, color: t.color, headColor: t.headColor,
+        lastBoostDrop: 0, targetAngle: 0,
+        spiral: { active: false, consecutiveTurns: 0, ticksElapsed: 0, direction: 1 },
+        bodyRadius: t.bodyRadius, cachedBodyLength: t.bodyLen,
+        cachedBodyScore: t.score, cachedVisualTailIdx: 0,
+        prevHeadX: safePrevX, prevHeadY: safePrevY,
+        smoothBrakeFactor: 1.0, skinId: t.skinId, rarity: t.rarity,
+      };
+      this._adapterCache.set(id, a);
+    }
+    a.name = t.name;
+    a.angle = t.history.length > 0 ? t.history[0].angle : 0;
+    // FIX H2 support: prevAngle = previous snapshot's angle so the renderer
+    // can lerp head rotation between snapshots. Fallback to current angle
+    // when history is short — NEVER 0 (that would spin the head from east).
+    a.prevAngle = t.history.length > 1 ? t.history[1].angle : (t.history.length > 0 ? t.history[0].angle : 0);
+    a.renderPrevAngle = a.prevAngle;
+    a.score = t.score;
+    a.carriedChips = t.carriedChips;
+    a.boosting = t.boosting;
+    a.spawnTime = t.spawnTime;
+    a.targetAngle = t.history.length > 0 ? t.history[0].angle : 0;
+    a.bodyRadius = t.bodyRadius;
+    a.cachedBodyLength = t.bodyLen;
+    a.cachedBodyScore = t.score;
+    a.prevHeadX = safePrevX;
+    a.prevHeadY = safePrevY;
+    a.skinId = t.skinId;
+    a.rarity = t.rarity;
+    return a;
   }
 
   /** Clear all tracked snakes and their smoothed segment caches. */
@@ -356,6 +374,7 @@ export class RemoteSnakeManager {
       clearSmoothedSegs(id);
     }
     this.snakes.clear();
+    this._adapterCache.clear(); // Tier-2: adapters reference tracked paths — drop them too
   }
 
   /** Get all tracked snake IDs */
@@ -381,38 +400,54 @@ export class RemoteSnakeManager {
     return RemoteSnakeManager._glowMap;
   }
 
-  /** Convert remote foods to FoodOrb[] for the shared renderer */
+  /** Convert remote foods to FoodOrb[] for the shared renderer.
+   *  Tier-2: reuses a pre-allocated array + FoodOrb pool. The old code
+   *  allocated a new array AND a new FoodOrb object per food PER FRAME
+   *  (~60K objects/sec at 60fps with 1000 foods) — constant GC churn.
+   *  Pool grows to max-ever food count once, then reuses. */
   buildFoodArray(foods: RemoteFood[]): FoodOrb[] {
     const glowMap = RemoteSnakeManager.getGlowMap();
-    const result: FoodOrb[] = new Array(foods.length);
+    const arr = this._foodArray;
+    arr.length = foods.length;
+    const pool = this._foodPool;
+    while (pool.length < foods.length) {
+      pool.push({
+        id: 0, x: 0, y: 0, size: 'small', value: 0, radius: 0,
+        color: '', glowColor: '', magnetized: false,
+      });
+    }
     for (let i = 0; i < foods.length; i++) {
       const f = foods[i];
+      const o = pool[i];
       // Map server radius to size: FOOD_RADII = [1.5, 2, 3]
       // Small: 1.5, Medium: 2.0, Large: 3.0 — matches offline exactly
-      const size: 'small' | 'medium' | 'large' =
-        f.r >= 2.5 ? 'large' : f.r >= 1.75 ? 'medium' : 'small';
-      const value = f.r >= 2.5 ? 50 : f.r >= 1.75 ? 15 : 5;
-      result[i] = {
-        id: i,
-        x: f.x,
-        y: f.y,
-        size,
-        value,
-        radius: f.r,
-        color: f.color,
-        glowColor: glowMap.get(f.color) || f.color,
-        magnetized: f.m,
-      };
+      o.size = f.r >= 2.5 ? 'large' : f.r >= 1.75 ? 'medium' : 'small';
+      o.value = f.r >= 2.5 ? 50 : f.r >= 1.75 ? 15 : 5;
+      o.id = i;
+      o.x = f.x;
+      o.y = f.y;
+      o.radius = f.r;
+      o.color = f.color;
+      o.glowColor = glowMap.get(f.color) || f.color;
+      o.magnetized = f.m;
+      arr[i] = o;
     }
-    return result;
+    return arr;
   }
 
-  /** Build a synthetic GameState for the shared HUD renderer */
+  /** Build a synthetic GameState for the shared HUD renderer.
+   *  Tier-2: reuses the snake Map and the state object (mutated in place).
+   *  Consumers render within the frame — nothing retains these objects. */
   buildGameState(snap: GameSnapshot, arenaConfig: any): any {
-    const snakeMap = new Map<string, Snake>();
+    const snakeMap = this._snakeMap;
+    snakeMap.clear();
     let playerSnake: Snake | null = null;
 
-    for (const id of this.getSnakeIds()) {
+    // Tier-2: refresh reused food array/pool from this snapshot
+    this.buildFoodArray(snap.foods);
+
+    // Iterate keys directly (getSnakeIds() spread-allocates an array)
+    for (const id of this.snakes.keys()) {
       const snake = this.buildSnakeAdapter(id);
       if (snake) {
         snakeMap.set(id, snake);
@@ -420,16 +455,19 @@ export class RemoteSnakeManager {
       }
     }
 
-    return {
-      snakes: snakeMap,
-      foods: this.buildFoodArray(snap.foods),
-      player: playerSnake,
-      nextFoodId: 0,
-      showControls: false,
-      tickCount: snap.tick,
-      botsEnabled: true,
-      arenaConfig,
-      boundaryRadius: snap.boundaryRadius,
-    };
+    let st = this._state;
+    if (!st) {
+      st = {
+        snakes: snakeMap, foods: this._foodArray, player: null,
+        nextFoodId: 0, showControls: false, tickCount: 0, botsEnabled: true,
+        arenaConfig, boundaryRadius: 0,
+      };
+      this._state = st;
+    }
+    st.player = playerSnake;
+    st.tickCount = snap.tick;
+    st.arenaConfig = arenaConfig;
+    st.boundaryRadius = snap.boundaryRadius;
+    return st;
   }
 }

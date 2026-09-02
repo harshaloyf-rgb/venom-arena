@@ -100,13 +100,36 @@ function cross2d(ax: number, ay: number, bx: number, by: number): number {
 
 // ─── Segment-segment intersection ──────────────────────────────────────────
 // Returns true if segment (p1→p2) crosses segment (p3→p4).
+// G1 (Tier-2): handles DEGENERATE segments (zero length). Frozen bots don't
+// move, so their swept head line collapses to a point. A moving head's line
+// must still register a hit when it passes through a frozen head's dot:
+// degenerate-vs-segment becomes a point-to-segment distance test against
+// SNAKE_RADIUS (the head dot's physical size). Without this, flying through
+// a frozen bot's head would silently pass — a new pass-through exploit.
 
-function segsIntersect(
+export function segsIntersect(
   p1x: number, p1y: number, p2x: number, p2y: number,
   p3x: number, p3y: number, p4x: number, p4y: number,
 ): boolean {
   const d1x = p2x - p1x, d1y = p2y - p1y;
   const d2x = p4x - p3x, d2y = p4y - p3y;
+  const len1Sq = d1x * d1x + d1y * d1y;
+  const len2Sq = d2x * d2x + d2y * d2y;
+
+  // Degenerate cases (frozen snakes)
+  if (len1Sq < 1e-10 && len2Sq < 1e-10) {
+    // Two points: collide only if effectively coincident
+    const ddx = p1x - p3x, ddy = p1y - p3y;
+    return ddx * ddx + ddy * ddy <= SNAKE_RADIUS * SNAKE_RADIUS;
+  }
+  if (len1Sq < 1e-10) {
+    // Point p1 vs segment p3→p4: within head-dot radius of the other line?
+    return distPointToSegSq(p1x, p1y, p3x, p3y, p4x, p4y) <= SNAKE_RADIUS * SNAKE_RADIUS;
+  }
+  if (len2Sq < 1e-10) {
+    return distPointToSegSq(p3x, p3y, p1x, p1y, p2x, p2y) <= SNAKE_RADIUS * SNAKE_RADIUS;
+  }
+
   const d3x = p3x - p1x, d3y = p3y - p1y;
 
   const denom = cross2d(d1x, d1y, d2x, d2y);

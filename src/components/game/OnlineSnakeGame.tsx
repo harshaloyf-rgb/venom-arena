@@ -554,7 +554,9 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       if (now - fc.lastTime >= 1000) { fc.fps = fc.frames; fc.frames = 0; fc.lastTime = now; }
 
       beginRenderFrameWithDpr(dpr);
-      renderBackground(ctx, gameState, camera, viewport, fc.fps, now);
+      // Tier-2: pass foodsOverride explicitly (audit gap) — mirrors the
+      // offline call shape; the array is the manager's reused buffer.
+      renderBackground(ctx, gameState, camera, viewport, fc.fps, now, gameState.foods);
 
       // ── Render star chips (golden stars from dead players) ──
       if (snap.stars?.length) {

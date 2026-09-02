@@ -17,6 +17,7 @@
 import type { GameState, Snake, FoodOrb, ArenaConfig } from './types';
 import { BASE_SPEED, SPAWN_RADIUS, computeBodyRadius, computeBodyLength, SEGMENT_SPACING } from './config';
 import { SpatialHash, type SpatialEntity } from './spatial-hash';
+import { collectFreezeAnchors, nearestAnchor, isFreezeDistSq } from './freeze';
 
 // PERF: Module-level ref to the engine's food spatial hash.
 // Set by updateAllBotAI() so food scanning helpers can use spatial queries
@@ -1276,9 +1277,13 @@ export function updateAllBotAI(state: GameState, foodHash?: SpatialHash): void {
   buildAIHeadHash(state.snakes);
 
   // P2 OPTIMIZATION: Cache player position for distance-based AI tiering.
-  const player = state.player;
-  const playerX = player?.alive ? player.path.headX : NaN;
-  const playerY = player?.alive ? player.path.headY : NaN;
+  // G1 (Tier-2): reference is now the NEAREST ALIVE REAL PLAYER (multiplayer-
+  // safe — the online server hosts several players; freezing/tiering relative
+  // to one arbitrary player would freeze bots sitting next to another player).
+  // Hunters steer toward the nearest player from anywhere on the map.
+  const anchors = collectFreezeAnchors(state.snakes);
+  const nearestOut = { x: 0, y: 0 };
+  const hasAnchor = anchors.length > 0;
 
   // PERF: AI stagger group — only this group runs FULL AI this tick.
   const staggerSlot = state.tickCount % AI_STAGGER_GROUPS;
@@ -1304,6 +1309,25 @@ export function updateAllBotAI(state: GameState, foodHash?: SpatialHash): void {
     const data = getBotData(id);
     if (!data) continue;
 
+    // ── G1/P2: nearest player (single pass) — feeds freeze + tiering + hunters ──
+    let playerX = NaN;
+    let playerY = NaN;
+    let nearestSq = Infinity;
+    if (hasAnchor) {
+      nearestSq = nearestAnchor(anchors, snake.path.headX, snake.path.headY, nearestOut);
+      if (Number.isFinite(nearestSq)) {
+        playerX = nearestOut.x;
+        playerY = nearestOut.y;
+      }
+    }
+
+    // ── G1: HARD FREEZE — bots beyond BOT_FREEZE_DIST of every player ──
+    // Skip ALL AI (no timers, no steering, no boost). The bot is a static
+    // world object until a player comes within range. Hunters are exempt.
+    // (Infinity when no players → frozen; engine/server movement loops apply
+    // the SAME check via getBotIsHunter, so frozen bots genuinely never move.)
+    if (!data.isHunter && isFreezeDistSq(nearestSq)) continue;
+
     data.retargetTimer--;
     data.wanderChangeTimer = Math.max(0, data.wanderChangeTimer - 1);
 
@@ -1312,7 +1336,7 @@ export function updateAllBotAI(state: GameState, foodHash?: SpatialHash): void {
     const farThresholdSq = isRanked ? rankedFarDistSq : farDistSq;
     const dxToPlayer = snake.path.headX - playerX;
     const dyToPlayer = snake.path.headY - playerY;
-    const isFarFromPlayer = isNaN(playerX) || (dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer > farThresholdSq);
+    const isFarFromPlayer = !Number.isFinite(nearestSq) || (dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer > farThresholdSq);
 
     // ── AI Tier ──
     let defensiveBoost = false;
@@ -1403,6 +1427,11 @@ export function updateAllBotAI(state: GameState, foodHash?: SpatialHash): void {
 
 export function getBotBoost(snakeId: string): boolean {
   return getBotData(snakeId)?.wantBoost ?? false;
+}
+
+/** G1: hunter status for freeze exemption in engine/server loops. */
+export function getBotIsHunter(snakeId: string): boolean {
+  return getBotData(snakeId)?.isHunter ?? false;
 }
 
 // ─── Bot Spawning ────────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@
 
 import type { Camera, Snake, Viewport } from '@/lib/snake/types';
 import { SEGMENT_SPACING, SPAWN_PROTECTION_MS, LEGENDARY_GLOW_SIZE, lerpAngle } from '@/lib/snake/config';
-import { worldToScreen, computeCamTransform, w2sXS, w2sYS, w2sX, w2sY } from '@/lib/snake/camera';
+import { worldToScreen, computeCamTransform, w2sX, w2sY } from '@/lib/snake/camera';
 import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
 import { isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
@@ -18,17 +18,22 @@ import { incrementCoilFrame, type PathLike } from './coil-path';
 // ─── Per-frame skin prop & lighten caches (avoid repeated Map.get per bot) ──
 const _multiColorCache = new Map<string, boolean>();
 
-/** FIX H2: Interpolated head angle for rendering.
+/** FIX H2 + Tier-2: Interpolated head angle for rendering.
  *  snake.angle only updates on physics ticks (offline) or snapshots (online).
  *  Rotating the head sprite directly to snake.angle makes the head SNAP by the
  *  full per-tick turn (up to ~5.7° while boosting) while its position glides
  *  smoothly — the classic "head tilt/snap when turning" artifact.
  *  Pairing snake.prevAngle (already tracked per tick/snapshot) with the render
  *  alpha gives a continuous rotation on every frame.
+ *  Tier-2: prefer renderPrevAngle (saved ONCE PER RENDER FRAME by the game
+ *  loops). moveSnake overwrites prevAngle per tick, so with 2+ ticks per frame
+ *  the prevAngle lerp spanned only the LAST tick's turn — rotation lagged the
+ *  position at low FPS. renderPrevAngle spans the whole frame, matching the
+ *  camera/position interpolation span exactly.
  *  alpha >= 1 (bots today, or missing data) → raw angle, zero behavior change. */
 function computeRenderAngle(snake: Snake, alpha: number): number {
   if (alpha >= 1) return snake.angle;
-  const prev = snake.prevAngle;
+  const prev = snake.renderPrevAngle ?? snake.prevAngle;
   if (!Number.isFinite(prev)) return snake.angle;
   return lerpAngle(prev, snake.angle, alpha);
 }
@@ -476,7 +481,7 @@ export function renderSnakeAtlas(
   time: number,
   mouseScreenX?: number,
   mouseScreenY?: number,
-  snap?: boolean,
+  _snap?: boolean, // Tier-2: REMOVED — snapping retired by world-to-screen unify (kept for call-site compat)
   alpha: number = 1.0,
   coiledPath?: PathLike,
 ): void {
@@ -500,13 +505,13 @@ export function renderSnakeAtlas(
   const presetVisuals = !patternVisuals ? cachedGetPresetVisualProps(snake.skinId) : null;
 
   if (snake.skinId === 'custom-lab-skin' || hasCustomSegments || patternVisuals || presetVisuals) {
-    renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY, snap, alpha, effectivePath);
+    renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY, undefined, alpha, effectivePath); // Tier-2: snap retired
     return;
   }
 
   const atlas = atlasManager.getAtlas(snake.skinId);
   if (!atlas) {
-    renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY, snap, alpha, effectivePath);
+    renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY, undefined, alpha, effectivePath); // Tier-2: snap retired
     return;
   }
 
@@ -929,7 +934,7 @@ export function renderSnakeFallback(
   now: number,
   mouseScreenX?: number,
   mouseScreenY?: number,
-  snap?: boolean,
+  _snap?: boolean, // Tier-2: REMOVED — snapping retired by world-to-screen unify (kept for call-site compat)
   alpha: number = 1.0,
   coiledPath?: PathLike,
   lodFar?: number,
@@ -992,10 +997,14 @@ export function renderSnakeFallback(
   const safeInterpY = Number.isFinite(interpHeadY) ? interpHeadY : snake.path.headY;
   const renderOffX = (safeInterpX - snake.path.headX) * zoom;
   const renderOffY = (safeInterpY - snake.path.headY) * zoom;
-  // Zero-allocation world-to-screen: compute transform once, inline per coordinate
+  // Tier-2 (world-to-screen unify): ALWAYS use the exact float transform.
+  // The old code snapped bots/food to integer pixels while the player and
+  // camera were exact — bots/food stepped in whole-pixel quanta against the
+  // smoothly-gliding player (visible shimmer at low zoom). One transform
+  // family everywhere = everything moves in the same sub-pixel space.
   const ct = computeCamTransform(camera, cw, ch);
-  const toSX = snap ? w2sXS : w2sX;
-  const toSY = snap ? w2sYS : w2sY;
+  const toSX = w2sX;
+  const toSY = w2sY;
 
   const headSX = toSX(headWorldX, ct) + renderOffX;
   const headSY = toSY(headWorldY, ct) + renderOffY;
