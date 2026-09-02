@@ -1,5 +1,23 @@
 apply plugin: 'com.android.application'
 
+// ============================================================================
+// Release signing (keystore.properties pattern — see RELEASE-CHECKLIST.md)
+// Create android/keystore.properties (gitignored) with:
+//   storeFile=/absolute/path/to/venom-arena-release.jks
+//   storePassword=...
+//   keyAlias=venom-arena
+//   keyPassword=...
+// Without that file the release build falls back to debug signing so that
+// local "Build APK(s)" still works; Play Store uploads MUST be signed with
+// the real release keystore (set once, back it up forever — Google Play
+// enrolls the first uploaded cert as the app's identity).
+// ============================================================================
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace = "gg.venomarena.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -8,7 +26,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "1.0"
+        versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,10 +34,25 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+
+    if (keystorePropertiesFile.exists()) {
+        signingConfigs {
+            release {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (keystorePropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }
