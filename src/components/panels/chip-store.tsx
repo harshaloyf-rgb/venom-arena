@@ -280,7 +280,7 @@ export function ChipStore({ onToast }: ChipStoreProps) {
             key={pack.id}
             pack={pack}
             busy={busyId === pack.id}
-            disabled={busyId !== null || storeLocked || !inApp}
+            disabled={busyId !== null || (inApp && storeLocked)}
             inApp={inApp}
             onGet={() => void handleGetPack(pack)}
           />
