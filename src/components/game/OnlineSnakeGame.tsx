@@ -1065,10 +1065,15 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         </button>
       </div>
 
-      {/* ── Online Death Screen Overlay (after 5s elimination) ── */}
+      {/* ── Online Death Screen Overlay (after 5s elimination) ──
+          FIX SPECT-2: the old overlay blanketed the screen with
+          bg-black/70 + backdrop-blur, hiding the live arena the server
+          keeps streaming during spectator mode. The card now floats over
+          the visible world (local dim only) so the player can watch the
+          fight that killed them while choosing next actions. */}
       {showDeathScreen && deathData && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="w-[320px] max-w-[90vw] bg-[#111118] border border-white/10 rounded-2xl p-5 flex flex-col items-center gap-4 shadow-2xl">
+        <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="w-[320px] max-w-[90vw] max-h-[92vh] overflow-y-auto va-scroll bg-[#111118]/90 border border-white/10 rounded-2xl p-5 flex flex-col items-center gap-4 shadow-2xl pointer-events-auto">
             {/* Title */}
             <div className="flex items-center gap-2">
               <Skull className="w-6 h-6 text-red-500" />
@@ -1177,8 +1182,8 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       )}
       {/* ── Online Extraction Success Screen ── */}
       {showExtractScreen && extractData && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="w-[320px] max-w-[90vw] bg-[#111118] border border-amber-500/20 rounded-2xl p-5 flex flex-col items-center gap-4 shadow-2xl shadow-amber-500/5">
+        <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="w-[320px] max-w-[90vw] max-h-[92vh] overflow-y-auto va-scroll bg-[#111118]/90 border border-amber-500/20 rounded-2xl p-5 flex flex-col items-center gap-4 shadow-2xl shadow-amber-500/5 pointer-events-auto">
             {/* Title */}
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-6 h-6 text-amber-400" />

@@ -73,6 +73,9 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
 
   /* ---- Recent matches state ---- */
   const [recentMatches, setRecentMatches] = useState<RecentMatch[]>([]);
+  // FIX KILL-1: per-tag action state for the "Killed by" rows in Recent Matches
+  const [killedByTags, setKilledByTags] = useState<Set<string>>(new Set());
+  const [addedRivalTags, setAddedRivalTags] = useState<Set<string>>(new Set());
 
   /* ---- Followers / Following state ---- */
   const [followers, setFollowers] = useState<FollowItem[]>([]);
@@ -190,7 +193,40 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
   const fetchRecentMatches = useCallback(async () => {
     try {
       const res = await fetch('/api/players/recent?limit=5');
-      if (res.ok) { const data = await res.json(); setRecentMatches(data.matches ?? []); }
+      if (res.ok) {
+        const data = await res.json();
+        setRecentMatches(data.matches ?? []);
+        // FIX KILL-1: pre-seed "Friend" button state — a tag that is already a
+        // friend or has a pending request shows as Sent instead of re-inviting.
+        try {
+          const [fr, rv] = await Promise.all([fetch('/api/friends/list'), fetch('/api/rivals')]);
+          if (fr.ok) {
+            const fd = await fr.json();
+            const known = new Set<string>([
+              ...((fd.friends ?? []) as Array<{ userTag: string }>).map(f => f.userTag),
+              ...((fd.pendingSent ?? []) as Array<{ userTag: string }>).map(f => f.userTag),
+            ]);
+            setKilledByTags(prev => {
+              const next = new Set(prev);
+              for (const m of (data.matches ?? []) as RecentMatch[]) {
+                if (m.killerTag && known.has(m.killerTag)) next.add(m.killerTag);
+              }
+              return next;
+            });
+          }
+          if (rv.ok) {
+            const rd = await rv.json();
+            const rivalTags = new Set<string>(((rd.rivals ?? []) as Array<{ rivalTag: string }>).map(r => r.rivalTag));
+            setAddedRivalTags(prev => {
+              const next = new Set(prev);
+              for (const m of (data.matches ?? []) as RecentMatch[]) {
+                if (m.killerTag && rivalTags.has(m.killerTag)) next.add(m.killerTag);
+              }
+              return next;
+            });
+          }
+        } catch { /* best-effort preseed */ }
+      }
     } catch { /* ignore */ }
   }, []);
 
@@ -246,6 +282,49 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
   /* ---- Effects ---- */
 
   useEffect(() => { fetchFriends(); fetchRecentMatches(); }, [fetchFriends, fetchRecentMatches]);
+
+  // FIX KILL-1: add friend directly from a "Killed by" row in Recent Matches
+  const handleAddFriendFromMatch = useCallback(async (m: RecentMatch) => {
+    if (!m.killerTag) return;
+    setKilledByTags(prev => new Set(prev).add(m.killerTag!));
+    try {
+      const res = await fetch('/api/friends/request', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userTag: m.killerTag }),
+      });
+      if (!res.ok) {
+        setKilledByTags(prev => { const n = new Set(prev); n.delete(m.killerTag!); return n; });
+        notify('Could not send friend request', 'error', onToast);
+      } else {
+        notify(`Friend request sent to ${m.killerName}`, 'success', onToast);
+      }
+    } catch {
+      setKilledByTags(prev => { const n = new Set(prev); n.delete(m.killerTag!); return n; });
+      notify('Could not send friend request', 'error', onToast);
+    }
+  }, [onToast]);
+
+  // FIX KILL-1: add rival directly from a "Killed by" row (revenge list)
+  const handleAddRivalFromMatch = useCallback(async (m: RecentMatch) => {
+    if (!m.killerTag) return;
+    const prevTags = addedRivalTags;
+    setAddedRivalTags(prev => new Set(prev).add(m.killerTag!));
+    try {
+      const res = await fetch('/api/rivals', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag: m.killerTag, name: m.killerName, action: 'add' }),
+      });
+      if (!res.ok) {
+        setAddedRivalTags(prevTags);
+        notify('Could not add rival', 'error', onToast);
+      } else {
+        notify(`${m.killerName} added to rivals — time for a rematch!`, 'success', onToast);
+      }
+    } catch {
+      setAddedRivalTags(prevTags);
+      notify('Could not add rival', 'error', onToast);
+    }
+  }, [addedRivalTags, onToast]);
 
   useEffect(() => { if (sub === 'search') fetchCountries(); }, [sub, fetchCountries]);
 
@@ -522,6 +601,10 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
           recentMatches={recentMatches}
           friendsLoading={friendsLoading}
           giftCooldowns={giftCooldowns}
+          killedByTags={killedByTags}
+          addedRivalTags={addedRivalTags}
+          onAddFriendFromMatch={handleAddFriendFromMatch}
+          onAddRivalFromMatch={handleAddRivalFromMatch}
           onAccept={handleAcceptFriend}
           onDecline={handleDeclineFriend}
           onRemove={handleRemoveFriend}

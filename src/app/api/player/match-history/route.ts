@@ -64,6 +64,11 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const { arenaId, arenaName, isOnline, status, chipsEarned, chipsLost, kills, snakeLength, durationSec } = body;
+    // FIX KILL-1: offline deaths are always bot kills, but accept the killer
+    // identity anyway so offline history rows render the same "Killed by X"
+    // UI. Only a display name is accepted from the client — killerTag is
+    // NEVER accepted here (a client must not mint real-player kill credits).
+    const clientKillerName = body.killerName ? String(body.killerName).slice(0, 40) : null;
 
     if (!arenaId || !arenaName || !status) {
       return NextResponse.json({ error: 'Missing required fields.' }, { status: 400 });
@@ -92,6 +97,9 @@ export async function POST(req: NextRequest) {
         kills: safeKills,
         snakeLength: safeSnakeLength,
         durationSec: safeDuration,
+        killerName: status === 'COLLIDED' ? clientKillerName : null,
+        killerTag: null, // client-supplied tags are never trusted
+        killerIsBot: status === 'COLLIDED' ? (clientKillerName ? true : null) : null,
       },
     });
 

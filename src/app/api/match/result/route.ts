@@ -165,6 +165,12 @@ export async function POST(req: NextRequest) {
   const durationSeconds = Math.max(0, Math.floor(Number(body.durationSeconds) || 0));
   const killerTag = body.killerTag ? String(body.killerTag) : undefined;
   const starsCollected = Math.max(0, Math.floor(Number(body.starsCollected) || 0));
+  // FIX KILL-1: killer identity forwarded by the game server. Only rows whose
+  // killerTag resolves to a REAL player (killerIsBot=false) are kept as-is;
+  // bot/boundary deaths store the bot display name (killerIsBot=true) so the
+  // UI can show "Killed by Net-817 (bot)" without offering add-friend.
+  const bodyKillerIsBot = body.killerIsBot === undefined ? undefined : Boolean(body.killerIsBot);
+  const bodyKillerName = body.killerName ? String(body.killerName).slice(0, 40) : undefined;
 
   const arena = getArenaById(arenaId);
   if (!arena) return NextResponse.json({ error: 'Unknown arena.' }, { status: 400 });
@@ -336,6 +342,33 @@ export async function POST(req: NextRequest) {
     }
 
     // --- Match History recording ---
+    // FIX KILL-1: resolve the killer into (killerName, killerTag, killerIsBot).
+    // A killerTag is only honored when the game server says the killer is NOT
+    // a bot AND the tag maps to a real Player row (tamper guard: the game
+    // server is trusted, but tag reuse/deletion can still leave orphans).
+    let killerNameCol: string | null = null;
+    let killerTagCol: string | null = null;
+    let killerIsBotCol: boolean | null = null;
+    if (outcome === 'death') {
+      if (killerTag && bodyKillerIsBot === false) {
+        const killerPlayer = await tx.player.findUnique({
+          where: { userTag: killerTag },
+          select: { name: true },
+        });
+        if (killerPlayer) {
+          killerNameCol = killerPlayer.name;
+          killerTagCol = killerTag;
+          killerIsBotCol = false;
+        }
+      }
+      if (killerNameCol === null && bodyKillerName) {
+        // Bot killer (or orphaned tag): keep the display name, mark as bot.
+        killerNameCol = bodyKillerName;
+        killerTagCol = null;
+        killerIsBotCol = true;
+      }
+    }
+
     await tx.matchHistory.create({
       data: {
         playerId: player.id,
@@ -348,6 +381,9 @@ export async function POST(req: NextRequest) {
         kills,
         snakeLength: score,
         durationSec: durationSeconds,
+        killerName: killerNameCol,
+        killerTag: killerTagCol,
+        killerIsBot: killerIsBotCol,
       },
     });
 

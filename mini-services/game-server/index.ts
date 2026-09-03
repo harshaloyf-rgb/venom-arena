@@ -1082,7 +1082,25 @@ class ArenaInstance {
     // G1 (Tier-2): freeze anchors — every alive real player. Bots beyond
     // BOT_FREEZE_DIST of ALL of them are frozen (no movement, no eating).
     // Hunters are exempt. Static frozen bots still die to the pulsing boundary.
+    //
+    // FIX SPECT-1 (live death screen): when the LAST real player dies, their
+    // snake is deleted from state.snakes, so collectFreezeAnchors() returned
+    // zero anchors → nearestAnchorDistSq = Infinity → EVERY non-hunter bot
+    // hard-froze. The elimination screen (5s banner + spectator snapshots)
+    // then showed a dead, frozen world with the killer statue-still — users
+    // read it as "the game broke / killer snake glitched" instead of a live
+    // arena. Anchor freeze on recent spectators' death spots too: bots near
+    // where the player died keep moving through the whole death flow. The
+    // anchors vanish automatically when the server disconnects the spectator
+    // (DEATH_SCREEN_DELAY = 6s + small margin), restoring the empty-server
+    // freeze for CPU savings.
     const freezeAnchors = collectFreezeAnchors(state.snakes);
+    for (const [, p] of this.players) {
+      if (p.deadAt === 0) continue;
+      if (now - p.deadAt > DEATH_SCREEN_DELAY + 4000) continue; // grace past disconnect
+      if (!Number.isFinite(p.spectatorHx) || !Number.isFinite(p.spectatorHy)) continue;
+      freezeAnchors.push({ x: p.spectatorHx, y: p.spectatorHy });
+    }
     const freezeBoundarySq = boundaryRadius * boundaryRadius;
 
     // Move connected players (skip spectators)
@@ -1513,8 +1531,15 @@ class ArenaInstance {
     } catch {}
 
     // Report result to main server (fire and forget)
-    this.reportMatchResult(player, 'death', chipsLost, kills, durationSeconds, score)
-      .catch(err => console.error(`[Arena ${this.arenaId}] Failed to report match result:`, err));
+    // FIX KILL-1: forward killer identity (tag + bot flag + display name) to
+    // the main server so MatchHistory rows carry who killed the player.
+    // killerName is parsed from the same "killed by X" reason the killed-event
+    // emitter uses — single source of truth.
+    const killerNameFromReason = reason.match(/^killed by (.+)$/);
+    this.reportMatchResult(
+      player, 'death', chipsLost, kills, durationSeconds, score,
+      undefined, killerTag, killerIsBot, killerNameFromReason?.[1],
+    ).catch(err => console.error(`[Arena ${this.arenaId}] Failed to report match result:`, err));
 
     // Schedule disconnect AFTER death screen period
     // During this time, the player stays in this.players as a spectator,
@@ -1656,6 +1681,13 @@ class ArenaInstance {
     durationSeconds: number,
     score: number,
     bankedAmount?: number,
+    // FIX KILL-1: forward killer identity so /api/match/result can store it in
+    // MatchHistory. Previously these fields were known here (handlePlayerDeath)
+    // but dropped on the floor — the social panel had no way to show "killed
+    // by <real player>" on the last-5 matches list.
+    killerTag?: string,
+    killerIsBot?: boolean,
+    killerName?: string,
   ): Promise<void> {
     try {
       const res = await fetch(`${MAIN_SERVER}/api/match/result`, {
@@ -1674,6 +1706,17 @@ class ArenaInstance {
           score,
           timestamp: Date.now(),
           ...(outcome === 'extract' && bankedAmount !== undefined ? { bankedAmount } : {}),
+          // FIX KILL-1b: bot killers have NO tag (bots are tag-less), so the
+          // original `killerTag ?` gate silently dropped bot-killer identity
+          // entirely. Send whenever we know ANY part of the killer identity;
+          // killerTag is only included for real players.
+          ...(outcome === 'death' && (killerTag || killerName)
+            ? {
+                ...(killerTag ? { killerTag } : {}),
+                killerIsBot: killerIsBot ?? !killerTag,
+                killerName: killerName || '',
+              }
+            : {}),
         }),
       });
       if (!res.ok) {

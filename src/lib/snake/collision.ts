@@ -59,6 +59,10 @@ const _singleAnchorScratch: FreezeAnchor[] = [{ x: 0, y: 0 }];
 // Now computed per-snake pair in the narrow phase below.
 // This constant is only used as a MINIMUM threshold (for degenerate cases).
 const MIN_CRAWL_HIT_DIST_SQ = (2 * SNAKE_RADIUS - 2) * (2 * SNAKE_RADIUS - 2); // 16 for R=3
+/** FIX COLL-SPAWN: bots get a shorter spawn-protection window than players.
+ *  Full 2s protection on constantly-respawning bots was the top cause of the
+ *  visible "snakes pass through each other" reports. See body-hash build. */
+const BOT_SPAWN_PROTECTION_MS = 700;
 
 // ─── Module-level scratch (avoids per-tick allocation) ──────────────────────
 
@@ -195,12 +199,14 @@ export function checkCollisions(
   playerAnchors?: FreezeAnchor[],
 ): CollisionResult {
   const scratch = _scratch;
-  // FIX O9/OFF-14: raised from 2000px — at min zoom 0.15 the visible radius is
-  // ~6400px, so bot-vs-bot pairs in the outer half of the screen glided through
-  // each other without dying ("the world looks fake"). 4000px still culls the
-  // vast majority of pairs; body-hash insert range extended to match (7000 =
-  // 4000 live zone + ~2600 max frozen trail + 400 margin).
-  const VIEWPORT_COLLISION_RANGE_SQ = 4000 * 4000;
+  // FIX COLL-VIS (pass-through hole #1): raised from 4000px. At min zoom 0.15
+  // a 1920px-wide screen shows a ~6400px radius, so bot-vs-bot pairs in the
+  // 4000-6400px ring were on screen but skipped by the narrow phase — players
+  // watched bots glide through each other without dying ("the world looks
+  // fake"). 6500 covers the worst-case visible radius. BODY_HASH_RANGE below
+  // already inserts bodies up to 7000px, so every body a 6500px mover can
+  // reach is still in the hash — no second range change needed.
+  const VIEWPORT_COLLISION_RANGE_SQ = 6500 * 6500;
   // PERF: Clear per-tick caches
   _tailIdxCache.clear();
   // T3: body-hash insert range tied to the live zone above.
@@ -231,7 +237,17 @@ export function checkCollisions(
   scratch.radius = SNAKE_RADIUS;
   for (const [, snake] of snakes) {
     if (!snake.alive) continue;
-    if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
+    // FIX COLL-SPAWN (#2): bots spawn-protected for a shorter window. Players
+    // keep the full SPAWN_PROTECTION_MS (spawning inside someone's body must
+    // not instantly kill a human). Bots respawn constantly (8/tick at high
+    // churn), so a 2s full-protection window meant freshly spawned bots were
+    // ALWAYS visible gliding through bodies — the most common report of
+    // "collision not working". 700ms is enough to leave a spawn point, and
+    // PASS 2 below still lets a protected bot DIE if its own head crosses
+    // someone's body (attacker-side), which removes the pass-through look
+    // almost entirely.
+    const spawnProtMs = snake.isBot ? BOT_SPAWN_PROTECTION_MS : SPAWN_PROTECTION_MS;
+    if (now - snake.spawnTime < spawnProtMs) continue;
     if (hasAnchors && snake.isBot) {
       if (nearestAnchorDistSq(anchors, snake.path.headX, snake.path.headY) > BODY_HASH_RANGE_SQ) continue;
     }
@@ -288,7 +304,10 @@ export function checkCollisions(
   //    (degenerate-segment branch in segsIntersect keeps the kill live).
   for (const [, snake] of snakes) {
     if (!snake.alive || deadSnakes.has(snake.id)) continue;
-    if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
+    // Per-snake spawn protection (players 2s, bots 0.7s) — a protected snake
+    // cannot KILL head-on-head. (In PASS 2 a protected BOT can still die by
+    // crawling into a body — see COLL-SPAWN note there.)
+    if (now - snake.spawnTime < (snake.isBot ? BOT_SPAWN_PROTECTION_MS : SPAWN_PROTECTION_MS)) continue;
     if (hasAnchors && snake.isBot && !getBotIsHunter(snake.id)
         && isFreezeDistSq(nearestAnchorDistSq(anchors, snake.path.headX, snake.path.headY))) {
       continue; // frozen — no self-initiated movement, no crossings from this side
@@ -320,7 +339,9 @@ export function checkCollisions(
 
       const otherSnake = snakes.get(otherId);
       if (!otherSnake || !otherSnake.alive) continue;
-      if (now - otherSnake.spawnTime < SPAWN_PROTECTION_MS) continue;
+      // Defender spawn protection (players 2s, bots 0.7s): a protected
+      // snake cannot be killed head-on-head either.
+      if (now - otherSnake.spawnTime < (otherSnake.isBot ? BOT_SPAWN_PROTECTION_MS : SPAWN_PROTECTION_MS)) continue;
 
       // Inline other snake's head dot + prev dot
       const ohx = otherSnake.path.headX;
@@ -399,7 +420,16 @@ export function checkCollisions(
 
   for (const [, snake] of snakes) {
     if (!snake.alive || deadSnakes.has(snake.id)) continue;
-    if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
+    // FIX COLL-SPAWN: spawn protection is applied ASYMMETRICALLY in PASS 2.
+    //  - Only a protected PLAYER attacker skips the pass entirely (a fresh
+    //    human spawn must not be killed seconds after joining).
+    //  - A protected BOT whose own head crosses someone's body still DIES —
+    //    previously a fresh bot was untouchable for 2 full seconds and could
+    //    visibly glide straight through any snake, the #1 "collision doesn't
+    //    work" report.
+    //  - The body OWNER's own protection is checked in the pair loop below
+    //    (a protected owner can't be hit).
+    if (!snake.isBot && now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
 
     // T3: inlined dot math (no {x,y} allocations per snake per tick)
     const hx = snake.path.headX;
@@ -437,7 +467,9 @@ export function checkCollisions(
 
       const otherSnake = snakes.get(otherId);
       if (!otherSnake || !otherSnake.alive || deadSnakes.has(otherId)) continue;
-      if (now - otherSnake.spawnTime < SPAWN_PROTECTION_MS) continue;
+      // FIX COLL-SPAWN: body owner's own spawn protection (players 2s,
+      // bots 0.7s) — a protected owner's body cannot be hit.
+      if (now - otherSnake.spawnTime < (otherSnake.isBot ? BOT_SPAWN_PROTECTION_MS : SPAWN_PROTECTION_MS)) continue;
 
       // P2 FIX #8 + T3: Skip expensive narrow-phase for bot-vs-bot pairs
       // where BOTH are far from EVERY player's viewport (nearest-anchor).

@@ -22,6 +22,9 @@ export interface ExtractionState {
   lastAngle: number;
   /** Guard: once extraction completes, it can never restart */
   completed: boolean;
+  /** FIX EXTRACT-STABLE: timestamp since the angle first exceeded the
+   *  threshold (debounce window). undefined = angle is within tolerance. */
+  resetPendingSince?: number;
 }
 
 /** Create a fresh extraction state */
@@ -32,8 +35,23 @@ export function createExtractionState(): ExtractionState {
 /** Duration of extraction in milliseconds */
 const EXTRACTION_DURATION_MS = 3000;
 
-/** Maximum angle delta (radians) before extraction progress resets */
-const EXTRACTION_ANGLE_THRESHOLD = 0.05;
+/** Maximum angle delta (radians) before extraction progress resets.
+ *  FIX EXTRACT-STABLE: was 0.05 rad (≈2.9°) — tighter than the server's
+ *  EXTRACT_ANGLE_TOLERANCE (0.12 rad) and tighter than real input device
+ *  noise. Touch-joystick tremor (1-2px at 20-40px radius) and mouse drift
+ *  near the screen center exceed 2.9° constantly, so the ring kept snapping
+ *  back to 0% and refilling ("moving front and back"). 0.12 matches the
+ *  server's steady-course window exactly: any ring that completes on the
+ *  client is guaranteed to also pass server validation, and normal input
+ *  noise no longer resets the ring. A real course change (>≈7°) still
+ *  resets it. */
+const EXTRACTION_ANGLE_THRESHOLD = 0.12;
+
+/** FIX EXTRACT-STABLE: the angle must exceed the threshold CONTINUOUSLY for
+ *  this long before progress resets. Transient tremor spikes self-cancel in
+ *  well under 250ms, so they no longer jerk the ring backwards; an actual
+ *  steering change persists and resets immediately after the grace window. */
+const EXTRACTION_RESET_DEBOUNCE_MS = 250;
 
 // ─── Extraction Progress Update ───────────────────────────────────────────
 
@@ -69,10 +87,22 @@ export function updateExtractionProgress(
     const angleDelta = Math.abs(targetAngle - state.lastAngle);
     const wrappedDelta = Math.min(angleDelta, Math.PI * 2 - angleDelta);
     if (wrappedDelta > EXTRACTION_ANGLE_THRESHOLD) {
-      // Player moved — reset progress
-      state.progress = 0;
-      state.lastAngle = targetAngle;
+      // Player moved — reset progress (debounced: transient input tremor
+      // below EXTRACTION_RESET_DEBOUNCE_MS doesn't jerk the ring backwards).
+      // lastAngle re-locks AFTER the debounce confirms a real course change.
+      // Note: the server re-validates the 3s window itself (0.12 rad), so in
+      // the rare case a spike >0.12 rad persists toward the moment of
+      // completion, the server may still reject — the player simply holds
+      // the ring again. Normal noise never reaches that state.
+      if (state.resetPendingSince === undefined) {
+        state.resetPendingSince = performance.now();
+      } else if (performance.now() - state.resetPendingSince >= EXTRACTION_RESET_DEBOUNCE_MS) {
+        state.progress = 0;
+        state.lastAngle = targetAngle;
+        state.resetPendingSince = undefined;
+      }
     } else {
+      state.resetPendingSince = undefined;
       // Accumulate progress
       state.progress += frameElapsed / EXTRACTION_DURATION_MS;
       if (state.progress >= 1.0) {
@@ -87,6 +117,7 @@ export function updateExtractionProgress(
     // Not extracting — reset
     state.active = false;
     state.progress = 0;
+    state.resetPendingSince = undefined;
   }
   return false;
 }

@@ -457,6 +457,12 @@ model MatchHistory {
   kills           Int      @default(0)
   snakeLength     Int      @default(0)
   durationSec     Int      @default(0)
+  // FIX KILL-1: who killed this player (null for extractions / boundary /
+  // legacy rows). killerIsBot=false rows power the "killed by <real player>"
+  // list in the Friends tab so players can add rivals/friends post-match.
+  killerName      String?
+  killerTag       String?
+  killerIsBot     Boolean?
   createdAt       DateTime @default(now())
 
   @@index([playerId, createdAt(sort: Desc)])

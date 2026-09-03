@@ -93,6 +93,12 @@ export interface RecentMatch {
   durationSec: number;
   createdAt: string;
   isOnline: boolean;
+  // FIX KILL-1: who killed the player in this match (online deaths only).
+  // killerIsBot=false + killerTag present → real player → UI offers
+  // Profile / Add Friend / Add Rival actions on the row.
+  killerName?: string | null;
+  killerTag?: string | null;
+  killerIsBot?: boolean | null;
 }
 
 // ──── Helpers ──────────────────────────────────────────────

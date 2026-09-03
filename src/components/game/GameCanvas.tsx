@@ -257,6 +257,69 @@ export default function GameCanvas({
     // ── Game loop ──
     let running = true;
 
+    // ── FIX TAB-1: keep the offline simulation alive in background tabs ──
+    // Browsers suspend requestAnimationFrame when the tab is hidden, which
+    // froze the entire arena the moment the player switched tabs; the world
+    // only resumed on return, which players read as a bug — a live .io arena
+    // should keep running. A 1s setInterval (the hard minimum browsers allow
+    // for hidden tabs) advances the same fixed-step simulation in real time
+    // while hidden. Rendering is pointless while hidden (nothing paints), so
+    // the interval runs ticks only and replicates the RAF loop's per-tick
+    // bookkeeping (kills, death detection, high score) so the state is
+    // consistent when the player comes back. Online mode is untouched — the
+    // authoritative server keeps simulating regardless of tab visibility.
+    const bgTickMs = FIXED_DT * 1000;
+    const bgTicksPerFire = Math.max(1, Math.round(1000 / bgTickMs)); // ~60 ticks = 1s of sim
+    let bgInterval: ReturnType<typeof setInterval> | null = null;
+    const runBackgroundTicks = () => {
+      if (pausedRef.current || !running) return;
+      const gs = gameStateRef.current;
+      if (!gs) return;
+      // Player cannot steer or boost while the tab is hidden — the snake
+      // continues on its last course at normal speed (matches online mode,
+      // where your snake keeps moving with the last input during a drop).
+      const hiddenInput = { ...input.getState(), boosting: false };
+      for (let i = 0; i < bgTicksPerFire; i++) {
+        const killEvents = gameTick(gs, hiddenInput, FIXED_DT);
+        if (gs.player) {
+          for (const ev of killEvents) {
+            if (ev.killerId === gs.player.id) killsRef.current++;
+            if (ev.victimId === gs.player.id) {
+              killedByRef.current = ev.killerName;
+              killerIdRef.current = ev.killerId;
+            }
+          }
+          if (gs.player.score > highScoreRef.current) {
+            highScoreRef.current = Math.floor(gs.player.score);
+            try { localStorage.setItem(highScoreKey, String(highScoreRef.current)); } catch { /* ignore */ }
+            setDisplayHighScore(highScoreRef.current);
+          }
+          if (!gs.player.alive && !isDeadRef.current) {
+            isDeadRef.current = true;
+            deathTimeRef.current = performance.now();
+            setIsDead(true);
+            setFinalScore(gs.player.score);
+          }
+        }
+        if (gs.foods.length < gs.arenaConfig.initialFoodTarget) seedInitialFood(gs);
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        if (mode === 'offline' && !bgInterval) bgInterval = setInterval(runBackgroundTicks, 1000);
+      } else {
+        // Back in the foreground: hand control back to the RAF loop cleanly.
+        // Reset the clock so the loop doesn't try to catch up the time spent
+        // hidden (the interval already simulated that time in real time).
+        if (bgInterval) { clearInterval(bgInterval); bgInterval = null; }
+        lastTimeRef.current = performance.now();
+        accumulatorRef.current = 0;
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    if (document.hidden && mode === 'offline') bgInterval = setInterval(runBackgroundTicks, 1000);
+
+    // ── Game loop ──
     const loop = (timestamp: number) => {
       if (!running) return;
 
@@ -616,6 +679,9 @@ export default function GameCanvas({
       running = false;
       cancelAnimationFrame(animFrameRef.current);
       input.detach();
+      // FIX TAB-1: stop the background simulation + listener
+      if (bgInterval) { clearInterval(bgInterval); bgInterval = null; }
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('keydown', onPauseKey);
       cleanupSafeArea();
       canvas.removeEventListener('pointerup', onCanvasClick);

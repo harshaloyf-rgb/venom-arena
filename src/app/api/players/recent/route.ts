@@ -25,6 +25,11 @@ export async function GET(req: NextRequest) {
       durationSec: true,
       createdAt: true,
       isOnline: true,
+      // FIX KILL-1: killer identity — the Friends tab shows "Killed by X"
+      // with add-friend / add-rival actions for REAL-player killers only.
+      killerName: true,
+      killerTag: true,
+      killerIsBot: true,
     },
   });
 
