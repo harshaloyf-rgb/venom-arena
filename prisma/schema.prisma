@@ -105,6 +105,7 @@ model Player {
   referralsSent   Referral[]    @relation("referralSender")
   referralsReceived Referral[]  @relation("referralReceiver")
   purchases       Purchase[]
+  storeOrders     StoreOrder[]
   sentGifts       Gift[]     @relation("giftFrom")
   receivedGifts   Gift[]     @relation("giftTo")
   friendsFrom     Friendship[] @relation("friendshipInitiator")
@@ -294,6 +295,28 @@ model Gift {
 
   @@index([fromId, createdAt])
   @@index([toId, createdAt])
+}
+
+// Real-money chip purchases via Google Play Billing / Apple StoreKit 2 (IAP).
+// One row per store transaction; storeTxId is the idempotency key so a replayed
+// receipt can never double-credit. Price/chips snapshot comes from the
+// server-side catalog (src/lib/store-catalog.ts), never from the client.
+model StoreOrder {
+  id           String   @id @default(cuid())
+  player       Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId     String
+  platform     String   // "android" | "ios"
+  packId       String   // internal pack id, e.g. "pack-100"
+  productId    String   // store product id, e.g. "venom.chips.100"
+  storeTxId    String   @unique // Google purchaseToken / Apple transactionId
+  chips        Int      // chips credited (catalog snapshot)
+  pricePaidINR Int?     // catalog reference price at purchase time
+  status       String   @default("completed") // completed | refunded
+  verifierNote String?  // short verification summary (JSON string)
+  createdAt    DateTime @default(now())
+
+  @@index([playerId, createdAt])
+  @@index([status, createdAt])
 }
 
 model Friendship {

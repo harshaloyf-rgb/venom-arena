@@ -10,6 +10,8 @@ import {
   AD_REWARD_CHIPS,
   type ChipPack,
 } from '@/lib/game-config';
+import { allStoreProducts } from '@/lib/store-catalog';
+import { isNativeApp, nativeBillingAvailable, purchaseAndVerify, IapError } from '@/lib/iap';
 import {
   GlowBlob,
   MicroLabel,
@@ -29,24 +31,14 @@ import {
   Lock,
   Gift,
   Video,
+  Smartphone,
 } from 'lucide-react';
 
 interface ChipStoreProps {
   onToast?: ToastFn;
 }
 
-const YEARLY_PURCHASED_KEY = 'venom_yearly_purchased_chips';
 const DAILY_ADS_KEY = 'venom_daily_ads';
-
-function getYearlyPurchased(): number {
-  if (typeof window === 'undefined') return 0;
-  try {
-    const v = localStorage.getItem(YEARLY_PURCHASED_KEY);
-    return v ? parseInt(v, 10) || 0 : 0;
-  } catch {
-    return 0;
-  }
-}
 
 function getTodayAdCount(): { date: string; count: number } {
   const today = new Date().toISOString().slice(0, 10);
@@ -62,71 +54,93 @@ function getTodayAdCount(): { date: string; count: number } {
   }
 }
 
+// packId -> store product id (server keeps the authoritative chips mapping)
+const PRODUCT_ID_BY_PACK = new Map(allStoreProducts().map((p) => [p.packId, p.productId]));
+
 export function ChipStore({ onToast }: ChipStoreProps) {
   const { player, loading, refresh } = useAuth();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [promoCode, setPromoCode] = useState('');
   const [promoBusy, setPromoBusy] = useState(false);
   const [adBusy, setAdBusy] = useState(false);
-  const [yearlyPurchased, setYearlyPurchased] = useState(0);
+  // Yearly buy cap is server truth now (GET /api/store/verify) — the old
+  // localStorage counter was trivially bypassable and lied after reinstalls.
+  const [yearlyPurchased, setYearlyPurchased] = useState<number | null>(null);
+  const [storeLocked, setStoreLocked] = useState(false);
   const [adState, setAdState] = useState({ date: '', count: 0 });
 
-  // Init from localStorage on mount
   useEffect(() => {
-    setYearlyPurchased(getYearlyPurchased());
     setAdState(getTodayAdCount());
   }, []);
+
+  useEffect(() => {
+    if (!player) return;
+    let cancelled = false;
+    fetch('/api/store/verify')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { yearlyPurchased?: number; storeLocked?: boolean } | null) => {
+        if (cancelled || !d) return;
+        setYearlyPurchased(d.yearlyPurchased ?? 0);
+        setStoreLocked(d.storeLocked ?? false);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [player]);
 
   if (loading) return <PanelSkeleton count={4} height="h-44" />;
   if (!player) return <NotSignedIn />;
 
-  const storeLocked = yearlyPurchased >= MAX_YEARLY_BUY_CHIPS;
+  const inApp = isNativeApp() && nativeBillingAvailable();
   const adsRemaining = MAX_DAILY_ADS - adState.count;
+  const currentPlayer = player;
 
   async function handleGetPack(pack: ChipPack) {
+    if (!inApp) {
+      notify(
+        'Chips can be purchased inside the Venom Arena Android/iOS app (Google Play / App Store billing).',
+        'info',
+        onToast,
+      );
+      return;
+    }
     if (storeLocked) {
       notify('Store is locked for 365 days after reaching the 25 Lakh yearly cap.', 'error', onToast);
       return;
     }
+    const productId = PRODUCT_ID_BY_PACK.get(pack.id);
+    if (!productId) {
+      notify('Pack unavailable — please update the app.', 'error', onToast);
+      return;
+    }
     setBusyId(pack.id);
     try {
-      // Audit U12: no fake "Initializing secure billing" toast — real billing
-      // is not integrated; the server response is the only source of truth.
-      const res = await fetch('/api/chips/pack', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ packId: pack.id }),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        granted?: number;
-      };
-      if (!res.ok) {
-        notify(data?.error || 'Failed to add chips.', 'error', onToast);
-        return;
-      }
-      const granted = data.granted ?? pack.chips;
-      const newPurchased = yearlyPurchased + pack.chips;
-      setYearlyPurchased(newPurchased);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(YEARLY_PURCHASED_KEY, String(newPurchased));
-      }
-      if (newPurchased >= MAX_YEARLY_BUY_CHIPS) {
+      // Server verifies the store receipt and credits chips idempotently —
+      // the server response is the only source of truth.
+      const result = await purchaseAndVerify(pack.id, productId, currentPlayer.id);
+      setYearlyPurchased(result.yearlyPurchased);
+      setStoreLocked(result.storeLocked);
+      if (result.storeLocked) {
         notify(
-          `🎉 Purchase Successful! +${granted.toLocaleString('en-IN')} CHIPS added! Annual buy cap of 25 Lakh Chips (2,500,000) reached — Store locked for 365 days to maintain tournament skill parity!`,
+          `Purchase Successful! +${result.credited.toLocaleString('en-IN')} CHIPS added! Annual buy cap of 25 Lakh Chips (2,500,000) reached — Store locked for 365 days to maintain tournament skill parity!`,
           'success',
           onToast,
         );
       } else {
         notify(
-          `Purchase Successful! +${granted.toLocaleString('en-IN')} CHIPS credited. (Bought this year: ${newPurchased.toLocaleString('en-IN')} / 25,00,000 max)`,
+          `Purchase Successful! +${result.credited.toLocaleString('en-IN')} CHIPS credited. (Bought this year: ${result.yearlyPurchased.toLocaleString('en-IN')} / 25,00,000 max)`,
           'success',
           onToast,
         );
       }
       await refresh();
-    } catch {
-      notify('Network error. Please try again.', 'error', onToast);
+    } catch (e) {
+      if (e instanceof IapError) {
+        if (e.code !== 'PAYMENT_CANCELLED') notify(e.message, 'error', onToast);
+      } else {
+        notify('Network error. If you were charged, your chips are credited automatically on next app start.', 'error', onToast);
+      }
     } finally {
       setBusyId(null);
     }
@@ -218,7 +232,7 @@ export function ChipStore({ onToast }: ChipStoreProps) {
             <div>
               <MicroLabel>Yearly Buy Cap</MicroLabel>
               <div className="font-mono font-bold text-rose-300 text-sm">
-                {yearlyPurchased.toLocaleString('en-IN')} / 25,00,000 c
+                {(yearlyPurchased ?? 0).toLocaleString('en-IN')} / 25,00,000 c
               </div>
             </div>
           </div>
@@ -239,6 +253,18 @@ export function ChipStore({ onToast }: ChipStoreProps) {
         </div>
       )}
 
+      {/* Web fallback notice */}
+      {!inApp && (
+        <div className="relative mb-5 p-3 rounded-xl border border-indigo-900/40 bg-indigo-950/30 text-xs text-indigo-200 leading-relaxed flex items-start gap-2">
+          <Smartphone className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+          <span>
+            Purchases run through Google Play / App Store in-app billing and are available inside
+            the <strong>Venom Arena mobile app</strong>. Sign in with the same account there and your
+            chips appear here instantly.
+          </span>
+        </div>
+      )}
+
       {/* Pack grid */}
       <div className="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
         {CHIP_PACKS.map((pack) => (
@@ -246,7 +272,8 @@ export function ChipStore({ onToast }: ChipStoreProps) {
             key={pack.id}
             pack={pack}
             busy={busyId === pack.id}
-            disabled={busyId !== null || storeLocked}
+            disabled={busyId !== null || storeLocked || !inApp}
+            inApp={inApp}
             onGet={() => void handleGetPack(pack)}
           />
         ))}
@@ -324,10 +351,11 @@ interface PackCardProps {
   pack: ChipPack;
   busy: boolean;
   disabled: boolean;
+  inApp: boolean;
   onGet: () => void;
 }
 
-function PackCard({ pack, busy, disabled, onGet }: PackCardProps) {
+function PackCard({ pack, busy, disabled, inApp, onGet }: PackCardProps) {
   const isMax = pack.id === 'pack-15000';
   return (
     <div
@@ -388,13 +416,17 @@ function PackCard({ pack, busy, disabled, onGet }: PackCardProps) {
       >
         {busy ? (
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        ) : !inApp ? (
+          <>
+            <Smartphone className="w-3.5 h-3.5" /> Buy in App
+          </>
         ) : disabled ? (
           <>
             <Lock className="w-3.5 h-3.5" /> Locked
           </>
         ) : (
           <>
-            <CreditCard className="w-3.5 h-3.5" /> Buy Pack
+            <CreditCard className="w-3.5 h-3.5" /> Buy · ₹{pack.priceINR}
           </>
         )}
       </button>

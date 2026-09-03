@@ -783,82 +783,23 @@ export function milestoneTierForChips(chips: number): { name: string; badge: str
 }
 
 // ----------------------------------------------------------------------------
-// Mock leaderboard seed (used by Leaderboards when API is sparse)
-// ----------------------------------------------------------------------------
-export const MOCK_LEADERBOARD = [
-  { name: 'ViperX', bankedChips: 285_400, level: 42, country: 'US', rank: 1, userTag: 'US-2854' },
-  { name: 'KobraCommander', bankedChips: 198_250, level: 38, country: 'KR', rank: 2, userTag: 'KR-1982' },
-  { name: 'SlinkySlayer', bankedChips: 142_010, level: 31, country: 'BR', rank: 3, userTag: 'BR-1420' },
-  { name: 'VenomousRex', bankedChips: 95_450, level: 27, country: 'DE', rank: 4, userTag: 'DE-9545' },
-  { name: 'Basilisk_99', bankedChips: 74_200, level: 24, country: 'CA', rank: 5, userTag: 'CA-7420' },
-  { name: 'PythonicPro', bankedChips: 51_900, level: 21, country: 'JP', rank: 6, userTag: 'JP-5190' },
-  { name: 'SidewinderAlpha', bankedChips: 38_700, level: 18, country: 'GB', rank: 7, userTag: 'GB-3870' },
-  { name: 'Naga_Queen', bankedChips: 24_650, level: 15, country: 'IN', rank: 8, userTag: 'IN-2465' },
-  { name: 'Anacondaaa', bankedChips: 19_500, level: 12, country: 'AU', rank: 9, userTag: 'AU-1950' },
-  { name: 'Copperhead', bankedChips: 12_400, level: 10, country: 'FR', rank: 10, userTag: 'FR-1240' },
-];
-
-// ----------------------------------------------------------------------------
-// Hall of Fame — 6 milestone tiers with first achievers
+// Hall of Fame — 6 milestone tiers (first achievers / achiever counts come
+// live from the DB via /api/hof/stats — no static demo data here)
 // ----------------------------------------------------------------------------
 export interface HallOfFameTier {
   id: string;
   name: string;
   chips: number;
   badge: string;
-  firstAchiever: { name: string; userTag: string; country: string; dateStr: string };
-  totalAchieversCount: number;
 }
 
 export const HALL_OF_FAME_TIERS: HallOfFameTier[] = [
-  {
-    id: 't-1lakh',
-    name: '1 LAKH CHIPS MILESTONE',
-    chips: 100_000,
-    badge: '🥉 Bronze Elite',
-    firstAchiever: { name: 'Rookie_Striker', userTag: '#IND-104', country: 'IN', dateStr: '02 Jan 2026, 09:15 AM UTC' },
-    totalAchieversCount: 14_209,
-  },
-  {
-    id: 't-5lakh',
-    name: '5 LAKH CHIPS MILESTONE',
-    chips: 500_000,
-    badge: '🥈 Silver Commander',
-    firstAchiever: { name: 'Viper_Zero', userTag: '#USA-402', country: 'US', dateStr: '07 Jan 2026, 02:40 PM UTC' },
-    totalAchieversCount: 4_810,
-  },
-  {
-    id: 't-10lakh',
-    name: '10 LAKH CHIPS (1 MILLION) MILESTONE',
-    chips: 1_000_000,
-    badge: '🥇 Gold Apex Vanguard',
-    firstAchiever: { name: 'K-Snake_Master', userTag: '#KOR-114', country: 'KR', dateStr: '11 Jan 2026, 06:30 AM SGT' },
-    totalAchieversCount: 1_290,
-  },
-  {
-    id: 't-25lakh',
-    name: '25 LAKH CHIPS MILESTONE',
-    chips: 2_500_000,
-    badge: '💎 Platinum Sovereign',
-    firstAchiever: { name: 'Apex_Viper', userTag: '#USA-882', country: 'US', dateStr: '16 Jan 2026, 11:10 PM UTC' },
-    totalAchieversCount: 312,
-  },
-  {
-    id: 't-50lakh',
-    name: '50 LAKH CHIPS MILESTONE',
-    chips: 5_000_000,
-    badge: '🔮 Diamond Warlord',
-    firstAchiever: { name: 'Shadow_Ninja', userTag: '#JPN-309', country: 'JP', dateStr: '19 Jan 2026, 08:22 PM JST' },
-    totalAchieversCount: 64,
-  },
-  {
-    id: 't-1crore',
-    name: '1 CRORE CHIPS (10,000,000) LEGENDARY MILESTONE',
-    chips: 10_000_000,
-    badge: '👑 OMEGA IMMORTAL GOD',
-    firstAchiever: { name: 'Hari', userTag: '#IND-001', country: 'IN', dateStr: '23 Jan 2026, 05:00 PM WST' },
-    totalAchieversCount: 3,
-  },
+  { id: 't-1lakh', name: '1 LAKH CHIPS MILESTONE', chips: 100_000, badge: '🥉 Bronze Elite' },
+  { id: 't-5lakh', name: '5 LAKH CHIPS MILESTONE', chips: 500_000, badge: '🥈 Silver Commander' },
+  { id: 't-10lakh', name: '10 LAKH CHIPS (1 MILLION) MILESTONE', chips: 1_000_000, badge: '🥇 Gold Apex Vanguard' },
+  { id: 't-25lakh', name: '25 LAKH CHIPS MILESTONE', chips: 2_500_000, badge: '💎 Platinum Sovereign' },
+  { id: 't-50lakh', name: '50 LAKH CHIPS MILESTONE', chips: 5_000_000, badge: '🔮 Diamond Warlord' },
+  { id: 't-1crore', name: '1 CRORE CHIPS (10,000,000) LEGENDARY MILESTONE', chips: 10_000_000, badge: '👑 OMEGA IMMORTAL GOD' },
 ];
 
 // ----------------------------------------------------------------------------
