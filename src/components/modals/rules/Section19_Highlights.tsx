@@ -11,23 +11,18 @@ export function Section19_Highlights() {
         <InfoCard title="🔥 What Are Highlights?" accent="text-orange-300">
           <p className="mb-1.5">The <strong>Highlights</strong> tab is the community showcase where great matches and player-submitted clips live. Two types of content appear:</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong className="text-emerald-300">Match Cards</strong> — Auto-generated stat cards from impressive matches. Instantly approved, always visible.</li>
-            <li><strong className="text-amber-300">Video Clips</strong> — Player-submitted YouTube/Instagram/Twitch links. Require admin review before going live.</li>
+            <li><strong className="text-emerald-300">Match Cards</strong> — Stat cards generated when you share a match from your history or profile. Instantly approved, always visible.</li>
+            <li><strong className="text-amber-300">Video Clips</strong> — Player-submitted YouTube/Instagram links. Require admin review before going live.</li>
           </ul>
         </InfoCard>
-        <InfoCard title="🤖 Auto-Publishing (Match Cards)" accent="text-emerald-300">
-          <p className="mb-1.5">The system automatically publishes a Match Card to the Highlights feed when your match meets <strong>any</strong> of these thresholds:</p>
-          <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong>Extraction</strong> with <strong>5,000+ chips</strong> earned</li>
-            <li><strong>Extraction</strong> with <strong>3+ kills</strong></li>
-            <li><strong>Death</strong> with <strong>5+ kills</strong> (impressive even without extracting)</li>
-          </ul>
-          <p className="mt-1.5 text-slate-500">Match Cards are always <strong>auto-approved</strong> — no waiting. They show: arena name, chips earned/lost, kills, snake length, duration, and your clan tag.</p>
+        <InfoCard title="📹 Share Your Matches" accent="text-emerald-300">
+          <p className="mb-1.5">Open any match in your <strong>Match History</strong> and hit share to generate a <strong>Match Card</strong> — a stat card for the Highlights feed showing arena name, chips earned/lost, kills, snake length, duration, and your clan tag.</p>
+          <p className="text-slate-500">Match Cards are <strong>auto-approved</strong> — no waiting. Video clips require admin review.</p>
         </InfoCard>
         <InfoCard title="📹 Submitting Video Clips" accent="text-amber-300">
           <ul className="list-disc pl-4 space-y-0.5">
             <li>Click <strong>Upload Clip</strong> on the Highlights tab</li>
-            <li>Choose platform: <strong>YouTube</strong>, <strong>Instagram</strong>, or <strong>Twitch</strong></li>
+            <li>Choose platform: <strong>YouTube</strong> or <strong>Instagram</strong></li>
             <li>Paste the video URL — YouTube thumbnails are auto-extracted</li>
             <li>Title: 5-120 characters. Description: up to 300 characters</li>
             <li>Profanity filter applies (English + Hindi)</li>
@@ -50,7 +45,7 @@ export function Section19_Highlights() {
           <ul className="list-disc pl-4 space-y-0.5">
             <li>Click the <strong>🔥 Flame</strong> button on any clip to upvote it</li>
             <li><strong>One vote per player per clip</strong> — enforced at the database level</li>
-            <li>Upvotes are <strong>not reversible</strong> — once you upvote, it&apos;s permanent</li>
+            <li>You can change your vote — clicking again removes it</li>
             <li>Must be logged in to upvote</li>
             <li>Upvote count is used in the Top Play fallback (highest upvoted ever)</li>
           </ul>
@@ -82,7 +77,7 @@ export function Section19_Highlights() {
             <li>Submitted clips are reviewed by admins before going public</li>
             <li>Profanity, spam, and inappropriate content will be <strong>rejected</strong></li>
             <li>Rejected clips are hidden from the public feed but preserved for audit</li>
-            <li>Auto-generated Match Cards bypass moderation (system-verified data)</li>
+            <li>Shared Match Cards bypass moderation (system-verified data)</li>
             <li>Admins can <strong>feature</strong> any approved clip to pin it as the Top Play spotlight</li>
             <li>Target review time: within <strong>24 hours</strong> of submission</li>
           </ul>

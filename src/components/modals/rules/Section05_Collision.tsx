@@ -15,7 +15,7 @@ export function Section05_Collision() {
         <InfoCard title="Head-on Collision (Head vs Head)" accent="text-amber-300">
           <ul className="list-disc pl-4 space-y-0.5">
             <li><strong>Neither boosting:</strong> Larger wins, smaller dies</li>
-            <li><strong>Smaller boosting, larger steady:</strong> Smaller survives!</li>
+            <li><strong>Smaller boosting, larger steady:</strong> Smaller survives — but only if it holds at least 25% of the larger snake&apos;s score (head-on boost gate)</li>
             <li><strong>Both boosting:</strong> Larger wins</li>
             <li><strong>Tie:</strong> Both die</li>
           </ul>

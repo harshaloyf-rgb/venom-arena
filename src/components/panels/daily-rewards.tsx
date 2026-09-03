@@ -97,7 +97,6 @@ export function DailyRewards({ onToast }: ClaimsProps) {
 
   // Daily claim state
   const [dailyBusy, setDailyBusy] = useState(false);
-  const [adBusy, setAdBusy] = useState(false);
 
   // Hourly state
   const [hourlyCanClaim, setHourlyCanClaim] = useState(false);
@@ -172,10 +171,11 @@ export function DailyRewards({ onToast }: ClaimsProps) {
       const res = await fetch('/api/player/daily', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { notify((data as { error?: string })?.error || 'Claim failed.', 'error', onToast); return; }
-      const d = data as { reward?: number; streak?: number; streakMilestone?: { milestone: number; reward: number; title: string; emoji: string } | null; seasonalBonus?: { multiplier: number; label: string } | null };
+      const d = data as { reward?: number; streak?: number; freezeUsed?: boolean; streakMilestone?: { milestone: number; reward: number; title: string; emoji: string } | null; seasonalBonus?: { multiplier: number; label: string } | null };
       setFlyReward(d.reward ?? 0);
       let msg = `+${fmtChips(d.reward ?? 0)} CHIPS! Streak: ${d.streak ?? 0} days`;
       if (d.seasonalBonus) msg += ` | ${d.seasonalBonus.label}`;
+      if (d.freezeUsed) msg += ' | 🛡️ Streak Freeze consumed — streak protected!';
       if (d.streakMilestone) {
         msg += ` | ${d.streakMilestone.emoji} ${d.streakMilestone.title} bonus: +${fmtChips(d.streakMilestone.reward)}c!`;
         setClaimedMilestones(prev => new Set([...prev, d.streakMilestone!.milestone]));
@@ -183,13 +183,7 @@ export function DailyRewards({ onToast }: ClaimsProps) {
       notify(msg, 'success', onToast);
       await refresh();
     } catch { notify('Network error.', 'error', onToast); }
-    finally { setDailyBusy(false); setAdBusy(false); }
-  }
-
-  function handleWatchAd() {
-    setAdBusy(true);
-    notify('Launching sponsor stream... Please hold', 'info', onToast);
-    setTimeout(() => void handleDailyClaim(), 2500);
+    finally { setDailyBusy(false); }
   }
 
   // ── Hourly Claim ──
@@ -329,12 +323,10 @@ export function DailyRewards({ onToast }: ClaimsProps) {
           currentDayIndex={currentDayIndex}
           claimedCount={claimedCount}
           dailyBusy={dailyBusy}
-          adBusy={adBusy}
           freezeBusy={freezeBusy}
           nextDailyTime={nextDailyTime}
           claimedMilestones={claimedMilestones}
           onDailyClaim={() => void handleDailyClaim()}
-          onWatchAd={handleWatchAd}
           onBuyFreeze={() => void handleBuyFreeze()}
         />
       )}

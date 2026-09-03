@@ -23,9 +23,9 @@ export function Section07_Map() {
         </InfoCard>
         <InfoCard title="Safe Spawning" accent="text-cyan-300">
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>500px from every other snake</li>
+            <li>400px from every other snake</li>
             <li>500px inside map boundary (online)</li>
-            <li><strong>4s spawn protection</strong> (invulnerable)</li>
+            <li><strong>2s spawn protection</strong> (invulnerable)</li>
           </ul>
         </InfoCard>
       </div>

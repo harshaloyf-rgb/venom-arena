@@ -17,13 +17,12 @@ export function Section11_Death() {
             <li>Killed by real player → View Profile / Add Friend / Add Rival buttons</li>
           </ul>
         </InfoCard>
-        <InfoCard title="Death Replay (15s Before + 15s After)" accent="text-cyan-300">
+        <InfoCard title="After Your Death" accent="text-cyan-300">
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>15s before death (circular buffer)</li>
-            <li>15s after death (shows food being collected)</li>
-            <li>Camera stays on death food, then follows first collector</li>
-            <li>Controls: Play/Pause, Speed, Zoom, Restart</li>
-            <li>Progress bar with death marker</li>
+            <li>Your killer is highlighted in the elimination banner</li>
+            <li>View their profile, add them as a friend or track them as a rival</li>
+            <li>XP is still awarded for the run — only carried chips are lost</li>
+            <li>Disconnects: a 12s grace window lets you rejoin your snake</li>
           </ul>
         </InfoCard>
       </div>

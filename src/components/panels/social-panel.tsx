@@ -434,7 +434,7 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
       const res = await fetch('/api/player/follow', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetUserTag: tag }),
+        body: JSON.stringify({ tag }),
       });
       const data = await res.json();
       if (!res.ok) { notify(data.error || 'Failed to follow back.', 'error', onToast); return; }
@@ -450,7 +450,7 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
       const res = await fetch('/api/player/follow', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetUserTag: tag, action: 'unfollow' }),
+        body: JSON.stringify({ tag }),
       });
       const data = await res.json();
       if (!res.ok) { notify(data.error || 'Failed to unfollow.', 'error', onToast); return; }
@@ -499,7 +499,7 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
           value={addFriendInput}
           onChange={(e) => setAddFriendInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') handleAddFriend(); }}
-          placeholder="Enter Player Tag (e.g. COBRA-4231)..."
+          placeholder="Enter Player Tag (e.g. VM-XXXXXX)..."
           className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-violet-500/50"
         />
         <button
@@ -622,10 +622,10 @@ function RivalsTab({ onToast, onInspectPlayer }: { onToast?: ToastFn; onInspectP
       const res = await fetch('/api/player/follow', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetUserTag: rival.rivalTag }),
+        body: JSON.stringify({ tag: rival.rivalTag }),
       });
       const data = await res.json();
-      if (data.isFollowing) {
+      if (data.following) {
         notify(`Now following ${rival.rivalName}!`, 'success', onToast);
       }
     } catch {

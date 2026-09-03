@@ -295,7 +295,9 @@ export interface ChipPack {
 
 export const MAX_YEARLY_BUY_CHIPS = 2500000; // 25 Lakh
 export const MAX_DAILY_ADS = 12;
-export const AD_REWARD_CHIPS = 100;
+// Must equal the server's credit per verified rewarded ad (see /api/ads/ssv).
+// Was 100 — the UI promised 1,200/day while the server paid 50 × 12 = 600.
+export const AD_REWARD_CHIPS = 50;
 
 // Hourly micro-claims
 export const HOURLY_REWARD_MIN = 10;
@@ -855,172 +857,10 @@ export const CHAMPIONSHIP_PRIZE_TIERS: ChampionshipPrize[] = [
 ];
 
 // ----------------------------------------------------------------------------
-// Social panel — friends, rivals, global players, public clans
+// (Social mock data removed — dead demo exports: INITIAL_FRIENDS,
+// INITIAL_RIVALS, GLOBAL_COMMUNITY_PLAYERS. The social panel is DB-driven.)
 // ----------------------------------------------------------------------------
-export interface MockFriend {
-  id: string;
-  name: string;
-  userTag: string;
-  status: 'online' | 'idle' | 'in-match' | 'offline';
-  currentArenaId?: string;
-  currentArenaName?: string;
-  level: number;
-  skinColor: string;
-  giftSent: boolean;
-  giftReceived: boolean;
-}
-
-export const INITIAL_FRIENDS: MockFriend[] = [
-  { id: 'f-1', name: 'ApexViper', userTag: 'APEX-1029', status: 'online', currentArenaId: 'tier-1', currentArenaName: 'Training Pit', level: 42, skinColor: '#10b981', giftSent: false, giftReceived: true },
-  { id: 'f-2', name: 'ShadowSlinker', userTag: 'SLNK-9281', status: 'in-match', currentArenaId: 'tier-2', currentArenaName: 'High Stakes Lounge', level: 18, skinColor: '#a855f7', giftSent: false, giftReceived: false },
-  { id: 'f-3', name: 'CoinGobbler', userTag: 'COIN-5432', status: 'offline', level: 29, skinColor: '#eab308', giftSent: true, giftReceived: false },
-  { id: 'f-4', name: 'VenomKing', userTag: 'VNOM-0001', status: 'idle', level: 55, skinColor: '#ef4444', giftSent: false, giftReceived: false },
-];
-
-export interface MockRival {
-  id: string;
-  name: string;
-  userTag: string;
-  status: 'online' | 'idle' | 'in-match' | 'offline';
-  currentArenaName: string;
-  level: number;
-  timesKilledByYou: number;
-  timesKilledYou: number;
-  lastEncounterDate: string;
-}
-
-export const INITIAL_RIVALS: MockRival[] = [
-  { id: 'r-1', name: 'VenomKing', userTag: 'VNOM-0001', status: 'in-match', currentArenaName: 'Venom Pit (5,000 Buy-In)', level: 55, timesKilledByYou: 2, timesKilledYou: 5, lastEncounterDate: 'Today, 2:15 PM' },
-  { id: 'r-2', name: 'ShadowSlinker', userTag: 'SLNK-9281', status: 'online', currentArenaName: 'High Stakes Lounge (1,000 Buy-In)', level: 38, timesKilledByYou: 4, timesKilledYou: 1, lastEncounterDate: 'Yesterday, 8:40 PM' },
-  { id: 'r-3', name: 'ApexViper', userTag: 'APEX-1029', status: 'in-match', currentArenaName: 'Extreme Arena (25,000 Buy-In)', level: 42, timesKilledByYou: 1, timesKilledYou: 3, lastEncounterDate: '2 days ago' },
-];
-
-export interface GlobalPlayer {
-  name: string;
-  userTag: string;
-  country: string;
-  level: number;
-  chips: number;
-  skinColor: string;
-  status: 'online' | 'idle' | 'in-match' | 'offline';
-  connected?: boolean;
-}
-
-export const GLOBAL_COMMUNITY_PLAYERS: GlobalPlayer[] = [
-  { name: 'CobraMaster_IN', userTag: 'IND-8821', country: 'IN', level: 48, chips: 4_500_000, skinColor: '#10b981', status: 'online' },
-  { name: 'Viper_Syndicate', userTag: 'IND-1049', country: 'IN', level: 52, chips: 12_500_000, skinColor: '#eab308', status: 'in-match' },
-  { name: 'Mamba_Strike', userTag: 'USA-4012', country: 'US', level: 39, chips: 2_100_000, skinColor: '#ef4444', status: 'online' },
-  { name: 'Tokyo_Slinker', userTag: 'JPN-9012', country: 'JP', level: 44, chips: 3_800_000, skinColor: '#a855f7', status: 'idle' },
-  { name: 'Seoul_Apex', userTag: 'KOR-2290', country: 'KR', level: 50, chips: 8_900_000, skinColor: '#3b82f6', status: 'online' },
-  { name: 'London_Viper', userTag: 'GBR-5012', country: 'GB', level: 35, chips: 1_800_000, skinColor: '#f43f5e', status: 'in-match' },
-  { name: 'Dragon_Cobra', userTag: 'IND-2201', country: 'IN', level: 41, chips: 2_900_000, skinColor: '#06b6d4', status: 'online' },
-  { name: 'Phoenix_Venom', userTag: 'BRA-7712', country: 'BR', level: 33, chips: 950_000, skinColor: '#84cc16', status: 'offline' },
-  { name: 'Berlin_Predator', userTag: 'DEU-3321', country: 'DE', level: 46, chips: 5_400_000, skinColor: '#ec4899', status: 'online' },
-  { name: 'Sydney_Strike', userTag: 'AUS-6612', country: 'AU', level: 37, chips: 1_400_000, skinColor: '#6366f1', status: 'idle' },
-  { name: 'Zenith_Viper', userTag: 'CAN-8840', country: 'CA', level: 28, chips: 620_000, skinColor: '#14b8a6', status: 'online' },
-  { name: 'Paris_Serpent', userTag: 'FRA-1190', country: 'FR', level: 38, chips: 1_950_000, skinColor: '#8b5cf6', status: 'offline' },
-];
-
 export const PRESET_EMBLEMS = ['🐍', '🦅', '🎯', '💀', '💎', '🔥', '👑', '⚡', '🏆', '☣️'];
-
-// ----------------------------------------------------------------------------
-// ClanSystem.tsx — 3 sample clans
-// ----------------------------------------------------------------------------
-export interface SampleClanMember {
-  name: string;
-  userTag: string;
-  role: 'Leader' | 'Officer' | 'Member';
-  chips: number;
-  level: number;
-  country: string;
-  joinedDate: string;
-}
-
-export interface SampleClanAnnouncement {
-  author: string;
-  text: string;
-  dateStr: string;
-}
-
-export interface SampleClan {
-  id: string;
-  name: string;
-  tag: string;
-  motto: string;
-  level: number;
-  logoEmoji: string;
-  treasuryChips: number;
-  members: SampleClanMember[];
-  maxMembers: number;
-  leaderName: string;
-  leaderTag: string;
-  minLevelReq: number;
-  clanRank: number;
-  announcements: SampleClanAnnouncement[];
-}
-
-export const SAMPLE_CLANS: SampleClan[] = [
-  {
-    id: 'clan-1',
-    name: 'Viper Apex Syndicate',
-    tag: 'APEX',
-    motto: 'Dominate the boundary, extract all chips.',
-    level: 12,
-    logoEmoji: '🐍',
-    treasuryChips: 14_500_000,
-    maxMembers: 30,
-    leaderName: 'Hari',
-    leaderTag: '#IND-001',
-    minLevelReq: 1,
-    clanRank: 1,
-    members: [
-      { name: 'Hari', userTag: '#IND-001', role: 'Leader', chips: 10_000_000, level: 50, country: 'IN', joinedDate: '01 Jan 2027' },
-      { name: 'Apex_Viper', userTag: '#USA-882', role: 'Officer', chips: 9_400_000, level: 49, country: 'US', joinedDate: '03 Jan 2027' },
-      { name: 'K-Snake_Master', userTag: '#KOR-114', role: 'Officer', chips: 8_900_000, level: 49, country: 'KR', joinedDate: '05 Jan 2027' },
-      { name: 'Rookie_Striker', userTag: '#IND-104', role: 'Member', chips: 1_200_000, level: 32, country: 'IN', joinedDate: '12 Jan 2027' },
-    ],
-    announcements: [
-      { author: 'Hari (Leader)', text: '🔥 Self-Sponsored Clan Arena War starts Saturday! Treasury pool funds 1,00,000c prize pool.', dateStr: '2 hours ago' },
-      { author: 'Apex_Viper (Officer)', text: 'Treasury Bank replenished by members for custom clan tournaments!', dateStr: '1 day ago' },
-    ],
-  },
-  {
-    id: 'clan-2',
-    name: 'Cyber Ninja Shadow Squad',
-    tag: 'NINJA',
-    motto: 'Silent extraction, maximum venom.',
-    level: 9,
-    logoEmoji: '🥷',
-    treasuryChips: 8_200_000,
-    maxMembers: 25,
-    leaderName: 'Shadow_Ninja',
-    leaderTag: '#JPN-309',
-    minLevelReq: 15,
-    clanRank: 2,
-    members: [
-      { name: 'Shadow_Ninja', userTag: '#JPN-309', role: 'Leader', chips: 5_000_000, level: 48, country: 'JP', joinedDate: '02 Jan 2027' },
-    ],
-    announcements: [
-      { author: 'Shadow_Ninja', text: 'Recruiting active players for High Stakes Tier 5 extractions!', dateStr: '3 days ago' },
-    ],
-  },
-  {
-    id: 'clan-3',
-    name: 'Phoenix Elite Extraction Corps',
-    tag: 'PHNX',
-    motto: 'From the ashes, we reclaim the arena.',
-    level: 6,
-    logoEmoji: '🔥',
-    treasuryChips: 3_400_000,
-    maxMembers: 20,
-    leaderName: 'Viper_Zero',
-    leaderTag: '#USA-402',
-    minLevelReq: 10,
-    clanRank: 3,
-    members: [],
-    announcements: [],
-  },
-];
 
 // ----------------------------------------------------------------------------
 // Season Pass — 20 free + 20 elite rewards

@@ -844,15 +844,19 @@ export function renderSnakeAtlas(
     }
 
     // Ultra-responsive eyes — track raw mouse position relative to head
-    // Skip if a custom eye cosmetic is equipped (it draws its own eyes)
+    // Skip if a custom eye cosmetic is equipped (it draws its own eyes).
+    // isPlayer guard (MAJOR fix): cosmetics are LOCAL to this device — without
+    // the guard every bot/remote snake also rendered the player's hat/eyes.
     const equipped = getCachedEquipped();
-    const hasCustomEyes = equipped.eyes && equipped.eyes !== 'none';
+    const hasCustomEyes = snake.isPlayer && equipped.eyes && equipped.eyes !== 'none';
     if (!hasCustomEyes) {
       drawResponsiveEyes(ctx, hsx, hsy, renderAngle, snake.targetAngle, headDrawSize / 2, snake.boosting, snake.id, time);
     }
 
     // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
-    renderEquippedCosmetics(ctx, { hx: hsx, hy: hsy, hr: headDrawSize / 2, angle: renderAngle, time, boosting: snake.boosting, mouseScreenX, mouseScreenY });
+    if (snake.isPlayer) {
+      renderEquippedCosmetics(ctx, { hx: hsx, hy: hsy, hr: headDrawSize / 2, angle: renderAngle, time, boosting: snake.boosting, mouseScreenX, mouseScreenY });
+    }
 
     // Head glow pulse when boosting
     if (snake.boosting && segRadius > 3) {
@@ -1272,16 +1276,20 @@ export function renderSnakeFallback(
     }
 
     // Responsive eyes — P8: skip for far LOD bots
-    // Skip if a custom eye cosmetic is equipped (it draws its own eyes)
+    // Skip if a custom eye cosmetic is equipped (it draws its own eyes).
+    // isPlayer guard (MAJOR fix): cosmetics are LOCAL to this device — without
+    // the guard every bot/remote snake also rendered the player's hat/eyes.
     if (!isFar) {
       const eq2 = getCachedEquipped();
-      const hasCustomEyes2 = eq2.eyes && eq2.eyes !== 'none';
+      const hasCustomEyes2 = snake.isPlayer && eq2.eyes && eq2.eyes !== 'none';
       if (!hasCustomEyes2) {
         drawResponsiveEyes(ctx, headSX, headSY, renderAngle, snake.targetAngle, headRadius, snake.boosting, snake.id, now);
       }
 
       // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
-      renderEquippedCosmetics(ctx, { hx: headSX, hy: headSY, hr: headRadius, angle: renderAngle, time: now, boosting: snake.boosting, mouseScreenX, mouseScreenY });
+      if (snake.isPlayer) {
+        renderEquippedCosmetics(ctx, { hx: headSX, hy: headSY, hr: headRadius, angle: renderAngle, time: now, boosting: snake.boosting, mouseScreenX, mouseScreenY });
+      }
     }
 
     // Name — P8: skip for far LOD bots

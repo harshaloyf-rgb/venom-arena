@@ -9,7 +9,7 @@ export function Section13_Championships() {
     <Section icon={<Trophy className="w-4 h-4" />} title="13. ANNUAL CHAMPIONSHIPS" accent="text-amber-400">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <InfoCard title="🏆 What is the Annual Championship?" accent="text-amber-300">
-          <p className="mb-1">The <strong>Annual Championship</strong> is a year-long competitive event that tracks every player&apos;s performance across all online matches. Unlike the lobby leaderboard (which is live/session-based), championship standings persist across the entire calendar year and culminate in a <strong>Jan 1st Payout</strong>.</p>
+          <p className="mb-1">The <strong>Annual Championship</strong> is a year-long competitive event that tracks every player&apos;s performance across all online matches. Unlike the lobby leaderboard (which is live/session-based), championship standings persist across the entire calendar year and culminate in the <strong>Jan 1st season close</strong>.</p>
           <ul className="list-disc pl-4 space-y-0.5">
             <li>Runs from <strong>Jan 1 to Dec 31</strong> each year</li>
             <li>Every online match counts toward your championship score</li>
@@ -21,7 +21,7 @@ export function Section13_Championships() {
         <InfoCard title="📋 DB-Backed Registration" accent="text-cyan-300">
           <p className="mb-1">Championship registration is handled entirely through the database — no separate sign-up needed:</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong>Auto-enrolled:</strong> Every registered player is automatically entered when they play their first online match of the year</li>
+            <li><strong>Free registration:</strong> Register from the Championships tab (one click, free entry) — then every online match of the year counts toward your standings</li>
             <li><strong>Persistent:</strong> Your registration status, match history, and standings are stored server-side in the database</li>
             <li><strong>One account per player:</strong> Duplicate or alt accounts are merged using your VM-XXXXXX tag</li>
             <li><strong>Guest players:</strong> Must register or link a social account before their championship stats are tracked</li>
@@ -29,7 +29,7 @@ export function Section13_Championships() {
         </InfoCard>
 
         <InfoCard title="💰 Jan 1st Payout &amp; Hall of Fame Tiers" accent="text-yellow-300">
-          <p className="mb-1.5">On <strong>January 1st</strong> of each year, final standings are locked and prizes are distributed based on your final championship rank:</p>
+          <p className="mb-1.5">After <strong>January 1st</strong> of each year, final standings are locked and the leaderboard winners are finalized, inducted into the Hall of Fame and their prizes awarded:</p>
           <div className="overflow-x-auto">
             <table className="w-full text-[11px] mt-1">
               <thead>
@@ -85,9 +85,9 @@ export function Section13_Championships() {
         <InfoCard title="⚠️ Match Cap Warnings (9K / 9.5K / 9.9K)" accent="text-red-400">
           <p className="mb-1">To encourage fair play and prevent grinding exploits, the championship has <strong>annual match caps</strong> with escalating warnings:</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong>9,000 matches:</strong> Yellow warning — &quot;Approaching annual cap. Matches beyond 9,500 score at 75% weight.&quot;</li>
-            <li><strong>9,500 matches:</strong> Orange warning — &quot;Near cap. Matches beyond 9,900 score at 50% weight.&quot;</li>
-            <li><strong>9,900 matches:</strong> Red warning — &quot;Final 100 matches. These score at 25% weight. Plan carefully!&quot;</li>
+            <li><strong>9,000 matches:</strong> Yellow warning — approaching the annual 10,000-match cap</li>
+            <li><strong>9,500 matches:</strong> Orange warning — near the annual cap</li>
+            <li><strong>9,900 matches:</strong> Red warning — final 100 matches before the annual cap locks your registration</li>
             <li><strong>10,000 matches:</strong> Hard cap reached — no further championship scoring for the year</li>
           </ul>
           <p className="mt-1 text-amber-400/80">Caps reset every Jan 1st. Quality over quantity — each match should count!</p>

@@ -20,9 +20,9 @@ export function Section02_Modes() {
               <li><strong>Graduated Commission:</strong> 0% if ≤3 real players, 35% if ≥4. Extract anytime.</li>
               <li><strong>Full Death Penalty:</strong> On death, your carried chips transform into 10 stars at your last position for others to collect.</li>
               <li><strong>Star Chips:</strong> Golden stars dropped when real players die. Each star = player&apos;s carried chips ÷ 10. Collect to increase your carried chips.</li>
-              <li><strong>XP:</strong> Earned on successful extraction only.</li>
+              <li><strong>XP:</strong> Earned on extraction AND on death (score ×5 + kills ×50, scaled by arena multiplier). Chips are only banked on extraction.</li>
               <li><strong>Map:</strong> Circular boundary that breathes. Stay inside!</li>
-              <li><strong>Bots:</strong> 30 bots per tier. Self-destruct at score≥100. Bots never drop or collect stars.</li>
+              <li><strong>Bots:</strong> Every arena is filled to capacity with AI snakes (up to ~1,000 agents). Self-destruct at score≥100. Bots never drop or collect stars.</li>
             </ul>
           </div>
 

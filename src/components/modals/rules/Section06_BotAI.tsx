@@ -11,8 +11,8 @@ export function Section06_BotAI() {
         <InfoCard title="Harvesting Mode" accent="text-violet-300">
           <ul className="list-disc pl-4 space-y-0.5">
             <li>Seek nearest food orbs</li>
-            <li>Dodge players (predictive — 8 ticks ahead)</li>
-            <li>Avoid body segments (150px range)</li>
+            <li>Dodge players (predictive — 25–45 ticks ahead)</li>
+            <li>Avoid body segments (120px range) and other snakes (300px range)</li>
             <li>Turn away from map boundary</li>
             <li>Never boost, never collect stars</li>
           </ul>

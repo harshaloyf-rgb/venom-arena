@@ -102,6 +102,7 @@ model Player {
   luckySpins      LuckySpin[]
   promoRewards    PromoReward[]
   videoRewards    VideoReward[]
+  adSessions      AdRewardSession[]
   referralsSent   Referral[]    @relation("referralSender")
   referralsReceived Referral[]  @relation("referralReceiver")
   purchases       Purchase[]
@@ -253,6 +254,22 @@ model VideoReward {
   playerId  String
   reward    Int
   createdAt DateTime @default(now())
+
+  @@index([playerId, createdAt])
+}
+
+// One short-lived server-issued session per rewarded-ad attempt.
+// The nonce travels to Google via the ad's SSV custom_data (<=64 bytes) and
+// comes back inside the cryptographically signed SSV callback — the ONLY path
+// that credits ad chips (the legacy client-claimed faucet was deleted).
+model AdRewardSession {
+  id         String   @id @default(cuid())
+  player     Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId   String
+  nonce      String   @unique
+  consumed   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  consumedAt DateTime?
 
   @@index([playerId, createdAt])
 }

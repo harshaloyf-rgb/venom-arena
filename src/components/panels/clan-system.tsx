@@ -445,7 +445,7 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
               {/* Header */}
               <div className="flex items-start justify-between gap-3 lg:gap-1 flex-wrap p-4 lg:p-1.5 rounded-2xl border border-slate-800 bg-slate-950/60">
                 <div className="flex items-center gap-3 lg:gap-1 min-w-0">
-                  <span className="text-3xl lg:text-[11px]" aria-hidden>{myClanInfo?.emblem || '\u0001f40d'}</span>
+                  <span className="text-3xl lg:text-[11px]" aria-hidden>{myClanInfo?.emblem || '\u{1F40D}'}</span>
                   <div className="min-w-0">
                     <h3 className="text-base lg:text-[11px] font-bold text-white flex items-center gap-2 lg:gap-1 flex-wrap">
                       {myClanInfo?.name || playerClanTag}

@@ -109,66 +109,7 @@ interface MatchHistoryEntry {
 // ---------------------------------------------------------------------------
 
 
-const SAMPLE_MATCHES: MatchHistoryEntry[] = [
-  {
-    id: 'match-mock1',
-    arenaName: 'Slum Alley',
-    isOnline: false,
-    status: 'EXTRACTED',
-    chipsEarned: 180,
-    chipsLost: 0,
-    kills: 3,
-    snakeLength: 22,
-    timestamp: new Date(Date.now() - 4 * 3_600_000).toISOString(),
-    durationSec: 85,
-  },
-  {
-    id: 'match-mock2',
-    arenaName: 'Neon Grid',
-    isOnline: true,
-    status: 'COLLIDED',
-    chipsEarned: 0,
-    chipsLost: 50,
-    kills: 1,
-    snakeLength: 14,
-    timestamp: new Date(Date.now() - 24 * 3_600_000).toISOString(),
-    durationSec: 42,
-  },
-  {
-    id: 'match-mock3',
-    arenaName: 'Viper Syndicate',
-    isOnline: true,
-    status: 'EXTRACTED',
-    chipsEarned: 640,
-    chipsLost: 0,
-    kills: 6,
-    snakeLength: 35,
-    timestamp: new Date(Date.now() - 48 * 3_600_000).toISOString(),
-    durationSec: 164,
-  },
-];
-
-// ---------------------------------------------------------------------------
-// Local-storage helpers
-// ---------------------------------------------------------------------------
-function readJSON<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function writeJSON(key: string, value: unknown) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    /* quota errors silently ignored */
-  }
-}
-
+// (localStorage helpers removed — profile data is DB-backed)
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -370,10 +311,8 @@ function ProfileContent({
   const [saving, setSaving] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  // Local matches (fallback when DB is empty)
-  const [matches, setMatches] = useState<MatchHistoryEntry[]>([]);
-
-  // -- NEW: DB-backed match history
+  // Match history is DB-driven only — the old SAMPLE_MATCHES localStorage
+  // seeding (fake matches written on first visit) was removed as demo data.
   const [dbMatches, setDbMatches] = useState<MatchHistoryEntry[]>([]);
   const [matchFilter, setMatchFilter] = useState<'all' | 'EXTRACTED' | 'COLLIDED'>('all');
   const [matchLoading, setMatchLoading] = useState(false);
@@ -540,19 +479,9 @@ function ProfileContent({
     }
   }, []);
 
-  // Load from localStorage + socials from DB player object
+  // Load socials from DB player object (localStorage match-history removed —
+  // history is DB-backed; seeding fake samples was demo data)
   useEffect(() => {
-    const storedMatches = readJSON<MatchHistoryEntry[] | null>(
-      'venom_match_history',
-      null,
-    );
-    if (storedMatches && Array.isArray(storedMatches) && storedMatches.length) {
-      setMatches(storedMatches);
-    } else {
-      setMatches(SAMPLE_MATCHES);
-      writeJSON('venom_match_history', SAMPLE_MATCHES);
-    }
-
     // Socials loaded from player object (DB-backed) instead of localStorage
     setInstagram(player.instagram || '');
     setYoutube(player.youtube || '');

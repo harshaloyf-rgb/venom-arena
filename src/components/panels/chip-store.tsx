@@ -6,12 +6,11 @@ import {
   CHIP_PACKS,
   PROMO_CODES,
   MAX_YEARLY_BUY_CHIPS,
-  MAX_DAILY_ADS,
-  AD_REWARD_CHIPS,
   type ChipPack,
 } from '@/lib/game-config';
 import { allStoreProducts } from '@/lib/store-catalog';
 import { isNativeApp, nativeBillingAvailable, purchaseAndVerify, IapError } from '@/lib/iap';
+import { rewardedAdsAvailable, showRewardedAd } from '@/lib/ads';
 import {
   GlowBlob,
   MicroLabel,
@@ -38,22 +37,6 @@ interface ChipStoreProps {
   onToast?: ToastFn;
 }
 
-const DAILY_ADS_KEY = 'venom_daily_ads';
-
-function getTodayAdCount(): { date: string; count: number } {
-  const today = new Date().toISOString().slice(0, 10);
-  if (typeof window === 'undefined') return { date: today, count: 0 };
-  try {
-    const v = localStorage.getItem(DAILY_ADS_KEY);
-    if (!v) return { date: today, count: 0 };
-    const parsed = JSON.parse(v) as { date: string; count: number };
-    if (parsed.date !== today) return { date: today, count: 0 };
-    return parsed;
-  } catch {
-    return { date: today, count: 0 };
-  }
-}
-
 // packId -> store product id (server keeps the authoritative chips mapping)
 const PRODUCT_ID_BY_PACK = new Map(allStoreProducts().map((p) => [p.packId, p.productId]));
 
@@ -67,11 +50,9 @@ export function ChipStore({ onToast }: ChipStoreProps) {
   // localStorage counter was trivially bypassable and lied after reinstalls.
   const [yearlyPurchased, setYearlyPurchased] = useState<number | null>(null);
   const [storeLocked, setStoreLocked] = useState(false);
-  const [adState, setAdState] = useState({ date: '', count: 0 });
-
-  useEffect(() => {
-    setAdState(getTodayAdCount());
-  }, []);
+  // Ad status is ALSO server truth (GET /api/ads/session) — count, cap and
+  // reward size come from the same authority that verifies and credits.
+  const [adStatus, setAdStatus] = useState<{ adsToday: number; dailyCap: number; rewardPerAd: number; remaining: number } | null>(null);
 
   useEffect(() => {
     if (!player) return;
@@ -84,6 +65,22 @@ export function ChipStore({ onToast }: ChipStoreProps) {
         setStoreLocked(d.storeLocked ?? false);
       })
       .catch(() => undefined);
+    // Ad card only appears when rewarded ads are genuinely available
+    // (native app + NEXT_PUBLIC_ADMOB_ENABLED flag).
+    if (rewardedAdsAvailable()) {
+      fetch('/api/ads/session')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: { adsToday?: number; dailyCap?: number; rewardPerAd?: number; remaining?: number } | null) => {
+          if (cancelled || !d) return;
+          setAdStatus({
+            adsToday: d.adsToday ?? 0,
+            dailyCap: d.dailyCap ?? 12,
+            rewardPerAd: d.rewardPerAd ?? 50,
+            remaining: d.remaining ?? 0,
+          });
+        })
+        .catch(() => undefined);
+    }
     return () => {
       cancelled = true;
     };
@@ -93,7 +90,6 @@ export function ChipStore({ onToast }: ChipStoreProps) {
   if (!player) return <NotSignedIn />;
 
   const inApp = isNativeApp() && nativeBillingAvailable();
-  const adsRemaining = MAX_DAILY_ADS - adState.count;
   const currentPlayer = player;
 
   async function handleGetPack(pack: ChipPack) {
@@ -172,30 +168,42 @@ export function ChipStore({ onToast }: ChipStoreProps) {
   }
 
   async function handleWatchAd() {
-    if (adsRemaining <= 0) {
-      notify('Daily Ad Limit Reached (12/12)! Resets at 00:00 UTC.', 'error', onToast);
+    if (!adStatus || adStatus.remaining <= 0) {
+      notify('Daily Ad Limit Reached! Resets at 00:00 UTC.', 'error', onToast);
       return;
     }
     setAdBusy(true);
-    notify('Launching high-definition sponsor video... Keep active.', 'info', onToast);
     try {
-      const res = await fetch('/api/player/video-reward', { method: 'POST' });
-      const data = (await res.json().catch(() => ({}))) as { error?: string; reward?: number; newBankedChips?: number };
-      if (!res.ok) {
-        notify(data?.error || 'Failed to claim ad reward.', 'error', onToast);
+      // 1. Server issues a one-time nonce bound to this player.
+      const sessionRes = await fetch('/api/ads/session', { method: 'POST' });
+      const sessionData = (await sessionRes.json().catch(() => ({}))) as { error?: string; nonce?: string };
+      if (!sessionRes.ok || !sessionData.nonce) {
+        notify(sessionData.error || 'Could not start an ad session.', 'error', onToast);
         return;
       }
-      const newCount = adState.count + 1;
-      const today = new Date().toISOString().slice(0, 10);
-      const newState = { date: today, count: newCount };
-      setAdState(newState);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(DAILY_ADS_KEY, JSON.stringify(newState));
+      // 2. Real rewarded ad. The nonce rides along as the SSV custom_data.
+      const result = await showRewardedAd(sessionData.nonce);
+      if (result !== 'earned') {
+        if (result === 'dismissed') notify('Ad closed before completion — no reward.', 'info', onToast);
+        else notify('Ad failed to load. Please try again later.', 'error', onToast);
+        return;
       }
-      notify(`Sponsor Ad Completed: +${data.reward || AD_REWARD_CHIPS} FREE CHIPS deposited! (${newCount}/12 ads today)`, 'success', onToast);
-      void refresh();
+      // 3. Google now calls OUR server (/api/ads/ssv) with a signed callback.
+      //    Poll for the credit — the client can never mint chips itself.
+      for (let attempt = 0; attempt < 12; attempt++) {
+        await new Promise((r) => setTimeout(r, 2500));
+        const poll = await fetch(`/api/ads/session?nonce=${encodeURIComponent(sessionData.nonce)}`);
+        const pollData = (await poll.json().catch(() => ({}))) as { credited?: boolean; reward?: number; adsToday?: number; dailyCap?: number };
+        if (poll.ok && pollData.credited) {
+          notify(`+${pollData.reward ?? adStatus.rewardPerAd} FREE CHIPS credited from the ad! (${pollData.adsToday ?? adStatus.adsToday + 1}/${pollData.dailyCap ?? adStatus.dailyCap} today)`, 'success', onToast);
+          setAdStatus({ ...adStatus, adsToday: pollData.adsToday ?? adStatus.adsToday + 1, remaining: Math.max(0, adStatus.remaining - 1) });
+          void refresh();
+          return;
+        }
+      }
+      notify('Ad verified — your chips will appear in your wallet within a minute.', 'info', onToast);
     } catch {
-      notify('Network error claiming ad reward.', 'error', onToast);
+      notify('Network error during the ad reward.', 'error', onToast);
     } finally {
       setAdBusy(false);
     }
@@ -248,7 +256,7 @@ export function ChipStore({ onToast }: ChipStoreProps) {
           <p>
             You have reached the absolute maximum yearly buy cap of 25 Lakh Chips (2,500,000 chips).
             Store purchases are disabled to ensure tournament skill remains 100% fair across all
-            197 countries. Free ad rewards (1,200 chips/day) and arena wagers remain fully active!
+            197 countries. Free ad rewards (600 chips/day) and arena wagers remain fully active!
           </p>
         </div>
       )}
@@ -308,30 +316,35 @@ export function ChipStore({ onToast }: ChipStoreProps) {
           </div>
         </div>
 
-        {/* Ad rewards */}
+        {/* Ad rewards — ONLY rendered when rewarded ads are genuinely available
+            (native app + NEXT_PUBLIC_ADMOB_ENABLED). The old fake "sponsor"
+            button (no ad SDK, instant credit) was a Play policy violation. */}
+        {adStatus && (
         <div className="p-4 rounded-2xl border border-slate-800 bg-slate-950/60">
           <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-2">
-            <Video className="w-4 h-4 text-indigo-400" /> Daily Reward Ads (12 Max / Day)
+            <Video className="w-4 h-4 text-indigo-400" /> Daily Reward Ads ({adStatus.dailyCap} Max / Day)
           </h3>
           <p className="text-[11px] text-slate-400 mb-3">
-            Each completed ad awards 100 chips directly to your wallet (Max 1,200 free chips per day).
-            Resets strictly at 00:00 UTC daily.
+            Each completed rewarded video awards {adStatus.rewardPerAd} chips directly to your wallet
+            (Max {adStatus.dailyCap * adStatus.rewardPerAd} free chips per day). Credits are verified
+            server-side via Google and post shortly after the ad finishes. Resets at 00:00 UTC.
           </p>
           <div className="flex items-center justify-between gap-2">
             <span className="text-[10px] font-mono text-slate-500">
-              Today: {adState.count}/12 ads · {adsRemaining} remaining
+              Today: {adStatus.adsToday}/{adStatus.dailyCap} ads · {adStatus.remaining} remaining
             </span>
             <button
               type="button"
               onClick={handleWatchAd}
-              disabled={adBusy || adsRemaining <= 0}
+              disabled={adBusy || adStatus.remaining <= 0}
               className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition disabled:opacity-50 flex items-center gap-1.5"
             >
               {adBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Video className="w-3.5 h-3.5" />}
-              {adBusy ? 'Buffering Sponsor Offer...' : adsRemaining <= 0 ? 'Daily Limit Reached (12/12)' : 'Watch Sponsor Ad (+100 Chips)'}
+              {adBusy ? 'Verifying ad reward...' : adStatus.remaining <= 0 ? 'Daily Limit Reached' : `Watch Ad (+${adStatus.rewardPerAd} Chips)`}
             </button>
           </div>
         </div>
+        )}
       </div>
 
       {/* Compliance notice */}

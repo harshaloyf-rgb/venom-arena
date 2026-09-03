@@ -17,19 +17,17 @@ interface DailyStreakTabProps {
   currentDayIndex: number;
   claimedCount: number;
   dailyBusy: boolean;
-  adBusy: boolean;
   freezeBusy: boolean;
   nextDailyTime: number;
   claimedMilestones: Set<number>;
   onDailyClaim: () => void;
-  onWatchAd: () => void;
   onBuyFreeze: () => void;
 }
 
 export function DailyStreakTab({
   player, alreadyClaimed, currentDayIndex, claimedCount,
-  dailyBusy, adBusy, freezeBusy, nextDailyTime,
-  claimedMilestones, onDailyClaim, onWatchAd, onBuyFreeze,
+  dailyBusy, freezeBusy, nextDailyTime,
+  claimedMilestones, onDailyClaim, onBuyFreeze,
 }: DailyStreakTabProps) {
   return (
     <div className="space-y-4 lg:space-y-1">
@@ -82,14 +80,9 @@ export function DailyStreakTab({
           </button>
         ) : (
           <div className="flex items-center gap-2 lg:gap-1 flex-wrap">
-            <button type="button" onClick={onDailyClaim} disabled={dailyBusy || adBusy}
+            <button type="button" onClick={onDailyClaim} disabled={dailyBusy}
               className="inline-flex items-center gap-1.5 px-5 py-2.5 lg:px-2 lg:py-1 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold rounded-xl text-xs lg:text-[11px] uppercase tracking-wider transition-all shadow-md shadow-emerald-950/40 disabled:opacity-50">
               {dailyBusy ? <Loader2 className="w-4 h-4 lg:w-3 lg:h-3 animate-spin" /> : <Flame className="w-4 h-4 lg:w-3 lg:h-3" />} Claim
-            </button>
-            <button type="button" onClick={onWatchAd} disabled={dailyBusy || adBusy}
-              className="inline-flex items-center gap-1.5 px-5 py-2.5 lg:px-2 lg:py-1 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs lg:text-[11px] uppercase tracking-wider transition-all shadow-md shadow-rose-950/40 disabled:opacity-50">
-              {adBusy ? <Loader2 className="w-4 h-4 lg:w-3 lg:h-3 animate-spin" /> : <Sparkles className="w-4 h-4 lg:w-3 lg:h-3" />}
-              {adBusy ? 'Loading...' : 'Watch Ad'}
             </button>
           </div>
         )}

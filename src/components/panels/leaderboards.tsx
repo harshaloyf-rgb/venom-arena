@@ -386,6 +386,8 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
   const [milestonesLoading, setMilestonesLoading] = useState(true);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const listRef = useRef<HTMLOListElement>(null);
+  // userTag -> rank from the previous successful fetch (for Move deltas)
+  const prevRanksRef = useRef<Map<string, number>>(new Map());
 
   const playerTag = player?.userTag;
 
@@ -434,15 +436,22 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
       };
 
       if (res.ok && data.entries && data.entries.length > 0) {
+        // Real rank movement (MAJOR fix: the Move column previously always
+        // rendered 0/dash while the rules claimed it showed movement).
+        // Deltas are computed against the PREVIOUS fetch of the same tab.
+        const prevRanks = prevRanksRef.current;
         const enriched: EnrichedEntry[] = data.entries.map((e) => ({
           ...e,
           isPlayer: e.userTag === playerTag,
           isHOF: false,
           championshipPrize: championshipPrizeForRank(e.rank),
-          rankChange: 0,
+          rankChange: prevRanks.has(e.userTag) ? (prevRanks.get(e.userTag)! - e.rank) : 0,
           region: e.region || regionOf(e.country || ''),
           isDemo: false,
         }));
+        const currentRanks = new Map<string, number>();
+        for (const e of data.entries) currentRanks.set(e.userTag, e.rank);
+        prevRanksRef.current = currentRanks;
 
         // Compute tie-break reasons by comparing consecutive entries
         for (let i = 1; i < enriched.length; i++) {
@@ -504,24 +513,41 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
     return () => clearInterval(id);
   }, [fetchBoard]);
 
-  // Live ticker
+  // Live ticker — REAL aggregate stats from /api/stats/live (MAJOR fix: this
+  // previously FABRICATED random "A player from X extracted Y chips" events
+  // every 8s — fake activity presented as live data).
   useEffect(() => {
-    const id = setInterval(() => {
+    let cancelled = false;
+    async function pollLiveStats() {
       if (!isRealData) return;
-      const names = ['A player', 'Someone', 'A challenger', 'A rival', 'A warrior'];
-      const name = names[Math.floor(Math.random() * names.length)];
-      const country = COUNTRIES[Math.floor(Math.random() * COUNTRIES.length)];
-      const chips = 50_000 + Math.floor(Math.random() * 5_000_000);
-      const templates = [
-        `\u{1F3A4} ${name} from ${country.name} ${country.flag} extracted ${chips.toLocaleString('en-IN')} chips!`,
-        `\u{1F4A5} ${name} ${country.flag} eliminated a rival and claimed ${(chips / 2).toLocaleString('en-IN')} chips!`,
-        `\u{1F451} ${name} ${country.flag} reached a new milestone tier!`,
-      ];
-      const text = templates[Math.floor(Math.random() * templates.length)];
-      const ts = new Date().toLocaleTimeString('en-US', { hour12: false, timeZone: 'UTC' }) + ' UTC';
-      setTickerMessages((prev) => [{ id: `c-${Date.now()}`, ts, text }, ...prev].slice(0, 20));
-    }, 8000);
-    return () => clearInterval(id);
+      try {
+        const res = await fetch('/api/stats/live', { cache: 'no-store' });
+        if (!res.ok) return;
+        const d = (await res.json()) as {
+          today?: { totalMatches?: number; extractions?: number; chipsEarned?: number; kills?: number };
+          totalPlayers?: number;
+        };
+        if (cancelled) return;
+        const t = d.today ?? {};
+        const parts: string[] = [];
+        if ((t.totalMatches ?? 0) > 0) parts.push(`\u{1F3AE} ${t.totalMatches!.toLocaleString('en-IN')} matches played today`);
+        if ((t.extractions ?? 0) > 0) parts.push(`\u{1F4B0} ${t.extractions!.toLocaleString('en-IN')} extractions`);
+        if ((t.chipsEarned ?? 0) > 0) parts.push(`${(t.chipsEarned ?? 0).toLocaleString('en-IN')}c banked`);
+        if ((t.kills ?? 0) > 0) parts.push(`\u{1F4A5} ${t.kills!.toLocaleString('en-IN')} eliminations`);
+        if ((d.totalPlayers ?? 0) > 0) parts.push(`\u{1F30D} ${d.totalPlayers!.toLocaleString('en-IN')} registered agents`);
+        if (parts.length === 0) return;
+        const ts = new Date().toLocaleTimeString('en-US', { hour12: false, timeZone: 'UTC' }) + ' UTC';
+        setTickerMessages([{ id: `live-${Date.now()}`, ts, text: ' ' + parts.join('  ·  ') }]);
+      } catch {
+        // stats endpoint unavailable — ticker simply stays empty (never fake)
+      }
+    }
+    void pollLiveStats();
+    const id = setInterval(() => void pollLiveStats(), 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, [isRealData]);
 
   // Sync selected country with player's country when it changes
@@ -562,16 +588,14 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
 
   function inspectPlayer(e: EnrichedEntry) {
     if (!onInspectPlayer) return;
-    const tier = milestoneTierForChips(e.bankedChips);
     onInspectPlayer({
       name: e.name, userTag: e.userTag, country: e.country,
       flag: countryFlag(e.country), bankedChips: e.bankedChips, level: e.level,
       clanTag: e.clanTag || '\u2014', clanName: 'Clan ' + (e.clanTag || '\u2014'),
-      achievedAt: new Date().toLocaleString('en-US', { timeZone: 'UTC' }) + ' UTC',
-      globalRank: e.rank, countryRank: Math.max(1, Math.floor(e.rank / 1.4)),
-      regionalRank: Math.max(1, Math.floor(e.rank / 2)),
+      // Only REAL rank data is passed (MAJOR fix — the dossier previously
+      // fabricated country/regional/global ranks with invented divisors).
+      globalRank: e.rank,
     });
-    void tier;
   }
 
   // Per-tab Find Me handler (with toast + scroll)
@@ -717,7 +741,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
       {activeTab === 'summit' && (
         <div className="space-y-4 lg:space-y-1">
           <TabToolbar
-            countLabel={isRealData ? `${filteredEntries.length} Country Champions` : (isAdmin ? 'Demo data \u2014 real champions appear when players compete' : 'No country champions yet. Be the first!')}
+            countLabel={isRealData ? `${filteredEntries.length} Country Champions` : 'No country champions yet. Be the first!'}
             tabColor="#f59e0b"
           />
           <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden lg:overflow-visible">
@@ -811,7 +835,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
       {activeTab === 'global' && (
         <div className="space-y-4 lg:space-y-1">
           <TabToolbar
-            countLabel={isRealData ? `Total Players: ${filteredEntries.length}` : (isAdmin ? 'Demo data \u2014 real rankings appear when players compete' : 'No players ranked yet. Play matches to appear here!')}
+            countLabel={isRealData ? `Total Players: ${filteredEntries.length}` : 'No players ranked yet. Play matches to appear here!'}
             tabColor="#06b6d4"
           />
 
@@ -924,7 +948,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
               </select>
             </div>
             <TabToolbar
-              countLabel={isRealData ? `${filteredEntries.length} players from ${countryName(selectedCountry)}` : (isAdmin ? `Demo \u2014 no real players ranked in ${countryName(selectedCountry)} yet` : `No players ranked in ${countryName(selectedCountry)} yet`)}
+              countLabel={isRealData ? `${filteredEntries.length} players from ${countryName(selectedCountry)}` : `No players ranked in ${countryName(selectedCountry)} yet`}
               tabColor="#8b5cf6"
             />
           </div>
@@ -1033,7 +1057,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
           </div>
 
           <TabToolbar
-            countLabel={isRealData ? undefined : (isAdmin ? 'Demo data \u2014 real regional rankings appear when players from these regions compete' : undefined)}
+            countLabel={isRealData ? undefined : undefined}
             tabColor="#ec4899"
           />
 
@@ -1145,8 +1169,8 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
 
           <TabToolbar
             countLabel={selectedTierId !== 'all' && selectedTierId !== 'rookie'
-              ? `Threshold: ${(MILESTONE_TIERS.find((t) => t.id === selectedTierId)?.minChips || 0).toLocaleString('en-IN')}c \u00b7 ${filteredEntries.length} players${!isRealData && isAdmin ? ' \u00b7 Demo data' : ''}`
-              : `${filteredEntries.length} players${!isRealData && isAdmin ? ' \u00b7 Demo data' : ''}`
+              ? `Threshold: ${(MILESTONE_TIERS.find((t) => t.id === selectedTierId)?.minChips || 0).toLocaleString('en-IN')}c \u00b7 ${filteredEntries.length} players`
+              : `${filteredEntries.length} players`
             }
             tabColor="#eab308"
           />

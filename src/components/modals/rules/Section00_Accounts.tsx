@@ -51,7 +51,7 @@ export function Section00_Accounts() {
           <li>Chips are <strong>free in-game currency</strong> — no real-world value</li>
           <li>Start with 150 chips. Earn more by: extracting from arenas, daily login rewards, chip store, or gifting from friends (+25 per friend)</li>
           <li>Buy into arenas costs chips. If you die, you lose your carried chips. If you extract, you bank them!</li>
-          <li>Need more chips? Visit the Chip Store (free packs) or claim Daily Rewards</li>
+          <li>Need more chips? Claim Daily Rewards, complete challenges — or buy chip packs in the Chip Store inside the mobile app</li>
         </ul>
       </InfoCard>
       <InfoCard title="🔑 Password Recovery (Forgot Password)" accent="text-cyan-300">

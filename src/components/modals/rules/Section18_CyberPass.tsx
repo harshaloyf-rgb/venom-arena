@@ -9,11 +9,11 @@ export function Section18_CyberPass() {
     <Section icon={<Award className="w-4 h-4" />} title="18. CYBER PASS (SEASON PASS)" accent="text-purple-400">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <InfoCard title="🏆 What Is the Cyber Pass?" accent="text-purple-300">
-          <p className="mb-1.5">The <strong>Cyber Pass</strong> is a progression-based reward track with <strong>20 tiers</strong> of exclusive cosmetics. As you level up by playing matches, new tiers unlock automatically.</p>
+          <p className="mb-1.5">The <strong>Cyber Pass</strong> is a progression-based reward track with <strong>20 tiers</strong> of rewards. You earn <strong>Pass XP</strong> by playing online matches (50% of match XP, up to 1,500 Pass XP per day) and new tiers unlock automatically as Pass XP accumulates.</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>Each tier requires a specific <strong>player level</strong> (Lv 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 15, 17, 19, 21, 23, 25, 28, 31, 34, 38)</li>
+            <li>Each tier requires a specific amount of <strong>Pass XP</strong> (growing per tier — see the progress bar in the Cyber Pass tab)</li>
             <li>Every tier has a <strong>Free reward</strong> + an <strong>Elite reward</strong></li>
-            <li>Rewards are <strong>real cosmetics</strong> — skins, trails, death effects, flags, and banners</li>
+            <li>Rewards are <strong>chips and exclusive snake skins</strong> (from 200c up to 10,000c per tier on the two tracks)</li>
           </ul>
         </InfoCard>
         <InfoCard title="⚡ How Do I Earn XP?" accent="text-emerald-300">
@@ -22,7 +22,7 @@ export function Section18_CyberPass() {
             <li><strong>Extract safely</strong> = XP earned (amount scales with chips extracted + kills)</li>
             <li><strong>Die / collide</strong> = XP still earned based on score and kills before death</li>
             <li>Complete <strong>daily challenges</strong> for bonus XP (+25 per challenge)</li>
-            <li>Your player level increases as XP accumulates</li>
+            <li>Your Pass XP increases with every online match (50% of match XP, capped at 1,500/day)</li>
           </ul>
         </InfoCard>
         <InfoCard title="💰 Free vs Elite Track" accent="text-amber-300">

@@ -23,7 +23,7 @@ export function Section04_Boost() {
             <li>Use to cut off rivals or escape danger</li>
             <li>Boosting burns earned mass faster than eating grows it</li>
             <li>Dropped food orbs can be collected by anyone</li>
-            <li>In head-on crashes a boosting snake wins — but only against snakes worth at least 4× your score</li>
+            <li>In head-on crashes a boosting snake wins — but only against snakes worth <strong>at most 4×</strong> your score (you must hold at least 25% of their score)</li>
             <li>Never boost into the red boundary — it kills instantly</li>
           </ul>
         </InfoCard>

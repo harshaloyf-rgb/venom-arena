@@ -36,6 +36,17 @@
         </provider>
     </application>
 
+    <!--
+      AdMob (Ads option C — real rewarded ads behind NEXT_PUBLIC_ADMOB_ENABLED).
+      Currently the Google TEST App ID: safe for dev builds, REQUIRED to replace
+      with your real App ID from the AdMob console before enabling ads in a
+      release build — see ADS-SETUP.md step 3. With ads disabled the SDK is
+      never initialized and no ads are requested.
+    -->
+    <meta-data
+        android:name="com.google.android.gms.ads.APPLICATION_ID"
+        android:value="ca-app-pub-3940256099942544~3347511713" />
+
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />

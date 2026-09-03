@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { toProfile } from '@/lib/player-helpers';
-import { getArenaById, levelFromXp, MILESTONE_TIERS, HALL_OF_FAME_TIERS, PASS_TIER_XP, PASS_DAILY_XP_CAP, PASS_XP_MULTIPLIER } from '@/lib/game-config';
+import { getArenaById, levelFromXp, MILESTONE_TIERS, HALL_OF_FAME_TIERS, PASS_TIER_XP, PASS_DAILY_XP_CAP, PASS_XP_MULTIPLIER, REFERRAL_REWARD, REFERRAL_MATCH_THRESHOLD } from '@/lib/game-config';
 import { utcToday, utcMonday } from '@/lib/date-utils';
 import { verifyInternalSecret } from '@/lib/api-helpers';
 
@@ -358,6 +358,36 @@ export async function POST(req: NextRequest) {
         where: { playerId: player.id, year: currentYear },
         data: { gamesPlayed: { increment: 1 } },
       });
+    }
+
+    // --- Referral progress (CRITICAL fix — was promised in UI but never tracked/paid):
+    // Every verified ONLINE match increments the referred player's counter.
+    // At the threshold BOTH players receive REFERRAL_REWARD chips, paid exactly
+    // once — the status claim (updateMany on status='pending') is the race-safe
+    // idempotency gate inside this same transaction.
+    if (arena.rewardMultiplier > 0) {
+      const referral = await tx.referral.findUnique({ where: { referredId: player.id } });
+      if (referral && referral.status === 'pending') {
+        const newMatches = referral.matchesPlayed + 1;
+        if (newMatches >= REFERRAL_MATCH_THRESHOLD) {
+          const claimed = await tx.referral.updateMany({
+            where: { id: referral.id, status: 'pending' },
+            data: { status: 'claimed', matchesPlayed: newMatches, reward: REFERRAL_REWARD },
+          });
+          if (claimed.count === 1) {
+            await tx.player.update({
+              where: { id: player.id },
+              data: { bankedChips: { increment: REFERRAL_REWARD }, totalEarned: { increment: REFERRAL_REWARD } },
+            });
+            await tx.player.update({
+              where: { id: referral.referrerId },
+              data: { bankedChips: { increment: REFERRAL_REWARD }, totalEarned: { increment: REFERRAL_REWARD } },
+            });
+          }
+        } else {
+          await tx.referral.update({ where: { id: referral.id }, data: { matchesPlayed: newMatches } });
+        }
+      }
     }
 
     // --- War scoring (if player is in a clan with an active war) ---

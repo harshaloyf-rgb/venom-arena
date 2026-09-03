@@ -85,6 +85,18 @@ cp android/keystore.properties.template android/keystore.properties   # fill it 
 
 4. Required graphic assets: app icon (already generated: `public/icons/icon-512.png`), 2+ phone screenshots (take from the game), 1024×500 feature graphic.
 
+## Phase D2 — Monetization setup (IAP + rewarded ads, optional)
+
+Both systems are fully implemented server-authoritative and ship **dark** — nothing
+is visible or earnable until you complete the respective setup guide:
+
+- **Real IAP (chip store):** follow `IAP-SETUP.md` — Play Console products +
+  service account, App Store Connect products, env vars, then `npm i && npx cap sync android`.
+- **Rewarded ads (AdMob):** follow `ADS-SETUP.md` — AdMob app + rewarded ad unit,
+  set the SSV callback URL to `https://YOUR-DOMAIN/api/ads/ssv`, replace the TEST
+  App ID in `AndroidManifest.xml`, set `NEXT_PUBLIC_ADMOB_ENABLED=true` + ad unit env,
+  then rebuild. With the flag off no ad UI renders anywhere.
+
 ## Phase E — Every future release
 
 1. Bump `VERSION` in `public/sw.js` (cache-bust for returning players).

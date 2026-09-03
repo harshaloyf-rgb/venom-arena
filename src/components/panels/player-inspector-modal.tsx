@@ -176,9 +176,12 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   const clanRank = profile?.clanRank || null;
   const avatarSrc = profile?.avatar || null;
 
-  const globalRank = p.globalRank ?? Math.max(1, 15 - Math.floor(p.level / 3));
-  const countryRank = p.countryRank ?? Math.max(1, Math.floor(globalRank / 1.4));
-  const regionalRank = p.regionalRank ?? Math.max(1, Math.floor(globalRank / 2));
+  // MAJOR fix: ranks are shown ONLY when real data was passed in by the
+  // caller (or the public profile). The old fallback INVENTED ranks —
+  // e.g. a level-45 player with no rank data displayed "#1 in the world".
+  const globalRank = p.globalRank ?? null;
+  const countryRank = p.countryRank ?? null;
+  const regionalRank = p.regionalRank ?? null;
 
   const friendsCount = profile?.friendsCount ?? null;
   const followersCount = profile?.followersCount ?? 0;
@@ -394,17 +397,23 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                 <span>\u2022</span>
                 <span style={{ color: milestone.color }}>{milestone.badge}</span>
               </div>
-              {/* Rank pills + social counts + timeline - single row */}
+              {/* Rank pills (only when REAL data exists) + social counts — single row */}
               <div className="flex items-center gap-1 mt-1 flex-wrap">
+                {globalRank != null && (
                 <span className="text-[9px] font-mono bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-px rounded">
                   \uD83C\uDFC6 #{globalRank}
                 </span>
+                )}
+                {countryRank != null && (
                 <span className="text-[9px] font-mono bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-1.5 py-px rounded">
                   {flag} #{countryRank}
                 </span>
+                )}
+                {regionalRank != null && (
                 <span className="text-[9px] font-mono bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 px-1.5 py-px rounded">
                   \uD83C\uDF0D #{regionalRank}
                 </span>
+                )}
                 <span className="text-[9px] text-slate-700 mx-0.5">|</span>
                 <span className="text-[9px] font-mono text-slate-400">
                   <Users className="w-2.5 h-2.5 inline text-indigo-400" /> {friendsCount != null ? friendsCount : (profileLoading ? '...' : '\u2014')}

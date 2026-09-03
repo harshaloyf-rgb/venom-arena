@@ -27,14 +27,22 @@ export async function POST() {
         throw new Error('ALREADY_CLAIMED');
       }
 
-      // Determine streak: if last claim was yesterday, increment; else reset to day 0
+      // Determine streak: if last claim was yesterday, increment.
+      // CRITICAL fix (was a placebo): a purchased Streak Freeze is now actually
+      // CONSUMED — if exactly one day was missed (diffDays === 2) and the player
+      // owns a freeze, the streak continues and one freeze is burned. Freezes
+      // only protect a single missed day; longer gaps still reset the streak.
       let newStreak = 0;
+      let freezeUsed = false;
       if (player.lastDailyClaim) {
         const last = new Date(player.lastDailyClaim + 'T00:00:00Z');
         const todayDate = new Date(today + 'T00:00:00Z');
         const diffDays = Math.round((todayDate.getTime() - last.getTime()) / 86400000);
         if (diffDays === 1) newStreak = player.dailyStreak + 1;
-        else newStreak = 0; // missed a day
+        else if (diffDays === 2 && player.streakFreezes > 0) {
+          newStreak = player.dailyStreak + 1;
+          freezeUsed = true;
+        } else newStreak = 0; // missed a day (no freeze, or gap > 1 day)
       }
 
       // Base reward from 7-day cycle
@@ -59,6 +67,7 @@ export async function POST() {
           totalEarned: { increment: reward },
           dailyStreak: newStreak,
           lastDailyClaim: today,
+          ...(freezeUsed ? { streakFreezes: { decrement: 1 } } : {}),
         },
       });
       await tx.dailyClaim.create({
@@ -101,6 +110,7 @@ export async function POST() {
             reward,
             baseReward,
             newStreak,
+            freezeUsed,
             lvlMult,
             seasonal,
             milestoneResult: { milestone: newStreak, ...milestoneDef },
@@ -113,6 +123,7 @@ export async function POST() {
         reward,
         baseReward,
         newStreak,
+        freezeUsed,
         lvlMult,
         seasonal,
         milestoneResult: null,
@@ -124,6 +135,7 @@ export async function POST() {
       reward: result.reward,
       baseReward: result.baseReward,
       streak: result.newStreak,
+      freezeUsed: result.freezeUsed,
       levelMultiplier: result.lvlMult,
       seasonalBonus: result.seasonal
         ? { multiplier: result.seasonal.multiplier, label: result.seasonal.label }

@@ -41,7 +41,7 @@ export function Section12_Leaderboards() {
           <p className="mb-1.5">Shows the <strong>#1 ranked player from each country</strong>, sorted by banked chips. Only one champion per nation — like the Olympics.</p>
           <ul className="list-disc pl-4 space-y-0.5">
             <li>Columns: Rank, Move, Country Champion (name + tag), Clan Tag, Nation (flag + name), Chips, Status</li>
-            <li><strong>Move column:</strong> Shows rank movement (up/down/unchanged) since last refresh</li>
+            <li><strong>Move column:</strong> Shows rank movement (up/down/unchanged) compared to the previous refresh</li>
             <li><strong>HOF badge (🏆):</strong> Players in the Hall of Fame get a gold Award icon next to their name</li>
             <li><strong>Status column:</strong> Championship prize tier (e.g. &quot;👑 World Champion&quot; for #1, &quot;🥈 Elite 10&quot; for #2-10)</li>
             <li>Tie-break applies: if two country champions have equal chips, higher level wins, then earlier join date.</li>

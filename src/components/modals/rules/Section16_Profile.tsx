@@ -28,12 +28,9 @@ export function Section16_Profile() {
         <InfoCard title="🎮 Cosmetics Loadout" accent="text-amber-300">
           <p className="mb-1.5">Your active cosmetic items are displayed on the Stats tab:</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong>Skin</strong> — Your snake&apos;s appearance</li>
-            <li><strong>Trail</strong> — Visual effect behind your snake</li>
-            <li><strong>Death FX</strong> — Explosion effect when you die</li>
-            <li><strong>Flag</strong> — Custom flag cosmetic (separate from your Faction Region)</li>
-            <li><strong>Banner</strong> — Background banner cosmetic</li>
-            <li>All cosmetics are changeable anytime from the Cosmetics Shop</li>
+            <li><strong>Skin</strong> — Your snake&apos;s appearance (season-pass skins, premium designs, or your own Genetic Lab creations)</li>
+            <li><strong>Face cosmetics</strong> — hats, eyes and mouths rendered on your snake&apos;s head (equipped locally, visible on your own snake)</li>
+            <li>All cosmetics are changeable anytime from the Shop &amp; Lab</li>
           </ul>
         </InfoCard>
       </div>

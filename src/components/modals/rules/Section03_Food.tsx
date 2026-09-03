@@ -15,7 +15,7 @@ export function Section03_Food() {
             <li><strong>Medium:</strong> 3 points, blue glow (4% chance)</li>
             <li><strong>Large:</strong> 5 points, pink glow (3% chance — rare)</li>
           </ul>
-          <p className="mt-1">Eating food increases score and body length. Growth rate is 1/4 of food value. ALL snakes eat food orbs. Food orbs do NOT affect carried chips.</p>
+          <p className="mt-1">Eating food increases score and body length. Length growth is logarithmic in your score — early food grows you fast, later food adds length more gradually. ALL snakes eat food orbs. Food orbs do NOT affect carried chips.</p>
         </InfoCard>
         <InfoCard title="💀 Death Food Orbs (Body Drop)" accent="text-rose-300">
           <ul className="list-disc pl-4 space-y-0.5">
