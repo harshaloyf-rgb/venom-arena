@@ -8,7 +8,7 @@ import { createCamera, updateCameraInterpolated, getViewport } from '@/lib/snake
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
 import { getPlayerSkinAsset, registerSkinAsset, registerDefaultSkins } from '@/lib/snake/skin-registry';
 import { type GameState, type Camera, type Viewport } from '@/lib/snake/types';
-import { FIXED_DT } from '@/lib/snake/config';
+import { FIXED_DT, resolveOfflineBotTarget, scaleBotMix } from '@/lib/snake/config';
 import { drawDeathOverlay, drawEliminatedBanner, drawControlsHint } from './renderer';
 import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrameWithDpr } from './render-snake-atlas';
 import { cleanupDeadSnakeParticles, renderBackground, renderHUD, handleMinimapClick, resetMinimapZoom } from './hud';
@@ -200,6 +200,20 @@ export default function GameCanvas({
     // gameTick fills them in gradually at 8/tick ≈ 480/sec → full in ~2s.
     if (mode === 'offline') {
       gameStateRef.current.botsEnabled = true;
+      // FIX BOT-SCALE (999 bots too heavy for phones/desktop): resolve the
+      // population from a localStorage override (venom:bot-count) or a device
+      // heuristic, then scale this session's arenaConfig botMix proportionally.
+      // respawnDeadBots derives its target from the mix sum, so this is the
+      // single lever for spawn + respawn + steady-state population. Desktop
+      // with 8+ cores keeps the full 999; phones get 350.
+      try {
+        const { count } = resolveOfflineBotTarget();
+        const base = gameStateRef.current.arenaConfig;
+        const scaledMix = scaleBotMix(base.botMix as { predator: number; coiler: number; baiter: number; interceptor: number; grazer: number; trapper: number; ranked: number }, count);
+        if (scaledMix !== base.botMix) {
+          gameStateRef.current.arenaConfig = { ...base, botMix: scaledMix as typeof base.botMix };
+        }
+      } catch { /* heuristic unavailable — keep full mix */ }
     }
     cameraRef.current = createCamera(0, 0);
     isDeadRef.current = false;
@@ -358,9 +372,17 @@ export default function GameCanvas({
       }
 
       // ── Extraction progress tracking (shared) ──
+      // FIX EXTRACT-JITTER: measure the snake's ACTUAL smoothed heading
+      // (post-turn-rate), not the raw mouse-derived target angle. A stationary
+      // mouse near the screen center wobbles the raw angle past the reset
+      // threshold whenever the camera catches up after a frame drop — the ring
+      // kept snapping back to 0% ("moving front and back"). The smoothed
+      // heading only changes when the snake PHYSICALLY turns, and it is the
+      // same signal the online server validates against.
       updateExtractionProgress(
         extractionRef.current, input.isExtracting(), isDeadRef.current,
-        inputState.targetAngle, frameElapsed, onExit,
+        gameState.player?.alive ? gameState.player.angle : inputState.targetAngle,
+        frameElapsed, onExit,
       );
 
       // Dismiss controls on first input
@@ -514,8 +536,10 @@ export default function GameCanvas({
       }
 
       // Extraction progress ring on snake head (shared)
+      // FIX EXTRACT-SHAKE: pass the same render alpha the body renderer uses so
+      // the ring rides the INTERPOLATED head instead of the raw tick position.
       if (extractionRef.current.active && extractionRef.current.progress > 0 && gameState.player && gameState.player.alive) {
-        drawExtractRing(ctx, gameState.player, cameraRef.current, viewport, extractionRef.current.progress);
+        drawExtractRing(ctx, gameState.player, cameraRef.current, viewport, extractionRef.current.progress, { alpha });
       }
 
       // HUD

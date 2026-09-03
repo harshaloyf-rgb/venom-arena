@@ -1112,10 +1112,17 @@ class ArenaInstance {
       // Save head position for potential spectator mode
       player.spectatorHx = snake.path.headX;
       player.spectatorHy = snake.path.headY;
-      // FIX E2-v2: sample (targetAngle, boost) each tick for extraction
+      // FIX E2-v2: sample the snake's ACTUAL heading each tick for extraction
       // steady-course validation (3s window at 60Hz = 180 pairs = 360 entries).
-      // player.input is exactly what moveSnake consumed this tick.
-      player.extractSamples.push(player.input.angle, player.input.boost ? 1 : 0);
+      // FIX EXTRACT-JITTER (paired with the client extraction.ts change): the
+      // old sample was the RAW client input angle — a stationary mouse near
+      // screen center wobbles that past any tolerance whenever the camera
+      // catches up after a frame drop, so legitimate holds kept failing
+      // server validation. snake.angle is post-turn-rate-limit (the snake
+      // physically cannot turn faster), noise-free, and exactly what the
+      // client ring now measures. A real course change still turns the snake
+      // continuously and fails the 0.12 window; boost can't hide inside it.
+      player.extractSamples.push(snake.angle, player.input.boost ? 1 : 0);
       if (player.extractSamples.length > 360) {
         player.extractSamples.splice(0, player.extractSamples.length - 360);
       }

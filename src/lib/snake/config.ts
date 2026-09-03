@@ -541,6 +541,71 @@ export function getArenaConfig(arenaId?: string): ArenaConfig {
 }
 
 // ============================================================================
+// 13b. ADAPTIVE OFFLINE BOT POPULATION (BOT-SCALE)
+// ============================================================================
+// The 999-bot default simulated the full arena on the CLIENT CPU (movement,
+// AI, collisions, food) and was too heavy for phones — and mid-range laptops
+// when a big crowd gathered near the player. The population is now adaptive:
+//   • localStorage override 'venom:bot-count' (user control, 50-999)
+//   • otherwise a device heuristic (cores / memory / mobile UA)
+// respawns and leaderboard derive their target from the scaled botMix sum,
+// so scaling the mix is the single lever for the whole simulation.
+// ============================================================================
+
+export const OFFLINE_BOT_TARGETS = { high: 999, medium: 600, low: 350 } as const;
+
+/** Resolve the offline bot population for THIS device. */
+export function resolveOfflineBotTarget(): { count: number; source: 'override' | 'device' } {
+  try {
+    const raw = localStorage.getItem('venom:bot-count');
+    if (raw) {
+      const n = parseInt(raw, 10);
+      if (Number.isFinite(n) && n >= 50 && n <= 999) return { count: n, source: 'override' };
+    }
+  } catch { /* private mode */ }
+  let cores = 4;
+  try { cores = navigator.hardwareConcurrency || 4; } catch { /* old browser */ }
+  let memGB = 4;
+  try { memGB = (navigator as unknown as { deviceMemory?: number }).deviceMemory ?? 4; } catch { /* old browser */ }
+  let mobile = false;
+  try { mobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent); } catch { /* no UA */ }
+  // Phones and weak cores: low crowd. Mid laptops: medium. Desktop: full 999.
+  if (mobile || cores <= 4 || memGB <= 2) return { count: OFFLINE_BOT_TARGETS.low, source: 'device' };
+  if (cores <= 6 || memGB <= 4) return { count: OFFLINE_BOT_TARGETS.medium, source: 'device' };
+  return { count: OFFLINE_BOT_TARGETS.high, source: 'device' };
+}
+
+/** Scale a bot mix proportionally down to `targetTotal` (never scales UP —
+ *  mixes are already at most 999). Keeps at least 1 ranked bot so the
+ *  leaderboard giants still exist on low-end devices. */
+export function scaleBotMix(
+  mix: { predator: number; coiler: number; baiter: number; interceptor: number; grazer: number; trapper: number; ranked: number },
+  targetTotal: number,
+): { predator: number; coiler: number; baiter: number; interceptor: number; grazer: number; trapper: number; ranked: number } {
+  const total = mix.predator + mix.coiler + mix.baiter + mix.interceptor + mix.grazer + mix.trapper + mix.ranked;
+  if (targetTotal >= total || total <= 0) return mix;
+  const ratio = targetTotal / total;
+  const out = {
+    ranked: Math.max(1, Math.round(mix.ranked * ratio)),
+    predator: 0, coiler: 0, baiter: 0, interceptor: 0, grazer: 0, trapper: 0,
+  };
+  const rest: Array<keyof typeof out> = ['predator', 'coiler', 'baiter', 'interceptor', 'grazer', 'trapper'];
+  let used = out.ranked;
+  for (let i = 0; i < rest.length; i++) {
+    const k = rest[i];
+    if (i === rest.length - 1) {
+      // Last key absorbs the rounding remainder so the sum EXACTLY equals target
+      out[k] = Math.max(0, targetTotal - used);
+      break;
+    }
+    const v = Math.max(1, Math.floor((mix[k] as number) * ratio));
+    out[k] = v;
+    used += v;
+  }
+  return out;
+}
+
+// ============================================================================
 // 14. BOT SKIN PALETTE — shared color pairs for bot snake appearance
 // ============================================================================
 // Used by both offline (engine.ts) and online (game-server) to assign

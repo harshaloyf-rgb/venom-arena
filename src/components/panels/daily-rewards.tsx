@@ -193,9 +193,17 @@ export function DailyRewards({ onToast }: ClaimsProps) {
       const res = await fetch('/api/player/hourly', { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { notify((data as { error?: string })?.error || 'Hourly claim failed.', 'error', onToast); return; }
-      const d = data as { reward?: number };
+      const d = data as { reward?: number; levelMultiplier?: number };
       setFlyReward(d.reward ?? 0);
-      notify(`Hourly micro-claim: +${fmtChips(d.reward ?? 0)} CHIPS!`, 'success', onToast);
+      // FIX CLAIMS-RANGE: show the multiplier breakdown so the paid amount is
+      // never a surprise vs the displayed base range (e.g. +456c at L31+ =
+      // base 114 × 4× level bonus).
+      notify(
+        d.levelMultiplier && d.levelMultiplier > 1
+          ? `Hourly micro-claim: +${fmtChips(d.reward ?? 0)} CHIPS (includes ×${d.levelMultiplier} level bonus)!`
+          : `Hourly micro-claim: +${fmtChips(d.reward ?? 0)} CHIPS!`,
+        'success', onToast,
+      );
       await refresh();
       fetchHourly();
     } catch { notify('Network error.', 'error', onToast); }
@@ -338,6 +346,7 @@ export function DailyRewards({ onToast }: ClaimsProps) {
           hourlyTimeLeft={hourlyTimeLeft}
           hourlyBusy={hourlyBusy}
           onHourlyClaim={() => void handleHourlyClaim()}
+          level={player?.level ?? 1}
         />
       )}
 

@@ -25,6 +25,7 @@ import { SpatialHash, type SpatialEntity } from './spatial-hash';
 import { SPAWN_PROTECTION_MS, HEAD_ON_HEAD_BOOST_WINS, HEAD_ON_BOOST_MIN_SCORE_FRACTION, SNAKE_RADIUS, SEGMENT_SPACING } from './config';
 import { collectFreezeAnchors, nearestAnchorDistSq, isFreezeDistSq, type FreezeAnchor } from './freeze';
 import { getBotIsHunter } from './bot-ai';
+import { perfEnter, perfExit } from './perf-ticks';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -233,6 +234,7 @@ export function checkCollisions(
   const hasAnchors = anchors.length > 0;
 
   // ── Build body spatial hash (broad phase) ──
+  perfEnter('coll.hashBuild');
   bodyHash.clear();
   scratch.radius = SNAKE_RADIUS;
   for (const [, snake] of snakes) {
@@ -276,9 +278,22 @@ export function checkCollisions(
 
   // ── Build head hash (for head-on-head broad phase) ──
   // T3: inlined head-dot math (getHeadDot allocated {x,y} per snake per tick)
+  perfExit('coll.hashBuild');
+  perfEnter('coll.headHash');
   headHash.clear();
+  // PERF HEAD-CULL (offline lag fix): inserting ALL heads (up to 1000) bloated
+  // the head-hash cellMap across the whole 29K-radius map, slowing every
+  // Map.get during both build and query. Only heads within HEAD_HASH_RANGE of
+  // a player anchor can ever participate in a head-on-head kill: non-hunter
+  // bots beyond BOT_FREEZE_DIST (2000px) never self-initiate crossings, and
+  // hunters chase the player (anchor) — the same visibility approximation the
+  // 6500px bot-vs-bot body cull already accepts. Hunters-vs-hunters beyond
+  // this range is off-screen for every player and cannot involve the player.
+  const HEAD_HASH_RANGE_SQ = 7000 * 7000;
   for (const [, snake] of snakes) {
     if (!snake.alive) continue;
+    if (hasAnchors && snake.isBot &&
+        nearestAnchorDistSq(anchors, snake.path.headX, snake.path.headY) > HEAD_HASH_RANGE_SQ) continue;
     scratch.x = snake.path.headX + Math.cos(snake.angle) * DOT_OFF;
     scratch.y = snake.path.headY + Math.sin(snake.angle) * DOT_OFF;
     scratch.radius = SNAKE_RADIUS;
@@ -287,6 +302,7 @@ export function checkCollisions(
   }
 
   // Reuse pre-allocated Sets/Maps (Issue #6 GC fix)
+  perfExit('coll.headHash');
   const deadSnakes = _deadSnakesSet;
   deadSnakes.clear();
   const killEvents: KillEvent[] = [];

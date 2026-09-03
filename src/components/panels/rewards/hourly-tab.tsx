@@ -1,13 +1,19 @@
 'use client';
 
 import { Clock, Gift, Loader2 } from 'lucide-react';
-import { HOURLY_REWARD_MIN, HOURLY_REWARD_MAX } from '@/lib/game-config';
+import { HOURLY_REWARD_MIN, HOURLY_REWARD_MAX, levelRewardMultiplier } from '@/lib/game-config';
 
 interface HourlyTabProps {
   hourlyCanClaim: boolean;
   hourlyTimeLeft: number;
   hourlyBusy: boolean;
   onHourlyClaim: () => void;
+  /** Player level — drives the reward multiplier shown in the UI.
+   *  FIX CLAIMS-RANGE: the tab previously displayed only the BASE 10–150c
+   *  range while the API multiplies the roll by the level bonus (up to 4×),
+   *  so a level-31+ player saw "10–150" but received e.g. 456c and reported
+   *  it as wrong. The displayed range is now the REAL effective range. */
+  level: number;
 }
 
 function timeLabel(ms: number): string {
@@ -18,12 +24,18 @@ function timeLabel(ms: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export function HourlyTab({ hourlyCanClaim, hourlyTimeLeft, hourlyBusy, onHourlyClaim }: HourlyTabProps) {
+export function HourlyTab({ hourlyCanClaim, hourlyTimeLeft, hourlyBusy, onHourlyClaim, level }: HourlyTabProps) {
+  const mult = levelRewardMultiplier(level);
+  const effMin = Math.floor(HOURLY_REWARD_MIN * mult);
+  const effMax = Math.floor(HOURLY_REWARD_MAX * mult);
   return (
     <div className="space-y-4 lg:space-y-1">
       <div className="rounded-xl border border-cyan-500/20 bg-cyan-950/10 p-4 lg:p-1 text-[11px] text-cyan-200 leading-relaxed">
         <strong>HOURLY MICRO-CLAIMS</strong><br />
-        Claim {HOURLY_REWARD_MIN}–{HOURLY_REWARD_MAX} chips every hour. Small but steady — keeps your wallet alive between matches!
+        Claim {effMin}–{effMax} chips every hour. Small but steady — keeps your wallet alive between matches!
+        {mult > 1 && (
+          <> Base roll is {HOURLY_REWARD_MIN}–{HOURLY_REWARD_MAX}c, multiplied ×{mult} by your <strong>Level {level}</strong> bonus.</>
+        )}
       </div>
 
       <div className="bg-slate-950/40 rounded-2xl border border-slate-800 p-6 lg:p-2 flex flex-col items-center gap-4 lg:gap-1">
@@ -35,7 +47,7 @@ export function HourlyTab({ hourlyCanClaim, hourlyTimeLeft, hourlyBusy, onHourly
             <p className="text-sm lg:text-[11px] text-cyan-300 font-bold">Micro-claim is ready!</p>
             <button type="button" onClick={onHourlyClaim} disabled={hourlyBusy}
               className="inline-flex items-center gap-2 lg:gap-1 px-6 py-3 lg:px-2 lg:py-1 bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-400 hover:to-teal-400 text-slate-950 font-bold rounded-xl text-sm lg:text-[11px] uppercase tracking-wider transition-all shadow-lg shadow-cyan-950/40 disabled:opacity-50">
-              {hourlyBusy ? <Loader2 className="w-5 h-5 lg:w-3 lg:h-3 animate-spin" /> : <Gift className="w-5 h-5 lg:w-3 lg:h-3" />} Claim {HOURLY_REWARD_MIN}–{HOURLY_REWARD_MAX}c
+              {hourlyBusy ? <Loader2 className="w-5 h-5 lg:w-3 lg:h-3 animate-spin" /> : <Gift className="w-5 h-5 lg:w-3 lg:h-3" />} Claim {effMin}–{effMax}c
             </button>
           </>
         ) : (

@@ -634,11 +634,20 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       const isBoosting = inputState.boosting;
       sockRef.current?.sendInput(inputState.targetAngle, isBoosting);
 
+      // ── Build synthetic GameState for shared renderers ──
+      const gameState = mgr.buildGameState(snap, ac);
+
       // ── Extraction progress (client-side, same as offline) ──
       // When ring completes, emit 'extract' to server instead of calling onExit
       // FIX E4: use REAL frame time — the hardcoded 16ms made the "3-second"
       // extraction ring framerate-dependent (≈1.6s at 120Hz, ≈6s at 30fps).
       // Same capped-elapsed pattern as the offline loop in GameCanvas.tsx.
+      // FIX EXTRACT-JITTER: measure the SERVER-SMOOTHED heading (the adapter's
+      // snapshot angle, BEFORE the render-only heading echo below) instead of
+      // the raw mouse target angle. The camera-lag wobble of a stationary
+      // mouse kept resetting the ring ("moving front and back"); the server's
+      // snake.angle has the turn-rate limiter baked in, so client ring and
+      // server validation now measure the identical physical signal.
       const nowMs = performance.now();
       const frameElapsed = Math.min(Math.max(nowMs - lastFrameMsRef.current, 0), 100);
       lastFrameMsRef.current = nowMs;
@@ -648,12 +657,10 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         // boosted ticks in the hold window, so mirror that client-side (no
         // confusing "You cannot boost while extracting" after a full ring).
         input.isExtracting() && !isBoosting, isDeadRef.current,
-        inputState.targetAngle, frameElapsed,
+        gameState.player?.alive ? gameState.player.angle : inputState.targetAngle,
+        frameElapsed,
         () => { sockRef.current?.sendExtract(); },
       );
-
-      // ── Build synthetic GameState for shared renderers ──
-      const gameState = mgr.buildGameState(snap, ac);
 
       // FIX O3-lite: heading echo — the head sprite aims where you point
       // RIGHT NOW instead of waiting for the next snapshot to rotate the
@@ -795,7 +802,9 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
 
       // ── Extraction progress ring (same as offline) ──
       if (extractionRef.current.active && extractionRef.current.progress > 0 && gameState.player && gameState.player.alive) {
-        drawExtractRing(ctx, gameState.player, camera, viewport, extractionRef.current.progress);
+        // FIX EXTRACT-SHAKE: same render alpha as the body interpolation, so the
+        // ring pins to the visible head instead of the raw 20Hz snapshot point.
+        drawExtractRing(ctx, gameState.player, camera, viewport, extractionRef.current.progress, { alpha: mgr.getPlayerAlpha() });
       }
 
       // ── HUD (same as offline) ──

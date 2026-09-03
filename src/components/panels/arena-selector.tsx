@@ -32,6 +32,7 @@ import {
 } from './_panel-primitives';
 
 import { chipShort, chipFull } from '@/lib/format-chips';
+import { resolveOfflineBotTarget } from '@/lib/snake/config';
 
 // ── Difficulty filter groups ──────────────────────────────────────────
 
@@ -63,6 +64,15 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
   const [arenaStats, setArenaStats] = useState<
     Record<string, ArenaStats>
   >({});
+  // BOT-SCALE: the offline population is adaptive now (device heuristic or a
+  // venom:bot-count override), so the detail card shows the REAL number this
+  // device will simulate instead of a hardcoded "1,000 Bots".
+  const [offlineBotLabel] = useState(() => {
+    try {
+      const { count, source } = resolveOfflineBotTarget();
+      return `${count.toLocaleString()} Bots${source === 'device' ? ' (auto)' : ''}`;
+    } catch { return 'Adaptive'; }
+  });
 
   // Poll live arena stats every 5 seconds while in online mode.
   useEffect(() => {
@@ -432,7 +442,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
             <DetailRow
               icon={<Users className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-slate-500" />}
               label="Bot Population"
-              value={`${selectedTier.botsCount.toLocaleString()} Bots`}
+              value={!isOnline ? offlineBotLabel : `${selectedTier.botsCount.toLocaleString()} Bots`}
               valueClass="text-cyan-400"
             />
 

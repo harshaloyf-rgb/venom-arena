@@ -13,6 +13,7 @@ import {
   BOT_TYPE_COLORS, type BotType, type BotSpawnConfig, DEFAULT_BOT_MIX,
 } from './bot-ai';
 import { collectFreezeAnchors, nearestAnchorDistSq, isFreezeDistSq, type FreezeAnchor } from './freeze';
+import { perfEnter, perfExit, perfTickDone } from './perf-ticks';
 import { SKIN_PRESETS } from '@/components/panels/cosmetics/cosmetics-types';
 import {
   // MOVEMENT
@@ -112,6 +113,10 @@ const _foodHashScratch: SpatialEntity = { x: 0, y: 0, radius: 0, id: 0 };
 const _magnetizedIds: number[] = [];
 // Pre-allocated eaten IDs set (Issue #6 GC fix — avoids new Set() per tick)
 const _eatenIdsSet = new Set<number>();
+
+// PERF FOOD-RESYNC: safety-net resync interval (5s at 60Hz). The hash is
+// maintained incrementally on every mutation — this only bounds any drift.
+const FOOD_HASH_RESYNC_INTERVAL = 300;
 
 function rebuildFoodHash(fh: SpatialHash, foods: FoodOrb[]): void {
   fh.clear();
@@ -508,6 +513,7 @@ function checkFoodEating(
   // Rebuild hash from scratch (called every N ticks per arena config)
   // Uses module-level _foodHashScratch to avoid per-rebuild object allocation.
   if (!useCachedHash) {
+    perfEnter('food.rebuild');
     fh.clear();
     fvc.clear();
     _cachedFoodById.clear();
@@ -520,6 +526,7 @@ function checkFoodEating(
       fvc.set(f.id, f.value);
       _cachedFoodById.set(f.id, f);
     }
+    perfExit('food.rebuild');
   }
 
   const foodById = _cachedFoodById;
@@ -528,6 +535,9 @@ function checkFoodEating(
   eatenIds.clear();
   const speedRange = FOOD_MAGNET_MAX_SPEED - FOOD_MAGNET_MIN_SPEED;
   const zoneWidth = MAGNET_PULL_DIST - MAGNET_DEATH_DIST;
+
+  perfEnter('food.loop');
+  let _perfCandidates = 0;
 
   for (const snake of snakes) {
     if (!snake.alive) continue;
@@ -542,6 +552,7 @@ function checkFoodEating(
         isFreezeDistSq(nearestAnchorDistSq(freezeAnchors, hx, hy))) continue;
 
     const nearby = fh.query(hx, hy, MAGNET_PULL_DIST);
+    _perfCandidates += nearby.length;
     for (let i = 0; i < nearby.length; i++) {
       const entity = nearby[i];
       const fid = entity.id as number;
@@ -582,6 +593,8 @@ function checkFoodEating(
       }
     }
   }
+  if ((globalThis as any).__PERF) (globalThis as any).__PERF_FOOD_CANDIDATES = _perfCandidates;
+  perfExit('food.loop');
   return eatenIds;
 }
 
@@ -705,6 +718,7 @@ export function seedInitialFood(state: GameState): boolean {
 export function gameTick(state: GameState, input: InputState, _dt: number): KillEvent[] {
   state.tickCount++;
   const now = performance.now();
+  perfEnter('tick.total');
   const ac = state.arenaConfig;
   const foodIdRef = { value: state.nextFoodId };
 
@@ -728,7 +742,9 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   // 1. Update bot AI (compute target angles + boost decisions) — offline only
   if (state.botsEnabled && state.tickCount % ac.aiTickThrottle === 0) {
     // PERF: Pass foodHash so AI uses spatial food queries instead of random sampling
+    perfEnter('phase.botAI');
     updateAllBotAI(state, foodHash);
+    perfExit('phase.botAI');
   }
 
   // Collect boundary-killed snakes (separate from collision kills)
@@ -736,9 +752,12 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
 
   // G1 (Tier-2): freeze anchors — alive real players. Collected once per tick,
   // shared by the movement loop and the food-eating pass below.
+  perfEnter('phase.freezeAnchors');
   const freezeAnchors = collectFreezeAnchors(state.snakes);
+  perfExit('phase.freezeAnchors');
 
   // 2. Move player
+  perfEnter('phase.moveSnakes');
   const player = state.player;
   if (player && player.alive) {
     const hitWall = moveSnake(player, input.targetAngle, input.boosting, now, moveCtx);
@@ -768,6 +787,7 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
       if (hitWall) boundaryDead.push(id);
     }
   }
+  perfExit('phase.moveSnakes');
 
   // 3b. Kill boundary-hit snakes (no food drop)
   for (const deadId of boundaryDead) {
@@ -782,8 +802,19 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   }
 
   // 4. Check food eating (rebuild spatial hash per arena config)
-  const rebuildHash = state.tickCount % ac.foodHashRebuildInterval === 0;
-  const eatenIds = checkFoodEating(state.snakes.values(), state.foods, foodHash, foodValueCache, now, rebuildHash, freezeAnchors);
+  perfEnter('phase.foodEat');
+  // PERF FOOD-RESYNC (offline lag fix): useCachedHash must be TRUE on normal
+  // ticks and FALSE only on the rare resync tick. The old call passed
+  // `tickCount % interval === 0` — INVERTED — so the engine rebuilt the FULL
+  // 20-25K-food hash on every NON-multiple tick (598 of 600 ticks measured,
+  // 7.7ms each ≈ 46% of the whole tick) and SKIPPED it on the multiples.
+  // Combined with per-arena intervals of 2-6 this was the single biggest
+  // offline frame cost and the source of the "start stop" judder spikes.
+  // All mutation paths maintain the hash incrementally (FIX G2), so the
+  // resync now runs once every 300 ticks (5s) as a self-healing safety net.
+  const useCachedFoodHash = state.tickCount % FOOD_HASH_RESYNC_INTERVAL !== 0;
+  const eatenIds = checkFoodEating(state.snakes.values(), state.foods, foodHash, foodValueCache, now, useCachedFoodHash, freezeAnchors);
+  perfExit('phase.foodEat');
   if (eatenIds.size > 0) {
     // FIX G2: unindex eaten food so the hash/id-cache stay render-accurate
     // (no ghost orbs between periodic rebuilds).
@@ -799,6 +830,7 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   }
 
   // 5. Food management
+  perfEnter('phase.foodMaint');
   if (state.tickCount % ac.playerFoodInterval === 0) {
     maintainFoodAroundPlayer(state, foodIdRef, foodHash);
   }
@@ -806,10 +838,13 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   if (state.tickCount % ac.mapFoodInterval === 0) {
     maintainMapFood(state, foodIdRef);
   }
+  perfExit('phase.foodMaint');
 
   // 6. Check collisions (shared) — T3: pass ALL player anchors so body-hash
   // inserts and viewport culling measure distance to the NEAREST player.
+  perfEnter('phase.collision');
   const collisionResult = checkCollisions(state.snakes, bodyHash, headHash, now, state.player?.path.headX, state.player?.path.headY, freezeAnchors);
+  perfExit('phase.collision');
   for (const deadId of collisionResult.deadIds) {
     const deadSnake = state.snakes.get(deadId);
     if (deadSnake) {
@@ -822,6 +857,7 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
   }
 
   // 7. Respawn dead bots — offline only
+  perfEnter('phase.respawn');
   if (state.botsEnabled) {
     // FIX OFF-17: adaptive fill — the fixed 8-10 respawns/tick left the first
     // ~2 seconds of every match a barren map. 8× fill during the initial
@@ -835,6 +871,9 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
 
   state.nextFoodId = foodIdRef.value;
 
+  perfExit('phase.respawn');
+  perfExit('tick.total');
+  perfTickDone();
   return collisionResult.killEvents;
 }
 

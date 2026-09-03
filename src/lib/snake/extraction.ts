@@ -62,7 +62,15 @@ const EXTRACTION_RESET_DEBOUNCE_MS = 250;
  * @param state   - Mutable extraction state (typically stored in a ref)
  * @param isExtracting - Whether E/right-click is held
  * @param isDead - Whether the player is dead
- * @param targetAngle - Current target movement angle
+ * @param courseAngle - The snake's CURRENT ACTUAL heading (post-turn-rate
+ *   smoothing). FIX EXTRACT-JITTER: callers previously passed the raw
+ *   mouse-derived target angle. While the camera catches up after frame
+ *   drops, a stationary mouse near the screen center wobbles that raw angle
+ *   past the threshold, resetting the ring — progress "kept moving front and
+ *   back". The smoothed heading absorbs input tremor by construction (the
+ *   snake physically cannot turn faster than the turn-rate limit), so the
+ *   ring now only resets on a REAL course change, and it measures the same
+ *   physical quantity the server validates (its own snake.angle samples).
  * @param frameElapsed - Milliseconds since last frame
  * @param onExit  - Callback when extraction completes (100%)
  * @returns true if extraction just completed this frame
@@ -71,7 +79,7 @@ export function updateExtractionProgress(
   state: ExtractionState,
   isExtracting: boolean,
   isDead: boolean,
-  targetAngle: number,
+  courseAngle: number,
   frameElapsed: number,
   onExit?: () => void,
 ): boolean {
@@ -82,9 +90,9 @@ export function updateExtractionProgress(
     if (!state.active) {
       state.active = true;
       state.progress = 0;
-      state.lastAngle = targetAngle;
+      state.lastAngle = courseAngle;
     }
-    const angleDelta = Math.abs(targetAngle - state.lastAngle);
+    const angleDelta = Math.abs(courseAngle - state.lastAngle);
     const wrappedDelta = Math.min(angleDelta, Math.PI * 2 - angleDelta);
     if (wrappedDelta > EXTRACTION_ANGLE_THRESHOLD) {
       // Player moved — reset progress (debounced: transient input tremor
@@ -98,7 +106,7 @@ export function updateExtractionProgress(
         state.resetPendingSince = performance.now();
       } else if (performance.now() - state.resetPendingSince >= EXTRACTION_RESET_DEBOUNCE_MS) {
         state.progress = 0;
-        state.lastAngle = targetAngle;
+        state.lastAngle = courseAngle;
         state.resetPendingSince = undefined;
       }
     } else {
@@ -127,6 +135,14 @@ export function updateExtractionProgress(
 /**
  * Draw the extraction progress ring on the snake's head.
  * White → Green color transition as progress increases.
+ *
+ * FIX EXTRACT-SHAKE: the ring previously anchored to the RAW tick head
+ * (path.headX/Y) while the snake BODY renders at the interpolated position
+ * (prevHead → head lerp + extrapolation, see render-snake-atlas). The ring
+ * therefore lagged the visible head by up to one tick (3px+) and wobbled
+ * against it on every frame — the "ring shakes / distorted" report. The
+ * opts.alpha mirror of the renderer's interpolation pins the ring to the
+ * exact visible head position.
  */
 export function drawExtractRing(
   ctx: CanvasRenderingContext2D,
@@ -134,9 +150,13 @@ export function drawExtractRing(
   camera: Camera,
   viewport: Viewport,
   progress: number,
+  opts?: { alpha?: number },
 ): void {
-  const hx = snake.path.headX;
-  const hy = snake.path.headY;
+  const alpha = opts?.alpha ?? 1;
+  const prevX = Number.isFinite(snake.prevHeadX) ? snake.prevHeadX : snake.path.headX;
+  const prevY = Number.isFinite(snake.prevHeadY) ? snake.prevHeadY : snake.path.headY;
+  const hx = prevX + (snake.path.headX - prevX) * alpha + (snake.extrapX || 0);
+  const hy = prevY + (snake.path.headY - prevY) * alpha + (snake.extrapY || 0);
   const sx = (hx - camera.x) * camera.zoom + viewport.width / 2;
   const sy = (hy - camera.y) * camera.zoom + viewport.height / 2;
   const zoom = camera.zoom;
