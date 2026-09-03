@@ -13,7 +13,7 @@ import { drawDeathOverlay, drawEliminatedBanner, drawControlsHint } from './rend
 import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrameWithDpr } from './render-snake-atlas';
 import { cleanupDeadSnakeParticles, renderBackground, renderHUD, handleMinimapClick, resetMinimapZoom } from './hud';
 import { initSafeAreaTracking } from './safe-area';
-import { InputHandler } from './input';
+import { InputHandler, TOUCH_BOOST_THRESHOLD } from './input';
 import { makeCoiledPath } from './coil-path';
 import { SEGMENT_SPACING } from '@/lib/snake/config';
 import { useAuth } from '@/components/providers/auth-provider';
@@ -220,6 +220,21 @@ export default function GameCanvas({
     // Input handler
     const input = new InputHandler(canvas);
     inputRef.current = input;
+
+    // FIX OFF-18: offline pause — Escape (or P) freezes the simulation. The
+    // rAF loop keeps rendering (so resize/orientation stays correct) but the
+    // tick loop is skipped, so nothing moves, eats, or drains boost.
+    const pausedRef = { current: false };
+    const canPause = mode === 'offline';
+    const onPauseKey = (e: KeyboardEvent) => {
+      if (!canPause) return;
+      if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
+        e.preventDefault();
+        pausedRef.current = !pausedRef.current;
+      }
+    };
+    window.addEventListener('keydown', onPauseKey);
+
     input.attach();
 
     // Minimap zoom tap handler — FIX M4: 'click' never fires on touch because
@@ -334,7 +349,8 @@ export default function GameCanvas({
 
       let ticksThisFrame = 0;
       const maxTicks = 6;
-      while (accumulatorRef.current >= tickMs && ticksThisFrame < maxTicks) {
+      // FIX OFF-18: paused — hold simulation (accumulator capped, nothing ticks)
+      while (!pausedRef.current && accumulatorRef.current >= tickMs && ticksThisFrame < maxTicks) {
         const killEvents = gameTick(gameState, inputState, FIXED_DT);
         accumulatorRef.current -= tickMs;
 
@@ -445,6 +461,60 @@ export default function GameCanvas({
         drawControlsHint(ctx, viewport);
       }
 
+      // FIX OFF-9: touch joystick visualization — show the drag origin,
+      // current finger, and the boost threshold ring so the invisible
+      // "drag past 50px to boost" gesture becomes visible on phones.
+      {
+        const js = input.getTouchJoystick();
+        if (js) {
+          const TH = TOUCH_BOOST_THRESHOLD;
+          ctx.save();
+          // Origin + boost ring
+          ctx.globalAlpha = 0.35;
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(js.ox, js.oy, 14, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = js.boost ? 0.55 : 0.22;
+          ctx.strokeStyle = js.boost ? '#22d3ee' : '#ffffff';
+          ctx.setLineDash([6, 6]);
+          ctx.beginPath();
+          ctx.arc(js.ox, js.oy, TH, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          // Knob at finger
+          ctx.globalAlpha = 0.7;
+          ctx.fillStyle = js.boost ? '#22d3ee' : '#ffffff';
+          ctx.beginPath();
+          ctx.arc(js.cx, js.cy, 12, 0, Math.PI * 2);
+          ctx.fill();
+          if (js.boost) {
+            ctx.fillStyle = '#22d3ee';
+            ctx.font = 'bold 10px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('BOOST', js.ox, js.oy - TH - 8);
+          }
+          ctx.restore();
+        }
+      }
+
+      // FIX OFF-18: pause overlay
+      if (pausedRef.current) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(5, 8, 15, 0.55)';
+        ctx.fillRect(0, 0, w, h);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 28px sans-serif';
+        ctx.fillText('PAUSED', w / 2, h / 2 - 10);
+        ctx.fillStyle = '#ffffff60';
+        ctx.font = '13px sans-serif';
+        ctx.fillText('Press Esc to resume', w / 2, h / 2 + 24);
+        ctx.restore();
+      }
+
       // ── Killer highlight: pulsing red glow on the bot that killed you ──
       // Renders for 5s after death so you can SEE what killed you.
       if (isDeadRef.current && killerIdRef.current) {
@@ -546,6 +616,7 @@ export default function GameCanvas({
       running = false;
       cancelAnimationFrame(animFrameRef.current);
       input.detach();
+      window.removeEventListener('keydown', onPauseKey);
       cleanupSafeArea();
       canvas.removeEventListener('pointerup', onCanvasClick);
       window.removeEventListener('resize', resize);

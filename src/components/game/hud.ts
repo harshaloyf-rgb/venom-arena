@@ -132,12 +132,16 @@ export function renderHUD(
 
   // ── Rank below minimap ──
   // In online mode, use minimapDots for total count (state.snakes only has visible ones)
-  const aliveSnakes = minimapDots ? minimapDots.length + 1 : state.snakes.size;
+  // FIX O13: server minimap dots INCLUDE the player (all alive snakes are
+  // pushed) — the old `length + 1` counted yourself twice ("Rank 5 / 1001").
+  // Bot dot scores are u16-clamped at 65535 in the encoder; clamp self score
+  // for the comparison so big-self doesn't inflate rank vs clamped bots.
+  const aliveSnakes = minimapDots ? minimapDots.length : state.snakes.size;
   let rank = 1;
   if (minimapDots) {
-    // Online: count from minimap dots (excludes player)
+    const myScore = Math.min(state.player.score, 65535);
     for (let i = 0; i < minimapDots.length; i++) {
-      if (minimapDots[i].score > state.player.score) rank++;
+      if (minimapDots[i].score > myScore) rank++;
     }
   } else {
     for (const [, s] of state.snakes) {

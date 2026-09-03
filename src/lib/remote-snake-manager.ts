@@ -55,6 +55,16 @@ interface TrackedSnake {
   lastSnapTime: number;
   // Whether the path has been initialized with at least 2 points
   pathReady: boolean;
+  // FIX O4: dead reckoning — velocity from the last two snapshots (px/ms)
+  velX: number;
+  velY: number;
+  // Forward offset currently applied at render time (world px). On a fresh
+  // snapshot it is decayed back to 0 over ~100ms instead of snapping to zero.
+  extrapX: number;
+  extrapY: number;
+  decayFromX: number;
+  decayFromY: number;
+  decayStart: number;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -62,6 +72,18 @@ interface TrackedSnake {
 const MAX_HISTORY = 600; // 30 seconds at 20Hz — enough for longest snakes
 const SNAPSHOT_INTERVAL_MS = 50; // 1000/20 = 50ms between snapshots
 const DENSE_STEP = BASE_SPEED; // ~3px between path points (matches offline per-tick density)
+// FIX O4: dead-reckoning caps — extrapolate a remote snake's head along its
+// last velocity for at most 150ms (~27px) when a snapshot is late, so snakes
+// GLIDE through packet loss instead of freeze-then-teleport.
+const MAX_EXTRAP_MS = 150;
+const MAX_EXTRAP_PX = 40;
+// FIX O3: constant forward lead for the PLAYER's own snake (world px cap).
+// Renders own snake slightly ahead of server truth to cancel a big chunk of
+// interpolation+RTT input lag. Constant offset = no oscillation; server keeps
+// all collision authority (visual lead ≤30px vs body radius 8-25px).
+const SELF_LEAD_MS = 75;
+const MAX_SELF_LEAD_PX = 30;
+const EXTRAP_DECAY_MS = 100;
 
 // ─── Manager ─────────────────────────────────────────────────────────────────
 
@@ -131,6 +153,10 @@ export class RemoteSnakeManager {
           prevHeadY: rs.hy,
           lastSnapTime: now,
           pathReady: false,
+          velX: 0, velY: 0,
+          extrapX: 0, extrapY: 0,
+          decayFromX: 0, decayFromY: 0,
+          decayStart: now,
         };
         this.snakes.set(rs.id, tracked);
         if (rs.ip) this.playerSnakeId = rs.id;
@@ -142,6 +168,17 @@ export class RemoteSnakeManager {
         } else {
           tracked.prevHeadX = rs.hx;
           tracked.prevHeadY = rs.hy;
+        }
+        // FIX O4: capture the currently-applied extrapolation so it DECAYS on
+        // the fresh snapshot instead of snapping back (continuity), and update
+        // velocity from the last two snapshot heads (px per ms).
+        tracked.decayFromX = tracked.extrapX;
+        tracked.decayFromY = tracked.extrapY;
+        tracked.decayStart = now;
+        if (tracked.history.length > 0) {
+          const dtMs = Math.max(1, (snap.tick - tracked.history[0].tick) * SNAPSHOT_INTERVAL_MS);
+          tracked.velX = (rs.hx - tracked.history[0].x) / dtMs;
+          tracked.velY = (rs.hy - tracked.history[0].y) / dtMs;
         }
         // Update metadata
         tracked.bodyLen = rs.bl;
@@ -373,6 +410,38 @@ export class RemoteSnakeManager {
     a.prevHeadY = safePrevY;
     a.skinId = t.skinId;
     a.rarity = t.rarity;
+    // FIX O3/O4: compute this frame's render-time extrapolation offset.
+    const nowMs = performance.now();
+    const elapsed = nowMs - t.lastSnapTime;
+    if (t.isPlayer) {
+      // Own snake: constant forward lead along last velocity (input-lag cancel)
+      let ex = t.velX * SELF_LEAD_MS;
+      let ey = t.velY * SELF_LEAD_MS;
+      const magSq = ex * ex + ey * ey;
+      if (magSq > MAX_SELF_LEAD_PX * MAX_SELF_LEAD_PX) {
+        const s = MAX_SELF_LEAD_PX / Math.sqrt(magSq);
+        ex *= s; ey *= s;
+      }
+      t.extrapX = ex; t.extrapY = ey;
+    } else if (elapsed <= SNAPSHOT_INTERVAL_MS) {
+      // Fresh snapshot — decay the previously-applied offset back to 0
+      const k = Math.max(0, 1 - (nowMs - t.decayStart) / EXTRAP_DECAY_MS);
+      t.extrapX = t.decayFromX * k;
+      t.extrapY = t.decayFromY * k;
+    } else {
+      // Snapshot overdue — dead reckon along last velocity, capped
+      const over = Math.min(elapsed - SNAPSHOT_INTERVAL_MS, MAX_EXTRAP_MS);
+      let ex = t.velX * over;
+      let ey = t.velY * over;
+      const magSq = ex * ex + ey * ey;
+      if (magSq > MAX_EXTRAP_PX * MAX_EXTRAP_PX) {
+        const s = MAX_EXTRAP_PX / Math.sqrt(magSq);
+        ex *= s; ey *= s;
+      }
+      t.extrapX = ex; t.extrapY = ey;
+    }
+    a.extrapX = t.extrapX;
+    a.extrapY = t.extrapY;
     return a;
   }
 

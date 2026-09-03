@@ -14,6 +14,18 @@
 
 import type { InputState } from '@/lib/snake/types';
 
+/** FIX OFF-9: boost drag threshold lowered from 80px — 80px was 15-20% of a
+ *  phone screen and silently cancelled boost when easing back mid-chase. */
+export const TOUCH_BOOST_THRESHOLD = 50;
+
+/** Touch joystick info for the renderer (FIX OFF-9: draw what the player feels) */
+export interface TouchJoystickInfo {
+  active: boolean;
+  ox: number; oy: number;   // drag origin (canvas-space)
+  cx: number; cy: number;   // current finger position (canvas-space)
+  boost: boolean;           // beyond boost threshold?
+}
+
 /**
  * Creates and manages input state for the game.
  * Call attach() to bind event listeners, detach() to unbind.
@@ -37,6 +49,7 @@ export class InputHandler {
   private touchX = 0;
   private touchY = 0;
   private touchId: number | null = null;
+  private touchBoostId: number | null = null; // FIX OFF-9: second finger = boost
   private canvasRect: DOMRect | null = null;
   private onDetached = false;
 
@@ -60,6 +73,7 @@ export class InputHandler {
 
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
+    window.addEventListener('blur', this.onBlur);
     window.addEventListener('mousemove', this.onMouseMove);
     this.canvas.addEventListener('mousedown', this.onMouseDown);
     window.addEventListener('mouseup', this.onMouseUp);
@@ -75,6 +89,7 @@ export class InputHandler {
     this.onDetached = true;
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
+    window.removeEventListener('blur', this.onBlur);
     window.removeEventListener('mousemove', this.onMouseMove);
     this.canvas.removeEventListener('mousedown', this.onMouseDown);
     window.removeEventListener('mouseup', this.onMouseUp);
@@ -141,7 +156,8 @@ export class InputHandler {
       if (dist > 10) {
         this.state.targetAngle = Math.atan2(dy, dx);
       }
-      this.state.boosting = dist > 80 || this.keys.has('b') || this.externalBoost;
+      this.state.boosting = dist > TOUCH_BOOST_THRESHOLD || this.touchBoostId !== null
+        || this.keys.has('b') || this.externalBoost;
       return;
     }
 
@@ -165,6 +181,18 @@ export class InputHandler {
   }
 
   // --- Event handlers (arrow functions for stable `this`) ---
+
+  /** FIX OFF-10: clear held inputs when the window loses focus — alt-tabbing
+   *  while holding W/Space used to leave the snake turning/boosting forever. */
+  private onBlur = (): void => {
+    this.keys.clear();
+    this.mouseDown = false;
+    this.rightMouseDown = false;
+    this.touchActive = false;
+    this.touchId = null;
+    this.touchBoostId = null;
+    this.state.boosting = false;
+  };
 
   private onKeyDown = (e: KeyboardEvent): void => {
     const key = e.key.toLowerCase();
@@ -204,7 +232,20 @@ export class InputHandler {
 
   private onTouchStart = (e: TouchEvent): void => {
     e.preventDefault();
-    if (this.touchActive) return;
+    if (!this.canvasRect) return;
+    // FIX OFF-9: second finger anywhere = boost toggle while held
+    if (this.touchActive) {
+      if (this.touchBoostId === null) {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const t = e.changedTouches[i];
+          if (t.identifier !== this.touchId) {
+            this.touchBoostId = t.identifier;
+            break;
+          }
+        }
+      }
+      return;
+    }
     const touch = e.changedTouches[0];
     if (!touch) return;
     this.touchId = touch.identifier;
@@ -231,14 +272,31 @@ export class InputHandler {
 
   private onTouchEnd = (e: TouchEvent): void => {
     for (let i = 0; i < e.changedTouches.length; i++) {
-      if (e.changedTouches[i].identifier === this.touchId) {
+      const identifier = e.changedTouches[i].identifier;
+      if (identifier === this.touchBoostId) {
+        this.touchBoostId = null;
+      }
+      if (identifier === this.touchId) {
         this.touchActive = false;
         this.touchId = null;
-        this.state.boosting = false;
+        this.state.boosting = this.touchBoostId !== null;
         break;
       }
     }
   };
+
+  /** Current touch-joystick geometry for renderer feedback (null = no steer touch) */
+  getTouchJoystick(): TouchJoystickInfo | null {
+    if (!this.touchActive || this.touchId === null || !this.canvasRect) return null;
+    const dx = this.touchX - this.touchStartX;
+    const dy = this.touchY - this.touchStartY;
+    return {
+      active: true,
+      ox: this.touchStartX, oy: this.touchStartY,
+      cx: this.touchX, cy: this.touchY,
+      boost: Math.sqrt(dx * dx + dy * dy) > TOUCH_BOOST_THRESHOLD || this.touchBoostId !== null,
+    };
+  }
 
   private onContextMenu = (e: Event): void => {
     e.preventDefault();

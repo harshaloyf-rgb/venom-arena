@@ -128,6 +128,11 @@ export interface Snake {
   name: string;
   /** Zero-alloc path buffer. Logical index 0 = HEAD. */
   path: IPathBuffer;
+  /** FIX O3/O4: render-time forward extrapolation offset (world px).
+   *  Set by RemoteSnakeManager for online adapters (self lead + remote dead
+   *  reckoning); undefined offline → renderer treats as 0. Never simulated. */
+  extrapX?: number;
+  extrapY?: number;
   /** Current movement angle in radians */
   angle: number;
   /** Previous tick's angle (for turn detection) */

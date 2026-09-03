@@ -139,6 +139,9 @@ const STAR_COLLECT_RADIUS_SQ = STAR_COLLECT_RADIUS * STAR_COLLECT_RADIUS;
 const STAR_VIS_RANGE = 6000;  // px — stars visible to players within this range
 const STAR_VIS_RANGE_SQ = STAR_VIS_RANGE * STAR_VIS_RANGE;
 const STARS_PER_DEATH = 10;  // always 10 stars when a real player dies
+// FIX O6: how long a disconnected player's snake survives before a natural
+// death (needs to comfortably exceed the client's 5s auto-return + reconnect)
+const DISCONNECT_GRACE_MS = 12_000;
 
 // ─── Online Arena Config — matches offline practice-easy exactly ─────────────
 // Online tiers use the SAME 29000px-radius map, 999 bots, and food density
@@ -422,13 +425,15 @@ function killSnake(snake: Snake, nextFoodId: { value: number }, foods: FoodOrb[]
   snake.alive = false;
   const dropValue = Math.max(1, snake.score);
   const segLen = snake.path.length;
-  const maxFood = segLen;
-
-  const largeCount = Math.min(maxFood, Math.max(1, Math.floor(dropValue * 0.4 / FOOD_VALUES[2])));
-  const medCount = Math.min(maxFood - largeCount, Math.max(1, Math.floor(dropValue * 0.3 / FOOD_VALUES[1])));
-  let remaining = dropValue - largeCount * FOOD_VALUES[2] - medCount * FOOD_VALUES[1];
-  const smallCount = Math.min(maxFood - largeCount - medCount, Math.max(1, remaining));
-  remaining -= smallCount;
+  // FIX OFF-6 (kept in lockstep with engine.ts): the old distribution computed
+  // orb COUNTS from value but capped every tier by path length — an 8K corpse
+  // dropped ~18% of its value and a 50K corpse ~5%. Now a fixed slot mix
+  // (capped by path length) carries the FULL value as stacked per-orb value.
+  const maxFood = Math.max(1, segLen);
+  const slotCount = Math.min(maxFood, 500);
+  const largeCount = Math.max(1, Math.floor(slotCount * 0.4));
+  const medCount = Math.max(1, Math.floor(slotCount * 0.3));
+  const smallCount = Math.max(1, slotCount - largeCount - medCount);
   const totalFood = largeCount + medCount + smallCount;
 
   const sizes: Array<0 | 1 | 2> = [];
@@ -441,12 +446,17 @@ function killSnake(snake: Snake, nextFoodId: { value: number }, foods: FoodOrb[]
   }
 
   const step = Math.max(1, Math.floor(segLen / totalFood));
+  const perOrb = Math.floor(dropValue / totalFood);
+  let leftover = dropValue - perOrb * totalFood;
   for (let i = 0; i < sizes.length; i++) {
     const si = Math.min(i * step, segLen - 1);
     const sizeIdx = sizes[i];
+    let value = perOrb;
+    if (leftover > 0) { value++; leftover--; }
+    if (value < 1) value = 1;
     const f: FoodOrb = {
       id: nextFoodId.value++, x: snake.path.getX(si), y: snake.path.getY(si),
-      size: FOOD_SIZES[sizeIdx], value: FOOD_VALUES[sizeIdx], radius: FOOD_RADII[sizeIdx],
+      size: FOOD_SIZES[sizeIdx], value, radius: FOOD_RADII[sizeIdx],
       color: FOOD_COLORS[sizeIdx], glowColor: FOOD_GLOW_COLORS[sizeIdx], magnetized: false,
     };
     foods.push(f);
@@ -487,7 +497,10 @@ function checkFoodEating(
     if (!snake.alive) continue;
     const hx = snake.path.headX;
     const hy = snake.path.headY;
-    if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
+    // FIX OFF-4: protected snakes can now EAT. Spawn protection exists to stop
+    // them being KILLED, not to lock them out of food — the old skip made every
+    // spawn/respawn start with 2s of driving through the food-rich start ring
+    // unable to eat anything (both modes shared this bug).
     // G1: frozen bots don't eat and don't pull food (they don't move).
     if (freezeAnchors && snake.isBot && !getBotIsHunter(snake.id) &&
         isFreezeDistSq(nearestAnchorDistSq(freezeAnchors, hx, hy))) continue;
@@ -541,13 +554,32 @@ function maintainFoodAroundPlayer(
   arenaConfig: ArenaConfig,
   nextIdRef: { value: number }, fh: SpatialHash, fhVis?: SpatialHash,
 ): void {
-  // Find a reference snake (first alive one)
-  let refSnake: Snake | undefined;
+  // FIX O10: maintain density around every REAL player. The old code picked
+  // "the first alive snake" — always a bot (999 bots are inserted before any
+  // player) — so human-visited space stayed food-starved online while the
+  // maintainer fussed over a frozen bot nobody was near.
+  const refs: Snake[] = [];
   for (const [, s] of snakes) {
-    if (s.alive && s.path.length > 0) { refSnake = s; break; }
+    if (s.alive && s.path.length > 0 && s.isPlayer) refs.push(s);
   }
-  if (!refSnake) return;
+  if (refs.length === 0) {
+    // No humans connected — fall back to the first alive snake so the map
+    // still regenerates while empty.
+    for (const [, s] of snakes) {
+      if (s.alive && s.path.length > 0) { refs.push(s); break; }
+    }
+  }
+  for (let r = 0; r < refs.length; r++) {
+    maintainFoodAroundRef(refs[r], foods, arenaConfig, nextIdRef, fh, fhVis);
+  }
+}
 
+// Density maintenance around one reference snake (called per real player)
+function maintainFoodAroundRef(
+  refSnake: Snake, foods: FoodOrb[],
+  arenaConfig: ArenaConfig,
+  nextIdRef: { value: number }, fh: SpatialHash, fhVis?: SpatialHash,
+): void {
   const ac = arenaConfig;
   const hx = refSnake.path.headX;
   const hy = refSnake.path.headY;
@@ -767,10 +799,14 @@ interface ConnectedPlayer {
   lastPosCheckTime: number;
   lastPosCheckX: number;
   lastPosCheckY: number;
-  // ── Extraction hold-still validation (FIX E2) ──
-  // Flat [x0,y0,x1,y1,...] head-position ring sampled every tick; kept at
+  // ── Extraction steady-course validation (FIX E2-v2) ──
+  // Flat [angle0,boost0,angle1,boost1,...] ring sampled every tick; kept at
   // EXTRACT_SAMPLE_CAPACITY numbers (= 3s of history at 60Hz).
   extractSamples: number[];
+  // FIX O6: disconnect grace — 0 = connected; Date.now() when the socket
+  // closed mid-game. The snake stays alive for DISCONNECT_GRACE_MS so a
+  // transient drop resumes without losing the run or re-charging the buy-in.
+  disconnectedAt: number;
   // ── Spectator mode (after death) ──
   deadAt: number;           // 0 = alive, >0 = Date.now() of death
   spectatorHx: number;      // last head X before death (for snapshot camera)
@@ -929,6 +965,27 @@ class ArenaInstance {
     return player;
   }
 
+  // FIX O6: socket closed mid-game. Instead of deleting the snake instantly
+  // (which made the reconnect-resume path almost unreachable — any clean
+  // disconnect killed the run and re-charged the buy-in on auto-rejoin), keep
+  // the snake alive for DISCONNECT_GRACE_MS. A reconnecting client resumes
+  // via the duplicate-JOIN migration with score/chips intact; if the player
+  // never returns, the grace sweep kills the snake through the NORMAL death
+  // pipeline (corpse drops food, result reported) instead of a silent delete.
+  markPlayerDisconnected(socketId: string): void {
+    const player = this.players.get(socketId);
+    if (!player) return;
+    if (player.deadAt > 0) {
+      // Spectator / already dead — nothing to preserve, clean up immediately
+      this.removePlayer(socketId);
+      return;
+    }
+    player.disconnectedAt = Date.now();
+    // AFK drift safety: keep the snake moving straight but stop boost drain
+    player.input.boost = false;
+    console.log(`[Arena ${this.arenaId}] DISCONNECT GRACE started for ${player.name} (${DISCONNECT_GRACE_MS / 1000}s to reconnect)`);
+  }
+
   // ─── Anti-Cheat: Statistical anomaly detection ───────────────────────
   // Runs every 5 seconds (300 ticks at 60Hz) per player.
   // Detects: impossible score acceleration, teleport, speed hacks.
@@ -1037,9 +1094,10 @@ class ArenaInstance {
       // Save head position for potential spectator mode
       player.spectatorHx = snake.path.headX;
       player.spectatorHy = snake.path.headY;
-      // FIX E2: sample head positions for extraction hold-still validation
-      // (3s window at 60Hz = 180 points = 360 floats)
-      player.extractSamples.push(snake.path.headX, snake.path.headY);
+      // FIX E2-v2: sample (targetAngle, boost) each tick for extraction
+      // steady-course validation (3s window at 60Hz = 180 pairs = 360 entries).
+      // player.input is exactly what moveSnake consumed this tick.
+      player.extractSamples.push(player.input.angle, player.input.boost ? 1 : 0);
       if (player.extractSamples.length > 360) {
         player.extractSamples.splice(0, player.extractSamples.length - 360);
       }
@@ -1144,15 +1202,49 @@ class ArenaInstance {
         }
       }
     }
-    // Remove collected stars in one pass
-    if (_collectedStarIds.size > 0) {
+    // Remove collected stars in one pass; also expire stale stars every second
+    // (FIX O12: uncollected death-stars accumulated FOREVER on long-running
+    // servers — every snapshot's star scan and memory grew unbounded)
+    const STAR_MAX_AGE_MS = 900_000; // 15 minutes to travel to a dropped star
+    if (_collectedStarIds.size > 0 || state.tickCount % 60 === 0) {
+      const nowMs = Date.now();
       let writeIdx = 0;
       for (let i = 0; i < state.stars.length; i++) {
-        if (!_collectedStarIds.has(state.stars[i].id)) {
-          state.stars[writeIdx++] = state.stars[i];
-        }
+        const s = state.stars[i];
+        if (_collectedStarIds.has(s.id)) continue;
+        if (nowMs - s.spawnTime > STAR_MAX_AGE_MS) continue;
+        state.stars[writeIdx++] = s;
       }
       state.stars.length = writeIdx;
+    }
+
+    // FIX O6: disconnect grace expiry — a snake whose player never returned
+    // within the grace window dies through the NORMAL death pipeline (stars
+    // drop, match result reported) instead of living forever as a ghost.
+    if (state.tickCount % 30 === 0) {
+      const nowMs = Date.now();
+      for (const [socketId, player] of this.players) {
+        if (player.disconnectedAt === 0 || player.deadAt > 0) continue;
+        if (nowMs - player.disconnectedAt < DISCONNECT_GRACE_MS) continue;
+        console.log(`[Arena ${this.arenaId}] GRACE EXPIRED ${player.name} — natural death`);
+        const snake = state.snakes.get(player.snakeId);
+        if (snake && snake.alive) {
+          this.handlePlayerDeath(player.snakeId, socketId, 'disconnect — connection lost', undefined, true);
+        }
+        this.removePlayer(socketId);
+        // If that was the last player, schedule arena cleanup (handleClose's
+        // cleanup path doesn't fire while the grace entry is held)
+        if (this.playerCount === 0) {
+          this.lastPlayerLeaveTime = Date.now();
+          this.emptyTimeout = setTimeout(() => {
+            if (this.playerCount === 0) {
+              this.stop();
+              arenas.delete(this.arenaId);
+              console.log(`[GameManager] Cleaned up empty arena: ${this.arenaId}`);
+            }
+          }, ARENA_EMPTY_TIMEOUT_MS);
+        }
+      }
     }
 
     // 6. Food management (incremental: new food inserted into hash immediately)
@@ -1290,6 +1382,49 @@ class ArenaInstance {
     if (state.tickCount % 300 === 0) {
       this.runAntiCheat();
     }
+
+    // 13. FIX O8: server-authoritative global leaderboard every 500ms —
+    // the client only sees snakes within SNAKE_VIS_RANGE (15km), so its own
+    // ranking was "biggest snake in view" and never showed the real leaders.
+    if (state.tickCount % 30 === 0) {
+      this.sendLeaderboards();
+    }
+  }
+
+  /** FIX O8: compute global top-10 (score + chips) and per-player self rank. */
+  private sendLeaderboards(): void {
+    const alive: Snake[] = [];
+    for (const [, s] of this.state.snakes) {
+      if (s.alive) alive.push(s);
+    }
+    if (alive.length === 0) return;
+    const totalAlive = alive.length;
+    const byScore = [...alive].sort((a, b) => b.score - a.score).slice(0, 10);
+    const byChips = [...alive].sort((a, b) => b.carriedChips - a.carriedChips).slice(0, 10);
+
+    for (const [socketId, player] of this.players) {
+      if (player.disconnectedAt > 0) continue;
+      const selfSnake = this.state.snakes.get(player.snakeId);
+      let selfRankScore = 0;
+      let selfRankChips = 0;
+      if (selfSnake && selfSnake.alive) {
+        selfRankScore = 1;
+        selfRankChips = 1;
+        for (const s of alive) {
+          if (s.score > selfSnake.score) selfRankScore++;
+          if (s.carriedChips > selfSnake.carriedChips) selfRankChips++;
+        }
+      }
+      try {
+        player.socket.emit('leaderboard', {
+          totalAlive,
+          selfRankScore,
+          selfRankChips,
+          score: byScore.map(s => ({ name: s.name, score: Math.floor(s.score), chips: Math.floor(s.carriedChips), isBot: s.isBot, isSelf: s === selfSnake })),
+          chips: byChips.map(s => ({ name: s.name, score: Math.floor(s.score), chips: Math.floor(s.carriedChips), isBot: s.isBot, isSelf: s === selfSnake })),
+        });
+      } catch {}
+    }
   }
 
   private handlePlayerDeath(snakeId: string, socketId: string, reason: string, killerTag?: string, killerIsBot?: boolean, killerId?: string): void {
@@ -1405,32 +1540,53 @@ class ArenaInstance {
     const snake = this.state.snakes.get(player.snakeId);
     if (!snake || !snake.alive) return;
 
-    // ── FIX E2: server-side extraction validation ──
-    // Previously OP.EXTRACT was fully client-trusted: a modified client could
-    // send the 1-byte packet mid-chase and bank chips instantly, skipping the
-    // entire 3-second stationary-ring risk window (EXTRACT_FAIL was dead code).
+    // ── FIX E2-v2: server-side extraction validation ──
+    // OP.EXTRACT is no longer fully client-trusted: a modified client could
+    // send the 1-byte packet mid-chase and bank chips instantly.
+    // The client ring (extraction.ts) requires holding E for 3s while keeping
+    // the TARGET ANGLE steady (±0.05 rad) — the snake keeps MOVING in a straight
+    // line. The previous server check demanded physical stationarity (all head
+    // positions within 50px), which is impossible for a moving snake — a live
+    // snake is always ≥3px/tick, so the 2s-old samples were already ~540px away
+    // and EVERY extraction failed (CRITICAL audit fix).
+    // Server mirror of the client rule: sample (targetAngle, boost) each tick;
+    // a valid extract = full 3s window with zero boosted ticks and every angle
+    // within tolerance of the window's first angle (steady-course vulnerability
+    // window preserved server-side).
     const durationSeconds0 = Math.floor((Date.now() - player.joinTime) / 1000);
     if (durationSeconds0 < 3) {
       try { player.socket.emit('extractFailed', { reason: 'Stay in the arena a bit longer before extracting.' }); } catch {}
       return;
     }
-    // Must have been (near-)stationary for the last ~3 seconds. 60Hz samples,
-    // 3s window = 180 points. Allow 50px tolerance (boundary pulse jitter).
-    const samples = player.extractSamples;
-    const EXTRACT_HOLD_TOLERANCE_PX = 50;
-    if (samples.length < 240) {
-      // Not enough movement history (joined < ~2s ago or spawn protection)
-      try { player.socket.emit('extractFailed', { reason: 'Hold still for 3 seconds to extract.' }); } catch {}
+    const samples = player.extractSamples; // [angle, boost] pairs, 60Hz
+    // Client resets the ring when the target angle deviates >0.05 rad from the
+    // locked angle. Successful completion ⇒ every angle stayed within 0.05 of
+    // ONE locked angle, so pairwise deviation ≤0.1 in the relock edge case.
+    // 0.12 keeps that legit edge passable while any real steering (or aimbot
+    // wobble that matters) still rejects.
+    const EXTRACT_ANGLE_TOLERANCE = 0.12;
+    // Validate the LAST 3s of samples (180 pairs), NOT the whole buffer — the
+    // buffer holds up to 6s, so a player who joined 10s ago and then held
+    // steady for 3s must still pass.
+    const HOLD_ENTRIES = 180; // 3s × 60Hz × 2 entries
+    if (samples.length < HOLD_ENTRIES) {
+      // Not enough history (joined < ~3s ago or input gap)
+      try { player.socket.emit('extractFailed', { reason: 'Hold your course steady for 3 seconds to extract.' }); } catch {}
       return;
     }
-    const hx = snake.path.headX;
-    const hy = snake.path.headY;
-    for (let i = 0; i < samples.length; i += 2) {
-      const dx = samples[i] - hx;
-      const dy = samples[i + 1] - hy;
-      if (dx * dx + dy * dy > EXTRACT_HOLD_TOLERANCE_PX * EXTRACT_HOLD_TOLERANCE_PX) {
-        console.log(`[Arena ${this.arenaId}] EXTRACT REJECTED ${player.name}: moved within hold window`);
-        try { player.socket.emit('extractFailed', { reason: 'You must hold still for 3 seconds to extract.' }); } catch {}
+    const start = samples.length - HOLD_ENTRIES;
+    const refAngle = samples[start];
+    for (let i = start; i < samples.length; i += 2) {
+      if (samples[i + 1] !== 0) {
+        console.log(`[Arena ${this.arenaId}] EXTRACT REJECTED ${player.name}: boosted during hold window`);
+        try { player.socket.emit('extractFailed', { reason: 'You cannot boost while extracting.' }); } catch {}
+        return;
+      }
+      const d = Math.abs(samples[i] - refAngle);
+      const wrapped = Math.min(d, Math.PI * 2 - d);
+      if (wrapped > EXTRACT_ANGLE_TOLERANCE) {
+        console.log(`[Arena ${this.arenaId}] EXTRACT REJECTED ${player.name}: steered during hold window`);
+        try { player.socket.emit('extractFailed', { reason: 'Hold your course steady for 3 seconds to extract.' }); } catch {}
         return;
       }
     }
@@ -1445,10 +1601,11 @@ class ArenaInstance {
     const score = snake.score;
     const kills = player.kills;
 
-    // Commission: 35% if ≥4 real players; 10% floor otherwise (FIX X10 —
-    // a 0% rate with ≤3 players enabled collusive chip laundering for free).
+    // Commission: 35% if ≥4 real players; 0% below that (USER DECISION
+    // 2026-09-03 — reverts the X10 10% floor; small/solo arenas extract
+    // commission-free by design).
     const realPlayerCount = this.playerCount;
-    const commissionRate = realPlayerCount >= 4 ? 0.35 : 0.10;
+    const commissionRate = realPlayerCount >= 4 ? 0.35 : 0;
     const commission = Math.floor(effectiveChips * commissionRate);
     const bankedAmount = effectiveChips - commission;
 
@@ -1611,12 +1768,20 @@ class ArenaInstance {
       entry.ra = snake.rarity;
     }
 
-    // ── Step 3.5: Build minimap dots (ALL bots, full map — for minimap rendering) ──
+    // ── Step 3.5: Build minimap dots — every 4th snapshot only (5Hz) ──
+    // FIX O11: full-map dots for ~1000 snakes cost ~7KB per snapshot
+    // (≈140KB/s of mobile data was JUST minimap) yet the dots barely move at
+    // that granularity. 5Hz rebuild + client-side hold is visually identical
+    // and saves ~3/4 of minimap bandwidth AND server rebuild CPU.
     const minimapDots = this._snapBuf.m;
-    minimapDots.length = 0;
-    for (const [, snake] of state.snakes) {
-      if (!snake.alive) continue;
-      minimapDots.push(snake.path.headX, snake.path.headY, snake.score, snake.isBot ? 1 : 0);
+    if (tick % 4 === 0) {
+      minimapDots.length = 0;
+      for (const [, snake] of state.snakes) {
+        if (!snake.alive) continue;
+        minimapDots.push(snake.path.headX, snake.path.headY, snake.score, snake.isBot ? 1 : 0);
+      }
+    } else {
+      minimapDots.length = 0; // client keeps its previous dots
     }
 
     // ── Step 4: Send personalized snapshot to each player (including spectators) ──
@@ -1624,6 +1789,9 @@ class ArenaInstance {
     this._snapBuf.boundaryRadius = boundaryRadius;
 
     for (const [socketId, player] of this.players) {
+      // FIX O6: disconnected mid-game — their socket is gone, skip sending
+      // (the snake itself stays alive during the grace period)
+      if (player.disconnectedAt > 0) continue;
       const isSpectator = player.deadAt > 0;
       const playerSnake = isSpectator ? null : state.snakes.get(player.snakeId);
 
@@ -1760,6 +1928,9 @@ class ArenaInstance {
     this._snapBuf.boundaryRadius = boundaryRadius;
 
     for (const [socketId, player] of this.players) {
+      // FIX O6: disconnected mid-game — their socket is gone, skip sending
+      // (the snake itself stays alive during the grace period)
+      if (player.disconnectedAt > 0) continue;
       const isSpectator = player.deadAt > 0;
       const playerSnake = isSpectator ? null : state.snakes.get(player.snakeId);
 
@@ -2176,6 +2347,7 @@ async function handleJoin(ws: any, arenaId: string): Promise<void> {
         existingArena.players.delete(oldConnId);
         socketToArena.delete(oldConnId);
         existingPlayer.socket = state.conn; // snapshots now flow to the new socket
+        existingPlayer.disconnectedAt = 0; // FIX O6: grace cleared — fully resumed
         existingArena.players.set(state.connId, existingPlayer);
         existingArena.snakeToSocket.set(existingPlayer.snakeId, state.connId);
 
@@ -2261,6 +2433,8 @@ async function handleJoin(ws: any, arenaId: string): Promise<void> {
       lastPosCheckX: NaN,
       lastPosCheckY: NaN,
       extractSamples: [],
+      // FIX O6: disconnect grace
+      disconnectedAt: 0,
       // Spectator mode
       deadAt: 0,
       spectatorHx: 0,
@@ -2413,7 +2587,10 @@ function handleClose(ws: any): void {
     const arena = arenas.get(state.arenaId);
     if (arena) {
       socketToArena.delete(connId);
-      arena.removePlayer(connId);
+      // FIX O6: keep the snake alive for a grace period instead of deleting
+      // it instantly — transient drops (wifi blip, phone call) resume with
+      // score/chips intact and no double buy-in charge.
+      arena.markPlayerDisconnected(connId);
       // Schedule arena cleanup when no players remain
       if (arena.playerCount === 0) {
         arena.lastPlayerLeaveTime = Date.now();

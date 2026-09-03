@@ -22,7 +22,7 @@
 
 import type { Snake } from './types';
 import { SpatialHash, type SpatialEntity } from './spatial-hash';
-import { SPAWN_PROTECTION_MS, HEAD_ON_HEAD_BOOST_WINS, SNAKE_RADIUS, SEGMENT_SPACING } from './config';
+import { SPAWN_PROTECTION_MS, HEAD_ON_HEAD_BOOST_WINS, HEAD_ON_BOOST_MIN_SCORE_FRACTION, SNAKE_RADIUS, SEGMENT_SPACING } from './config';
 import { collectFreezeAnchors, nearestAnchorDistSq, isFreezeDistSq, type FreezeAnchor } from './freeze';
 import { getBotIsHunter } from './bot-ai';
 
@@ -68,6 +68,7 @@ const _deadSnakesSet = new Set<string>();
 const _hohCheckedSet = new Set<string>();
 const _checkedSnakesSet = new Set<string>();
 const _h2bMap = new Map<string, string>();
+const _h2bOrder = new Map<string, number>(); // FIX O18: detection order per head-to-body hit
 // PERF: Cache visualTailIdx per tick — avoids recomputing the sqrt-walk
 // for the same snake in both body hash build AND narrow phase.
 const _tailIdxCache = new Map<string, number>();
@@ -194,17 +195,21 @@ export function checkCollisions(
   playerAnchors?: FreezeAnchor[],
 ): CollisionResult {
   const scratch = _scratch;
-  const VIEWPORT_COLLISION_RANGE_SQ = 2000 * 2000;
+  // FIX O9/OFF-14: raised from 2000px — at min zoom 0.15 the visible radius is
+  // ~6400px, so bot-vs-bot pairs in the outer half of the screen glided through
+  // each other without dying ("the world looks fake"). 4000px still culls the
+  // vast majority of pairs; body-hash insert range extended to match (7000 =
+  // 4000 live zone + ~2600 max frozen trail + 400 margin).
+  const VIEWPORT_COLLISION_RANGE_SQ = 4000 * 4000;
   // PERF: Clear per-tick caches
   _tailIdxCache.clear();
-  // T3: body-hash insert range tightened from 12000px to 5000px.
+  // T3: body-hash insert range tied to the live zone above.
   // With G1 freeze, heads beyond 2000px are static; a static snake's body
   // trails at most ~2600px behind its head (computeBodyLength(1e6) ≈ 324
-  // segments × 8px). Range = freeze(2000) + max trail(~2600) + margin(400)
-  // = 5000px guarantees every body pixel that can reach the 2000px live
-  // zone still has its snake inserted. 12000² → 5000² removes ~85% of the
-  // frozen-body hash inserts.
-  const BODY_HASH_RANGE_SQ = (2000 + 3000) * (2000 + 3000);
+  // segments × 8px). Range = live zone(4000) + max trail(~2600) + margin(400)
+  // = 7000px guarantees every body pixel that can reach the live zone still
+  // has its snake inserted.
+  const BODY_HASH_RANGE_SQ = (4000 + 3000) * (4000 + 3000);
   const hasPlayerRef = playerX !== undefined && playerY !== undefined;
 
   // T3: resolve anchor list — explicit anchors, else single player, else
@@ -343,9 +348,14 @@ export function checkCollisions(
         const bBoost = otherSnake.boosting;
 
         // Determine winner — there is ALWAYS exactly one winner (never both die).
-        // Priority: boost > higher score > deterministic ID tiebreaker.
+        // Priority: legit boost > higher score > deterministic ID tiebreaker.
+        // FIX OFF-5: boost-priority is now gated — the booster must hold at
+        // least HEAD_ON_BOOST_MIN_SCORE_FRACTION of the other's score, so a
+        // 500-score minnow can no longer one-shot a 20K giant by holding boost.
+        const boostValid = HEAD_ON_HEAD_BOOST_WINS && aBoost !== bBoost
+          && (aBoost ? scoreA : scoreB) >= (aBoost ? scoreB : scoreA) * HEAD_ON_BOOST_MIN_SCORE_FRACTION;
         let winnerIsA: boolean;
-        if (HEAD_ON_HEAD_BOOST_WINS && aBoost !== bBoost) {
+        if (boostValid) {
           winnerIsA = aBoost; // boosting snake wins
         } else if (scoreA !== scoreB) {
           winnerIsA = scoreA > scoreB; // higher score wins
@@ -490,8 +500,12 @@ export function checkCollisions(
   // ── Resolve head-to-body hits with mutual-kill protection ──
   const h2bMapScratch = _h2bMap;
   h2bMapScratch.clear();
+  const h2bOrder = _h2bOrder;
+  h2bOrder.clear();
+  let h2bOrd = 0;
   for (const [attackerId, bodyOwnerId] of h2bHits) {
     h2bMapScratch.set(attackerId, bodyOwnerId);
+    h2bOrder.set(attackerId, h2bOrd++);
   }
 
   for (const [attackerId, bodyOwnerId] of h2bHits) {
@@ -501,20 +515,25 @@ export function checkCollisions(
     const reverseBodyOwnerId = h2bMapScratch.get(bodyOwnerId);
     if (reverseBodyOwnerId === attackerId) {
       // Mutual: both heads are in each other's bodies.
-      // Longer snake survives, shorter dies. Equal = both die.
-      const lenA = attacker.path.length;
-      const lenB = bodyOwner.path.length;
-      if (lenA > lenB) {
-        // Attacker is longer → body owner (shorter) dies
-        if (!deadSnakes.has(bodyOwnerId)) {
-          deadSnakes.add(bodyOwnerId);
-          killEvents.push({ victimId: bodyOwnerId, victimName: bodyOwner.name, killerId: attackerId, killerName: attacker.name, score: bodyOwner.score, timestamp: now });
-        }
-      } else if (lenB > lenA) {
-        // Body owner is longer → attacker (shorter) dies
+      // FIX O18: the old length-based tiebreak let a huge snake head-butt a
+      // small snake's body and walk away on size alone ("I died even though
+      // its head crossed my body first"). Right-of-way now: whichever head
+      // crossed a body FIRST in this tick's detection order dies — the same
+      // rule as the one-sided case. Equal order (not reachable in practice)
+      // still means both die.
+      const orderA = h2bOrder.get(attackerId) ?? Number.MAX_SAFE_INTEGER;
+      const orderB = h2bOrder.get(bodyOwnerId) ?? Number.MAX_SAFE_INTEGER;
+      if (orderA < orderB) {
+        // Attacker's head crossed a body first → attacker dies
         if (!deadSnakes.has(attackerId)) {
           deadSnakes.add(attackerId);
           killEvents.push({ victimId: attackerId, victimName: attacker.name, killerId: bodyOwnerId, killerName: bodyOwner.name, score: attacker.score, timestamp: now });
+        }
+      } else if (orderB < orderA) {
+        // Body owner's head crossed a body first → body owner dies
+        if (!deadSnakes.has(bodyOwnerId)) {
+          deadSnakes.add(bodyOwnerId);
+          killEvents.push({ victimId: bodyOwnerId, victimName: bodyOwner.name, killerId: attackerId, killerName: attacker.name, score: bodyOwner.score, timestamp: now });
         }
       } else {
         // Same length: both die

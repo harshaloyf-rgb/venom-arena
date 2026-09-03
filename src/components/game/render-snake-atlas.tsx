@@ -565,8 +565,8 @@ export function renderSnakeAtlas(
   const interpHeadY = safePrevY + (snake.path.headY - safePrevY) * alpha;
   const safeInterpX = Number.isFinite(interpHeadX) ? interpHeadX : snake.path.headX;
   const safeInterpY = Number.isFinite(interpHeadY) ? interpHeadY : snake.path.headY;
-  const renderOffX = (safeInterpX - snake.path.headX) * zoom;
-  const renderOffY = (safeInterpY - snake.path.headY) * zoom;
+  const renderOffX = (safeInterpX - snake.path.headX) * zoom + (snake.extrapX || 0) * zoom;
+  const renderOffY = (safeInterpY - snake.path.headY) * zoom + (snake.extrapY || 0) * zoom;
   // Zero-allocation world-to-screen: compute transform once, inline per coordinate
   const ct = computeCamTransform(camera, cw, ch);
 
@@ -995,8 +995,8 @@ export function renderSnakeFallback(
   const interpHeadY = safePrevY + (snake.path.headY - safePrevY) * alpha;
   const safeInterpX = Number.isFinite(interpHeadX) ? interpHeadX : snake.path.headX;
   const safeInterpY = Number.isFinite(interpHeadY) ? interpHeadY : snake.path.headY;
-  const renderOffX = (safeInterpX - snake.path.headX) * zoom;
-  const renderOffY = (safeInterpY - snake.path.headY) * zoom;
+  const renderOffX = (safeInterpX - snake.path.headX) * zoom + (snake.extrapX || 0) * zoom;
+  const renderOffY = (safeInterpY - snake.path.headY) * zoom + (snake.extrapY || 0) * zoom;
   // Tier-2 (world-to-screen unify): ALWAYS use the exact float transform.
   // The old code snapped bots/food to integer pixels while the player and
   // camera were exact — bots/food stepped in whole-pixel quanta against the

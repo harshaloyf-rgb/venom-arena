@@ -99,7 +99,7 @@ export function encodeSnapshot(
   totalSize += foodCount * 12;
 
   // Per star (stride 5): 4+4+2+2+1 = 13 bytes
-  totalSize += starCount * 13;
+  totalSize += starCount * 15;
 
   // Per minimap (stride 4): 2+2+2+1 = 7 bytes
   totalSize += minimapCount * 7;
@@ -189,10 +189,10 @@ export function encodeSnapshot(
   for (let i = 0; i + 4 < stars.length; i += 5) {
     wb.writeF32(Number(stars[i]) || 0);       // x
     wb.writeF32(Number(stars[i + 1]) || 0);   // y
-    // FIX E3: clamp star value to u16 — death stars carry baseValue =
-    // floor(chips/9) and buy-ins reach 750M+, so an unclamped value silently
-    // wraps mod 65536 on the client display (server math uses the true value).
-    wb.writeU16(Math.min(65535, Math.max(0, Math.trunc(Number(stars[i + 2]) || 0))));   // value
+    // FIX O14: star value as f32 (was u16-clamped at 65535 — high-stakes
+    // stars worth 80M+ chips were LABELED 65.5kc on the client while paying
+    // their true value; 4 bytes/star keeps labels honest)
+    wb.writeF32(Math.max(0, Number(stars[i + 2]) || 0));   // value
     wb.writeU16(Number(stars[i + 3]) || 0);   // id
     wb.writeU8(Number(stars[i + 4]) || 0);    // radius
   }

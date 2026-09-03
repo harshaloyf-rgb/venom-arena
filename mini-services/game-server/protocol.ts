@@ -22,6 +22,8 @@ export const OP = {
 
   CUSTOM_SKIN: 0x40,
   STRING_TABLE: 0x41,
+  // FIX O8: server-authoritative global leaderboard, sent every 500ms
+  LEADERBOARD: 0x42,
 
   STATS_REQ: 0x50,
   STATS_RESP: 0x51,
@@ -222,6 +224,9 @@ export class WSPlayerConnection {
       case 'extractFailed':
         this._sendExtractFailed(data);
         break;
+      case 'leaderboard':
+        this._sendLeaderboard(data);
+        break;
       default:
         console.warn('[WSConn] Unknown event:', event);
     }
@@ -365,6 +370,39 @@ export class WSPlayerConnection {
 
     wb.writeU8(OP.EXTRACT_FAIL);
     wb.writeStringWithLen(reason);
+
+    this.send(wb.toBuffer());
+  }
+
+  // FIX O8: server-authoritative global leaderboard (two top-10 lists + ranks).
+  // [u8 op][u8 scoreCount]{entries}[u8 chipsCount]{entries}[u16 totalAlive]
+  // [u16 selfRankScore][u16 selfRankChips]
+  // entry: [u8 nameLen][utf8][u32 score][u32 chips][u8 flags: bit0=isBot bit1=isSelf]
+  private _sendLeaderboard(data: any): void {
+    const score: any[] = data.score ?? [];
+    const chips: any[] = data.chips ?? [];
+    const wb = new WriteBuffer(512 + score.length * 64 + chips.length * 64);
+
+    wb.writeU8(OP.LEADERBOARD);
+    wb.writeU8(Math.min(20, score.length));
+    for (let i = 0; i < score.length && i < 20; i++) {
+      const e = score[i];
+      wb.writeStringWithLen(String(e.name ?? '?').slice(0, 24));
+      wb.writeU32(Math.max(0, Math.floor(e.score ?? 0)) >>> 0);
+      wb.writeU32(Math.max(0, Math.floor(e.chips ?? 0)) >>> 0);
+      wb.writeU8((e.isBot ? 1 : 0) | (e.isSelf ? 2 : 0));
+    }
+    wb.writeU8(Math.min(20, chips.length));
+    for (let i = 0; i < chips.length && i < 20; i++) {
+      const e = chips[i];
+      wb.writeStringWithLen(String(e.name ?? '?').slice(0, 24));
+      wb.writeU32(Math.max(0, Math.floor(e.score ?? 0)) >>> 0);
+      wb.writeU32(Math.max(0, Math.floor(e.chips ?? 0)) >>> 0);
+      wb.writeU8((e.isBot ? 1 : 0) | (e.isSelf ? 2 : 0));
+    }
+    wb.writeU16((data.totalAlive ?? 0) & 0xffff);
+    wb.writeU16((data.selfRankScore ?? 0) & 0xffff);
+    wb.writeU16((data.selfRankChips ?? 0) & 0xffff);
 
     this.send(wb.toBuffer());
   }

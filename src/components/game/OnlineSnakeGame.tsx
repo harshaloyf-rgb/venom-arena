@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Zap, CircleDot, Wifi, WifiOff, Trophy, Coins, UserPlus, Swords, LogOut, Skull, Eye, ShieldCheck, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/components/providers/auth-provider';
-import { createGameSocket, type GameSnapshot, type ConnectionStatus } from '@/lib/game-socket';
+import { createGameSocket, type GameSnapshot, type ConnectionStatus, type ServerLeaderboard, type LeaderboardEntry } from '@/lib/game-socket';
 import { RemoteSnakeManager } from '@/lib/remote-snake-manager';
 import { createCamera, updateCameraInterpolated, getViewport } from '@/lib/snake/camera';
 import { SkinAtlasManager, DEFAULT_SKINS } from '@/lib/snake/atlas';
@@ -148,6 +148,9 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
 
   // ── Game state refs ──
   const isDeadRef = useRef(false);
+  // FIX O2: distinguishes a REAL match end (death/extract processed) from a
+  // disconnect-latched dead-state so reconnects can safely un-latch
+  const matchEndedRef = useRef(false);
   const deathTimeRef = useRef<number>(0);
   // Audit U6: auto-return once we've actually been in the arena and then dropped
   const wasConnectedRef = useRef(false);
@@ -155,6 +158,9 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
   const killerNameRef = useRef<string | null>(null);
   // Audit E6: killer's snakeId — exact highlight match (names can collide)
   const killerIdRef = useRef<string | null>(null);
+  // FIX O17: true while a join-level error (arena full / failed join) is shown
+  // — a canvas click then returns to the lobby instead of doing nothing
+  const joinErrorBackRef = useRef(false);
   const highScoreRef = useRef(0);
   const playerScoreRef = useRef(0);
   const playerKillsRef = useRef(0);
@@ -171,6 +177,10 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
   const [displayStatus, setDisplayStatus] = useState<ConnectionStatus>('disconnected');
   const [displayError, setDisplayError] = useState<string | null>(null);
   const [leaderboard, setLeaderboard] = useState<LBEntry[]>([]);
+  // FIX O8: server-authoritative global top-10 (updated by game-socket state)
+  const serverLbRef = useRef<ServerLeaderboard | null>(null);
+  const lastAppliedLbRef = useRef<ServerLeaderboard | null>(null);
+  const lastAppliedLbModeRef = useRef<'score' | 'chips'>('chips');
   const [lbMode, setLbMode] = useState<'score' | 'chips'>('chips');
   const [displayHighScore, setDisplayHighScore] = useState(0);
   const [isDead, setIsDead] = useState(false);
@@ -228,6 +238,32 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
   const lbModeRef = useRef(lbMode);
   useEffect(() => { lbModeRef.current = lbMode; });
   const updateLeaderboardRef = useRef((snakes: Map<string, Snake>, player: Snake | null) => {
+    // FIX O8: prefer the server's global top-10 — the old visible-snakes
+    // ranking was "biggest snake within 15km" and never showed the real
+    // leaders roaming outside view.
+    const slb = serverLbRef.current;
+    if (slb) {
+      // Only rebuild the list when the server data (2Hz) or the mode changes —
+      // calling setLeaderboard with a fresh array every frame would re-render
+      // the HUD 60×/s for nothing.
+      if (slb !== lastAppliedLbRef.current || lbModeRef.current !== lastAppliedLbModeRef.current) {
+        lastAppliedLbRef.current = slb;
+        lastAppliedLbModeRef.current = lbModeRef.current;
+        const mapEntry = (e: LeaderboardEntry): LBEntry => ({
+          name: e.name,
+          score: e.score,
+          carriedChips: e.chips,
+          isPlayer: !e.isBot,
+          isBot: e.isBot,
+        });
+        if (lbModeRef.current === 'chips') {
+          setLeaderboard(slb.chips.filter(e => !e.isBot || e.chips > 0).map(mapEntry));
+        } else {
+          setLeaderboard(slb.score.map(mapEntry));
+        }
+      }
+      return;
+    }
     const entries: LBEntry[] = [];
     for (const [, s] of snakes) {
       if (!s.alive) continue;
@@ -296,6 +332,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         if (state.matchEnd && !isDeadRef.current) {
           console.log('[GameEnd] matchEnd data:', JSON.stringify(state.matchEnd));
           isDeadRef.current = true;
+          matchEndedRef.current = true; // FIX O2: real end — never un-latch
           deathTimeRef.current = performance.now();
           setIsDead(true);
           clearAllSmoothedSegs();
@@ -340,8 +377,33 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
             toast.error('Extraction failed: ' + reason);
           }
         }
+        // FIX O8: capture server leaderboard (identity-guarded re-render in updateLeaderboardRef)
+        if (state.leaderboard) {
+          serverLbRef.current = state.leaderboard;
+        }
         if (state.status === 'connected') {
           wasConnectedRef.current = true;
+          // Socket is back — cancel the U6 auto-return timer; if this was a
+          // real death the death screen keeps its own flow, otherwise the
+          // JOINED resume check below un-latches the dead-state.
+          if (autoReturnTimerRef.current) {
+            clearTimeout(autoReturnTimerRef.current);
+            autoReturnTimerRef.current = null;
+          }
+        }
+        // FIX O2: transient reconnect resume. A socket drop used to latch
+        // isDead FOREVER — fake "ELIMINATED" banner, boost button disabled,
+        // extraction dead — even though the server kept the snake alive and
+        // the re-join migrated it back with score/chips intact. Un-latch when
+        // JOINED is re-confirmed and no real matchEnd was processed.
+        if (state.joinedInGame && isDeadRef.current && !matchEndedRef.current && !deathData) {
+          isDeadRef.current = false;
+          setIsDead(false);
+          killerNameRef.current = null;
+          killerIdRef.current = null;
+          extractionRef.current.active = false;
+          extractionRef.current.progress = 0;
+          console.log('[GameResume] Reconnected with live snake — dead-state un-latched');
         }
         if (state.status === 'disconnected' || state.status === 'error') {
           if (!isDeadRef.current) {
@@ -456,6 +518,12 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
     const onCanvasClick = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
       handleMinimapClick(e.clientX - rect.left, e.clientY - rect.top);
+      // FIX O17: join-level errors (arena full / failed join) — click returns
+      // to the arena list instead of a dead-end screen
+      if (joinErrorBackRef.current) {
+        onExit?.();
+        return;
+      }
       // Death overlay: click to respawn (after 5s)
       if (isDeadRef.current && performance.now() - deathTimeRef.current >= 5000) {
         handleRespawn();
@@ -519,10 +587,20 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         } else if (status === 'error') {
           ctx.fillStyle = '#ef4444';
           ctx.font = 'bold 18px sans-serif';
+          // FIX O17: show the SERVER's reason (arena full, join failed, etc.)
+          // instead of burying everything under a generic connection error
           ctx.fillText(error || 'Connection failed', w / 2, h / 2);
           ctx.fillStyle = '#ffffff40';
           ctx.font = '13px sans-serif';
-          ctx.fillText('Check your connection and try again', w / 2, h / 2 + 30);
+          // Join-level errors (arena full / failed join) are not connection
+          // problems — don't tell the player to "check your connection"
+          const isJoinError = /full|join|arena/i.test(error || '');
+          ctx.fillText(
+            isJoinError ? 'Tap to go back and pick a different arena' : 'Check your connection and try again',
+            w / 2, h / 2 + 30,
+          );
+          // Canvas tap handler: for join errors a click goes back to the lobby
+          joinErrorBackRef.current = isJoinError;
         } else if (status === 'disconnected') {
           ctx.fillStyle = '#ffffff';
           ctx.font = 'bold 18px sans-serif';
@@ -565,13 +643,29 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
       const frameElapsed = Math.min(Math.max(nowMs - lastFrameMsRef.current, 0), 100);
       lastFrameMsRef.current = nowMs;
       updateExtractionProgress(
-        extractionRef.current, input.isExtracting(), isDeadRef.current,
+        extractionRef.current,
+        // E2-v2: boosting cancels the ring — the server rejects extracts with
+        // boosted ticks in the hold window, so mirror that client-side (no
+        // confusing "You cannot boost while extracting" after a full ring).
+        input.isExtracting() && !isBoosting, isDeadRef.current,
         inputState.targetAngle, frameElapsed,
         () => { sockRef.current?.sendExtract(); },
       );
 
       // ── Build synthetic GameState for shared renderers ──
       const gameState = mgr.buildGameState(snap, ac);
+
+      // FIX O3-lite: heading echo — the head sprite aims where you point
+      // RIGHT NOW instead of waiting for the next snapshot to rotate the
+      // server angle. Render-only (adapter object, server truth untouched);
+      // the body path catches up when the snapshot arrives. Fast lerp keeps
+      // it from kinking the neck at extreme flicks.
+      const playerAdapter = gameState.player;
+      if (playerAdapter && playerAdapter.alive) {
+        let ad = inputState.targetAngle - playerAdapter.angle;
+        ad = Math.atan2(Math.sin(ad), Math.cos(ad));
+        playerAdapter.angle = playerAdapter.angle + ad * 0.35;
+      }
 
 
 

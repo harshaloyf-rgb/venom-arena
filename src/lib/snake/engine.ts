@@ -268,6 +268,21 @@ function findSafeSpawn(
       const dx = snake.path.headX - x;
       const dy = snake.path.headY - y;
       if (dx * dx + dy * dy < safeDistSq) { safe = false; break; }
+      // FIX OFF-3: body-aware safety. Head-only checks were never enough — a
+      // big snake's body extends 900-1500px BEHIND its head, so respawns
+      // materialized inside coils and died the moment protection ended.
+      const bodyLen = Math.min(snake.path.length, snake.cachedBodyLength || snake.path.length);
+      if (bodyLen > 2) {
+        const bodySafeDist = Math.max(40, snake.bodyRadius * 4 + 20);
+        const bodySafeDistSq = bodySafeDist * bodySafeDist;
+        const step = Math.max(2, Math.floor(bodyLen / 40)); // ~40 samples max
+        for (let i = step; i < bodyLen; i += step) {
+          const bdx = snake.path.getX(i) - x;
+          const bdy = snake.path.getY(i) - y;
+          if (bdx * bdx + bdy * bdy < bodySafeDistSq) { safe = false; break; }
+        }
+        if (!safe) break;
+      }
     }
     if (safe) return { x, y };
   }
@@ -518,7 +533,10 @@ function checkFoodEating(
     if (!snake.alive) continue;
     const hx = snake.path.headX;
     const hy = snake.path.headY;
-    if (now - snake.spawnTime < SPAWN_PROTECTION_MS) continue;
+    // FIX OFF-4: protected snakes can now EAT. Spawn protection exists to stop
+    // them being KILLED, not to lock them out of food — the old skip made every
+    // spawn/respawn start with 2s of driving through the food-rich start ring
+    // unable to eat anything.
     // G1: frozen bots don't eat and don't pull food (they don't move).
     if (freezeAnchors && snake.isBot && !getBotIsHunter(snake.id) &&
         isFreezeDistSq(nearestAnchorDistSq(freezeAnchors, hx, hy))) continue;
@@ -531,11 +549,12 @@ function checkFoodEating(
       const food = foodById.get(fid);
       if (!food) continue;
 
-      // FIX: Use entity hash position for distance/eating checks.
-      // Earlier snakes modify food.x/food.y via magnet pull, causing
-      // a mismatch between the query (hash pos) and this check (actual pos).
-      const ex = entity.x;
-      const ey = entity.y;
+      // Use ACTUAL food position for all checks (accurate physics) —
+      // kept in lockstep with the server's copy in mini-services/game-server.
+      // The old hash-position check let pulled orbs visibly hover at the
+      // snake's mouth for 33-100ms until the next hash rebuild (FIX OFF-16).
+      const ex = food.x;
+      const ey = food.y;
       const edx = hx - ex;
       const edy = hy - ey;
       const eDistSq = edx * edx + edy * edy;
@@ -577,14 +596,16 @@ function killSnake(snake: Snake, nextFoodId: { value: number }, foods: FoodOrb[]
   snake.alive = false;
   const dropValue = Math.max(1, snake.score);
   const segLen = snake.path.length;
-  // Cap total food to path length so drops don't pile at the tail
-  const maxFood = segLen;
-
-  const largeCount = Math.min(maxFood, Math.max(1, Math.floor(dropValue * 0.4 / 5)));
-  const medCount = Math.min(maxFood - largeCount, Math.max(1, Math.floor(dropValue * 0.3 / 2)));
-  let remaining = dropValue - largeCount * 5 - medCount * 2;
-  const smallCount = Math.min(maxFood - largeCount - medCount, Math.max(1, remaining));
-  remaining -= smallCount;
+  // FIX OFF-6: the old distribution computed orb COUNTS from value but capped
+  // every tier by path length — an 8K corpse dropped ~18% of its value and a
+  // 50K corpse ~5%, so finally cutting off the #1 snake paid almost nothing.
+  // Now a fixed slot mix (capped by path length) carries the FULL value as
+  // stacked per-orb value — big kills finally pay what they're worth.
+  const maxFood = Math.max(1, segLen);
+  const slotCount = Math.min(maxFood, 500);
+  const largeCount = Math.max(1, Math.floor(slotCount * 0.4));
+  const medCount = Math.max(1, Math.floor(slotCount * 0.3));
+  const smallCount = Math.max(1, slotCount - largeCount - medCount);
   const totalFood = largeCount + medCount + smallCount;
 
   const sizes: Array<0 | 1 | 2> = [];
@@ -597,12 +618,17 @@ function killSnake(snake: Snake, nextFoodId: { value: number }, foods: FoodOrb[]
   }
 
   const step = Math.max(1, Math.floor(segLen / totalFood));
+  const perOrb = Math.floor(dropValue / totalFood);
+  let leftover = dropValue - perOrb * totalFood;
   for (let i = 0; i < sizes.length; i++) {
     const si = Math.min(i * step, segLen - 1);
     const sizeIdx = sizes[i];
+    let value = perOrb;
+    if (leftover > 0) { value++; leftover--; }
+    if (value < 1) value = 1;
     const drop: FoodOrb = {
       id: nextFoodId.value++, x: snake.path.getX(si), y: snake.path.getY(si),
-      size: FOOD_SIZES[sizeIdx], value: FOOD_VALUES[sizeIdx], radius: FOOD_RADII[sizeIdx],
+      size: FOOD_SIZES[sizeIdx], value, radius: FOOD_RADII[sizeIdx],
       color: FOOD_COLORS[sizeIdx], glowColor: FOOD_GLOW_COLORS[sizeIdx], magnetized: false,
     };
     foods.push(drop);
@@ -797,7 +823,12 @@ export function gameTick(state: GameState, input: InputState, _dt: number): Kill
 
   // 7. Respawn dead bots — offline only
   if (state.botsEnabled) {
-    for (let r = 0; r < ac.respawnPerTick; r++) {
+    // FIX OFF-17: adaptive fill — the fixed 8-10 respawns/tick left the first
+    // ~2 seconds of every match a barren map. 8× fill during the initial
+    // window lands the full arena in under a second; steady state keeps the
+    // gentle trickle (no bot-flood after that).
+    const fillMultiplier = state.tickCount < 150 ? 8 : 1;
+    for (let r = 0; r < ac.respawnPerTick * fillMultiplier; r++) {
       respawnDeadBots(state, ac.botMix as any, createBotSnakeFactory);
     }
   }

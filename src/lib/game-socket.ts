@@ -51,6 +51,23 @@ export interface RemoteStar {
   radius: number;   // visual radius (matches dead player's body width)
 }
 
+// FIX O8: server-authoritative global leaderboard
+export interface LeaderboardEntry {
+  name: string;
+  score: number;
+  chips: number;
+  isBot: boolean;
+  isSelf: boolean;
+}
+
+export interface ServerLeaderboard {
+  score: LeaderboardEntry[];
+  chips: LeaderboardEntry[];
+  totalAlive: number;
+  selfRankScore: number;
+  selfRankChips: number;
+}
+
 export interface GameSnapshot {
   tick: number;
   boundaryRadius: number;
@@ -90,6 +107,11 @@ export interface GameSocketState {
   killerTag: string | null;
   killerIsBot: boolean;
   serverMapHalf: number | null;
+  /** FIX O2: true once JOINED confirmed and a live snake exists on the server —
+   *  lets the UI un-latch a disconnect-induced dead-state on resume. */
+  joinedInGame: boolean;
+  /** FIX O8: server-authoritative global leaderboard (null until first message) */
+  leaderboard: ServerLeaderboard | null;
 }
 
 // ─── Binary Opcodes ─────────────────────────────────────────────────────────
@@ -109,6 +131,7 @@ const OP_EXTRACT_FAIL = 0x33;
 const OP_ERROR      = 0x34;
 const OP_CUSTOM_SKIN = 0x40;
 const OP_STRING_TABLE = 0x41;
+const OP_LEADERBOARD = 0x42; // FIX O8: server-authoritative global leaderboard
 // FIX H5: heartbeat — client pings every 10s, server pongs. Detects half-dead
 // mobile connections that keep readyState OPEN after backgrounding.
 const OP_PING       = 0x60;
@@ -260,10 +283,12 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
   let lastPongAt = 0;
   let lastSnapshotAt = 0;
   let visibilityHandler: (() => void) | null = null;
+  let serverLeaderboard: ServerLeaderboard | null = null; // FIX O8
 
   // Pre-allocated parse buffers (avoid GC from array creation every 50ms)
   const _parseFoods: RemoteFood[] = [];
   const _parseMinimap: MinimapDot[] = [];
+  const _minimapPool: MinimapDot[] = []; // FIX O11: pooled dot objects
   const _parseStars: RemoteStar[] = [];
 
   // Pre-allocated snake array for snapshots
@@ -285,9 +310,37 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       killerTag,
       killerIsBot,
       serverMapHalf,
+      joinedInGame,
+      leaderboard: serverLeaderboard,
     });
     // One-shot: clear after emitting so consumer only sees it once
     extractFailedReason = null;
+  }
+
+  // FIX O8: parse the server leaderboard message
+  function handleLeaderboard(data: ArrayBuffer) {
+    const r = new BinReader(data);
+    r.u8v(); // skip opcode
+    const readList = (): LeaderboardEntry[] => {
+      const n = r.u8v();
+      const list: LeaderboardEntry[] = [];
+      for (let i = 0; i < n; i++) {
+        const nameLen = r.u8v();
+        const name = r.utf8(nameLen);
+        const score = r.u32v();
+        const chips = r.u32v();
+        const flags = r.u8v();
+        list.push({ name, score, chips, isBot: (flags & 0x01) !== 0, isSelf: (flags & 0x02) !== 0 });
+      }
+      return list;
+    };
+    const score = readList();
+    const chips = readList();
+    const totalAlive = r.u16v();
+    const selfRankScore = r.u16v();
+    const selfRankChips = r.u16v();
+    serverLeaderboard = { score, chips, totalAlive, selfRankScore, selfRankChips };
+    emit();
   }
 
   // ── Binary message handlers ──────────────────────────────────────────────
@@ -411,8 +464,9 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       if (rarityIdx !== 0xFFFF) snake.ra = st(rarityIdx);
       _parseSnakes[i] = snake;
 
-      // Debug log for first snake (avoids spam)
-      if (i === 0) {
+      // Debug log for first snake — DEV ONLY (FIX O16: this logged at 20 Hz
+      // in production builds, spamming consoles and costing frame time)
+      if (i === 0 && process.env.NODE_ENV !== 'production') {
         console.log('[GameSocket] First snake:', snake.name, 'bodyLen:', bodyLen, 'bodyRadiusRaw:', bodyRadiusRaw, 'sFlags:', sFlags.toString(16), 'score:', score);
       }
     }
@@ -439,35 +493,43 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       });
     }
 
-    // ── Parse stars (13 bytes each) ──
+    // ── Parse stars (15 bytes each) ──
     const stars = _parseStars;
     stars.length = 0;
     for (let i = 0; i < starCount; i++) {
       const x = r.f32v();
       const y = r.f32v();
-      const value = r.u16v();
+      // FIX O14: f32 value (was u16 — high-value stars displayed clamped)
+      const value = r.f32v();
       const id = r.u16v();
       const radius = r.u8v();
       stars.push({ x, y, value, id, radius });
     }
 
     // ── Parse minimap dots (7 bytes each) ──
+    // FIX O11: the server only rebuilds minimap dots every 4th snapshot (5Hz)
+    // and sends an EMPTY dot list otherwise — keep the previous dots so the
+    // minimap holds steady instead of blinking empty. Objects are POOLED:
+    // re-allocating ~1000 dots per snapshot was 20K objects/sec of GC churn.
     const minimapDots = _parseMinimap;
-    minimapDots.length = 0;
-    for (let i = 0; i < minimapCount; i++) {
-      const xRaw = r.i16v();
-      const yRaw = r.i16v();
-      const score = r.u16v();
-      const mFlags = r.u8v();
-      // Decompress: val / 32767 * boundaryRadius
-      const x = (xRaw / 32767) * boundaryRadius;
-      const y = (yRaw / 32767) * boundaryRadius;
-      minimapDots.push({
-        x,
-        y,
-        score,
-        isBot: (mFlags & 0x01) !== 0,
-      });
+    if (minimapCount > 0) {
+      minimapDots.length = 0;
+      for (let i = 0; i < minimapCount; i++) {
+        const xRaw = r.i16v();
+        const yRaw = r.i16v();
+        const score = r.u16v();
+        const mFlags = r.u8v();
+        // Decompress: val / 32767 * boundaryRadius
+        const x = (xRaw / 32767) * boundaryRadius;
+        const y = (yRaw / 32767) * boundaryRadius;
+        let dot = _minimapPool[i];
+        if (!dot) { dot = { x: 0, y: 0, score: 0, isBot: false }; _minimapPool[i] = dot; }
+        dot.x = x;
+        dot.y = y;
+        dot.score = score;
+        dot.isBot = (mFlags & 0x01) !== 0;
+        minimapDots.push(dot);
+      }
     }
 
     return {
@@ -666,6 +728,9 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
           break;
         case OP_CUSTOM_SKIN:
           handleCustomSkin(event.data);
+          break;
+        case OP_LEADERBOARD:
+          handleLeaderboard(event.data);
           break;
       }
     } catch (err) {

@@ -56,12 +56,27 @@ const _anchors: FreezeAnchor[] = [];
 export function collectFreezeAnchors(snakes: Map<string, Snake> | Iterable<Snake>): FreezeAnchor[] {
   _anchors.length = 0;
   const it = snakes instanceof Map ? snakes.values() : snakes;
+  let deadPlayerHead: FreezeAnchor | null = null;
   for (const s of it) {
-    if (!s.alive || s.isBot || !s.isPlayer) continue;
-    const x = s.path.headX;
-    const y = s.path.headY;
-    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-    _anchors.push({ x, y });
+    if (s.isBot || !s.isPlayer) continue;
+    if (s.alive) {
+      const x = s.path.headX;
+      const y = s.path.headY;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      _anchors.push({ x, y });
+    } else if (!deadPlayerHead) {
+      // FIX OFF-15: remember where the player DIED — during the 5s
+      // elimination screen the old code returned zero anchors, so EVERY bot
+      // hard-froze mid-chase while the killer's red highlight kept animating
+      // (the world read as a frame hitch). Anchoring on the death spot keeps
+      // the surrounding arena alive through the death flow.
+      const x = s.path.headX;
+      const y = s.path.headY;
+      if (Number.isFinite(x) && Number.isFinite(y)) deadPlayerHead = { x, y };
+    }
+  }
+  if (_anchors.length === 0 && deadPlayerHead) {
+    _anchors.push(deadPlayerHead);
   }
   return _anchors;
 }

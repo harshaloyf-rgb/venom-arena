@@ -174,8 +174,16 @@ export const NECK_PROTECTION = 5;
 /** Spawn protection duration in milliseconds */
 export const SPAWN_PROTECTION_MS = 2000;
 
-/** Head-on-head: if true, the boosting snake always wins */
+/** Head-on-head: if true, the boosting snake wins (subject to the score
+ *  fraction gate below) */
 export const HEAD_ON_HEAD_BOOST_WINS = true;
+
+/** FIX OFF-5: boost-priority in head-on collisions only applies when the
+ *  booster holds at least this fraction of the other snake's score. Without
+ *  the gate, a 500-score bot holding boost could one-shot a 20K snake (and
+ *  players could one-shot ANY bot for the price of a boost drain).
+ *  0.25 = boost still gives peers an edge, giants no longer fall to minnows. */
+export const HEAD_ON_BOOST_MIN_SCORE_FRACTION = 0.25;
 
 /** Spatial hash cell size in pixels for collision detection */
 export const SPATIAL_CELL_SIZE = 100;

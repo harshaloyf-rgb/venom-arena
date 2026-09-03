@@ -43,6 +43,11 @@ export function updateCameraInterpolated(
   const curY = snake.path.headY;
   camera.x = snake.prevHeadX + (curX - snake.prevHeadX) * alpha;
   camera.y = snake.prevHeadY + (curY - snake.prevHeadY) * alpha;
+  // FIX O3/O4: include the render-time extrapolation offset (online adapters
+  // set self-lead/dead-reckoning offsets) so the own snake stays centered —
+  // otherwise the renderer shifts the snake inside a camera that lags behind.
+  camera.x += snake.extrapX || 0;
+  camera.y += snake.extrapY || 0;
 
   // Zoom: quantized + lerped
   // P3: Adjusted zoom formula for unlimited growth support.
