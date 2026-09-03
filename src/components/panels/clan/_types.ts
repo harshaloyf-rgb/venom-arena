@@ -99,28 +99,28 @@ export interface WarInfo {
 // ──── Constants ────────────────────────────────────────────
 
 export const EMBLEM_OPTIONS = [
-  { value: '\u0001f40d', label: '\u0001f40d Viper Snake' },
-  { value: '\u0001f451', label: '\u0001f451 Royal Crown' },
-  { value: '\u0001f977', label: '\u0001f977 Cyber Ninja' },
-  { value: '\u0001f525', label: '\u0001f525 Phoenix Fire' },
+  { value: '🐍', label: '🐍 Viper Snake' },
+  { value: '👑', label: '👑 Royal Crown' },
+  { value: '🥷', label: '🥷 Cyber Ninja' },
+  { value: '🔥', label: '🔥 Phoenix Fire' },
   { value: '\u26a1', label: '\u26a1 Lightning Bolt' },
-  { value: '\u0001f48e', label: '\u0001f48e Diamond Shield' },
+  { value: '💎', label: '💎 Diamond Shield' },
 ];
 
 export const ACTIVITY_ICONS: Record<string, string> = {
   join: '\u2b06\ufe0f',
   leave: '\u2b07\ufe0f',
-  deposit: '\u0001f4b0',
-  create: '\u0001f3af',
+  deposit: '💰',
+  create: '🎯',
   promote: '\u2b06\ufe0f',
   demote: '\u2b07\ufe0f',
-  challenge_claim: '\u0001f3c6',
+  challenge_claim: '🏆',
   level_up: '\u2b50',
-  withdraw: '\u0001f4b0',
-  payout: '\u0001f4b0',
-  shop_purchase: '\u0001f6d2',
+  withdraw: '💰',
+  payout: '💰',
+  shop_purchase: '🛒',
   war_declare: '\u2694\ufe0f',
-  war_end: '\u0001f3c6',
+  war_end: '🏆',
 };
 
 export const CHALLENGE_ICONS: Record<string, LucideIcon> = {

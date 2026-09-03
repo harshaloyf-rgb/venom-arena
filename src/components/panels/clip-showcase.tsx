@@ -388,9 +388,12 @@ function ExpandedView({
 }
 
 
-// ── Empty State Component ──
-
-function EmptyState({ isLoggedIn, onOpenUpload }: { isLoggedIn: boolean; onOpenUpload: () => void }) {
+// ── Upload Guide Component ──
+// (Extracted from the old empty-state: the “how to get featured” walkthrough
+// now ALSO renders when the feed has content or when loading fails, instead
+// of vanishing — users reported it “completely removed” because it only
+// showed for brand-new empty feeds.)
+function UploadGuide({ isLoggedIn, onOpenUpload }: { isLoggedIn: boolean; onOpenUpload: () => void }) {
   return (
     <div className="text-center py-6 sm:py-8 lg:py-2">
       <div className="relative inline-flex items-center justify-center mb-5 lg:mb-1">
@@ -404,6 +407,14 @@ function EmptyState({ isLoggedIn, onOpenUpload }: { isLoggedIn: boolean; onOpenU
         Scroll through top plays, upvote your favorites, and share your own legendary moments!
       </p>
 
+      <GuideSteps isLoggedIn={isLoggedIn} onOpenUpload={onOpenUpload} />
+    </div>
+  );
+}
+
+function GuideSteps({ isLoggedIn, onOpenUpload }: { isLoggedIn: boolean; onOpenUpload: () => void }) {
+  return (
+    <>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:gap-1 mb-5 lg:mb-1 max-w-sm mx-auto">
         <StepCard icon={<Video className="w-5 h-5 lg:w-3 lg:h-3 text-red-400" />} step="1" title="Play Matches" desc="Impressive games (5K+ chips or 3+ kills) auto-generate highlight cards" />
         <StepCard icon={<Upload className="w-5 h-5 lg:w-3 lg:h-3 text-amber-400" />} step="2" title="Record & Upload" desc="Record gameplay, upload to YouTube/Instagram, paste the link here" />
@@ -445,8 +456,13 @@ function EmptyState({ isLoggedIn, onOpenUpload }: { isLoggedIn: boolean; onOpenU
       ) : (
         <p className="text-[11px] text-slate-500 italic">Sign in to submit your own gameplay highlights</p>
       )}
-    </div>
+    </>
   );
+}
+
+// Full empty state = intro + guide steps (used when a feed has zero clips)
+function EmptyState({ isLoggedIn, onOpenUpload }: { isLoggedIn: boolean; onOpenUpload: () => void }) {
+  return <UploadGuide isLoggedIn={isLoggedIn} onOpenUpload={onOpenUpload} />;
 }
 
 function StepCard({ icon, step, title, desc }: { icon: React.ReactNode; step: string; title: string; desc: string }) {
@@ -493,6 +509,9 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
     title: '', description: '', platform: 'YouTube' as string,
     chips: '', kills: '', arenaName: '', url: '',
   });
+  // Persistent “how to get featured” guide — user request: the walkthrough used
+  // to vanish as soon as any clip existed or loading failed.
+  const [showGuide, setShowGuide] = useState(false);
 
   const fetchClips = useCallback(
     async (reset = false) => {
@@ -509,7 +528,7 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
           params.set('platform', filterType);
         }
         const res = await fetch(`/api/clips?${params}`);
-        if (!res.ok) throw new Error('Failed to load clips');
+        if (!res.ok) throw new Error(`Failed to load clips (server error ${res.status})`);
         const data = await res.json();
         setClips((prev) => (reset ? data.clips : [...prev, ...data.clips]));
         setTotal(data.total);
@@ -707,6 +726,9 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
             <p className="text-xs text-slate-400 mt-1 max-w-xl lg:text-[11px] lg:mt-0">Top plays, clutch extractions &amp; community highlights.</p>
           </div>
           <div className="flex items-center gap-2 shrink-0 lg:gap-1">
+            <button type="button" onClick={() => setShowGuide((v) => !v)} className={`px-3 py-2 lg:px-1.5 lg:py-1 rounded-xl font-bold text-xs uppercase tracking-wider transition flex items-center gap-1.5 lg:gap-1 border ${showGuide ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'}`} title="How Highlights works">
+              ❔ How It Works
+            </button>
             {isLoggedIn && (
               <button type="button" onClick={() => setMyClipsOnly((v) => !v)} className={`px-3 py-2 lg:px-1.5 lg:py-1 rounded-xl font-bold text-xs uppercase tracking-wider transition flex items-center gap-1.5 lg:gap-1 border ${myClipsOnly ? 'bg-red-600 border-red-600 text-white' : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800'}`}>
                 {myClipsOnly ? '✕' : '👤'} {myClipsOnly ? 'All' : 'My Clips'}
@@ -758,6 +780,16 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
           <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-5 lg:p-2 text-center">
             <p className="text-sm text-rose-300 mb-3">{error}</p>
             <button type="button" onClick={() => fetchClips(true)} className="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition">Retry</button>
+          </div>
+        )}
+
+        {/* Guide stays visible even when the feed fails — the “section removed” fix */}
+        {error && !loading && !isExpanded && <UploadGuide isLoggedIn={isLoggedIn} onOpenUpload={() => setShowUpload(true)} />}
+
+        {/* On-demand guide toggle (always available, even when clips exist) */}
+        {showGuide && !error && !loading && !isExpanded && (
+          <div className="mb-4 lg:mb-1 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 lg:p-2">
+            <GuideSteps isLoggedIn={isLoggedIn} onOpenUpload={() => setShowUpload(true)} />
           </div>
         )}
 

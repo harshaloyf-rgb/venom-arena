@@ -322,9 +322,9 @@ function FindMeCard({ myRank, activeTab, selectedCountry, selectedRegion, onClos
 
       <div className="flex items-center gap-3 text-[10px] lg:gap-1 lg:text-[11px] font-mono text-slate-400 mb-3">
         <span>Chips: <span className="text-emerald-400 font-bold">{myRank.bankedChips.toLocaleString()}c</span></span>
-        <span>\u00b7</span>
+        <span>&middot;</span>
         <span>Level: <span className="text-white font-bold">{myRank.level}</span></span>
-        {myRank.clanTag && <><span>\u00b7</span><span>Clan: <span className="text-cyan-300 font-bold">[{myRank.clanTag}]</span></span></>}
+        {myRank.clanTag && <><span>&middot;</span><span>Clan: <span className="text-cyan-300 font-bold">[{myRank.clanTag}]</span></span></>}
       </div>
 
       {/* Milestones in Find Me card */}
@@ -647,7 +647,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
         <span className="text-[10px] lg:text-[11px] font-mono text-slate-500">{countLabel}</span>
         <div className="flex items-center gap-2 lg:gap-1">
           <span className="text-[9px] lg:text-[11px] font-mono text-slate-600 hidden sm:inline" title={TIE_BREAK_EXPLANATION}>
-            Tie-break: chips \u2192 level \u2192 join date
+            Tie-break: chips &rarr; level &rarr; join date
           </span>
           <button
             type="button"
@@ -680,7 +680,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
               2026 CONCURRENT TOURNAMENT
             </span>
             <span className="inline-flex items-center gap-1 text-[9px] lg:text-[11px] font-mono text-amber-400 font-bold px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 rounded">
-              <Zap className="w-3 h-3" /> LIVE \u00b7 30min updates
+              <Zap className="w-3 h-3" /> LIVE &middot; 30min updates
             </span>
           </div>
           <h2 className="text-xl sm:text-2xl lg:text-[11px] font-sans font-black text-white tracking-tight flex items-center gap-2.5 mt-2">
@@ -812,7 +812,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                           <div className="text-[10px] lg:text-[11px] font-mono text-slate-500">{c.userTag}</div>
                         </div>
                         <div className="lg:col-span-2">
-                          {c.clanTag ? <span className="text-[10px] lg:text-[11px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 lg:px-1 lg:py-0 rounded">[{c.clanTag}]</span> : <span className="text-slate-700 text-[10px] lg:text-[11px]">\u2014</span>}
+                          {c.clanTag ? <span className="text-[10px] lg:text-[11px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 lg:px-1 lg:py-0 rounded">[{c.clanTag}]</span> : <span className="text-slate-700 text-[10px] lg:text-[11px]">&mdash;</span>}
                         </div>
                         <div className="lg:col-span-2 text-xs lg:text-[11px] text-slate-300 flex items-center gap-1.5">
                           <span aria-hidden>{countryFlag(c.country)}</span> {countryName(c.country)}
@@ -917,7 +917,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                           <div className="text-[10px] lg:text-[11px] font-mono text-slate-500">{e.userTag}</div>
                         </div>
                         <div className="lg:col-span-2">
-                          {e.clanTag ? <span className="text-[10px] lg:text-[11px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 lg:px-1 lg:py-0 rounded">[{e.clanTag}]</span> : <span className="text-slate-700 text-[10px] lg:text-[11px]">\u2014</span>}
+                          {e.clanTag ? <span className="text-[10px] lg:text-[11px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 lg:px-1 lg:py-0 rounded">[{e.clanTag}]</span> : <span className="text-slate-700 text-[10px] lg:text-[11px]">&mdash;</span>}
                         </div>
                         <div className="lg:col-span-2 text-xs lg:text-[11px]">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-[10px] lg:text-[11px] font-mono" style={{ color: tier.color }}>{tier.badge}</span>
@@ -1022,7 +1022,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                           <div className="text-[10px] lg:text-[11px] font-mono text-slate-500">{e.userTag}</div>
                         </div>
                         <div className="lg:col-span-2">
-                          {e.clanTag ? <span className="text-[10px] lg:text-[11px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 lg:px-1 lg:py-0 rounded">[{e.clanTag}]</span> : <span className="text-slate-700 text-[10px] lg:text-[11px]">\u2014</span>}
+                          {e.clanTag ? <span className="text-[10px] lg:text-[11px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 lg:px-1 lg:py-0 rounded">[{e.clanTag}]</span> : <span className="text-slate-700 text-[10px] lg:text-[11px]">&mdash;</span>}
                         </div>
                         <div className="lg:col-span-1 text-right text-xs lg:text-[11px] text-amber-400 font-mono">{e.level}</div>
                         <div className="lg:col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">{e.bankedChips.toLocaleString()}c</div>
@@ -1130,7 +1130,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                           <div className="text-[10px] lg:text-[11px] font-mono text-slate-500">{e.userTag}</div>
                         </div>
                         <div className="lg:col-span-2">
-                          {e.clanTag ? <span className="text-[10px] lg:text-[11px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 lg:px-1 lg:py-0 rounded">[{e.clanTag}]</span> : <span className="text-slate-700 text-[10px] lg:text-[11px]">\u2014</span>}
+                          {e.clanTag ? <span className="text-[10px] lg:text-[11px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 lg:px-1 lg:py-0 rounded">[{e.clanTag}]</span> : <span className="text-slate-700 text-[10px] lg:text-[11px]">&mdash;</span>}
                         </div>
                         <div className="lg:col-span-2 text-xs lg:text-[11px] text-slate-300 flex items-center gap-1.5">
                           <span aria-hidden>{countryFlag(e.country)}</span> {countryName(e.country)}
@@ -1244,7 +1244,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                           <div className="text-[10px] lg:text-[11px] font-mono text-slate-500">{e.userTag}</div>
                         </div>
                         <div className="lg:col-span-2">
-                          {e.clanTag ? <span className="text-[10px] lg:text-[11px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 lg:px-1 lg:py-0 rounded">[{e.clanTag}]</span> : <span className="text-slate-700 text-[10px] lg:text-[11px]">\u2014</span>}
+                          {e.clanTag ? <span className="text-[10px] lg:text-[11px] font-mono text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-1.5 py-0.5 lg:px-1 lg:py-0 rounded">[{e.clanTag}]</span> : <span className="text-slate-700 text-[10px] lg:text-[11px]">&mdash;</span>}
                         </div>
                         <div className="lg:col-span-3 text-xs lg:text-[11px] text-slate-300 flex items-center gap-1.5">
                           <span aria-hidden>{countryFlag(e.country)}</span> {countryName(e.country)}

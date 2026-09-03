@@ -5,6 +5,7 @@ import { getSession } from '@/lib/auth';
 // GET /api/clips/featured — return the top featured clip (approved only)
 // Priority: 1) Admin-featured  2) Today's best match-card  3) Highest upvoted
 export async function GET() {
+  try {
   const session = await getSession();
   const baseWhere = { status: 'approved' as const };
 
@@ -57,4 +58,8 @@ export async function GET() {
       myVote,
     },
   });
+  } catch (e) {
+    console.error('[clips/featured] error', e);
+    return NextResponse.json({ clip: null, error: 'Featured clip unavailable (database error).' }, { status: 500 });
+  }
 }

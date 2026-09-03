@@ -51,6 +51,23 @@ Then play one live round in a desktop browser — socket must connect.
 
 > Database: the VPS reuses your existing `DATABASE_URL` (shipped inside `.env`). If the DB lives elsewhere, make sure it accepts connections from the VPS IP.
 
+**B-SCHEMA (REQUIRED after every code update — do not skip).** Newer API routes
+read/write newer tables. If the VPS database is behind the code, the lobby shows
+"Network error during registration", "Failed to load clips", failing claims, and
+empty leaderboards/HOF details. After every deploy, run on the VPS (in the app
+folder that contains `prisma/schema.prisma`):
+
+```bash
+npx prisma db push        # applies schema diffs to the SQLite file (non-destructive for additive changes)
+pm2 restart venom-web || systemctl restart venom-web   # or your process manager
+```
+
+Then verify with the built-in self-check (reports any missing table by name):
+
+```bash
+curl -s https://play.venomarena.gg/api/health
+# ok:true  → schema current. missingTables:[...] → run npx prisma db push.
+
 ## Phase C — Android APK (your machine, needs Android Studio)
 
 **C1.** Install [Android Studio](https://developer.android.com/studio) (includes SDK; open the project once to let it download what's needed).

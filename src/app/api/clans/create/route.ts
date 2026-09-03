@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const tag = String(body.tag || '').toUpperCase().trim().slice(0, 5);
     const name = String(body.name || '').trim().slice(0, 30);
-    const emblem = String(body.emblem || '\u0001f40d').slice(0, 4).replace(/[\x00-\x1F\u200B-\u200D\uFEFF]/g, '');
+    const emblem = String(body.emblem || '\uD83D\uDC0D').slice(0, 4).replace(/[\x00-\x1F\u200B-\u200D\uFEFF]/g, '');
     const description = String(body.description || '').slice(0, 200);
 
     if (!/^[A-Z0-9]{3,5}$/.test(tag)) {

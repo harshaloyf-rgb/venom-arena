@@ -1298,15 +1298,9 @@ class ArenaInstance {
       if (deadSnake.isBot) {
         removeBot(deadId);
         state.snakes.delete(deadId);
-        // Credit kill to the killer player (if any)
-        const killEvt = collisionResult.killEvents.find(e => e.victimId === deadId);
-        if (killEvt) {
-          const killerSocketId = this.snakeToSocket.get(killEvt.killerId);
-          if (killerSocketId) {
-            const killerPlayer = this.players.get(killerSocketId);
-            if (killerPlayer) killerPlayer.kills++;
-          }
-        }
+        // KILLS POLICY (user directive): only REAL-player kills count toward a
+        // player's kill stat / XP / challenges / leaderboards. Bot kills are
+        // deliberately NOT credited (they were previously, which inflated stats).
       } else {
         // Check if already marked for boundary death
         if (!playersToKill.find(p => p.snakeId === deadId)) {
@@ -1327,7 +1321,12 @@ class ArenaInstance {
                   const killerSocketId = this.snakeToSocket.get(killEvent.killerId);
                   if (killerSocketId) {
                     const killerPlayer = this.players.get(killerSocketId);
-                    if (killerPlayer) killerTag = killerPlayer.userTag;
+                    if (killerPlayer) {
+                      killerTag = killerPlayer.userTag;
+                      // KILLS POLICY (user directive): real-player-vs-real-player
+                      // kill — this is the ONLY kill that counts toward stats.
+                      killerPlayer.kills++;
+                    }
                   }
                 }
               }

@@ -392,16 +392,16 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
               </div>
               <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5 flex-wrap">
                 <span className="font-mono text-amber-400">{p.userTag}</span>
-                <span>\u2022</span>
+                <span>&bull;</span>
                 <span className="font-mono font-bold text-emerald-400">{p.bankedChips.toLocaleString('en-IN')}c</span>
-                <span>\u2022</span>
+                <span>&bull;</span>
                 <span style={{ color: milestone.color }}>{milestone.badge}</span>
               </div>
               {/* Rank pills (only when REAL data exists) + social counts — single row */}
               <div className="flex items-center gap-1 mt-1 flex-wrap">
                 {globalRank != null && (
                 <span className="text-[9px] font-mono bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-px rounded">
-                  \uD83C\uDFC6 #{globalRank}
+                  🏆 #{globalRank}
                 </span>
                 )}
                 {countryRank != null && (
@@ -411,7 +411,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
                 )}
                 {regionalRank != null && (
                 <span className="text-[9px] font-mono bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 px-1.5 py-px rounded">
-                  \uD83C\uDF0D #{regionalRank}
+                  🌍 #{regionalRank}
                 </span>
                 )}
                 <span className="text-[9px] text-slate-700 mx-0.5">|</span>
@@ -431,7 +431,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
               {/* Timeline: Since + Last Seen */}
               <div className="flex items-center gap-2 text-[9px] text-slate-600 font-mono mt-0.5">
                 {memberSince && <span>Since {memberSince}</span>}
-                {memberSince && lastSeen && <span>\u2022</span>}
+                {memberSince && lastSeen && <span>&bull;</span>}
                 {lastSeen && (
                   <span className="flex items-center gap-0.5">
                     <Clock className="w-2 h-2" /> {lastSeen}
@@ -519,7 +519,7 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
           {realHofEntries.length > 0 && (
             <div className="bg-yellow-500/5 border border-yellow-500/15 rounded-lg px-2 py-1">
               <div className="text-[9px] font-bold text-yellow-400 uppercase tracking-wider">
-                \uD83D\uDC51 Hall of Fame - {realHofEntries.length} Induction{realHofEntries.length !== 1 ? 's' : ''}
+                👑 Hall of Fame - {realHofEntries.length} Induction{realHofEntries.length !== 1 ? 's' : ''}
               </div>
               {realHofEntries.slice(0, 2).map((e) => (
                 <div key={e.id} className="flex justify-between text-[10px] mt-0.5">

@@ -61,7 +61,7 @@ export function Section16_Profile() {
           <ul className="list-disc pl-4 space-y-0.5">
             <li><strong>Level &amp; XP:</strong> Current level, XP progress bar, and XP needed for next level</li>
             <li><strong>Chips:</strong> Banked vault balance and current buy-in arena tier</li>
-            <li><strong>K/D Ratio:</strong> Lifetime kills, deaths, and kill/death ratio</li>
+            <li><strong>K/D Ratio:</strong> Lifetime real-player kills (bot eliminations don&apos;t count), deaths, and kill/death ratio</li>
             <li><strong>Win Stats:</strong> Total runs, extractions, and extraction rate percentage</li>
             <li><strong>Account Age:</strong> Days since account creation</li>
             <li><strong>Milestone Tier:</strong> Current badge and next tier target</li>

@@ -1245,7 +1245,7 @@ function ProfileContent({
             />
             <StatCard
               label="Total Kills"
-              subLabel="All Snake Eliminations"
+              subLabel="Real-Player Eliminations"
               value={String(player.lifetimeKills)}
               icon={<Skull className="w-4 h-4 lg:w-3 lg:h-3 text-rose-400" />}
               valueClass="text-white"

@@ -59,6 +59,32 @@ rsync -az --delete \
   mini-services/game-server/ "${SSH}:${APP_DIR}/game-server/"
 rsync -az .env "${SSH}:${APP_DIR}/game-server/.env"
 
+# ── 3b. Apply the Prisma schema to the VPS database ─────────────────────────
+# Without this, any new table added since the last deploy makes the newer API
+# routes 500 on the VPS (lobby shows "Network error during registration",
+# "Failed to load clips", failing claims, empty HOF/leaderboard details).
+# `prisma db push` is non-destructive for additive changes and REFUSES to run
+# destructive migrations without --accept-data-loss, so data stays safe.
+echo "==> [3b/6] Applying Prisma schema (npx prisma db push) on remote"
+rsync -az prisma/schema.prisma "${SSH}:${APP_DIR}/web/schema.prisma.shipped"
+ssh "$SSH" "cd '${APP_DIR}/web' \
+  && mkdir -p prisma && mv schema.prisma.shipped prisma/schema.prisma \
+  && if command -v npx >/dev/null 2>&1; then npx --yes prisma@6 db push --skip-generate --schema prisma/schema.prisma; \
+     else bunx prisma@6 db push --skip-generate --schema prisma/schema.prisma; fi"
+
+# ── 3b. Apply the Prisma schema to the VPS database ─────────────────────────
+# Without this, any new table added since the last deploy makes the newer API
+# routes 500 on the VPS (lobby shows "Network error during registration",
+# "Failed to load clips", failing claims, empty HOF/leaderboard details).
+# `prisma db push` is non-destructive for additive changes and REFUSES to run
+# destructive migrations without --accept-data-loss, so data stays safe.
+echo "==> [3b/6] Applying Prisma schema (npx prisma db push) on remote"
+rsync -az prisma/schema.prisma "${SSH}:${APP_DIR}/web/prisma.schema.prisma"
+ssh "$SSH" "cd '${APP_DIR}/web' \
+  && mkdir -p prisma && mv prisma.schema.prisma prisma/schema.prisma \
+  && (npx --yes prisma/db --version >/dev/null 2>&1 || true) \
+  && npx --yes prisma@6 db push --skip-generate --schema prisma/schema.prisma"
+
 # ── 4. Install systemd units (bun path resolved remotely) ──────────────────
 echo "==> [4/6] Installing systemd units"
 BUN_PATH="$(ssh "$SSH" 'which bun || echo /usr/bin/bun')"
@@ -80,6 +106,8 @@ sleep 3
 ssh "$SSH" "curl -sf -o /dev/null http://127.0.0.1:3000/ && echo 'web :3000 OK' || { echo 'web FAIL'; sudo journalctl -u venom-web -n 20 --no-pager; exit 1; }"
 ssh "$SSH" "curl -sf -o /dev/null 'http://127.0.0.1:3001/socket.io/?EIO=4&transport=polling' && echo 'game :3001 OK' || { echo 'game FAIL'; sudo journalctl -u venom-game -n 20 --no-pager; exit 1; }"
 ssh "$SSH" "curl -sf -o /dev/null http://127.0.0.1:3000/sw.js && echo 'sw.js OK'"
+echo "==> [5/6] Schema self-check (/api/health)"
+ssh "$SSH" "curl -fsS http://127.0.0.1:3000/api/health || echo 'health check failed — inspect /api/health for missingTables'"
 
 # ── 6. Done ────────────────────────────────────────────────────────────────
 echo "==> [6/6] Deployed to ${REMOTE_HOST}"

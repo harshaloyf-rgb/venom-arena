@@ -74,10 +74,10 @@ export function Section15_Syndicates() {
           </ul>
         </InfoCard>
         <InfoCard title="⚔️ Clan Wars — How It Works" accent="text-rose-300">
-          <p className="mb-1.5"><strong>No separate clan arenas needed.</strong> Members play <strong>normal matches</strong> as usual — their kills automatically count toward the war score.</p>
+          <p className="mb-1.5"><strong>No separate clan arenas needed.</strong> Members play <strong>normal matches</strong> as usual — their <strong>real-player kills</strong> (bot eliminations don&apos;t count) automatically count toward the war score.</p>
           <ol className="list-decimal pl-4 space-y-0.5">
             <li><strong>Declare:</strong> Leader picks a target clan, enters a wager (min 1,000c). Both clans&apos; treasuries are <strong>deducted immediately</strong> (escrow). Total pot = wager × 2.</li>
-            <li><strong>Fight:</strong> ALL members of BOTH clans play their <strong>normal matches</strong>. Every kill by any member automatically adds to their clan&apos;s war score. No special mode or lobby needed.</li>
+            <li><strong>Fight:</strong> ALL members of BOTH clans play their <strong>normal matches</strong>. Every <strong>real-player kill</strong> (bot eliminations don&apos;t count) automatically adds to their clan&apos;s war score. No special mode or lobby needed.</li>
             <li><strong>Score:</strong> War tab shows live score bars (e.g. KILL: 32/50 vs APEX: 28/50). Scores update after each member finishes a match.</li>
             <li><strong>Win:</strong> First clan to reach <strong>50 kills</strong> wins the <strong>entire pot</strong>. War ends automatically — chips are added to the winner&apos;s treasury.</li>
           </ol>

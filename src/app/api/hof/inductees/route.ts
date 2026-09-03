@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth';
 
 // GET /api/hof/inductees?type=milestone|championship&year=2026&milestoneTier=t-1lakh&badge=crown&search=Hari&limit=50
 export async function GET(req: Request) {
+  try {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -72,4 +73,11 @@ export async function GET(req: Request) {
     limit,
     offset,
   });
+  } catch (e) {
+    console.error('[hof/inductees] error', e);
+    return NextResponse.json(
+      { error: 'Could not load Hall of Fame (database error). If this persists, the server needs the latest schema migration (npx prisma db push).' },
+      { status: 500 },
+    );
+  }
 }

@@ -201,18 +201,20 @@ export function Championships({ onToast }: ChampionshipsProps) {
   async function handleRegister() {
     try {
       const res = await fetch('/api/championship/register', { method: 'POST' });
-      if (res.ok) {
+      // Safe parse: a 500 from a mis-deployed server may be HTML — never let
+      // json() throw inside this handler or it masquerades as "Network error".
+      let data: { error?: string; gamesPlayed?: number } | null = null;
+      try { data = await res.json(); } catch { /* non-JSON body */ }
+      if (res.ok && data) {
         setRegistered(true);
-        const data = await res.json();
         setGamesPlayed(data.gamesPlayed ?? 0);
         notify('🏆 REGISTERED FOR 2026 ANNUAL VENOM WORLD CHAMPIONSHIP! You have 10,000 matches limit. Good luck!', 'success', onToast);
         fetchStandings(true); fetchClans();
       } else {
-        const err = await res.json();
-        notify(err.error || 'Registration failed.', 'error', onToast);
+        notify(data?.error || `Registration failed (server error ${res.status}).`, 'error', onToast);
       }
     } catch {
-      notify('Network error during registration.', 'error', onToast);
+      notify('Network error during registration. Check your connection and try again.', 'error', onToast);
     }
   }
 
