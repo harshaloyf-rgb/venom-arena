@@ -3,8 +3,9 @@
  * engine's steering math produces, using the REAL config constants.
  *
  * Replicates src/lib/snake/engine.ts moveSnake steering verbatim:
- *   maxTurn = BASE_TURN_RATE + (MIN_TURN_RATE - BASE_TURN_RATE) * speedT
- *   [spiral assist — reads SPIRAL_* constants]
+ *   minTurnRadius = max(MIN_TURN_RADIUS_BASE, MIN_TURN_RADIUS_PER_BODY_RADIUS * bodyRadius)
+ *   maxTurn = speed / minTurnRadius
+ *   [spiral assist — reads SPIRAL_* constants, hard-clamped to the radius floor]
  *   sharpness = min(|diff * STEERING_LERP| / maxTurn, 1)
  *   effMaxTurn = maxTurn * (1 - SHARP_TURN_BRAKE * smoothstep(sharpness))
  *   angle += clamp(diff * STEERING_LERP, -effMaxTurn, +effMaxTurn)
@@ -16,7 +17,7 @@
  */
 
 import {
-  BASE_SPEED, BOOST_SPEED, BASE_TURN_RATE, MIN_TURN_RATE,
+  BASE_SPEED, BOOST_SPEED, MIN_TURN_RADIUS_BASE, MIN_TURN_RADIUS_PER_BODY_RADIUS,
   STEERING_LERP, SHARP_TURN_BRAKE,
   SPIRAL_TURN_THRESHOLD, SPIRAL_ENTER_TICKS, SPIRAL_MAX_MULTIPLIER,
   SPIRAL_RAMP_TICKS, SPIRAL_EXIT_THRESHOLD,
@@ -24,19 +25,19 @@ import {
 
 interface Cfg {
   name: string;
-  base: number; min: number; lerp: number; brake: number; spiral: number;
+  radiusBase: number; radiusPerBr: number; bodyRadius: number; lerp: number; brake: number; spiral: number;
 }
 
 const CONFIGS: Cfg[] = [
-  { name: 'ORIGINAL (before all my work)', base: 0.050, min: 0.100, lerp: 0.12, brake: 0.30, spiral: 1.8 },
-  { name: 'raise #1-#3 (what you tested)', base: 0.090, min: 0.180, lerp: 0.45, brake: 0.30, spiral: 1.8 },
-  { name: 'NEW (brake off + direct steering)', base: 0.180, min: 0.360, lerp: 1.0, brake: 0.0, spiral: 1.0 },
+  { name: 'small snake (spawn, bodyRadius 3)', radiusBase: MIN_TURN_RADIUS_BASE, radiusPerBr: MIN_TURN_RADIUS_PER_BODY_RADIUS, bodyRadius: 3, lerp: 1.0, brake: 0.0, spiral: 1.0 },
+  { name: 'mid snake (score 5K, bodyRadius 9.8)', radiusBase: MIN_TURN_RADIUS_BASE, radiusPerBr: MIN_TURN_RADIUS_PER_BODY_RADIUS, bodyRadius: 9.8, lerp: 1.0, brake: 0.0, spiral: 1.0 },
+  { name: 'big snake (score 100K, bodyRadius 17.2)', radiusBase: MIN_TURN_RADIUS_BASE, radiusPerBr: MIN_TURN_RADIUS_PER_BODY_RADIUS, bodyRadius: 17.2, lerp: 1.0, brake: 0.0, spiral: 1.0 },
 ];
 
-function measure(cfg: Cfg, boost: boolean): { radius: number; effMaxTurn: number } {
+function measure(cfg: Cfg, boost: boolean): { radius: number; minTurnRadius: number } {
   const speed = boost ? BOOST_SPEED : BASE_SPEED;
-  const speedT = Math.min(1, Math.max(0, (speed - BASE_SPEED) / (BOOST_SPEED - BASE_SPEED)));
-  let maxTurn = cfg.base + (cfg.min - cfg.base) * speedT;
+  const minTurnRadius = Math.max(cfg.radiusBase, cfg.radiusPerBr * cfg.bodyRadius);
+  const maxTurn = speed / minTurnRadius;
 
   let angle = 0;
   let x = 0, y = 0;
@@ -64,7 +65,8 @@ function measure(cfg: Cfg, boost: boolean): { radius: number; effMaxTurn: number
         curMaxTurn = maxTurn * mult;
       }
     }
-    const effMax = spActive ? curMaxTurn : maxTurn;
+    // hard floor clamp (verbatim from engine)
+    const effMax = Math.min(spActive ? curMaxTurn : maxTurn, maxTurn);
 
     // steering (verbatim)
     const turnAmount = diff * cfg.lerp;
@@ -83,7 +85,7 @@ function measure(cfg: Cfg, boost: boolean): { radius: number; effMaxTurn: number
     }
   }
   const rx = (maxX - minX) / 2, ry = (maxY - minY) / 2;
-  return { radius: (rx + ry) / 2, effMaxTurn: maxTurn };
+  return { radius: (rx + ry) / 2, minTurnRadius };
 }
 
 console.log('Measured steady-state turn circle (mouse held 90° off heading):\n');
@@ -92,6 +94,7 @@ for (const cfg of CONFIGS) {
   const boost = measure(cfg, true);
   console.log(`${cfg.name}`);
   console.log(`  base speed : ${base.radius.toFixed(1)}px radius  (${(base.radius * 2).toFixed(0)}px circle)`);
-  console.log(`  boost speed: ${boost.radius.toFixed(1)}px radius  (${(boost.radius * 2).toFixed(0)}px circle)`);
+  console.log(`  boost speed: ${boost.radius.toFixed(1)}px radius  (${(boost.radius * 2).toFixed(0)}px circle) — same circle, slither-style`);
 }
-console.log('\nSpawn snake body radius ≈ 13px → NEW circle ≈ 1.3 body widths (slither.io-tight).');
+console.log('\nFloor = max(17, 2.2 × bodyRadius): small snakes keep the approved tight circle;');
+console.log('big snakes coil visibly instead of hairpinning inside themselves.');

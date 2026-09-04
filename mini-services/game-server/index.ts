@@ -27,7 +27,7 @@ import {
 import { collectFreezeAnchors, nearestAnchorDistSq, isFreezeDistSq, type FreezeAnchor } from '../../src/lib/snake/freeze';
 import {
   // MOVEMENT
-  BASE_SPEED, BOOST_SPEED, BASE_TURN_RATE, MIN_TURN_RATE, SEGMENT_SPACING,
+  BASE_SPEED, BOOST_SPEED, MIN_TURN_RADIUS_BASE, MIN_TURN_RADIUS_PER_BODY_RADIUS, SEGMENT_SPACING,
   STEERING_LERP, SHARP_TURN_BRAKE,
   computeBodyLength, computeBodyRadius,
   // FOOD
@@ -293,8 +293,13 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
 
   const canBoost = wantBoost && snake.score >= BOOST_MIN_SCORE;
   const currentSpeed = canBoost ? BOOST_SPEED : BASE_SPEED;
-  const speedT = Math.min(1, Math.max(0, (currentSpeed - BASE_SPEED) / (BOOST_SPEED - BASE_SPEED)));
-  let maxTurn = BASE_TURN_RATE + (MIN_TURN_RATE - BASE_TURN_RATE) * speedT;
+  // Slither-style min turn radius: the cap is a RADIUS, not a rate.
+  // Kept in lockstep with src/lib/snake/engine.ts (offline/online parity).
+  const minTurnRadius = Math.max(
+    MIN_TURN_RADIUS_BASE,
+    MIN_TURN_RADIUS_PER_BODY_RADIUS * snake.bodyRadius,
+  );
+  let maxTurn = currentSpeed / minTurnRadius;
 
   // Spiral assist
   const absDiff = Math.abs(diff);
@@ -322,6 +327,9 @@ function moveSnake(snake: Snake, targetAngle: number, wantBoost: boolean, now: n
       maxTurn *= multiplier;
     }
   }
+
+  // HARD FLOOR: no assist may ever turn tighter than the min radius.
+  maxTurn = Math.min(maxTurn, currentSpeed / minTurnRadius);
 
   // Steering Inertia + Dynamic Speed Braking
   const turnAmount = diff * STEERING_LERP;

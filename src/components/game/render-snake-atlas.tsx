@@ -140,7 +140,7 @@ function getCachedGradientCircle(color: string, r: number, dpr: number): Offscre
     : document.createElement('canvas');
   if (!(oc instanceof OffscreenCanvas)) { (oc as HTMLCanvasElement).width = diameter; (oc as HTMLCanvasElement).height = diameter; }
 
-  const cx = oc.getContext('2d')!;
+  const cx = oc.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
   const half = diameter / (2 * dpr);
   cx.scale(dpr, dpr);
 
@@ -188,7 +188,7 @@ function getCachedBoostGlow(color: string, r: number, dpr: number): OffscreenCan
     (oc as HTMLCanvasElement).width = diameter;
     (oc as HTMLCanvasElement).height = diameter;
   }
-  const cx = oc.getContext('2d')!;
+  const cx = oc.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
   const center = diameter / (2 * dpr);
   cx.scale(dpr, dpr);
 

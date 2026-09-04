@@ -22,16 +22,20 @@ export const BASE_SPEED = 3.0;
 /** Speed while boosting (pixels per tick at 60fps) — 2.0× base */
 export const BOOST_SPEED = 6.0;
 
-/** Turn rate at base speed (radians per tick) — ~10.3° per tick.
- *  Turn radius = speed / turn_rate → 3.0 / 0.180 = 17px.
- *  Fourth raise per user request (0.050 → 0.075 → 0.090 → 0.120 → 0.180).
- *  Min turn circle ≈ 33px diameter ≈ 1.3 body widths at spawn — slither.io-tight.
- *  NOTE: SHARP_TURN_BRAKE (now 0) used to claw back 30% of every raise. */
-export const BASE_TURN_RATE = 0.180;
+/** Slither-style MINIMUM TURN RADIUS (world px) — the tightest circle any
+ *  snake can hold, at ANY speed. The per-tick turn cap is derived FROM this
+ *  radius (maxTurn = speed / minTurnRadius), exactly like slither.io:
+ *  boosting makes you faster, not tighter. Base keeps small snakes at the
+ *  approved tight feel (17px ≈ 5.6 body radii at spawn); the per-body-radius
+ *  term grows the floor with size so big snakes coil like slither.io instead
+ *  of folding back inside their own body (the old fixed 17px floor was ~1
+ *  body radius at score 100K — read as "no minimum turn radius"). */
+export const MIN_TURN_RADIUS_BASE = 17;
 
-/** Turn rate at boost speed (radians per tick) — ~20.6° per tick.
- *  Turn radius = speed / turn_rate → 6.0 / 0.360 = 17px (same as base). */
-export const MIN_TURN_RATE = 0.360;
+/** The min turn radius floor grows with body size: radius = max(BASE,
+ *  PER_BODY_RADIUS × bodyRadius). 2.2 → minimum circle diameter ≈ 4.4 body
+ *  widths — a visible slither-style coil, never a hairpin. */
+export const MIN_TURN_RADIUS_PER_BODY_RADIUS = 2.2;
 
 /** Steering inertia — fraction of remaining angle applied per tick (0–1).
  *  1.0 = DIRECT slither.io steering: turn = min(angleDiff, maxTurn). The

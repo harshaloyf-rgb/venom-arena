@@ -19,7 +19,7 @@
  */
 
 import {
-  BASE_SPEED, BOOST_SPEED, BASE_TURN_RATE, MIN_TURN_RATE,
+  BASE_SPEED, BOOST_SPEED, MIN_TURN_RADIUS_BASE, MIN_TURN_RADIUS_PER_BODY_RADIUS,
   STEERING_LERP, SHARP_TURN_BRAKE, SEGMENT_SPACING,
 } from '../src/lib/snake/config';
 
@@ -39,8 +39,8 @@ function makeSim(): Sim {
 
 function tickSim(s: Sim, targetDiff: number, boost: boolean): void {
   const speed = boost ? BOOST_SPEED : BASE_SPEED;
-  const speedT = Math.min(1, Math.max(0, (speed - BASE_SPEED) / (BOOST_SPEED - BASE_SPEED)));
-  const maxTurn = BASE_TURN_RATE + (MIN_TURN_RATE - BASE_TURN_RATE) * speedT;
+  const minTurnRadius = Math.max(MIN_TURN_RADIUS_BASE, MIN_TURN_RADIUS_PER_BODY_RADIUS * BODY_RADIUS);
+  const maxTurn = speed / minTurnRadius;
   const turnAmount = targetDiff * STEERING_LERP;
   const sharpness = maxTurn > 0 ? Math.min(Math.abs(turnAmount) / maxTurn, 1.0) : 0;
   const smoothT = sharpness * sharpness * (3 - 2 * sharpness);
