@@ -44,6 +44,8 @@ function registerCosmeticSkin(item: Skin): void {
     accentColor,
     pattern,
     animation,
+    // Premium character-face skins (Skin.headStyle → face id)
+    headStyle: item.headStyle,
   });
 }
 

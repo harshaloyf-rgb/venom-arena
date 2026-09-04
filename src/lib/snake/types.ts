@@ -77,6 +77,9 @@ export interface SkinAsset {
   pattern?: 'solid' | 'striped' | 'spotted' | 'gradient' | 'spiral' | 'cyber' | 'lava' | 'pulse';
   /** Animation type for epic+ rarity */
   animation?: 'none' | 'pulse' | 'flow' | 'glow' | 'lava' | 'cyberpulse';
+  /** Premium character-face id (character-faces.ts) — face is baked into the
+   *  head sprite and replaces the default responsive eyes. */
+  headStyle?: string;
   /** Whether legendary particles are emitted */
   hasParticles?: boolean;
 }

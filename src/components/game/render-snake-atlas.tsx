@@ -9,6 +9,7 @@ import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
 import { isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
 import { renderEquippedCosmetics, readEquippedCosmetics, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
+import { getCharacterFaceForSkin, drawCharacterFace } from '../panels/cosmetics/character-faces';
 import { drawSegmentShape, readCustomSkinState, getSkinVisualProps, getPresetVisualProps, resolveShapeStyle, computeTaperRadius, setSpriteDpr, lightenHex, darkenHex } from '../panels/cosmetics/cosmetics-utils';
 import { isCustomDBSkin, getCustomSkinSegments } from '@/lib/snake/skin-registry';
 import type { CustomSkinState } from '@/components/panels/cosmetics/cosmetics-types';
@@ -899,11 +900,14 @@ export function renderSnakeAtlas(
 
     // Ultra-responsive eyes — track raw mouse position relative to head
     // Skip if a custom eye cosmetic is equipped (it draws its own eyes).
+    // Skip for character-face skins — the face is baked into the head sprite
+    // (rotates with the head) and includes its own eyes.
     // isPlayer guard (MAJOR fix): cosmetics are LOCAL to this device — without
     // the guard every bot/remote snake also rendered the player's hat/eyes.
+    const hasCharFace = !!getCharacterFaceForSkin(snake.skinId);
     const equipped = getCachedEquipped();
     const hasCustomEyes = snake.isPlayer && equipped.eyes && equipped.eyes !== 'none';
-    if (!hasCustomEyes) {
+    if (!hasCustomEyes && !hasCharFace) {
       // Eye sockets ride WITH the head (neck facing); pupils still track the
       // mouse via targetAngle inside drawResponsiveEyes.
       drawResponsiveEyes(ctx, hsx, hsy, headFacing, snake.targetAngle, headDrawSize / 2, snake.boosting, snake.id, time);
@@ -1313,6 +1317,8 @@ export function renderSnakeFallback(
   }
   const headScale = isUniformTaper ? 1.0 : 1.05;
   const headRadius = segRadius * headScale;
+  // Premium character-face skin (face replaces default eyes in this path too)
+  const charFaceFb = getCharacterFaceForSkin(snake.skinId);
   if (headVisible) {
     // For pattern/preset skins, use the primary color for the head
     const visProps = patternVis || presetVis;
@@ -1336,12 +1342,16 @@ export function renderSnakeFallback(
 
     // Responsive eyes — P8: skip for far LOD bots
     // Skip if a custom eye cosmetic is equipped (it draws its own eyes).
+    // Skip for character-face skins — drawCharacterFace replaces the eyes.
     // isPlayer guard (MAJOR fix): cosmetics are LOCAL to this device — without
     // the guard every bot/remote snake also rendered the player's hat/eyes.
     if (!isFar) {
+      if (charFaceFb) {
+        drawCharacterFace(ctx, headSX, headSY, headRadius, headFacingFb, charFaceFb, now);
+      }
       const eq2 = getCachedEquipped();
       const hasCustomEyes2 = snake.isPlayer && eq2.eyes && eq2.eyes !== 'none';
-      if (!hasCustomEyes2) {
+      if (!hasCustomEyes2 && !charFaceFb) {
         // RIGID-HEAD: sockets ride with the body (neck facing), pupils still
         // track the mouse via targetAngle inside drawResponsiveEyes.
         drawResponsiveEyes(ctx, headSX, headSY, headFacingFb, snake.targetAngle, headRadius, snake.boosting, snake.id, now);

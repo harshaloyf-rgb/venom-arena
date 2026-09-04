@@ -11,6 +11,7 @@ import { useEffect, useRef } from 'react';
 import { SNAKE_RADIUS, CAMERA_BASE_ZOOM } from '@/lib/snake/config';
 import { getSkinAsset } from '@/lib/snake/skin-registry';
 import { resolveShapeStyle, computeTaperRadius, drawSegmentShape, readCustomSkinStateSafe, getSkinVisualProps, lightenHex, darkenHex } from './cosmetics-utils';
+import { drawCharacterFace, getCharacterFaceForSkin } from './character-faces';
 import type { BodyStyle, TaperStyle, CustomSegment } from './cosmetics-types';
 import { getCosmeticById, readEquippedCosmetics, type EquippedCosmetics } from '@/lib/snake/face-cosmetics';
 
@@ -36,7 +37,10 @@ function seededRandom(seed: number): () => number {
 
 const G = {
   segR: SNAKE_RADIUS * CAMERA_BASE_ZOOM,  // 4.8
-  headScale: 1.3,
+  // GAME PARITY (2026-09-05): was 1.3 — shop heads looked fatter than the
+  // arena. Game fallback/atlas paths draw the head at 1.05 × body radius
+  // (render-snake-atlas.tsx headScale / headDrawSize), 1.0 for uniform taper.
+  headScale: 1.05,
   // step is now computed dynamically: segR * 1.35 (matches game density)
   step: 0, // placeholder — overridden by local variable
   stepRatio: 1.35, // step = segR * stepRatio  (game ≈ 0.667 * diameter)
@@ -102,6 +106,8 @@ export function GameSnakePreview({
   glow,
   // Face cosmetics
   equippedCosmetics,
+  // Premium character-face skin (explicit id wins; otherwise resolved from skinId)
+  characterFace,
 }: {
   skinId?: string;
   headColor?: string;
@@ -121,6 +127,8 @@ export function GameSnakePreview({
   glow?: boolean;
   // Face cosmetics
   equippedCosmetics?: EquippedCosmetics | null;
+  // Premium character-face skin
+  characterFace?: string | null;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef(0);
@@ -133,6 +141,9 @@ export function GameSnakePreview({
 
   // Resolve colors for this render (stable, no side effects)
   const resolvedHead = (() => {
+    // Character-face skins: the head circle IS the face base — explicit
+    // headColor wins over colors[0] (which holds the BODY color there).
+    if (characterFace && headColorProp) return headColorProp;
     if (colors && colors.length > 0) return colors[0];
     if (headColorProp) return headColorProp;
     if (skinId) {
@@ -148,6 +159,16 @@ export function GameSnakePreview({
       try { return getSkinAsset(skinId).bodyColor; } catch { /* */ }
     }
     return '#16a34a';
+  })();
+
+  // Premium character-face skin: explicit prop wins, else resolve via skinId.
+  // The face REPLACES the default eyes (it draws its own).
+  const resolvedFace = (() => {
+    if (characterFace) return characterFace;
+    if (skinId) {
+      try { return getCharacterFaceForSkin(skinId); } catch { /* */ }
+    }
+    return null;
   })();
 
   // Auto-detect lab-mode props: (1) pattern-based from skin registry,
@@ -237,9 +258,12 @@ export function GameSnakePreview({
     // Need more buffer entries for tighter spacing
     // step/speed = entries per segment. Buffer must hold segments * entries.
     const entriesPerSeg = Math.ceil(localStep / speed) + 2;
-    const bufLen = economy
+    // Head pad: body segment 0 now starts one full draw-step BEHIND the head
+    // (game parity), so the buffer needs one extra step worth of entries.
+    const headPad = entriesPerSeg + 2;
+    const bufLen = (economy
       ? segments * Math.min(entriesPerSeg, 8)
-      : segments * Math.min(entriesPerSeg * 2, 24);
+      : segments * Math.min(entriesPerSeg * 2, 24)) + headPad;
     if (!bufRef.current || prevSegRef.current !== segments) {
       bufRef.current = { bx: new Float64Array(bufLen), by: new Float64Array(bufLen) };
       posRef.current = null; // Force fresh init with pre-simulation
@@ -364,6 +388,7 @@ export function GameSnakePreview({
     const curHeadCol = resolvedHead;
     const curBodyCol = resolvedBody;
     const curLabMode = isLabMode;
+    const curFace = resolvedFace;
 
     // Reusable segment array
     const segs = ensureSegs(segments);
@@ -456,13 +481,16 @@ export function GameSnakePreview({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       // Build segments (reuse pre-allocated array)
+      // GAME PARITY FIX (2026-09-05) — "coin snake arrowhead on the face":
+      // The game renderer (walkPathFixedStep) starts the body ONE full draw-step
+      // BEHIND the head, and every body-segment angle points TAIL-WARD. The
+      // preview used to pin segment 0 AT the head center with a FORWARD angle,
+      // so forward-pointing shapes (obsidian spikes, stingray triangles) poked
+      // out past the face in previews but never in-game.
       let segCount = 0;
       let cx = headX, cy = headY, srcIdx = 0;
-      segs[0].x = cx; segs[0].y = cy; segs[0].a = angle;
-      segCount = 1;
-
-      for (let s = 1; s < segments && srcIdx < bufCount - 1; s++) {
-        let rem = localStep;
+      const advance = (dist: number): void => {
+        let rem = dist;
         while (rem > 0 && srcIdx < bufCount - 1) {
           const dx = bx[srcIdx + 1] - bx[srcIdx];
           const dy = by[srcIdx + 1] - by[srcIdx];
@@ -478,6 +506,17 @@ export function GameSnakePreview({
             rem -= len; srcIdx++;
           }
         }
+      };
+
+      // Segment 0 sits one full step behind the head, angle tail-ward —
+      // exactly where walkPathFixedStep places walked[0] in-game.
+      advance(localStep);
+      segs[0].x = cx; segs[0].y = cy;
+      segs[0].a = Math.atan2(cy - headY, cx - headX);
+      segCount = 1;
+
+      for (let s = 1; s < segments && srcIdx < bufCount - 1; s++) {
+        advance(localStep);
         const prev = segs[segCount - 1];
         segs[segCount].x = cx; segs[segCount].y = cy; segs[segCount].a = Math.atan2(cy - prev.y, cx - prev.x);
         segCount++;
@@ -507,20 +546,22 @@ export function GameSnakePreview({
         }
       }
 
-      // Head color
-      const headCol = curLabMode ? (curColors![0] ?? '#22c55e') : curHeadCol;
+      // Head color — character-face skins always use the face base color
+      const headCol = curFace ? curHeadCol : (curLabMode ? (curColors![0] ?? '#22c55e') : curHeadCol);
 
       // ── Body spine line (matches game renderer — fills any gaps) ──
+      // GAME PARITY: spine starts AT THE HEAD (game JUNCTION FIX) and uses the
+      // game's 1.6× width / 0.85 alpha.
       if (segCount > 1) {
         ctx.save();
         ctx.strokeStyle = curLabMode ? (curColors![0] ?? curBodyCol) : curBodyCol;
-        ctx.lineWidth = segR * 1.4;
+        ctx.lineWidth = segR * 1.6;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-        ctx.globalAlpha = 0.6;
+        ctx.globalAlpha = 0.85;
         ctx.beginPath();
-        ctx.moveTo(segs[segCount - 1].x, segs[segCount - 1].y);
-        for (let i = segCount - 2; i >= 0; i--) {
+        ctx.moveTo(headX, headY);
+        for (let i = 0; i < segCount; i++) {
           ctx.lineTo(segs[i].x, segs[i].y);
         }
         ctx.stroke();
@@ -564,7 +605,13 @@ export function GameSnakePreview({
         ctx.fillStyle = hg;
         ctx.beginPath(); ctx.arc(headX, headY, hr, 0, Math.PI * 2); ctx.fill();
 
+        // Premium character face replaces the default eyes
+        if (curFace) {
+          drawCharacterFace(ctx, headX, headY, hr, angle, curFace, performance.now());
+        }
+
         // Responsive eyes (deadzone + relative tracking, same as game canvas)
+        if (!curFace) {
         const eyeOff = hr * G.eyeOff;
         const eyeR = hr * G.eyeR;
         const pupR = eyeR * G.pupR;
@@ -603,19 +650,20 @@ export function GameSnakePreview({
           ctx.fillStyle = `rgba(255,255,255,${G.highlight})`;
           ctx.beginPath(); ctx.arc(ppx - pupR * 0.3, ppy - pupR * 0.35, pupR * 0.3, 0, Math.PI * 2); ctx.fill();
         }
+        }
       } else {
         // FULL MODE: shadows, gradients, mouse-tracking eyes, cosmetics
         // ── Body spine line (matches game renderer) ──
         if (segCount > 1) {
           ctx.save();
           ctx.strokeStyle = curLabMode ? (curColors![0] ?? curBodyCol) : curBodyCol;
-          ctx.lineWidth = segR * 1.4;
+          ctx.lineWidth = segR * 1.6;
           ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
-          ctx.globalAlpha = 0.6;
+          ctx.globalAlpha = 0.85;
           ctx.beginPath();
-          ctx.moveTo(segs[segCount - 1].x, segs[segCount - 1].y);
-          for (let i = segCount - 2; i >= 0; i--) {
+          ctx.moveTo(headX, headY);
+          for (let i = 0; i < segCount; i++) {
             ctx.lineTo(segs[i].x, segs[i].y);
           }
           ctx.stroke();
@@ -674,8 +722,14 @@ export function GameSnakePreview({
         ctx.beginPath(); ctx.arc(headX, headY, hr, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
 
+        // Premium character face replaces the default eyes (drawn before
+        // cosmetics so hats/ears overlay it, same layer order as the game)
+        if (curFace) {
+          drawCharacterFace(ctx, headX, headY, hr, angle, curFace, performance.now());
+        }
+
         // Eyes (use cached hasCustomEyes, no per-frame localStorage)
-        if (!hasCustomEyesCached) {
+        if (!hasCustomEyesCached && !curFace) {
           const eyeOff = hr * G.eyeOff;
           const eyeR = hr * G.eyeR;
           const pupR = eyeR * G.pupR;
@@ -738,7 +792,7 @@ export function GameSnakePreview({
       c.removeEventListener('mousemove', onMove);
       c.removeEventListener('mouseleave', onLeave);
     };
-  }, [width, height, segments, speed, scale, resolvedHead, resolvedBody, effectiveBodyStyle, effectiveTaper, effectiveGlow, isLabMode, effectiveColors, instanceSeed, economy]);
+  }, [width, height, segments, speed, scale, resolvedHead, resolvedBody, resolvedFace, effectiveBodyStyle, effectiveTaper, effectiveGlow, isLabMode, effectiveColors, instanceSeed, economy]);
 
   // Get skin name for label
   let skinName = '';

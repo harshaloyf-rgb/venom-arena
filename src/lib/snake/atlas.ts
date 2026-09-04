@@ -19,6 +19,7 @@ import {
   LEGENDARY_GLOW_SIZE,
 } from './config';
 import type { IPathBuffer } from './pool';
+import { drawCharacterFace } from '../../components/panels/cosmetics/character-faces';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -96,7 +97,7 @@ export class SkinAtlasManager {
       width: HEAD_SPRITE_SIZE,
       height: HEAD_SPRITE_SIZE,
     };
-    this.renderHeadSprite(ctx, headRegion, asset.headColor, accent);
+    this.renderHeadSprite(ctx, headRegion, asset.headColor, accent, asset.headStyle);
 
     // ── Body regions ──
     const bodyRegions: AtlasRegion[] = [];
@@ -151,6 +152,7 @@ export class SkinAtlasManager {
     region: AtlasRegion,
     color: string,
     accent: string,
+    headStyle?: string,
   ): void {
     const cx = region.x + region.width / 2;
     const cy = region.y + region.height / 2;
@@ -163,12 +165,20 @@ export class SkinAtlasManager {
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
 
-    // Accent ring
-    ctx.strokeStyle = accent;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.stroke();
+    // Premium character face — baked INTO the sprite (facing +x / angle 0) so
+    // it rotates with the head at render time. The face draws its own eyes;
+    // the renderer skips drawResponsiveEyes for these skins.
+    if (headStyle) {
+      drawCharacterFace(ctx, cx, cy, r, 0, headStyle);
+    }
+    else {
+      // Accent ring only for non-face heads (a ring would clash with a face)
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
 
     // No baked-in eyes — responsive eyes are drawn at render time in screen space.
   }

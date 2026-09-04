@@ -165,6 +165,12 @@ export function PresetCard({
 
 /** Map SkinPattern → visual props for the card preview (uses shared source of truth) */
 function getSkinVisuals(item: Skin) {
+  // Character-face skins: solid body + face-colored head. The face itself is
+  // drawn by GameSnakePreview via the `characterFace` prop (matches the game,
+  // where the face is baked into the head sprite and the body is solid).
+  if (item.headStyle) {
+    return { colors: [item.color], bodyStyle: 'smooth' as const, taperStyle: 'natural' as const, glow: false };
+  }
   // Use shared function if the skin has a pattern
   const vis = getSkinVisualProps(item.id);
   if (vis) return vis;
@@ -235,6 +241,8 @@ export function SkinCard({
             speed={1.2}
             scale={0.8}
             economy
+            characterFace={item.headStyle ?? null}
+            headColor={item.headStyle ? (item.secondaryColor ?? item.color) : undefined}
           />
         </div>
 
@@ -243,6 +251,14 @@ export function SkinCard({
             {item.name}
           </h3>
         </div>
+
+        {item.headStyle && (
+          <div className="flex justify-center mb-1">
+            <span className="text-[9px] lg:text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
+              🎭 Character Face · Lab-Proof
+            </span>
+          </div>
+        )}
 
         <p className="text-[11px] text-slate-500 text-center leading-snug lg:leading-tight mb-2.5 lg:mb-1 px-1">
           {item.description}
