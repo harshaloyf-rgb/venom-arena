@@ -60,15 +60,17 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
           <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 to-emerald-950/50 border border-emerald-500/20 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
             <span className="text-[10px] text-emerald-400 font-mono font-bold tracking-widest block uppercase">
-              Core Loop
+              What is Venom Arena
             </span>
             <h3 className="text-lg font-black text-white mt-1">
-              Hunt. Harvest. Extract. Don&apos;t get caught.
+              Buy in. Collect. Extract. Become Champion.
             </h3>
             <p className="text-xs text-slate-300 font-sans mt-2 leading-relaxed">
-              You spawn as a small venom snake. Grow by harvesting food orbs for score/size, and collect star chips from fallen rivals to increase your carried chips.
-              The bigger you are, the more dangerous you become — but also the easier to cut off.
-              Bank your winnings by extracting before someone makes you their harvest.
+              Venom Arena is a mobile-first global multiplayer championship snake game. Buy into an arena with chips,
+              collect chips from defeated snakes, and extract before someone makes you their harvest — only banked chips
+              count. The player with the highest banked chips at season&apos;s end wins the Global Championship: virtual
+              chip prizes and permanent recognition in the Hall of Fame. Climb the live country and region leaderboards,
+              squad up in syndicates, and post your best runs to Highlights.
             </p>
           </div>
 

@@ -348,13 +348,13 @@ export default function Home() {
             </div>
             <div className="text-left hidden sm:block">
               <h1 className="text-[11px] md:text-xs font-extrabold tracking-tight text-white font-sans flex items-center gap-1.5 uppercase group-hover:text-indigo-400 transition duration-200">
-                Project Venom
+                Venom
                 <span className="text-[11px] px-1.5 py-0 bg-indigo-500 text-white font-bold rounded-full leading-none tracking-widest font-mono">
                   Arena
                 </span>
               </h1>
               <span className="text-[11px] text-slate-500 block font-mono hidden md:block">
-                Multiplayer Snake Arena
+                Global Championship Snake Arena
               </span>
             </div>
             <span className="sm:hidden text-[11px] font-extrabold text-white tracking-tight group-hover:text-indigo-400 transition-colors">
@@ -486,6 +486,11 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Championship tagline — leads with the core loop + the prize */}
+              <p className="text-[10px] text-slate-500 font-mono leading-snug">
+                Buy in with chips · collect from fallen snakes · extract to bank. Highest banked chips wins the Global Championship.
+              </p>
+
               {/* Quick stats row */}
               <div className="grid grid-cols-4 gap-2">
                 <div className="bg-slate-900/60 border border-slate-800/80 rounded-lg px-2 py-1.5 text-center">
@@ -553,7 +558,7 @@ export default function Home() {
                       <Award className="w-3 h-3 text-white animate-pulse" />
                     </div>
                     <div>
-                      <span className="text-[11px] text-indigo-400 font-mono font-bold tracking-widest uppercase">Lobby Headquarters</span>
+                      <span className="text-[11px] text-indigo-400 font-mono font-bold tracking-widest uppercase">Championship HQ</span>
                       <h2 className="text-[11px] font-bold text-white font-sans tracking-tight">WELCOME BACK, {player.name.toUpperCase()}</h2>
                       <div className="flex items-center gap-1 mt-0">
                         <span className="text-[11px] font-mono text-slate-400">LVL {player.level}</span>
@@ -573,14 +578,14 @@ export default function Home() {
                 <div className="flex flex-col gap-0">
                   <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Lobby Stations</span>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">
-                    <BentoGate onClick={() => setActiveTab('arena')} icon={Compass} accent="indigo" badge="Battle Gate" title="Play Endless Arenas" desc="Risk chips to compete in simulated multiplayer shards. Harvest dropping stars and escape safely." footLeft="STAKES FROM: 10 chips" footRight="Enter" />
+                    <BentoGate onClick={() => setActiveTab('arena')} icon={Compass} accent="indigo" badge="Battle Gate" title="Play Endless Arenas" desc="Buy in with chips, collect chips from defeated snakes, and extract alive to bank your winnings. Risk grows with every arena." footLeft="STAKES FROM: 10 chips" footRight="Enter" />
                     <BentoGate onClick={() => setActiveTab('shop')} icon={ShoppingBag} accent="purple" badge="Customize Lab" title="Identity Workshop & Shop" desc="Unlock glowing skins, trials, death burst novas, or design a custom repeating body segment sequence." footLeft={`EQUIPPED: ${player.currentSkin ? 'Custom DNA' : 'Gallery Skin'}`} footRight="Modify" />
                     <BentoGate onClick={() => setActiveTab('profile')} icon={User} accent="blue" badge="My Record" title="Agent Profile" desc="Examine your records, high scores, total banked wealth, and change your operative callsign." footLeft={`HIGH SCORE: ${(player.biggestExtract || 0).toLocaleString()}`} footRight="Inspect" />
-                    <BentoGate onClick={() => setActiveTab('leaderboard')} icon={Trophy} accent="amber" badge="Elite Standings" title="Global Standings" desc="Track rank placements and compare your banked chip balance against other elite venom snake operators." footLeft="LEADERBOARD RANK: Tier 1" footRight="View" />
+                    <BentoGate onClick={() => setActiveTab('leaderboard')} icon={Trophy} accent="amber" badge="Elite Standings" title="Global Standings" desc="Live global rankings by country and region. Compare your banked chip balance against the world's elite operators." footLeft="LEADERBOARD RANK: Tier 1" footRight="View" />
                     <BentoGate onClick={() => setActiveTab('rewards')} icon={Gift} accent="emerald" badge="Complimentary" title="Daily Free Claims" desc="Secure your complimentary login chips. Claim daily streaks, hourly micro-rewards, and spin the lucky wheel!" footLeft={`STREAK: ${player.dailyStreak || 1} Days`} footRight="Claim" />
                     <BentoGate onClick={() => setActiveTab('store')} icon={ShieldCheck} accent="cyan" badge="No Ads" title="Ad-Free Pass & Tickets" desc="Remove every ad with a one-time Time Pass and earn free Jade Corridor entry tickets. Ads never interrupt gameplay." footLeft={`WALLET: ${player.bankedChips.toLocaleString()} c`} footRight="Go Ad-Free" />
-                    <BentoGate onClick={() => setActiveTab('championships')} icon={Crown} accent="rose" badge="Tournament" title="Championships" desc="Enter elite championship events. Compete against top-ranked operators for massive chip prizes and exclusive titles." footLeft="SEASONAL EVENTS" footRight="Compete" />
-                    <BentoGate onClick={() => setActiveTab('halloffame')} icon={Award} accent="yellow" badge="Legends" title="Hall of Fame" desc="View legendary players and record-breaking performances. The greatest venom operators of all time." footLeft="LEGENDARY RANKINGS" footRight="View Legends" />
+                    <BentoGate onClick={() => setActiveTab('championships')} icon={Crown} accent="rose" badge="The Main Event" title="Championships" desc="Finish the year with the highest banked chips to win the Global Championship — virtual chip prizes and permanent recognition in the Hall of Fame." footLeft="JAN 1 — DEC 31" footRight="Compete" />
+                    <BentoGate onClick={() => setActiveTab('halloffame')} icon={Award} accent="yellow" badge="Legends" title="Hall of Fame" desc="Permanent recognition for the greatest operators of all time — champions, record extracts, legendary runs." footLeft="LEGENDARY RANKINGS" footRight="View Legends" />
                     <BentoGate onClick={() => setActiveTab('clans')} icon={Shield} accent="violet" badge="Team Ops" title="Syndicates" desc="Create or join a syndicate. Team up with allies, pool resources, and dominate arenas together." footLeft="CLAN WARFARE" footRight="Assemble" />
                     <BentoGate onClick={() => setActiveTab('seasonpass')} icon={Sparkles} accent="pink" badge="Pass XP" title="Season Pass" desc="Earn Pass XP from matches (50% of match XP, daily cap). Unlock cosmetics and chip rewards across 20 tiers." footLeft={player ? (() => { const tiers = PASS_TIER_XP.filter(x => (player.passXp ?? 0) >= x).length; const unclaimed = PASS_TIER_XP.filter((x, i) => (player.passXp ?? 0) >= x && !(player.passClaimedFree ?? []).includes(i + 1)).length; return unclaimed > 0 ? `Tier ${tiers}/20 · ${unclaimed} to claim!` : `Tier ${tiers}/20`; })() : 'EARN XP'}
                     footRight="View Pass" />
@@ -661,7 +666,7 @@ export default function Home() {
       {/* ===================== FOOTER (desktop only) ===================== */}
       <footer className="hidden md:block shrink-0 border-t border-slate-900/60 bg-slate-950/40 py-0.5 mt-auto text-center text-[11px] text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-1">
-          <p className="font-sans">&copy; 2026 Project Venom Arena. All Rights Reserved. Fully store-safe, non-gambling gameplay edition.</p>
+          <p className="font-sans">&copy; 2026 Venom Arena. All Rights Reserved. Fully store-safe, non-gambling gameplay edition.</p>
           <div className="flex gap-4 font-mono text-[11px] text-slate-400">
             <span>APP_VERSION: 1.0.0-MVP</span>
             <span>ENGINE: TSX_CANVAS</span>

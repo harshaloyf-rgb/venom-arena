@@ -238,7 +238,7 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
         <div>
           <h2 className="text-xl sm:text-2xl lg:text-[11px] font-sans font-black text-white tracking-tight flex items-center gap-2.5 lg:gap-1">
             <Crown className="w-5.5 h-5.5 lg:w-3 lg:h-3 text-yellow-400" />
-            Project Venom Hall of Fame &amp; Esports Shrine
+            Venom Arena Hall of Fame &amp; Esports Shrine
           </h2>
           <p className="text-xs lg:text-[11px] text-slate-400 mt-1 lg:mt-0 max-w-3xl">
             Permanent shrine for milestone achievers and championship legends. DB-backed, immutable, and forever.
