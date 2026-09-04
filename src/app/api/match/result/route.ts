@@ -171,6 +171,11 @@ export async function POST(req: NextRequest) {
   // UI can show "Killed by Net-817 (bot)" without offering add-friend.
   const bodyKillerIsBot = body.killerIsBot === undefined ? undefined : Boolean(body.killerIsBot);
   const bodyKillerName = body.killerName ? String(body.killerName).slice(0, 40) : undefined;
+  // Ticket join (locked spec 2026-09-04): free Jade Corridor entry via a
+  // Virtual Ticket — the carried stake was NEVER deducted from bankedChips,
+  // so a death must not inflate totalLost. Extracts bank normally (the
+  // risk-free upside IS the ticket's value).
+  const ticketJoin = body.ticketJoin === true;
 
   const arena = getArenaById(arenaId);
   if (!arena) return NextResponse.json({ error: 'Unknown arena.' }, { status: 400 });
@@ -221,7 +226,8 @@ export async function POST(req: NextRequest) {
   RECENT_RESULT_SIGNATURES.set(resultSignature, nowMs);
 
   const chipsEarned = outcome === 'extract' ? bankedAmountFromBody : 0;
-  const chipsLost = outcome === 'death' ? carriedChips : 0;
+  // Ticket deaths: the carried stake was never paid → nothing was lost.
+  const chipsLost = outcome === 'death' && !ticketJoin ? carriedChips : 0;
   // XP formula: floor((score*5 + kills*50) * rewardMultiplier)
   const xpGained = Math.floor((score * 5 + kills * 50) * arena.rewardMultiplier);
 

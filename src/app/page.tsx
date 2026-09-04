@@ -36,6 +36,7 @@ import { ClipShowcase } from '@/components/panels/clip-showcase';
 import { AdminPanel } from '@/components/panels/admin-panel';
 import { PlayerInspectorModal} from '@/components/panels/player-inspector-modal';
 import { GameRulesModal } from '@/components/modals/game-rules-modal';
+import { JoinGateModal } from '@/components/modals/join-gate-modal';
 import { BottomTabBar } from '@/components/layout/bottom-tab-bar';
 import { ScrollTabStrip } from '@/components/layout/scroll-tab-strip';
 import { MoreMenu } from '@/components/layout/more-menu';
@@ -110,6 +111,11 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [activeArenaId, setActiveArenaId] = useState<string | null>(null);
   const [gameMode, setGameMode] = useState<'online' | 'offline'>('offline');
+  // Locked spec 2026-09-04: pre-join ad gate for ONLINE arenas (the only ad
+  // surface in the game). gateArenaId set → modal overlays the lobby; commit
+  // → start the online match (optionally via Virtual Ticket redemption).
+  const [gateArenaId, setGateArenaId] = useState<string | null>(null);
+  const [joinUseTicket, setJoinUseTicket] = useState(false);
 
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -205,8 +211,9 @@ export default function Home() {
     if (rejoinArena) {
       sessionStorage.removeItem('venom:rejoin-arena');
       const t = setTimeout(() => {
-        setActiveArenaId(rejoinArena);
-        setGameMode('online');
+        // Route "Play Again" through the gate too: window may still be active
+        // (one tap to rejoin) or a fresh ad may be needed. Same locked rule.
+        setGateArenaId(rejoinArena);
       }, 100);
       return () => clearTimeout(t);
     }
@@ -230,7 +237,12 @@ export default function Home() {
   );
 
   const handlePlayArena = useCallback(
-    (arenaId: string, isOnline?: boolean) => { if (!player) return; setActiveArenaId(arenaId); setGameMode(isOnline ? 'online' : 'offline'); },
+    (arenaId: string, isOnline?: boolean) => {
+      if (!player) return;
+      if (isOnline) { setGateArenaId(arenaId); return; } // gate first — never mid-gameplay
+      setActiveArenaId(arenaId);
+      setGameMode('offline');
+    },
     [player],
   );
 
@@ -294,6 +306,7 @@ export default function Home() {
           <OnlineSnakeGame
             onExit={() => handleExitGame()}
             arenaId={activeArenaId}
+            useTicket={joinUseTicket}
           />
         ) : (
           <SnakeGame
@@ -651,6 +664,19 @@ export default function Home() {
 
       {/* ===================== MODALS ===================== */}
       <GameRulesModal isOpen={isRulesOpen} onClose={() => setIsRulesOpen(false)} />
+
+      {gateArenaId && (
+        <JoinGateModal
+          arenaId={gateArenaId}
+          onClose={() => setGateArenaId(null)}
+          onJoin={(useTicket) => {
+            setJoinUseTicket(useTicket);
+            setGateArenaId(null);
+            setActiveArenaId(gateArenaId);
+            setGameMode('online');
+          }}
+        />
+      )}
       {/* AdminGameTuning will be restored in Phase 7 */}
       <PlayerInspectorModal player={inspectedPlayer} onClose={() => setInspectedPlayer(null)} onToast={toastFn} />
     </div>

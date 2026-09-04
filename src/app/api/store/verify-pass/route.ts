@@ -2,10 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { playerActionLimit } from '@/lib/api-helpers';
-import { catalogEntryForProduct } from '@/lib/store-catalog';
-import { creditStorePurchase, yearlyPurchasedChips, YearlyCapError } from '@/lib/store-order';
-import { STORE_YEARLY_CAP_CHIPS, STORE_YEARLY_CAP_INR } from '@/lib/store-catalog';
-import { chipsStoreEnabled } from '@/lib/game-config';
+import { passPlanForProduct } from '@/lib/pass-catalog';
+import { creditPassPurchase } from '@/lib/pass-order';
 import {
   acknowledgeAndroidPurchase,
   IapNotConfiguredError,
@@ -14,17 +12,17 @@ import {
   verifyAppleJws,
 } from '@/lib/iap-verifier';
 
-// POST /api/store/verify — server-authoritative IAP verification + crediting.
+// POST /api/store/verify-pass — server-authoritative IAP verification +
+// Time Pass crediting (ad-free entitlement + bundled Virtual Tickets).
 //
-// Body (flat, what our client adapter sends):
+// Body (same shapes as /api/store/verify):
 //   { platform: 'android', productId, purchaseToken }
 //   { platform: 'ios',     productId, signedTransaction }
-// (cordova-plugin-purchase validator-style envelopes carrying
-//  transaction.purchaseToken / transaction.jws are also normalized here.)
 //
-// Flow: auth -> rate limit -> catalog lookup (server-side chips!) -> store
-// verification (Google androidpublisher / Apple JWS chain) -> idempotent
-// credit -> optional Android acknowledgement -> response with new balance.
+// Flow: auth -> rate limit -> pass catalog lookup (server-side duration +
+// tickets!) -> store verification (Google androidpublisher / Apple JWS) ->
+// idempotent credit (stacking adFreeUntil + upfront tickets in one
+// transaction) -> optional Android acknowledgement.
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) {
@@ -32,18 +30,8 @@ export async function POST(req: NextRequest) {
   }
   const playerId = session.playerId;
 
-  const rl = playerActionLimit(playerId, 'store-verify', 10, 60_000);
+  const rl = playerActionLimit(playerId, 'store-verify-pass', 10, 60_000);
   if (rl) return rl;
-
-  // Chip-pack purchases are REMOVED from the economy (locked spec 2026-09-04):
-  // rewarded ads + the ad-free Time Pass are the only monetization. The old
-  // pack flow stays dormant behind NEXT_PUBLIC_STORE_CHIPS=true.
-  if (!chipsStoreEnabled()) {
-    return NextResponse.json(
-      { error: 'Chip packs are no longer sold. Chips are earned by playing, claims and rewarded ads.', code: 'store_disabled' },
-      { status: 403 },
-    );
-  }
 
   let body: Record<string, unknown>;
   try {
@@ -60,7 +48,7 @@ export async function POST(req: NextRequest) {
     (body.type === 'android-playstore' ? 'android' : undefined);
   const productIdRaw =
     (body.productId as string | undefined) ??
-    (body.id as string | undefined) ?? // plugin receipt envelope: product id at top level
+    (body.id as string | undefined) ??
     undefined;
   const purchaseToken =
     (body.purchaseToken as string | undefined) ||
@@ -80,8 +68,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const entry = catalogEntryForProduct(productId);
-  if (!entry) {
+  // Chip pack product ids are REJECTED here — the pack catalog and this pass
+  // catalog are deliberately disjoint.
+  const plan = passPlanForProduct(productId);
+  if (!plan) {
     return NextResponse.json({ error: 'Unknown product.', code: 'unknown_product' }, { status: 400 });
   }
 
@@ -115,15 +105,11 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Idempotent credit + yearly cap inside one DB transaction.
-    const result = await creditStorePurchase({
+    const result = await creditPassPurchase({
       playerId,
-      platform,
-      packId: entry.packId,
-      productId,
+      plan,
+      store: platform === 'android' ? 'play' : 'appstore',
       storeTxId,
-      chips: entry.chips,
-      pricePaidINR: entry.priceINR,
       verifierNote,
     });
 
@@ -133,17 +119,17 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      credited: result.credited,
+      credited: !result.alreadyCredited,
       alreadyCredited: result.alreadyCredited,
-      balance: result.balance,
-      yearlyPurchased: result.yearlyPurchased,
-      yearlyCap: result.yearlyCap,
-      storeLocked: result.storeLocked,
-      packId: entry.packId,
+      sku: plan.id,
+      adFreeUntil: result.adFreeUntil,
+      tickets: result.tickets,
+      ticketsGranted: result.ticketsGranted,
+      orderId: result.orderId,
     });
   } catch (e) {
     if (e instanceof IapNotConfiguredError) {
-      console.error(`[store/verify] not configured (${e.platform}):`, e.message);
+      console.error(`[store/verify-pass] not configured (${e.platform}):`, e.message);
       return NextResponse.json(
         { error: 'Purchases are being set up — available very soon.', code: 'store_not_configured' },
         { status: 503 },
@@ -155,34 +141,26 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    if (e instanceof YearlyCapError) {
-      return NextResponse.json(
-        {
-          error: 'Annual buy cap of 25 Lakh Chips (2,500,000) reached — Store locked for 365 days to maintain tournament skill parity.',
-          code: 'yearly_cap',
-          yearlyPurchased: e.purchasedThisYear,
-          yearlyCap: STORE_YEARLY_CAP_CHIPS,
-        },
-        { status: 403 },
-      );
-    }
-    console.error('[store/verify] error', e);
+    console.error('[store/verify-pass] error', e);
     return NextResponse.json({ error: 'Verification failed. Please try again.', code: 'internal' }, { status: 500 });
   }
 }
 
-// GET /api/store/verify — yearly cap status for the signed-in player
-// (the chip-store panel replaces its old localStorage counter with this).
+// GET /api/store/verify-pass — current Time Pass + ticket status for the
+// signed-in player (used by the Vault panel on mount).
 export async function GET() {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
   }
-  const yearlyPurchased = await yearlyPurchasedChips(session.playerId);
+  const player = await db.player.findUnique({
+    where: { id: session.playerId },
+    select: { adFreeUntil: true, tickets: true },
+  });
+  if (!player) return NextResponse.json({ error: 'Player not found.' }, { status: 404 });
   return NextResponse.json({
-    yearlyPurchased,
-    yearlyCap: STORE_YEARLY_CAP_CHIPS,
-    storeLocked: yearlyPurchased >= STORE_YEARLY_CAP_CHIPS,
-    yearlyCapINR: STORE_YEARLY_CAP_INR,
+    adFreeUntil: player.adFreeUntil,
+    passActive: !!player.adFreeUntil && player.adFreeUntil.getTime() > Date.now(),
+    tickets: player.tickets,
   });
 }

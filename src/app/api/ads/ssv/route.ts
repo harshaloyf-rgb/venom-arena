@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { MAX_DAILY_ADS, AD_REWARD_CHIPS } from '@/lib/game-config';
+import { MAX_DAILY_ADS, AD_REWARD_CHIPS, JOIN_AD_WINDOW_MS } from '@/lib/game-config';
 import { verifySsvCallback } from '@/lib/ads-ssv';
 
 const SESSION_TTL_MS = 10 * 60 * 1000;
@@ -12,9 +12,11 @@ const SESSION_TTL_MS = 10 * 60 * 1000;
 // reward, with a cryptographically signed query string. We:
 //   1. verify the ECDSA signature against Google's public verifier keys,
 //   2. look up the AdRewardSession by the signed custom_data nonce,
-//   3. claim the nonce (single-use) and credit AD_REWARD_CHIPS inside one
-//      transaction that also enforces the daily cap — same hardening as the
-//      old video-reward route, but now the "ad was watched" proof is real.
+//   3. claim the nonce (single-use) and — inside one transaction — either
+//      credit AD_REWARD_CHIPS (purpose=chips, daily-capped) or unlock the
+//      pre-join window (purpose=join, sets Player.adUnlockUntil).
+//      The join placement NEVER touches chips: ads exist at exactly one
+//      surface (the pre-join gate) and never mid-gameplay.
 //
 // Google expects HTTP 200 and retries non-200 up to five times. We always
 // answer 200 with a status body; retry storms only happen for genuine
@@ -43,6 +45,16 @@ export async function GET(req: NextRequest) {
       });
       if (claimed.count !== 1) return 'already_used' as const;
 
+      // ── Join-gate placement: unlock the window, never touch chips ───────
+      if (row.purpose === 'join') {
+        await tx.player.update({
+          where: { id: row.playerId },
+          data: { adUnlockUntil: new Date(Date.now() + JOIN_AD_WINDOW_MS) },
+        });
+        return 'unlocked' as const;
+      }
+
+      // ── Chips placement: daily-capped watch-ad-for-chips faucet ─────────
       const todayStart = new Date();
       todayStart.setUTCHours(0, 0, 0, 0);
       const todayCount = await tx.videoReward.count({

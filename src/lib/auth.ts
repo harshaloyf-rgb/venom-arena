@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
 import { db } from './db';
 import bcrypt from 'bcryptjs';
+import { ensureYearRollover } from './year-rollover';
 
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
@@ -58,6 +59,10 @@ export async function getSession(): Promise<SessionPayload | null> {
   if (!token) return null;
   const payload = verifySession(token);
   if (!payload) return null;
+
+  // Jan 1 wallet rollover (locked spec): lazy, idempotent, memoized to one
+  // integer compare per process per year — see lib/year-rollover.ts.
+  await ensureYearRollover();
 
   // Invalidate session for banned players and token version mismatches
   // Also refresh role from DB (source of truth) so promotions/demotions take effect immediately

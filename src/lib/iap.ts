@@ -238,9 +238,24 @@ export interface CompletedPurchase {
   storeLocked: boolean;
 }
 
+export interface CompletedPassPurchase {
+  alreadyCredited: boolean;
+  sku: string;
+  adFreeUntil: string | null;
+  tickets: number;
+  ticketsGranted: number;
+}
+
 const PURCHASE_TIMEOUT_MS = 3 * 60_000; // covers slow payment dialogs
 
-export async function purchaseAndVerify(packId: string, productId: string, playerId: string): Promise<CompletedPurchase> {
+interface PurchaseCore {
+  tx: AnyTransaction;
+  platformId: IapPlatform;
+  proof: { purchaseToken?: string; signedTransaction?: string };
+}
+
+/** Shared store purchase core: order → wait for approved → extract proof. */
+async function runPurchase(productId: string, playerId: string, what: string): Promise<PurchaseCore> {
   await initStore(playerId);
   const store = storeApi();
   const platform = currentStorePlatform();
@@ -248,7 +263,7 @@ export async function purchaseAndVerify(packId: string, productId: string, playe
   const product = store.get(productId, platform);
   const offer = product?.offers?.[0];
   if (!product || !offer) {
-    throw new IapError('PRODUCT_UNAVAILABLE', 'This pack is not available in the store yet. Try again shortly.');
+    throw new IapError('PRODUCT_UNAVAILABLE', `This ${what} is not available in the store yet. Try again shortly.`);
   }
 
   const proofPromise = new Promise<AnyTransaction>((resolve, reject) => {
@@ -258,7 +273,7 @@ export async function purchaseAndVerify(packId: string, productId: string, playe
     }
     const timer = setTimeout(() => {
       activeWaiter = null;
-      reject(new IapError('TIMEOUT', 'Purchase did not complete in time. If you were charged, chips are credited on next app start.'));
+      reject(new IapError('TIMEOUT', `Purchase did not complete in time. If you were charged, the ${what} is credited on next app start.`));
     }, PURCHASE_TIMEOUT_MS);
     activeWaiter = { productId, resolve, reject, timer };
   });
@@ -290,11 +305,18 @@ export async function purchaseAndVerify(packId: string, productId: string, playe
   const platformId: IapPlatform = Capacitor.getPlatform() === 'ios' ? 'ios' : 'android';
   const proof = extractProof(tx, platformId);
   if (platformId === 'android' && !proof.purchaseToken) {
-    throw new IapError('NO_PROOF', 'Purchase receipt missing from the store response — chips will be credited automatically on next app start.');
+    throw new IapError('NO_PROOF', `Purchase receipt missing from the store response — the ${what} will be credited automatically on next app start.`);
   }
   if (platformId === 'ios' && !proof.signedTransaction) {
-    throw new IapError('NO_PROOF', 'Purchase receipt missing from the store response — chips will be credited automatically on next app start.');
+    throw new IapError('NO_PROOF', `Purchase receipt missing from the store response — the ${what} will be credited automatically on next app start.`);
   }
+
+  return { tx, platformId, proof };
+}
+
+/** Chip pack flow (dormant unless NEXT_PUBLIC_STORE_CHIPS=true). */
+export async function purchaseAndVerify(packId: string, productId: string, playerId: string): Promise<CompletedPurchase> {
+  const { tx, platformId, proof } = await runPurchase(productId, playerId, 'pack');
 
   // Server verification + idempotent credit — the ONLY source of chips.
   const res = await fetch('/api/store/verify', {
@@ -328,5 +350,43 @@ export async function purchaseAndVerify(packId: string, productId: string, playe
     yearlyPurchased: data.yearlyPurchased ?? 0,
     yearlyCap: data.yearlyCap ?? 0,
     storeLocked: data.storeLocked ?? false,
+  };
+}
+
+/** Time Pass flow (locked spec 2026-09-04): ad-free entitlement + tickets. */
+export async function purchasePassAndVerify(sku: string, productId: string, playerId: string): Promise<CompletedPassPurchase> {
+  const { tx, platformId, proof } = await runPurchase(productId, playerId, 'pass');
+
+  // Server verification + idempotent credit — the ONLY source of the
+  // entitlement (stacking adFreeUntil + upfront tickets, server-computed).
+  const res = await fetch('/api/store/verify-pass', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform: platformId, productId, ...proof }),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    code?: string;
+    alreadyCredited?: boolean;
+    sku?: string;
+    adFreeUntil?: string | null;
+    tickets?: number;
+    ticketsGranted?: number;
+  };
+
+  if (!res.ok) {
+    // Deliberately NOT finishing the transaction: it re-fires `approved` on
+    // the next launch and is auto-credited then (or user retried via store).
+    throw new IapError(data.code ?? 'VERIFY_FAILED', data.error || 'Purchase verification failed.');
+  }
+
+  await tx.finish();
+
+  return {
+    alreadyCredited: data.alreadyCredited ?? false,
+    sku: data.sku ?? sku,
+    adFreeUntil: data.adFreeUntil ?? null,
+    tickets: data.tickets ?? 0,
+    ticketsGranted: data.ticketsGranted ?? 0,
   };
 }

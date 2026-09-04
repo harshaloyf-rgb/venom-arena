@@ -95,3 +95,22 @@ npm run build:prod     # bakes the NEXT_PUBLIC_* values into the web bundle
   in sync if you ever change `AD_REWARD_CHIPS` (in `src/lib/game-config.ts`) and the
   server credit in `src/app/api/ads/ssv/route.ts` (they must stay equal).
 - Google requires a valid published privacy policy (see IAP-SETUP.md § policy).
+
+---
+
+## Join-gate placement (added 2026-09-04 — locked spec)
+
+A second rewarded-ad placement exists: the **pre-join gate**. Online arena
+joins require one rewarded ad, which unlocks `Player.adUnlockUntil` =
+**10 minutes** of unlimited entries (each entry still pays its own buy-in).
+
+- Purpose routing: `/api/ads/session` POST accepts `{ purpose: 'join' }`;
+  the SSV callback sets `adUnlockUntil` instead of crediting chips
+  (`AdRewardSession.purpose` = `chips | join`).
+- HARD RULE: ads appear at exactly ONE surface — the pre-join gate — and
+  NEVER mid-gameplay (expiry is only evaluated at join time).
+- You may reuse the SAME rewarded ad unit, or create a dedicated one for
+  better analytics; either way the SSV URL stays `/api/ads/ssv`.
+- Web/preview: a labeled TEST-AD simulation unlocks the window via
+  `/api/ads/mock-complete`, gated behind `NEXT_PUBLIC_ADS_MOCK=true`.
+  NEVER set that env in production.

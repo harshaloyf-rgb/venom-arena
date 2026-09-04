@@ -132,3 +132,42 @@ webhook automation.
 - Yearly cap copy in the app matches the enforced server cap (₹15,000 / 2.5M chips).
 - The web/PWA build shows "Buy in App" instead of a paywall — this keeps the
   PWA outside Play's billing-policy scope.
+
+---
+
+## Time Pass matrix (added 2026-09-04 — locked spec)
+
+The Vault now sells an **ad-free Time Pass** (USD, one-time) instead of chip
+packs. Chip packs are **removed from the economy** (dormant behind
+`NEXT_PUBLIC_STORE_CHIPS=true`) — rewarded ads + Time Passes are the only
+monetization.
+
+Create these product ids in Play Console / App Store Connect (matching
+prices; Play/Apple localize USD automatically):
+
+| SKU | Product id | Duration | USD  | Bundled Tickets |
+|-----|------------|----------|------|-----------------|
+| pass-5d  | venom.pass.5d  | 5 days  | $1.19  | 10  |
+| pass-15d | venom.pass.15d | 15 days | $2.99  | 30  |
+| pass-30d | venom.pass.30d | 30 days | $5.99  | 70  |
+| pass-3m  | venom.pass.3m  | 3 months | $11.99 | 160 |
+| pass-6m  | venom.pass.6m  | 6 months | $19.99 | 320 |
+| pass-1y  | venom.pass.1y  | 1 year  | $34.99 | 700 |
+
+Server truth: `src/lib/pass-catalog.ts` → verification in
+`/api/store/verify-pass` → idempotent crediting in `src/lib/pass-order.ts`
+(`PassOrder.storeOrderId` UNIQUE). Stacking: a purchase while active EXTENDS
+`Player.adFreeUntil` by the bought duration; tickets are credited upfront
+with a `TicketLedger` row.
+
+Entitlement semantics:
+- `adFreeUntil` active → the pre-join ad gate NEVER appears (no ads anywhere).
+- Tickets: 1 ticket = one completely free entry (no buy-in, no ad) to Jade
+  Corridor (`tier-8`) only; redeemed atomically in `/api/match/join`.
+
+Show the non-refundable clause (`PASS_LEGAL_TEXT` in pass-catalog.ts)
+verbatim at purchase confirmation AND in the store listing:
+"All purchases of Time Passes and bundled Virtual Tickets are final and
+non-refundable. If an account is closed, deleted, or banned for cheating,
+all remaining unexpired time and unused tickets are permanently forfeited
+without liability."

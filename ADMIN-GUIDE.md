@@ -284,3 +284,24 @@
 ---
 
 *Last updated: Security hardening session — $(date '+%Y-%m-%d')*
+
+---
+
+## Economy controls — Time Pass / Tickets / Wallet reset (2026-09-04)
+
+`POST /api/admin/economy` (admin session required):
+- `{ "action": "grant_pass", "userTag": "VM-xxxx", "sku": "pass-30d" }` —
+  grants an ad-free pass (time stacks) + bundled tickets. Audited.
+- `{ "action": "set_tickets", "userTag": "VM-xxxx", "delta": 5 }` —
+  adjusts the ticket balance (negative = revoke, clamped at 0). Audited.
+- `{ "action": "force_wallet_reset" }` — zeroes EVERYONE's bankedChips
+  immediately (Jan-1-style; the scheduled Jan 1 IST reset still runs on top).
+  Audited.
+
+`GET /api/admin/economy` — wallet-reset status, active-pass count, total
+tickets in circulation, plan catalog.
+
+Automatic reset: on Jan 1 (IST) the first authenticated request triggers an
+idempotent bulk `bankedChips -> 0` (marker: GameConfig key
+`wallet_reset_year`). Live matches settle into the zeroed wallet afterwards.
+Player re-registration / balances are unaffected otherwise.

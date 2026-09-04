@@ -1,6 +1,6 @@
 'use client';
 
-import { X, ShoppingBag, User, Crown, Award, Shield, Sparkles, Film, Coins, Users } from 'lucide-react';
+import { X, ShoppingBag, User, Crown, Award, Shield, Sparkles, Film, Landmark, Users } from 'lucide-react';
 
 interface MoreMenuProps {
   isOpen: boolean;
@@ -25,7 +25,7 @@ const ITEMS: MenuItem[] = [
   { tabId: 'clans', Icon: Shield, label: 'Syndicates', color: 'text-violet-400 bg-violet-500/10 border-violet-500/20 hover:bg-violet-500/20' },
   { tabId: 'seasonpass', Icon: Sparkles, label: 'Season Pass', color: 'text-pink-400 bg-pink-500/10 border-pink-500/20 hover:bg-pink-500/20' },
   { tabId: 'clips', Icon: Film, label: 'Highlights', color: 'text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20' },
-  { tabId: 'store', Icon: Coins, label: 'Chip Vault', color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20 hover:bg-cyan-500/20' },
+  { tabId: 'store', Icon: Landmark, label: 'Vault', color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20 hover:bg-cyan-500/20' },
   { tabId: 'social', Icon: Users, label: 'Social', color: 'text-violet-400 bg-violet-500/10 border-violet-500/20 hover:bg-violet-500/20' },
   { tabId: 'admin', Icon: Shield, label: 'Admin', color: 'text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20', adminOnly: true },
 ];

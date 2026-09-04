@@ -9,6 +9,9 @@ export function Section20_FAQ() {
     <Section icon={<AlertTriangle className="w-4 h-4" />} title="20. FAQ" accent="text-purple-400">
       <div className="flex flex-col gap-2.5">
         <FaqItem q="Do I lose my banked vault chips if I crash?" a="No! Your banked vault chips are 100% safe. You only lose the buy-in chips carried in that specific match." />
+        <FaqItem q="Why do I see an ad before joining an online arena?" a="Online arena joins require one short rewarded ad, which unlocks 10 minutes of unlimited entries (each entry still pays its own buy-in). Ads appear ONLY on this join screen — never during gameplay. Time Pass holders never see any ads." />
+        <FaqItem q="What is a Time Pass and what are Virtual Tickets?" a="A Time Pass (bought in the mobile app) removes ALL ads for its duration — 5 days to 1 year — and bundles Virtual Tickets upfront. Each Virtual Ticket is one completely free entry (no buy-in, no ad) to the Jade Corridor arena. Time stacks when you buy again. All pass and ticket purchases are final and non-refundable." />
+        <FaqItem q="What happens to my chips on January 1?" a="Every wallet resets to zero for the New Year Championship — a fresh, equal start for everyone. Your level, stats, cosmetics and passes are untouched. Earn fresh chips through gameplay, claims and reward ads." />
         <FaqItem q="What is the graduated commission?" a="If ≤3 real players are in the arena, extraction is FREE (0%). If ≥4 real players, 35% commission applies (you keep 65%)." />
         <FaqItem q="Why did my extraction restart from 0%?" a="Any steering (changing direction) while extracting resets the 3-second progress to 0%. Forward gliding is natural and allowed — just don't turn!" />
         <FaqItem q="What is the green ring near extracting players?" a="When YOU are extracting, a white-to-green progress ring appears near your snake head. It's private — only you can see your own extraction ring." />

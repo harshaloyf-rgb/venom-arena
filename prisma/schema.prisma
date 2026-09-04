@@ -55,6 +55,11 @@ model Player {
   passXpToday      Int      @default(0)      // pass XP earned today (for daily cap)
   passXpDate       String?                  // ISO date of last passXpToday reset (YYYY-MM-DD)
 
+  // Monetization — Time Pass (ad-free), pre-join ad gate, Virtual Tickets
+  adFreeUntil      DateTime? // Time Pass expiry: NO ads anywhere while active
+  adUnlockUntil    DateTime? // pre-join ad window: online arena joins need no new ad until this time
+  tickets          Int      @default(0) // Virtual Tickets — free entry to Jade Corridor (tier-8)
+
   // Cosmetics — JSON-encoded arrays/objects (default set in code on register)
   unlockedSkins   String   @default("[]")
   currentSkin     String   @default("skin-viper-green")
@@ -103,6 +108,8 @@ model Player {
   promoRewards    PromoReward[]
   videoRewards    VideoReward[]
   adSessions      AdRewardSession[]
+  passOrders      PassOrder[]
+  ticketLedger    TicketLedger[]
   referralsSent   Referral[]    @relation("referralSender")
   referralsReceived Referral[]  @relation("referralReceiver")
   purchases       Purchase[]
@@ -267,9 +274,43 @@ model AdRewardSession {
   player     Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
   playerId   String
   nonce      String   @unique
+  purpose    String   @default("chips") // chips | join (join = pre-join gate unlock)
   consumed   Boolean  @default(false)
   createdAt  DateTime @default(now())
   consumedAt DateTime?
+
+  @@index([playerId, createdAt])
+}
+
+// One-time purchase of an ad-free Time Pass (USD via Play/App Store billing).
+// Immutable purchase audit: stacking math and ticket grants are reconstructable.
+model PassOrder {
+  id               String   @id @default(cuid())
+  player           Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId         String
+  sku              String   // pass-5d | pass-15d | pass-30d | pass-3m | pass-6m | pass-1y
+  durationDays     Int
+  priceUsdMicros   Int      // USD * 1_000_000 (e.g. 1_190_000 = $1.19)
+  store            String   // play | appstore | admin
+  storeOrderId     String?  @unique // store order/purchase token — idempotency key (null for admin grants)
+  ticketsGranted   Int
+  adFreeUntilAfter DateTime // player's adFreeUntil after this purchase (stacking audit)
+  verifierNote     String?  // store verification metadata (environment, orderId)
+  createdAt        DateTime @default(now())
+
+  @@index([playerId, createdAt])
+}
+
+// Ledger for Virtual Tickets (free Jade Corridor entries). Every delta is
+// recorded so any balance can be reconstructed for support/abuse audits.
+model TicketLedger {
+  id        String   @id @default(cuid())
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId  String
+  delta     Int      // + grant / - spend
+  reason    String   // pass_grant | jade_corridor_join | admin_grant | admin_revoke
+  refId     String?  // PassOrder.id or MatchHistory.id
+  createdAt DateTime @default(now())
 
   @@index([playerId, createdAt])
 }

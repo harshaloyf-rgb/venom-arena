@@ -246,6 +246,22 @@ export const MAX_DAILY_ADS = 12;
 // Was 100 — the UI promised 1,200/day while the server paid 50 × 12 = 600.
 export const AD_REWARD_CHIPS = 50;
 
+// ── Pre-join ad gate (online arenas) ────────────────────────────────────────
+// HARD RULE: ads exist at exactly ONE surface — the pre-join gate. They are
+// never shown mid-gameplay (window expiry never interrupts a live match; the
+// gate is only evaluated at join time). One watched ad unlocks a 10-minute
+// window with unlimited arena joins; every join still pays its own buyIn.
+export const JOIN_AD_WINDOW_MS = 10 * 60 * 1000;
+// Virtual Tickets grant completely free entry (no buyIn, no ad) to this arena:
+export const JADE_CORRIDOR_TIER_ID = 'tier-8'; // "Jade Corridor", 1,000-chip buyIn
+
+// Master switch for the real-money CHIP PACK store (the old monetization).
+// Absent/false = chip packs removed everywhere (ads + Time Passes instead).
+// The Time Pass matrix is NOT affected by this flag.
+export function chipsStoreEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_STORE_CHIPS === 'true';
+}
+
 // Hourly micro-claims
 export const HOURLY_REWARD_MIN = 10;
 export const HOURLY_REWARD_MAX = 150;

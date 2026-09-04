@@ -101,6 +101,8 @@ function formatChips(chips: number): string {
 interface OnlineSnakeGameProps {
   onExit?: () => void;
   arenaId?: string;
+  /** Locked spec 2026-09-04: join via Virtual Ticket redemption (free Jade Corridor entry). */
+  useTicket?: boolean;
 }
 
 // ─── Leaderboard entry ───────────────────────────────────────────────────────
@@ -115,7 +117,7 @@ interface LBEntry {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProps) {
+export default function OnlineSnakeGame({ onExit, arenaId, useTicket }: OnlineSnakeGameProps) {
   const { player: authPlayer } = useAuth();
 
   // ── Stabilized auth refs ──
@@ -430,7 +432,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
         setDisplayError(state.error);
       });
       sockRef.current = sock;
-      sock.connect(token, arenaId);
+      sock.connect(token, arenaId, { useTicket: useTicket === true });
     })();
 
     return () => {

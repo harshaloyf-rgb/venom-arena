@@ -198,15 +198,19 @@ function buildAuthMsg(token: string): ArrayBuffer {
   return buf;
 }
 
-function buildJoinMsg(arenaId: string): ArrayBuffer {
+function buildJoinMsg(arenaId: string, useTicket = false): ArrayBuffer {
   const enc = new TextEncoder();
   const idBytes = enc.encode(arenaId);
-  const buf = new ArrayBuffer(1 + 1 + idBytes.length);
+  // Optional trailing flag byte (locked spec 2026-09-04): 0x01 = redeem a
+  // Virtual Ticket for this join (free Jade Corridor entry). Older servers
+  // ignore trailing bytes; the server reads it only when present.
+  const buf = new ArrayBuffer(1 + 1 + idBytes.length + (useTicket ? 1 : 0));
   const dv = new DataView(buf);
   const u8 = new Uint8Array(buf);
   dv.setUint8(0, OP_JOIN);
   dv.setUint8(1, idBytes.length);
   u8.set(idBytes, 2);
+  if (useTicket) dv.setUint8(2 + idBytes.length, 0x01);
   return buf;
 }
 
@@ -264,6 +268,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
   const MAX_RECONNECT = 8;
   let savedToken = '';
   let savedArenaId = '';
+  let savedUseTicket = false;
   let savedGamePort = 3001;
   let intentionalDisconnect = false;
 
@@ -373,7 +378,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
     //    buy-in whenever the socket dropped after death or app backgrounding.
     //    The death/match-end screen stays up; the player rejoins manually.
     if (ws && ws.readyState === WebSocket.OPEN && (firstAuth || joinedInGame)) {
-      ws.send(buildJoinMsg(savedArenaId));
+      ws.send(buildJoinMsg(savedArenaId, savedUseTicket));
     } else if (!firstAuth && !joinedInGame) {
       console.log('[GameSocket] Reconnected after match end — auto-JOIN skipped (buy-in guard)');
     }
@@ -880,7 +885,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
     get snapshot() { return currentSnapshot; },
     get status() { return currentStatus; },
 
-    async connect(token: string, arenaId: string) {
+    async connect(token: string, arenaId: string, opts?: { useTicket?: boolean }) {
       currentStatus = 'connecting';
       currentError = null;
       matchEndData = null;
@@ -897,6 +902,7 @@ export function createGameSocket(onStateChange: (state: GameSocketState) => void
       joinedInGame = false;    // FIX (hotfix-1.3)
       savedToken = token;
       savedArenaId = arenaId;
+      savedUseTicket = opts?.useTicket === true;
       stringTable.length = 0;
       lastSnapshotAt = 0; // FIX H5
       attachVisibility(); // FIX H5: resume health-check while connected

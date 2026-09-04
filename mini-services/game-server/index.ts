@@ -786,6 +786,10 @@ interface ConnectedPlayer {
   joinTime: number;
   kills: number;
   color: string;
+  // Locked spec 2026-09-04: this join consumed a Virtual Ticket (free Jade
+  // Corridor entry). Carried stake was never deducted → death must not
+  // inflate totalLost (match/result reads this flag from the result body).
+  ticketJoin?: boolean;
   secondaryColor: string;
   skinId: string;
   rarity: string;
@@ -1720,6 +1724,8 @@ class ArenaInstance {
           durationSeconds,
           score,
           timestamp: Date.now(),
+          // Locked spec: ticket joins never inflate totalLost on death.
+          ticketJoin: !!player.ticketJoin,
           ...(outcome === 'extract' && bankedAmount !== undefined ? { bankedAmount } : {}),
           // FIX KILL-1b: bot killers have NO tag (bots are tag-less), so the
           // original `killerTag ?` gate silently dropped bot-killer identity
@@ -2263,7 +2269,12 @@ function handleMessage(ws: any, msg: any): void {
         const arenaIdLen = view.getUint8(offset); offset += 1;
         if (buf.byteLength < offset + arenaIdLen) return;
         const arenaId = new TextDecoder().decode(new Uint8Array(buf, offset, arenaIdLen));
-        handleJoin(ws, arenaId);
+        offset += arenaIdLen;
+        // Optional flag byte (locked spec 2026-09-04): 0x01 = redeem a
+        // Virtual Ticket for this join (free Jade Corridor entry). Older
+        // clients don't send the byte — defaults to false.
+        const useTicket = offset < buf.byteLength && view.getUint8(offset) === 0x01;
+        handleJoin(ws, arenaId, useTicket);
         break;
       }
       case OP.INPUT: {
@@ -2365,7 +2376,7 @@ async function handleAuth(ws: any, token: string): Promise<void> {
 
 // ── JOIN handler ──────────────────────────────────────────────────────────
 
-async function handleJoin(ws: any, arenaId: string): Promise<void> {
+async function handleJoin(ws: any, arenaId: string, useTicket = false): Promise<void> {
   const state = connections.get(ws);
   if (!state || !state.authenticated) return;
 
@@ -2433,6 +2444,7 @@ async function handleJoin(ws: any, arenaId: string): Promise<void> {
       body: JSON.stringify({
         userTag: state.playerData.userTag,
         arenaId,
+        useTicket,
       }),
     });
 
@@ -2502,7 +2514,8 @@ async function handleJoin(ws: any, arenaId: string): Promise<void> {
     // Set buy-in as carried chips
     const buyIn = getArenaById(arenaId)?.buyIn ?? 0;
     playerInfo.carriedChips = buyIn;
-    console.log(`[Arena ${arenaId}] JOIN ${playerData.name} buyIn=${buyIn} arenaId=${arenaId}`);
+    playerInfo.ticketJoin = !!joinData.ticketJoin;
+    console.log(`[Arena ${arenaId}] JOIN ${playerData.name} buyIn=${buyIn} arenaId=${arenaId}${playerInfo.ticketJoin ? ' (ticket)' : ''}`);
 
     // Spawn player in arena
     const snake = arena.spawnPlayer(playerInfo);
