@@ -9,7 +9,7 @@ import { PathBuffer } from './pool';
 import { SpatialHash, type SpatialEntity } from './spatial-hash';
 import { checkCollisions, type KillEvent } from './collision';
 import {
-  updateAllBotAI, getBotBoost, getBotIsHunter, spawnBots, respawnDeadBots, removeBot,
+  updateAllBotAI, getBotBoost, getBotIsHunter, respawnDeadBots, removeBot,
   BOT_TYPE_COLORS, type BotType, type BotSpawnConfig, DEFAULT_BOT_MIX,
 } from './bot-ai';
 import { collectFreezeAnchors, nearestAnchorDistSq, isFreezeDistSq, type FreezeAnchor } from './freeze';
@@ -117,18 +117,6 @@ const _eatenIdsSet = new Set<number>();
 // PERF FOOD-RESYNC: safety-net resync interval (5s at 60Hz). The hash is
 // maintained incrementally on every mutation — this only bounds any drift.
 const FOOD_HASH_RESYNC_INTERVAL = 300;
-
-function rebuildFoodHash(fh: SpatialHash, foods: FoodOrb[]): void {
-  fh.clear();
-  _cachedFoodById.clear();
-  for (let i = 0; i < foods.length; i++) {
-    const f = foods[i];
-    _foodHashScratch.x = f.x; _foodHashScratch.y = f.y;
-    _foodHashScratch.radius = f.radius; _foodHashScratch.id = f.id;
-    fh.insert(_foodHashScratch);
-    _cachedFoodById.set(f.id, f);
-  }
-}
 
 // FIX G2: Incremental food-hash maintenance.
 // The hash used to be rebuilt from scratch every N ticks; food spawned between
@@ -885,15 +873,6 @@ function createBotSnakeFactory(
   id: string, name: string, score: number, x: number, y: number, now: number, botType: BotType,
 ): Snake {
   return createSnake(id, name, score, x, y, now, getRandomBotSkin(), botType);
-}
-
-// ==========================================================================
-// Bot Initialization (call once after createInitialState)
-// ==========================================================================
-
-/** Spawn the initial bot population into the game state */
-export function initBots(state: GameState, config?: BotSpawnConfig): void {
-  spawnBots(state, config, createBotSnakeFactory);
 }
 
 // ==========================================================================

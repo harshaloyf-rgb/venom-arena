@@ -72,11 +72,6 @@ export function updateCameraInterpolated(
   camera.zoom = Math.round(camera.zoom * 1000) / 1000;
 }
 
-/** Legacy camera update (no interpolation) — kept for online mode compatibility. */
-export function updateCamera(camera: Camera, snake: Snake, _canvasWidth: number, _canvasHeight: number): void {
-  updateCameraInterpolated(camera, snake, _canvasWidth, _canvasHeight, 1.0);
-}
-
 /** Compute the viewport bounds in world coordinates for culling */
 export function getViewport(camera: Camera, canvasWidth: number, canvasHeight: number): Viewport {
   const halfW = (canvasWidth / 2) / camera.zoom;
@@ -104,16 +99,6 @@ export function worldToScreen(
   return { x: (wx - camera.x) * camera.zoom + cw / 2, y: (wy - camera.y) * camera.zoom + ch / 2 };
 }
 
-/** World-to-screen snapped to integer pixels (for food/bots). */
-export function worldToScreenSnapped(
-  wx: number, wy: number, camera: Camera, cw: number, ch: number,
-): { x: number; y: number } {
-  return {
-    x: Math.round((wx - camera.x) * camera.zoom + cw / 2),
-    y: Math.round((wy - camera.y) * camera.zoom + ch / 2),
-  };
-}
-
 // ─── ZERO-ALLOCATION RENDER HELPERS ──────────────────────────────────────
 // Pre-computed transform constants for batch rendering.
 // Instead of calling worldToScreen() per segment (allocates {x,y} object),
@@ -134,16 +119,6 @@ export function computeCamTransform(camera: Camera, cw: number, ch: number): Cam
     offsetX: camera.x * camera.zoom - cw / 2,
     offsetY: camera.y * camera.zoom - ch / 2,
   };
-}
-
-/** Inline world→screen X (snapped, no allocation). */
-export function w2sXS(wx: number, ct: CamTransform): number {
-  return (wx * ct.zoom - ct.offsetX + 0.5) | 0;
-}
-
-/** Inline world→screen Y (snapped, no allocation). */
-export function w2sYS(wy: number, ct: CamTransform): number {
-  return (wy * ct.zoom - ct.offsetY + 0.5) | 0;
 }
 
 /** Inline world→screen X (exact, no allocation). */

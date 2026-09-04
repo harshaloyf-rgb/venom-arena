@@ -29,7 +29,6 @@ const ANDROIDPUBLISHER_SCOPE = 'https://www.googleapis.com/auth/androidpublisher
 const ANDROIDPUBLISHER_BASE = 'https://androidpublisher.googleapis.com/androidpublisher/v3/applications';
 
 export const DEFAULT_PACKAGE_NAME = 'gg.venomarena.app';
-export const DEFAULT_APPLE_BUNDLE_ID = 'gg.venomarena.app';
 
 // ---------------------------------------------------------------------------
 // Errors — mapped to HTTP statuses by the route layer

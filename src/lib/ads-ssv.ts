@@ -61,11 +61,6 @@ interface KeysCacheEntry {
 }
 let keysCache: KeysCacheEntry | null = null;
 
-/** Test hook — clears the module-level verifier key cache. */
-export function resetSsvKeysCacheForTests(): void {
-  keysCache = null;
-}
-
 async function fetchVerifierKeys(fetchFn: FetchFn): Promise<Map<number, crypto.KeyObject>> {
   let res: Response;
   try {

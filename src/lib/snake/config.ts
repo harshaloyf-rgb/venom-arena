@@ -111,11 +111,6 @@ export const FOOD_VISIBLE_RADIUS = 4000;
  *  29000px map radius + 1000px buffer = 30000px. */
 export const FOOD_DESPAWN_RADIUS = 30000;
 
-/** Number of food orbs to spawn per tick when density is below target.
- *  40 × 60fps = 2400 food/sec max respawn rate.
- *  Reduced from 80 to match lower FOOD_DENSITY_TARGET. */
-export const FOOD_RESPAWN_BATCH = 40;
-
 /** Spawn weight probabilities for [small, medium, large] food */
 export const FOOD_SPAWN_WEIGHTS: [number, number, number] = [0.93, 0.04, 0.03];
 
@@ -130,15 +125,6 @@ export const FOOD_COLORS: [string, string, string] = ['#34d399', '#38bdf8', '#f4
 
 /** Glow colors for [small, medium, large] food */
 export const FOOD_GLOW_COLORS: [string, string, string] = ['#10b981', '#0ea5e9', '#ec4899'];
-
-/** Initial food spawn area radius (around origin at game start).
- *  Set to map size so food covers the entire arena. */
-export const INITIAL_SPAWN_RADIUS = 29000;
-
-/** Maximum food array length (safety cap to prevent unbounded memory growth).
- *  50K is sufficient for 1000-bot arena — 150K was overkill causing
- *  O(30K) iteration in maintainFoodAroundPlayer every 10 ticks. */
-export const FOOD_MAX_COUNT = 50000;
 
 // ============================================================================
 // 4. COLLISION — snake radius, protection zones, death rules
@@ -165,14 +151,6 @@ export const SNAKE_RADIUS_GROWTH_RATE_2 = 0.65;
 
 /** Secondary radius growth offset. */
 export const SNAKE_RADIUS_GROWTH_OFFSET_2 = 100000;
-
-/** @deprecated Use SNAKE_RADIUS_GROWTH_RATE_1 and SNAKE_RADIUS_GROWTH_RATE_2 */
-export const SNAKE_RADIUS_GROWTH_RATE = SNAKE_RADIUS_GROWTH_RATE_1;
-/** @deprecated Use SNAKE_RADIUS_GROWTH_OFFSET_1 */
-export const SNAKE_RADIUS_GROWTH_OFFSET = SNAKE_RADIUS_GROWTH_OFFSET_1;
-
-/** First N segments of a snake's body that cannot kill on collision */
-export const NECK_PROTECTION = 5;
 
 /** Spawn protection duration in milliseconds */
 export const SPAWN_PROTECTION_MS = 2000;
@@ -201,10 +179,6 @@ export const BOOST_DROP_INTERVAL = 80;
 /** Number of food orbs to drop per boost interval.
  *  1 drop × 80ms ≈ 12.5 food/sec. */
 export const BOOST_DROP_COUNT = 1;
-
-/** Minimum body segments required to boost.
- *  Kept as config reference but NOT enforced — score check is sufficient. */
-export const BOOST_MIN_BODY = 3;
 
 /** Minimum score required to boost — must have score to spend.
  *  Score > 0 required. Boost drains 1 point every 5 ticks (~12/sec).

@@ -140,11 +140,6 @@ export function registerCustomSkinData(skinId: string, colors: string[], segment
   customSkinSegmentsCache.set(skinId, { colors, segments });
 }
 
-/** Get cached custom skin colors for segment rendering */
-export function getCustomSkinColors(skinId: string): string[] | null {
-  return customSkinSegmentsCache.get(skinId)?.colors ?? null;
-}
-
 /** Get cached custom skin segments for full rendering */
 export function getCustomSkinSegments(skinId: string): any[] | null {
   return customSkinSegmentsCache.get(skinId)?.segments ?? null;

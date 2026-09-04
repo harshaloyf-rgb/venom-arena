@@ -11,7 +11,7 @@ function acc(name: string): PhaseAcc {
   return p;
 }
 
-/** true while a measurement window is open (set via perfWindow) */
+/** true while a measurement window is open (set globalThis.__PERF = true directly) */
 function active(): boolean {
   return !!(globalThis as any).__PERF;
 }
@@ -37,12 +37,6 @@ export function perfExit(name: string): void {
       return;
     }
   }
-}
-
-/** Open a measurement window; report and close after `ticks` gameTick calls. */
-export function perfWindow(ticks: number): void {
-  (globalThis as any).__PERF = true;
-  (globalThis as any).__PERF_TICKS_LEFT = ticks;
 }
 
 export function perfTickDone(): void {

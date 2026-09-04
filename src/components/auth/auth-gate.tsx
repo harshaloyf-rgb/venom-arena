@@ -896,10 +896,3 @@ function ForgotPasswordForm({
     </form>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Export skeleton
-// ---------------------------------------------------------------------------
-export function AuthGateSkeleton() {
-  return <Skeleton className="w-full h-screen" />;
-}

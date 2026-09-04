@@ -4,7 +4,7 @@
 
 import type { Camera, Snake, Viewport } from '@/lib/snake/types';
 import { SEGMENT_SPACING, SPAWN_PROTECTION_MS, LEGENDARY_GLOW_SIZE, lerpAngle } from '@/lib/snake/config';
-import { worldToScreen, computeCamTransform, w2sX, w2sY } from '@/lib/snake/camera';
+import { computeCamTransform, w2sX, w2sY } from '@/lib/snake/camera';
 import type { SkinAtlasManager } from '@/lib/snake/atlas';
 import { LEGENDARY_EMITTER_CONFIG } from '@/lib/snake/atlas';
 import { isMultiColorSkin, getSegmentColor } from '@/lib/snake/skin-registry';
@@ -818,10 +818,8 @@ export function renderSnakeAtlas(
 
     ctx.save();
     ctx.translate(hsx, hsy);
-    // RIGID-HEAD: rotate to the neck-derived facing (always aligned with the
-    // body junction) instead of the steering heading — no more invisible-neck
-    // pivot while turning. The neck vector is continuous frame-to-frame and
-    // smoothHeadFacing eases it, so rotation stays smooth.
+    // RIGID-HEAD: rotate to the junction-derived facing (always aligned with
+    // the visible body) — no temporal filter, zero lag, no pivot.
     ctx.rotate(headFacing);
 
     if (isLegendary && animation && snake.boosting) {
@@ -922,12 +920,6 @@ export function renderSnakeAtlas(
     }
 
   }
-
-  // Collision chain debug rendering — hidden for production
-  // drawCollisionChain(
-  //   ctx, headScreen, snake.angle, atlasHeadR,
-  //   walked, segRadius, camera, cw, ch, vl, vr, vt, vb,
-  // );
 
   // ── Render particles for legendary snakes ──
   if (isLegendary) {
@@ -1350,106 +1342,7 @@ export function renderSnakeFallback(
 
   }
 
-  // Collision chain debug rendering — hidden for production
-  // drawCollisionChain(
-  //   ctx, headVisible ? headScreen : null, snake.angle, headRadius,
-  //   walked, segRadius, camera, cw, ch, vl, vr, vt, vb,
-  // );
-
   ctx.globalAlpha = 1;
-}
-
-// ─── Collision Chain: connected head diameter line + body squares ───────────────
-
-/**
- * Draw the full collision indicator chain for a snake.
- * 1. Head: straight line through the DIAMETER (center) of the head, perpendicular to direction
- * 2. Body: rotated squares at each segment center
- * 3. Connection: continuous polyline through all points — no gaps
- */
-function drawCollisionChain(
-  ctx: CanvasRenderingContext2D,
-  headScr: { x: number; y: number } | null,
-  headAngle: number,
-  headR: number,
-  walked: WalkResult,
-  segRadius: number,
-  camera: Camera,
-  cw: number,
-  ch: number,
-  vl: number,
-  vr: number,
-  vt: number,
-  vb: number,
-): void {
-  // Collect all visible collision point screen positions + angles
-  // Index 0 = head, 1+ = body segments
-  const totalPts = 1 + Math.max(0, walked.count - 1); // head + body (up to 2nd-last)
-  if (totalPts < 2) return;
-
-  const pts: { x: number; y: number; a: number; r: number }[] = [];
-
-  // Head point
-  if (headScr) {
-    pts.push({ x: headScr.x, y: headScr.y, a: headAngle, r: headR });
-  }
-
-  // Body points (walked 0 to count-2)
-  const bodyEnd = Math.max(0, walked.count - 1);
-  for (let i = 0; i < bodyEnd; i++) {
-    const wx = walked.xs[i];
-    const wy = walked.ys[i];
-    if (wx < vl || wx > vr || wy < vt || wy > vb) continue;
-    const scr = worldToScreen(wx, wy, camera, cw, ch);
-    pts.push({ x: scr.x, y: scr.y, a: walked.angles[i], r: segRadius });
-  }
-
-  if (pts.length < 2) return;
-
-  const sqHalf = segRadius * 0.55; // half-side of the collision square
-
-  ctx.save();
-  ctx.globalAlpha = 0.7;
-  ctx.strokeStyle = 'rgba(220, 38, 38, 0.9)';
-  ctx.fillStyle = 'rgba(239, 68, 68, 0.45)';
-  ctx.lineWidth = 1.8;
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-
-  // ── 1. Connecting polyline through all centers (no gaps) ──
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) {
-    ctx.lineTo(pts[i].x, pts[i].y);
-  }
-  ctx.stroke();
-
-  // ── 2. Head: tiny black dot at collision point (no red line) ──
-  if (pts[0].r > 0) {
-    const hp = pts[0];
-    const frontX = hp.x + Math.cos(hp.a) * hp.r * 0.75;
-    const frontY = hp.y + Math.sin(hp.a) * hp.r * 0.75;
-    ctx.fillStyle = '#000000';
-    ctx.beginPath();
-    ctx.arc(frontX, frontY, 1, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(239, 68, 68, 0.45)'; // restore red fill for squares
-  }
-
-  // ── 3. Body: rotated squares at each segment ──
-  for (let i = 1; i < pts.length; i++) {
-    const p = pts[i];
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(p.a);
-    ctx.beginPath();
-    ctx.rect(-sqHalf, -sqHalf, sqHalf * 2, sqHalf * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  ctx.restore();
 }
 
 // ─── Direction Pointer (player-only steering arrow) ──────────────────

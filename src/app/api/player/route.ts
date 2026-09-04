@@ -120,25 +120,6 @@ export async function PUT(req: NextRequest) {
   }
 }
 
-// Internal helper used by /api/player/cosmetic and /api/player/daily
-export async function unlockSkin(playerId: string, skinId: string) {
-  const updated = await db.$transaction(async (tx) => {
-    const player = await tx.player.findUnique({ where: { id: playerId } });
-    if (!player) return null;
-    const unlocked = (() => {
-      try { return JSON.parse(player.unlockedSkins || '[]') as string[]; } catch { return []; }
-    })();
-    if (unlocked.includes(skinId)) return player; // already unlocked, no-op
-    unlocked.push(skinId);
-    const result = await tx.player.update({
-      where: { id: playerId },
-      data: { unlockedSkins: encodeSkins(unlocked) },
-    });
-    return result;
-  });
-  return updated;
-}
-
 // DELETE /api/player — soft-delete account (anonymize data)
 // M-17: GDPR Right to Erasure
 export async function DELETE() {

@@ -490,31 +490,3 @@ function drawArenaBoundary(
   ctx.arc(sx, sy, screenRadius, 0, Math.PI * 2);
   ctx.stroke();
 }
-
-// ============================================================================
-// Mouse cursor indicator (classic .io style — subtle crosshair)
-// ============================================================================
-
-export function drawMouseCursor(
-  ctx: CanvasRenderingContext2D,
-  input: InputHandler,
-): void {
-  const pos = input.getMousePos();
-  if (!pos) return;
-
-  const r = 6;
-  const alpha = 0.5;
-
-  // Outer ring
-  ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-   ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // Center dot
-  ctx.fillStyle = `rgba(255, 255, 255, ${alpha + 0.2})`;
-  ctx.beginPath();
-  ctx.arc(pos.x, pos.y, 1.5, 0, Math.PI * 2);
-  ctx.fill();
-}

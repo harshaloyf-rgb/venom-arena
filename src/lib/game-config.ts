@@ -167,20 +167,9 @@ export function getCosmeticById(id: string): Skin | undefined {
 }
 
 // ----------------------------------------------------------------------------
-// World / physics constants
-// ----------------------------------------------------------------------------
-export const WORLD_SIZE = 8000;
-export const WORLD_RADIUS = 4000; // center of 8000x8000 world (used for offline infinite offset)
 // NOTE: Physics constants (speed, turn rate, collision, boost, etc.) are now in
 // src/lib/snake/config.ts as DEFAULT_SNAKE_CONFIG. The values below are only
 // the ones still referenced by non-engine code.
-
-export const INITIAL_SPAWN_SCORE = 20; // Starting score — all food collected adds to this
-export const TICK_RATE_HZ = 30;
-export const TICK_MS = 1000 / TICK_RATE_HZ;
-export const BROADCAST_RATE_HZ = 20;
-export const BROADCAST_MS = 1000 / BROADCAST_RATE_HZ;
-export const MAX_SNAPSHOTS_PER_SECOND = 20;
 
 // ----------------------------------------------------------------------------
 // Food Orb System — Three size variants
@@ -219,60 +208,18 @@ export const FOOD_ORB_LARGE: FoodOrbConfig = {
   glowColor: '#ec4899',
 };
 
-export const ALL_FOOD_ORBS: FoodOrbConfig[] = [FOOD_ORB_SMALL, FOOD_ORB_MEDIUM, FOOD_ORB_LARGE];
-
-// Food spawn distribution weights: 93% small, 4% medium, 3% large
-export const FOOD_ORB_WEIGHTS: number[] = [0.93, 0.04, 0.03];
-
 export const FOOD_DENSITY_TARGET = 800; // food count near player (density-based)
 export const FOOD_VISIBLE_RADIUS = 5000; // radius around player for density check
 export const FOOD_DESPAWN_RADIUS = 7000; // despawn food beyond this
-export const REGULAR_FOOD_GROW = 1; // legacy alias (food value IS the grow amount)
-
-// Star collectibles — always exactly 10 dropped on player death
-export const STAR_DROP_COUNT = 10; // ALWAYS exactly 10 stars
 
 // ----------------------------------------------------------------------------
 // Dynamic Map Scaling (Online Mode)
 // ----------------------------------------------------------------------------
-export const MAP_MIN_RADIUS = 3000;  // radius when 1 player (doubled for comfort)
-export const MAP_MAX_RADIUS = 16000;  // radius when 1000 players (DOUBLED for 1000-player density)
-export const MAP_BREATH_AMPLITUDE = 40;  // breathing oscillation
-export const MAP_BREATH_CYCLE_MS = 10000;
 export const MAX_ARENA_PLAYERS = 1000;
-
-/** Compute dynamic map radius based on real player count. */
-export function getDynamicMapRadius(realPlayerCount: number, elapsedMs?: number): number {
-  const minP = 1;
-  const maxP = MAX_ARENA_PLAYERS;
-  const count = Math.max(minP, Math.min(maxP, realPlayerCount));
-  // sqrt scaling: 1 player -> 1500, ~31 players -> ~3000, 1000 players -> 5000
-  const baseRadius = MAP_MIN_RADIUS + (MAP_MAX_RADIUS - MAP_MIN_RADIUS) * Math.sqrt((count - 1) / (maxP - 1));
-  // Add breathing
-  if (elapsedMs !== undefined) {
-    const cycle = (elapsedMs % MAP_BREATH_CYCLE_MS) / MAP_BREATH_CYCLE_MS;
-    return baseRadius + Math.sin(cycle * Math.PI * 2) * MAP_BREATH_AMPLITUDE;
-  }
-  return baseRadius;
-}
-
-// Legacy alias for backward compat
-export const MAP_BASE_RADIUS = 3800;
 
 // ----------------------------------------------------------------------------
 // Bot Constants
 // ----------------------------------------------------------------------------
-export const BOT_SELF_DESTRUCT_THRESHOLD = 100; // score at which bots self-destruct (online only)
-export const BOT_EVADE_RADIUS = 300; // distance at which bots start evading human players
-export const BOT_FOOD_SCAN_RADIUS = 300; // how far bots scan for food
-
-// Neck protection: first N segments behind the head are immune to head-to-body collision.
-// Prevents "close call" deaths where a head barely touches the neck area.
-export const NECK_PROTECTION_SEGS = 5;
-
-// Safe spawn: minimum distance from any existing snake when spawning
-export const SAFE_SPAWN_MIN_DIST = 500;
-export const SAFE_SPAWN_ATTEMPTS = 30; // max attempts to find safe spawn point
 
 // ----------------------------------------------------------------------------
 // Daily rewards (7-day cycle, repeats) — original: [10,20,50,100,250,500,1000]
@@ -302,7 +249,6 @@ export const AD_REWARD_CHIPS = 50;
 // Hourly micro-claims
 export const HOURLY_REWARD_MIN = 10;
 export const HOURLY_REWARD_MAX = 150;
-export const HOURLY_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 
 // Streak milestones
 export const STREAK_MILESTONES: Record<number, { reward: number; title: string; emoji: string }> = {
@@ -399,14 +345,6 @@ export const BOT_NAMES = [
   'ChronoKrait', 'QuantumMamba', 'AeroBoa', 'SavageSerpent', 'GlitchViper',
   'ApexPredator', 'GhostScale', 'MatrixAsp', 'Synthetix', 'StaticFang',
   'VectorVenom', 'OmegaSlink', 'BetaByte', 'RattleTech', 'HoloHydra',
-];
-export const BOT_SKINS = [
-  { color: '#22c55e', secondaryColor: '#15803d' },
-  { color: '#a855f7', secondaryColor: '#6b21a8' },
-  { color: '#06b6d4', secondaryColor: '#0891b2' },
-  { color: '#ec4899', secondaryColor: '#8b5cf6' },
-  { color: '#f59e0b', secondaryColor: '#b45309' },
-  { color: '#ef4444', secondaryColor: '#991b1b' },
 ];
 
 // ----------------------------------------------------------------------------
@@ -857,66 +795,8 @@ export const CHAMPIONSHIP_PRIZE_TIERS: ChampionshipPrize[] = [
 ];
 
 // ----------------------------------------------------------------------------
-// (Social mock data removed — dead demo exports: INITIAL_FRIENDS,
-// INITIAL_RIVALS, GLOBAL_COMMUNITY_PLAYERS. The social panel is DB-driven.)
-// ----------------------------------------------------------------------------
-export const PRESET_EMBLEMS = ['🐍', '🦅', '🎯', '💀', '💎', '🔥', '👑', '⚡', '🏆', '☣️'];
-
-// ----------------------------------------------------------------------------
 // Season Pass — 20 free + 20 elite rewards
 // ----------------------------------------------------------------------------
-export interface SeasonReward {
-  title: string;
-  category: string;
-  icon: string;
-  skinName?: string;
-}
-
-export const COSMETIC_FREE_REWARDS: SeasonReward[] = [
-  { title: 'Neon Viper Badge', category: 'Badge', icon: '🏷️' },
-  { title: 'Cyber Pulse Trail FX', category: 'Tail FX', icon: '⚡' },
-  { title: 'Green Venom Frame', category: 'Avatar Border', icon: '🖼️' },
-  { title: 'Serpent Whispers SFX', category: 'Kill Sound', icon: '🔊' },
-  { title: 'Genesis Pioneer Title', category: 'Title', icon: '🎖️' },
-  { title: 'Bio-Hazard Emote Spray', category: 'Spray', icon: '🎨' },
-  { title: 'Emerald Tail Glow', category: 'Tail FX', icon: '✨' },
-  { title: 'Cobra Strike Taunt', category: 'Emote', icon: '🐍' },
-  { title: 'Cyber Samurai Border', category: 'Avatar Border', icon: '⚔️' },
-  { title: 'Toxic Acid DNA Skin', category: 'DNA Skin', icon: '🧪' },
-  { title: 'Quantum Grid Avatar', category: 'Profile Icon', icon: '🌐' },
-  { title: 'Apex Vanguard Emblem', category: 'Badge', icon: '🛡️' },
-  { title: 'Neon Matrix Audio FX', category: 'Kill Sound', icon: '🎵' },
-  { title: 'Plasma Arc Tail Trail', category: 'Tail FX', icon: '⚡' },
-  { title: 'Cyber Warlord Title', category: 'Title', icon: '👑' },
-  { title: 'Solar Flare Emote', category: 'Emote', icon: '☀️' },
-  { title: 'Titanium Viper Skin', category: 'DNA Skin', icon: '🦾' },
-  { title: 'Cyber Void Frame', category: 'Avatar Border', icon: '🌌' },
-  { title: 'Genesis Immortal Badge', category: 'Badge', icon: '🏆' },
-  { title: 'Genesis Master DNA Skin', category: 'DNA Skin', icon: '🐉' },
-];
-
-export const COSMETIC_ELITE_REWARDS: SeasonReward[] = [
-  { title: 'Cyber Serpent God Skin', category: 'DNA Skin', icon: '👑', skinName: 'Cyber Serpent God' },
-  { title: 'Hyper Plasma Arc FX', category: 'Tail FX', icon: '⚡' },
-  { title: 'Cyber Siren Roar SFX', category: 'Kill Sound', icon: '🔊' },
-  { title: 'Royal Throne Taunt', category: 'Emote', icon: '🛋️' },
-  { title: '1 Crore Immortal Badge', category: 'Badge', icon: '🎖️' },
-  { title: 'Modular Venom DNA Skin', category: 'DNA Skin', icon: '🐍', skinName: 'Modular Venom DNA' },
-  { title: 'Holo-Shield Tail Aura', category: 'Tail FX', icon: '🛡️' },
-  { title: 'Golden Viper Frame', category: 'Avatar Border', icon: '🖼️' },
-  { title: 'Galactic Overlord Title', category: 'Title', icon: '🌌' },
-  { title: 'Dark Matter DNA Skin', category: 'DNA Skin', icon: '🌑', skinName: 'Dark Matter DNA' },
-  { title: 'Celestial Fire Trail', category: 'Tail FX', icon: '🔥' },
-  { title: 'Apex Predator Emblem', category: 'Badge', icon: '🦅' },
-  { title: 'Cyber Phantom Skin', category: 'DNA Skin', icon: '👻', skinName: 'Cyber Phantom' },
-  { title: 'Supernova Explosion SFX', category: 'Kill Sound', icon: '💥' },
-  { title: "Emperor's Crown Frame", category: 'Avatar Border', icon: '👑' },
-  { title: 'Diamond Viper DNA Skin', category: 'DNA Skin', icon: '💎', skinName: 'Diamond Viper' },
-  { title: 'Hyper-Drive Trail FX', category: 'Tail FX', icon: '⚡' },
-  { title: 'Genesis Sovereign Title', category: 'Title', icon: '📜' },
-  { title: 'Infinite Horizon Frame', category: 'Avatar Border', icon: '🎆' },
-  { title: 'Serpent God Ascended', category: 'DNA Skin', icon: '🌟', skinName: 'Serpent God Ascended' },
-];
 
 export const ELITE_PASS_COST = 100_000;
 
