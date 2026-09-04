@@ -28,6 +28,10 @@ export interface PlayerProfile {
   streakFreezes: number;
   referralCode: string | null;
 
+  // Ad-Free Time Pass & Virtual Tickets (monetization, 2026-09-05)
+  tickets: number;
+  adFreeUntil: string | null;
+
   unlockedSkins: string[];
   currentSkin: string;
   currentTrail: string;

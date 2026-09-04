@@ -13,7 +13,7 @@ import {
   Compass, Shield, User, Trophy, Gift, ShoppingBag, Coins,
   Sparkles, Users, ChevronLeft, Play, ListTodo, Award,
   LogOut, Film, BookOpen, Crown, Loader2, Sunrise, Star,
-  MoreHorizontal, Swords,
+  MoreHorizontal, Swords, ShieldCheck, Ticket,
 } from 'lucide-react';
 
 import { useAuth } from '@/components/providers/auth-provider';
@@ -88,7 +88,7 @@ const TABS: TabDef[] = [
   { id: 'seasonpass', label: 'Pass', icon: Sparkles, activeColor: 'text-purple-400 bg-purple-600/10 border-purple-500/30' },
   { id: 'clips', label: 'Highlights', icon: Film, activeColor: 'text-red-400 bg-red-600/10 border-red-500/30' },
   { id: 'rewards', label: 'Claims', icon: Gift, activeColor: 'text-emerald-400 bg-emerald-600/10 border-emerald-500/30' },
-  { id: 'store', label: 'Vault', icon: Coins, activeColor: 'text-emerald-400 bg-emerald-600/10 border-emerald-500/30' },
+  { id: 'store', label: 'Ad-Free', icon: ShieldCheck, activeColor: 'text-emerald-400 bg-emerald-600/10 border-emerald-500/30' },
   { id: 'social', label: 'Friends & Search', icon: Users, activeColor: 'text-violet-400 bg-violet-600/10 border-violet-500/30' },
   { id: 'admin', label: 'Admin', icon: Shield, activeColor: 'text-red-400 bg-red-600/10 border-red-500/30' },
 ];
@@ -97,7 +97,7 @@ const PANEL_TITLES: Record<string, string> = {
   arena: 'Play Arena', shop: 'Shop & Lab', profile: 'Agent Profile',
   leaderboard: 'Global Standings', championships: 'Championships',
   halloffame: 'Hall of Fame', clans: 'Syndicates', seasonpass: 'Season Pass',
-  clips: 'Highlights', rewards: 'Daily Claims', store: 'Chip Vault',
+  clips: 'Highlights', rewards: 'Daily Claims', store: 'Ad-Free Pass',
   social: 'Friends & Social', admin: 'Admin Panel',
 };
 
@@ -372,6 +372,28 @@ export default function Home() {
               </span>
             </div>
 
+            {/* Ad-Free pass badge (only while active) */}
+            {player.adFreeUntil && new Date(player.adFreeUntil) > new Date() && (
+              <div
+                className="bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 md:px-2 md:py-1 rounded-lg flex items-center gap-1"
+                title={`Ad-Free Pass active until ${new Date(player.adFreeUntil).toLocaleString()}`}
+              >
+                <ShieldCheck className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline text-[11px] md:text-xs font-bold text-emerald-400">No Ads</span>
+              </div>
+            )}
+
+            {/* Virtual Tickets (free Jade Corridor entries) */}
+            <div
+              className="bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 md:px-2 md:py-1 rounded-lg flex items-center gap-1"
+              title={`${player.tickets ?? 0} Virtual Tickets — free Jade Corridor entries`}
+            >
+              <Ticket className="w-3 h-3 md:w-3.5 md:h-3.5 text-sky-400" />
+              <span className="text-[11px] md:text-xs font-bold font-mono text-sky-400 tabular-nums">
+                {player.tickets ?? 0}
+              </span>
+            </div>
+
             {/* Desktop: Player badge + Rules + Sign Out */}
             <div className="hidden md:flex items-center gap-1.5">
               <div className="bg-slate-900/60 border border-slate-800/80 px-2 py-0.5 rounded-lg flex items-center gap-1.5">
@@ -556,7 +578,7 @@ export default function Home() {
                     <BentoGate onClick={() => setActiveTab('profile')} icon={User} accent="blue" badge="My Record" title="Agent Profile" desc="Examine your records, high scores, total banked wealth, and change your operative callsign." footLeft={`HIGH SCORE: ${(player.biggestExtract || 0).toLocaleString()}`} footRight="Inspect" />
                     <BentoGate onClick={() => setActiveTab('leaderboard')} icon={Trophy} accent="amber" badge="Elite Standings" title="Global Standings" desc="Track rank placements and compare your banked chip balance against other elite venom snake operators." footLeft="LEADERBOARD RANK: Tier 1" footRight="View" />
                     <BentoGate onClick={() => setActiveTab('rewards')} icon={Gift} accent="emerald" badge="Complimentary" title="Daily Free Claims" desc="Secure your complimentary login chips. Claim daily streaks, hourly micro-rewards, and spin the lucky wheel!" footLeft={`STREAK: ${player.dailyStreak || 1} Days`} footRight="Claim" />
-                    <BentoGate onClick={() => setActiveTab('store')} icon={Coins} accent="cyan" badge="Secure Vault" title="Virtual Chip Store" desc="Acquire secure safe-guarded chip packs immediately to compete in high-stakes premium arena tables." footLeft={`WALLET: ${player.bankedChips.toLocaleString()} c`} footRight="Shop" />
+                    <BentoGate onClick={() => setActiveTab('store')} icon={ShieldCheck} accent="cyan" badge="No Ads" title="Ad-Free Pass & Tickets" desc="Remove every ad with a one-time Time Pass and earn free Jade Corridor entry tickets. Ads never interrupt gameplay." footLeft={`WALLET: ${player.bankedChips.toLocaleString()} c`} footRight="Go Ad-Free" />
                     <BentoGate onClick={() => setActiveTab('championships')} icon={Crown} accent="rose" badge="Tournament" title="Championships" desc="Enter elite championship events. Compete against top-ranked operators for massive chip prizes and exclusive titles." footLeft="SEASONAL EVENTS" footRight="Compete" />
                     <BentoGate onClick={() => setActiveTab('halloffame')} icon={Award} accent="yellow" badge="Legends" title="Hall of Fame" desc="View legendary players and record-breaking performances. The greatest venom operators of all time." footLeft="LEGENDARY RANKINGS" footRight="View Legends" />
                     <BentoGate onClick={() => setActiveTab('clans')} icon={Shield} accent="violet" badge="Team Ops" title="Syndicates" desc="Create or join a syndicate. Team up with allies, pool resources, and dominate arenas together." footLeft="CLAN WARFARE" footRight="Assemble" />
@@ -674,6 +696,10 @@ export default function Home() {
             setGateArenaId(null);
             setActiveArenaId(gateArenaId);
             setGameMode('online');
+          }}
+          onGoAdFree={() => {
+            setGateArenaId(null);
+            setActiveTab('store');
           }}
         />
       )}

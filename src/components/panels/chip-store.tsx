@@ -1,15 +1,19 @@
 'use client';
 
-// Vault — Venom Arena's monetization hub (locked spec 2026-09-04).
+// Ad-Free — Venom Arena's pass & referrals hub (renamed from "The Vault",
+// 2026-09-05: real-money chip packs are dormant, so the old name mislead).
 //
 // Tab 1 "Ad-Free Passes": the Global USD One-Time Pass Matrix. Buying a pass
 //   grants the ad-free entitlement (stacking time) + bundled Virtual Tickets
 //   upfront. Real-money IAP via Google Play / App Store, verified server-side.
-// Tab 2 "Earn Chips": user-initiated rewarded ads (watch-ad-for-chips) + promo
-//   codes. User-initiated only — ads never auto-pop anywhere.
+// Tab 2 "Referrals": share a referral code — both players earn chips once the
+//   referred player completes REFERRAL_MATCH_THRESHOLD matches. Live status
+//   list (pending → active → claimed) from /api/player/referral.
 // Tab 3 "Chip Packs" (dormant): the old real-money chip store, hidden unless
 //   NEXT_PUBLIC_STORE_CHIPS=true. Server routes reject pack purchases without
 //   the flag — the UI and the API are gated together.
+// (Promo code redemption + Daily Reward Ads moved to the Claims panel's
+//   "Bonus" tab on 2026-09-05 — they are free rewards, not store items.)
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/providers/auth-provider';
@@ -17,10 +21,11 @@ import {
   CHIP_PACKS,
   type ChipPack,
   chipsStoreEnabled,
+  REFERRAL_REWARD,
+  REFERRAL_MATCH_THRESHOLD,
 } from '@/lib/game-config';
 import { allStoreProducts } from '@/lib/store-catalog';
 import { isNativeApp, nativeBillingAvailable, purchaseAndVerify, purchasePassAndVerify, IapError } from '@/lib/iap';
-import { rewardedAdsAvailable, showRewardedAd } from '@/lib/ads';
 import { PASS_PLANS, PASS_LEGAL_TEXT, formatUsd } from '@/lib/pass-catalog';
 import {
   GlowBlob,
@@ -39,8 +44,8 @@ import {
   ShieldAlert,
   CreditCard,
   Lock,
-  Gift,
-  Video,
+  Users,
+  Copy,
   Smartphone,
   ShieldCheck,
   Ticket,
@@ -52,7 +57,7 @@ interface ChipStoreProps {
   onToast?: ToastFn;
 }
 
-type VaultTab = 'passes' | 'earn' | 'packs';
+type AdFreeTab = 'passes' | 'refer' | 'packs';
 
 // packId -> store product id (server keeps the authoritative chips mapping)
 const PRODUCT_ID_BY_PACK = new Map(allStoreProducts().map((p) => [p.packId, p.productId]));
@@ -60,18 +65,12 @@ const SHOW_CHIP_PACKS = chipsStoreEnabled(); // dormant by default (locked spec)
 
 export function ChipStore({ onToast }: ChipStoreProps) {
   const { player, loading, refresh } = useAuth();
-  const [tab, setTab] = useState<VaultTab>('passes');
+  const [tab, setTab] = useState<AdFreeTab>('passes');
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [promoCode, setPromoCode] = useState('');
-  const [promoBusy, setPromoBusy] = useState(false);
-  const [adBusy, setAdBusy] = useState(false);
   // Yearly buy cap is server truth now (GET /api/store/verify) — the old
   // localStorage counter was trivially bypassable and lied after reinstalls.
   const [yearlyPurchased, setYearlyPurchased] = useState<number | null>(null);
   const [storeLocked, setStoreLocked] = useState(false);
-  // Ad status is ALSO server truth (GET /api/ads/session) — count, cap and
-  // reward size come from the same authority that verifies and credits.
-  const [adStatus, setAdStatus] = useState<{ adsToday: number; dailyCap: number; rewardPerAd: number; remaining: number } | null>(null);
   // Time Pass status (GET /api/store/verify-pass) — server truth for the
   // ad-free expiry and the ticket balance.
   const [passStatus, setPassStatus] = useState<{ passActive: boolean; adFreeUntil: string | null; tickets: number } | null>(null);
@@ -93,22 +92,6 @@ export function ChipStore({ onToast }: ChipStoreProps) {
           if (cancelled || !d) return;
           setYearlyPurchased(d.yearlyPurchased ?? 0);
           setStoreLocked(d.storeLocked ?? false);
-        })
-        .catch(() => undefined);
-    }
-    // Ad card only appears when rewarded ads are genuinely available
-    // (native app + NEXT_PUBLIC_ADMOB_ENABLED flag).
-    if (rewardedAdsAvailable()) {
-      fetch('/api/ads/session')
-        .then((r) => (r.ok ? r.json() : null))
-        .then((d: { adsToday?: number; dailyCap?: number; rewardPerAd?: number; remaining?: number } | null) => {
-          if (cancelled || !d) return;
-          setAdStatus({
-            adsToday: d.adsToday ?? 0,
-            dailyCap: d.dailyCap ?? 12,
-            rewardPerAd: d.rewardPerAd ?? 50,
-            remaining: d.remaining ?? 0,
-          });
         })
         .catch(() => undefined);
     }
@@ -212,77 +195,10 @@ export function ChipStore({ onToast }: ChipStoreProps) {
     }
   }
 
-  async function handlePromo() {
-    const code = promoCode.trim().toUpperCase();
-    if (!code) return;
-    setPromoBusy(true);
-    try {
-      const res = await fetch('/api/player/promo-reward', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code }),
-      });
-      const data = (await res.json().catch(() => ({}))) as { error?: string; reward?: number; newBankedChips?: number };
-      if (!res.ok) {
-        notify(data?.error || 'Invalid or expired promo code.', 'error', onToast);
-        return;
-      }
-      notify(`Promo Code redeemed: +${data.reward?.toLocaleString('en-IN')} CHIPS credited!`, 'success', onToast);
-      setPromoCode('');
-      void refresh();
-    } catch {
-      notify('Network error redeeming promo code.', 'error', onToast);
-    } finally {
-      setPromoBusy(false);
-    }
-  }
-
-  async function handleWatchAd() {
-    if (!adStatus || adStatus.remaining <= 0) {
-      notify('Daily Ad Limit Reached! Resets at 00:00 UTC.', 'error', onToast);
-      return;
-    }
-    setAdBusy(true);
-    try {
-      // 1. Server issues a one-time nonce bound to this player.
-      const sessionRes = await fetch('/api/ads/session', { method: 'POST' });
-      const sessionData = (await sessionRes.json().catch(() => ({}))) as { error?: string; nonce?: string };
-      if (!sessionRes.ok || !sessionData.nonce) {
-        notify(sessionData.error || 'Could not start an ad session.', 'error', onToast);
-        return;
-      }
-      // 2. Real rewarded ad. The nonce rides along as the SSV custom_data.
-      const result = await showRewardedAd(sessionData.nonce);
-      if (result !== 'earned') {
-        if (result === 'dismissed') notify('Ad closed before completion — no reward.', 'info', onToast);
-        else notify('Ad failed to load. Please try again later.', 'error', onToast);
-        return;
-      }
-      // 3. Google now calls OUR server (/api/ads/ssv) with a signed callback.
-      //    Poll for the credit — the client can never mint chips itself.
-      for (let attempt = 0; attempt < 12; attempt++) {
-        await new Promise((r) => setTimeout(r, 2500));
-        const poll = await fetch(`/api/ads/session?nonce=${encodeURIComponent(sessionData.nonce)}`);
-        const pollData = (await poll.json().catch(() => ({}))) as { credited?: boolean; reward?: number; adsToday?: number; dailyCap?: number };
-        if (poll.ok && pollData.credited) {
-          notify(`+${pollData.reward ?? adStatus.rewardPerAd} FREE CHIPS credited from the ad! (${pollData.adsToday ?? adStatus.adsToday + 1}/${pollData.dailyCap ?? adStatus.dailyCap} today)`, 'success', onToast);
-          setAdStatus({ ...adStatus, adsToday: pollData.adsToday ?? adStatus.adsToday + 1, remaining: Math.max(0, adStatus.remaining - 1) });
-          void refresh();
-          return;
-        }
-      }
-      notify('Ad verified — your chips will appear in your wallet within a minute.', 'info', onToast);
-    } catch {
-      notify('Network error during the ad reward.', 'error', onToast);
-    } finally {
-      setAdBusy(false);
-    }
-  }
-
-  const tabs: { id: VaultTab; label: string; icon: React.ReactNode }[] = [
+  const tabs: { id: AdFreeTab; label: string; icon: React.ReactNode }[] = [
     { id: 'passes', label: 'Ad-Free Passes', icon: <ShieldCheck className="w-3.5 h-3.5" /> },
-    { id: 'earn', label: 'Earn Chips', icon: <Coins className="w-3.5 h-3.5" /> },
-    ...(SHOW_CHIP_PACKS ? [{ id: 'packs' as VaultTab, label: 'Chip Packs', icon: <Landmark className="w-3.5 h-3.5" /> }] : []),
+    { id: 'refer', label: 'Referrals', icon: <Users className="w-3.5 h-3.5" /> },
+    ...(SHOW_CHIP_PACKS ? [{ id: 'packs' as AdFreeTab, label: 'Chip Packs', icon: <Landmark className="w-3.5 h-3.5" /> }] : []),
   ];
 
   return (
@@ -293,12 +209,12 @@ export function ChipStore({ onToast }: ChipStoreProps) {
       <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-5 border-b border-slate-800">
         <div>
           <h2 className="text-xl sm:text-2xl font-sans font-black text-white tracking-tight flex items-center gap-2.5">
-            <Landmark className="w-5.5 h-5.5 text-emerald-400" />
-            The Vault
+            <ShieldCheck className="w-5.5 h-5.5 text-emerald-400" />
+            Go Ad-Free
           </h2>
           <p className="text-xs text-slate-400 mt-1 max-w-2xl flex items-center gap-1.5">
             <Info className="w-3 h-3 shrink-0" />
-            Go ad-free with a Time Pass, or top up free chips through rewarded ads. Chips are earned by playing — never required.
+            One-time Time Passes remove every ad and bundle free Jade Corridor tickets. Or invite friends — you both earn chips. Ads never interrupt gameplay.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -408,68 +324,8 @@ export function ChipStore({ onToast }: ChipStoreProps) {
         </div>
       )}
 
-      {/* ── Earn Chips ─────────────────────────────────────────────────── */}
-      {tab === 'earn' && (
-        <div className="relative grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Promo codes */}
-          <div className="p-4 rounded-2xl border border-slate-800 bg-slate-950/60">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-2">
-              <Gift className="w-4 h-4 text-amber-400" /> Promotional Codes
-            </h3>
-            <p className="text-[11px] text-slate-400 mb-3">
-              Redeem a promo code for instant bonus chips. Try <code className="text-amber-300 font-mono">VENOM</code> (+500c) or <code className="text-amber-300 font-mono">CHAMPION</code> (+1000c).
-            </p>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={promoCode}
-                onChange={(e) => setPromoCode(e.target.value)}
-                placeholder="Enter Code (e.g. VENOM)"
-                className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white font-mono uppercase focus:outline-none focus:border-amber-500/50"
-              />
-              <button
-                type="button"
-                onClick={handlePromo}
-                disabled={promoBusy || !promoCode.trim()}
-                className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition disabled:opacity-50"
-              >
-                {promoBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Redeem'}
-              </button>
-            </div>
-          </div>
-
-          {/* Ad rewards — ONLY rendered when rewarded ads are genuinely available
-              (native app + NEXT_PUBLIC_ADMOB_ENABLED). The old fake "sponsor"
-              button (no ad SDK, instant credit) was a Play policy violation.
-              USER-INITIATED ONLY — ads never auto-pop (locked spec). */}
-          {adStatus && (
-          <div className="p-4 rounded-2xl border border-slate-800 bg-slate-950/60">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-2">
-              <Video className="w-4 h-4 text-indigo-400" /> Daily Reward Ads ({adStatus.dailyCap} Max / Day)
-            </h3>
-            <p className="text-[11px] text-slate-400 mb-3">
-              Each completed rewarded video awards {adStatus.rewardPerAd} chips directly to your wallet
-              (Max {adStatus.dailyCap * adStatus.rewardPerAd} free chips per day). Credits are verified
-              server-side via Google and post shortly after the ad finishes. Resets at 00:00 UTC.
-            </p>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] font-mono text-slate-500">
-                Today: {adStatus.adsToday}/{adStatus.dailyCap} ads · {adStatus.remaining} remaining
-              </span>
-              <button
-                type="button"
-                onClick={handleWatchAd}
-                disabled={adBusy || adStatus.remaining <= 0}
-                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition disabled:opacity-50 flex items-center gap-1.5"
-              >
-                {adBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Video className="w-3.5 h-3.5" />}
-                {adBusy ? 'Verifying ad reward...' : adStatus.remaining <= 0 ? 'Daily Limit Reached' : `Watch Ad (+${adStatus.rewardPerAd} Chips)`}
-              </button>
-            </div>
-          </div>
-          )}
-        </div>
-      )}
+      {/* ── Referrals ─────────────────────────────────────────────────── */}
+      {tab === 'refer' && <ReferralTab onToast={onToast} />}
 
       {/* ── Chip Packs (dormant behind NEXT_PUBLIC_STORE_CHIPS) ────────── */}
       {tab === 'packs' && SHOW_CHIP_PACKS && (
@@ -511,6 +367,151 @@ export function ChipStore({ onToast }: ChipStoreProps) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Referrals ──────────────────────────────────────────────────────────
+// Share a code → both players earn chips once the referred player completes
+// REFERRAL_MATCH_THRESHOLD matches. Statuses mirror the backend Referral
+// model: pending → active → claimed. Guests see a register prompt (codes are
+// issued to registered accounts only).
+
+interface ReferralData {
+  referralCode: string;
+  hasReferrer: boolean;
+  referrerName: string | null;
+  referrerCode: string | null;
+  referrals: Array<{ id: string; referredName: string; status: string; matchesPlayed: number; createdAt: string }>;
+}
+
+function ReferralTab({ onToast }: { onToast?: ToastFn }) {
+  const { player } = useAuth();
+  const [data, setData] = useState<ReferralData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch('/api/player/referral')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: ReferralData | null) => {
+        if (!cancelled) {
+          setData(d);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [player?.id]);
+
+  async function copyCode() {
+    if (!data?.referralCode) return;
+    try {
+      await navigator.clipboard.writeText(data.referralCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      notify('Could not copy — please copy the code manually.', 'error', onToast);
+    }
+  }
+
+  if (loading) return <PanelSkeleton count={2} height="h-28" />;
+
+  if (!player?.email) {
+    return (
+      <div className="relative p-5 rounded-2xl border border-slate-800 bg-slate-950/60 text-center">
+        <Users className="w-6 h-6 text-slate-500 mx-auto mb-2" />
+        <h3 className="text-sm font-bold text-white mb-1">Referrals need a registered account</h3>
+        <p className="text-[11px] text-slate-400 leading-relaxed max-w-md mx-auto">
+          Create your free account from <strong className="text-slate-200">Agent Profile → Account</strong> to unlock
+          your referral code. Invite a friend and you <strong className="text-emerald-400">both</strong> earn{' '}
+          <strong className="text-emerald-400">{REFERRAL_REWARD.toLocaleString('en-IN')} chips</strong> once they
+          complete <strong className="text-amber-400">{REFERRAL_MATCH_THRESHOLD} matches</strong>.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* How it works + your code */}
+      <div className="p-4 rounded-2xl border border-slate-800 bg-slate-950/60">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-2">
+          <Users className="w-4 h-4 text-emerald-400" /> Invite Friends — Both Earn
+        </h3>
+        <ul className="text-[11px] text-slate-400 space-y-1.5 leading-relaxed mb-3">
+          <li className="flex items-start gap-1.5">
+            <span className="text-emerald-400 mt-0.5 shrink-0 font-bold">1.</span>
+            <span>Share your referral code — your friend enters it when they sign up.</span>
+          </li>
+          <li className="flex items-start gap-1.5">
+            <span className="text-emerald-400 mt-0.5 shrink-0 font-bold">2.</span>
+            <span>They play <strong className="text-amber-400">{REFERRAL_MATCH_THRESHOLD} matches</strong>.</span>
+          </li>
+          <li className="flex items-start gap-1.5">
+            <span className="text-emerald-400 mt-0.5 shrink-0 font-bold">3.</span>
+            <span>You <strong className="text-emerald-400">both</strong> get <strong className="text-emerald-400">{REFERRAL_REWARD.toLocaleString('en-IN')} chips</strong> automatically.</span>
+          </li>
+        </ul>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-mono text-sm font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1.5 rounded-lg tracking-wider">
+            {data?.referralCode ?? '———'}
+          </span>
+          <button
+            type="button"
+            onClick={copyCode}
+            disabled={!data?.referralCode}
+            className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 text-xs font-bold transition disabled:opacity-50 flex items-center gap-1.5"
+          >
+            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? 'Copied!' : 'Copy Code'}
+          </button>
+        </div>
+        {data?.hasReferrer && data.referrerName && (
+          <p className="text-[11px] text-slate-500 mt-3">
+            Referred by <strong className="text-slate-300">{data.referrerName}</strong> ({data.referrerCode})
+          </p>
+        )}
+      </div>
+
+      {/* Referral status list */}
+      <div className="p-4 rounded-2xl border border-slate-800 bg-slate-950/60">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-3">
+          <Ticket className="w-4 h-4 text-sky-400" /> Referral Status ({data?.referrals.length ?? 0})
+        </h3>
+        {(data?.referrals.length ?? 0) > 0 ? (
+          <div className="max-h-56 overflow-y-auto va-scroll space-y-1.5">
+            {data!.referrals.map((r) => (
+              <div key={r.id} className="flex items-center justify-between rounded-lg bg-slate-950/40 border border-slate-900/40 px-3 py-2">
+                <div className="min-w-0">
+                  <span className="text-xs font-bold text-slate-200 block truncate">{r.referredName}</span>
+                  <span className="text-[10px] text-slate-500 font-mono">{r.matchesPlayed}/{REFERRAL_MATCH_THRESHOLD} matches</span>
+                </div>
+                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border shrink-0 ml-2 ${
+                  r.status === 'claimed'
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                    : r.status === 'active'
+                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                      : 'bg-slate-800 border-slate-700 text-slate-400'
+                }`}>
+                  {r.status === 'claimed' ? 'Claimed' : r.status === 'active' ? 'Active' : 'Pending'}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-6">
+            <Copy className="w-5 h-5 text-slate-600 mx-auto mb-2" />
+            <p className="text-[11px] text-slate-500">No referrals yet. Share your code to start earning!</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

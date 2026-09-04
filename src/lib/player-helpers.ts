@@ -112,6 +112,8 @@ export function toProfile(p: Player): PlayerProfile {
     lastHourlyClaim: p.lastHourlyClaim?.toISOString() ?? null,
     streakFreezes: p.streakFreezes,
     referralCode: p.referralCode,
+    tickets: p.tickets,
+    adFreeUntil: p.adFreeUntil?.toISOString() ?? null,
     unlockedSkins: unlocked,
     currentSkin: p.currentSkin,
     currentTrail: p.currentTrail,

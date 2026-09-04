@@ -21,6 +21,7 @@ import { HourlyTab } from './rewards/hourly-tab';
 import { SpinTab } from './rewards/spin-tab';
 import { CalendarTab } from './rewards/calendar-tab';
 import { HistoryTab } from './rewards/history-tab';
+import { BonusTab } from './rewards/bonus-tab';
 
 // ── Types ──
 
@@ -28,7 +29,7 @@ interface ClaimsProps {
   onToast?: ToastFn;
 }
 
-type ClaimTab = 'daily' | 'hourly' | 'spin' | 'calendar' | 'history';
+type ClaimTab = 'daily' | 'hourly' | 'spin' | 'calendar' | 'bonus' | 'history';
 
 interface HistoryEntry {
   id: string;
@@ -57,6 +58,7 @@ const TABS: { id: ClaimTab; label: string; icon: typeof Gift }[] = [
   { id: 'hourly', label: 'Hourly', icon: Flame },
   { id: 'spin', label: 'Lucky Spin', icon: Flame },
   { id: 'calendar', label: 'Calendar', icon: Flame },
+  { id: 'bonus', label: 'Bonus', icon: Gift },
   { id: 'history', label: 'History', icon: Flame },
 ];
 
@@ -367,6 +369,11 @@ export function DailyRewards({ onToast }: ClaimsProps) {
           player={player}
           onToast={onToast}
         />
+      )}
+
+      {/* ═══════ TAB: Bonus (promo codes + reward ads, moved from Ad-Free panel) ═══════ */}
+      {tab === 'bonus' && (
+        <BonusTab onToast={onToast} />
       )}
 
       {/* ═══════ TAB: History ═══════ */}

@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
 }
 
 // GET /api/store/verify-pass — current Time Pass + ticket status for the
-// signed-in player (used by the Vault panel on mount).
+// signed-in player (used by the Ad-Free panel on mount).
 export async function GET() {
   const session = await getSession();
   if (!session) {

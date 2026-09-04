@@ -19,9 +19,11 @@ import {
   MailWarning,
   RefreshCw,
   Shield,
+  ShieldCheck,
   Skull,
   Sparkles,
   Target,
+  Ticket,
   Timer,
   Trophy,
   UserCircle,
@@ -1243,6 +1245,22 @@ function ProfileContent({
               icon={<Landmark className="w-4 h-4 lg:w-3 lg:h-3 text-emerald-400" />}
               valueClass="text-emerald-400"
             />
+            <StatCard
+              label="Virtual Tickets"
+              subLabel="Free Jade Corridor Entries"
+              value={String(player.tickets ?? 0)}
+              icon={<Ticket className="w-4 h-4 lg:w-3 lg:h-3 text-sky-400" />}
+              valueClass="text-sky-400"
+            />
+            {player.adFreeUntil && new Date(player.adFreeUntil) > new Date() && (
+              <StatCard
+                label="No Ads"
+                subLabel={`Ad-Free Pass · until ${new Date(player.adFreeUntil).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`}
+                value="ACTIVE"
+                icon={<ShieldCheck className="w-4 h-4 lg:w-3 lg:h-3 text-emerald-400" />}
+                valueClass="text-emerald-400"
+              />
+            )}
             <StatCard
               label="Total Kills"
               subLabel="Real-Player Eliminations"

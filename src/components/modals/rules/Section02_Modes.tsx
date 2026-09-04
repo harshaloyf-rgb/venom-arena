@@ -15,7 +15,7 @@ export function Section02_Modes() {
               <Users className="w-3.5 h-3.5" /> Online Arena (High Stakes)
             </span>
             <ul className="list-disc pl-4 space-y-1 text-slate-400 text-[11px]">
-              <li><strong>Chip Buy-In:</strong> Deducts buy-in from your banked vault into carried match chips.</li>
+              <li><strong>Chip Buy-In:</strong> Deducts buy-in from your banked chips into carried match chips.</li>
               <li><strong>Real Players:</strong> Live PvP with real opponents and leaderboard rankings.</li>
               <li><strong>Graduated Commission:</strong> 0% if ≤3 real players, 35% if ≥4. Extract anytime.</li>
               <li><strong>Full Death Penalty:</strong> On death, your carried chips transform into 10 stars at your last position for others to collect.</li>

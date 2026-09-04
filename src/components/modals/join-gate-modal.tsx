@@ -37,6 +37,8 @@ interface JoinGateModalProps {
   onClose: () => void;
   /** Called ONCE when the player commits to the join. useTicket = redeem a Virtual Ticket. */
   onJoin: (useTicket: boolean) => void;
+  /** Optional: send the player to the Ad-Free panel (purchase path from the gate). */
+  onGoAdFree?: () => void;
 }
 
 function fmtRemaining(ms: number): string {
@@ -50,7 +52,7 @@ function fmtExpiry(iso: string | null): string {
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-export function JoinGateModal({ arenaId, onClose, onJoin }: JoinGateModalProps) {
+export function JoinGateModal({ arenaId, onClose, onJoin, onGoAdFree }: JoinGateModalProps) {
   const [gate, setGate] = useState<GateStatus | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [adPhase, setAdPhase] = useState<'idle' | 'playing' | 'verifying'>('idle');
@@ -138,7 +140,7 @@ export function JoinGateModal({ arenaId, onClose, onJoin }: JoinGateModalProps) 
 
     // ── Native: real AdMob rewarded ad with server-side SSV verification ──
     if (!rewardedAdsAvailable()) {
-      setAdError('Rewarded ads are only available in the mobile app. Joining online arenas on web requires a Time Pass or ticket.');
+      setAdError('Rewarded ads are only available in the mobile app. On web, join with a Time Pass (no ads at all) or a Jade Corridor ticket — open the Ad-Free tab to get one.');
       return;
     }
     setAdPhase('verifying');
@@ -234,7 +236,8 @@ export function JoinGateModal({ arenaId, onClose, onJoin }: JoinGateModalProps) 
               <div className="rounded-lg bg-slate-800/60 border border-slate-700 px-3 py-3">
                 <p className="text-xs text-slate-300 font-sans leading-relaxed">
                   Watch a short ad to unlock <span className="font-bold text-slate-100">10 minutes</span> of arena
-                  entries. Ads only ever appear here — never during gameplay.
+                  entries. Ads only ever appear here — never during gameplay. Prefer zero ads? Go Ad-Free —
+                  passes also include <span className="font-bold text-sky-300">free Jade Corridor tickets</span>.
                 </p>
                 {adPhase === 'playing' && gate.mockAds && (
                   <div className="mt-2">
@@ -261,12 +264,22 @@ export function JoinGateModal({ arenaId, onClose, onJoin }: JoinGateModalProps) 
                   <p className="mt-2 text-xs text-rose-300 font-sans">{adError}</p>
                 )}
                 {adPhase === 'idle' && (
-                  <button
-                    onClick={watchAd}
-                    className="mt-3 w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 px-4 py-2.5 text-sm font-bold text-white font-sans transition-colors"
-                  >
-                    <Play className="w-4 h-4" /> Watch Ad to Unlock 10 min
-                  </button>
+                  <>
+                    <button
+                      onClick={watchAd}
+                      className="mt-3 w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 px-4 py-2.5 text-sm font-bold text-white font-sans transition-colors"
+                    >
+                      <Play className="w-4 h-4" /> Watch Ad to Unlock 10 min
+                    </button>
+                    {onGoAdFree && (
+                      <button
+                        onClick={onGoAdFree}
+                        className="mt-2 w-full flex items-center justify-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 px-4 py-2 text-xs font-bold text-emerald-300 font-sans transition-colors"
+                      >
+                        <ShieldCheck className="w-4 h-4" /> Go Ad-Free — passes from $1.19 + free tickets
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             )}

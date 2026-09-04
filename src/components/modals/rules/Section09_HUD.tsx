@@ -22,7 +22,7 @@ export function Section09_HUD() {
         </InfoCard>
         <InfoCard title="Top-Right: Network &amp; Leaderboard" accent="text-cyan-300">
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong>Banked Chips:</strong> Amber card showing vault balance (deducts buy-in on match start)</li>
+            <li><strong>Banked Chips:</strong> Amber card showing your banked chip balance (deducts buy-in on match start)</li>
             <li><strong>FPS / Ping:</strong> Frames per second + latency in ms. Color-coded. &quot;LQ&quot; badge if low quality</li>
             <li><strong>Chat / Minimap:</strong> Below banked card. Chat opens message dialog. Minimap toggles radar</li>
             <li><strong>Arena Leaders (Online):</strong> Collapsible top-10 leaderboard of real players only. Sorted by carried chips (e.g., &quot;100c&quot; in green). Shows player name, country flag, carried chips. Your entry highlighted with &quot;YOU&quot; badge in indigo. Shows &quot;No real players yet.&quot; if you&apos;re the only one</li>
