@@ -16,6 +16,34 @@ import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-type
 import { incrementCoilFrame, type PathLike } from './coil-path';
 
 // ─── Per-frame skin prop & lighten caches (avoid repeated Map.get per bot) ──
+// ─── RIGID-HEAD FIX state ───
+// The head sprite previously rotated to the STEERING heading (snake.angle).
+// During turns the steering heading rotates faster than the body tangent at
+// the junction, so the head visibly pivoted on what looked like an invisible
+// neck joint between it and segment 2. Fix: face the head along the NECK —
+// the direction from the first body step (walked.xs[1], 1.3r behind the head
+// on the path) back to the head position. That is exactly the body's tangent
+// at the junction, so the head is always rigidly attached to the body while
+// turning. Eyes keep tracking the mouse independently; the steering pointer
+// keeps using the raw heading (both are gaze/UX, not body attachment).
+const _headFacingMap = new Map<string, { angle: number; ready: boolean }>();
+const _HEAD_FACING_MAX = 1100; // 999 bots + player + margin
+
+/** Wrap-aware exponential smoothing toward the raw neck angle.
+ *  Large jumps (> 1.2 rad, e.g. respawn/teleport) snap instead of lerping. */
+function smoothHeadFacing(snakeId: string, raw: number): number {
+  const prev = _headFacingMap.get(snakeId);
+  if (!prev || !prev.ready || !Number.isFinite(prev.angle)) {
+    _headFacingMap.set(snakeId, { angle: raw, ready: true });
+    return raw;
+  }
+  let d = raw - prev.angle;
+  d = Math.atan2(Math.sin(d), Math.cos(d));
+  const next = Math.abs(d) > 1.2 ? raw : prev.angle + d * 0.45;
+  _headFacingMap.set(snakeId, { angle: next, ready: true });
+  return next;
+}
+
 const _multiColorCache = new Map<string, boolean>();
 
 /** FIX H2 + Tier-2: Interpolated head angle for rendering.
@@ -645,6 +673,21 @@ export function renderSnakeAtlas(
   const vpDiag = Math.sqrt(cw * cw + ch * ch) / zoom;
   const walked = walkPathFixedStep(effectivePath, step, maxSegs, snake.angle, vpDiag + 500);
 
+  // ── RIGID-HEAD: derive head facing from the neck (body junction), ──
+  // not from the steering heading. walked.xs[0] is the head position and
+  // walked.xs[1] is one draw-step (≈1.3×bodyRadius) behind it along the
+  // body, so atan2(head − neck) is the body tangent exactly where the
+  // head attaches — the head can no longer rotate independently.
+  let headFacing = renderAngle;
+  if (walked.count >= 2) {
+    const ndx = headWx - walked.xs[1];
+    const ndy = headWy - walked.ys[1];
+    if (ndx * ndx + ndy * ndy > 1e-4) {
+      headFacing = smoothHeadFacing(snake.id, Math.atan2(ndy, ndx));
+      if (_headFacingMap.size > _HEAD_FACING_MAX) _headFacingMap.clear();
+    }
+  }
+
   // ── BOOST GLOW: Per-segment soft glow (classic .io style) ──
   if (snake.boosting && walked.count > 0) {
     const boostGlow = getCachedBoostGlow(snake.color, segRadius, _cachedDpr);
@@ -799,8 +842,11 @@ export function renderSnakeAtlas(
 
     ctx.save();
     ctx.translate(hsx, hsy);
-    // FIX H2: interpolated angle instead of raw snake.angle — no more snap/tilt
-    ctx.rotate(renderAngle);
+    // RIGID-HEAD: rotate to the neck-derived facing (always aligned with the
+    // body junction) instead of the steering heading — no more invisible-neck
+    // pivot while turning. The neck vector is continuous frame-to-frame and
+    // smoothHeadFacing eases it, so rotation stays smooth.
+    ctx.rotate(headFacing);
 
     if (isLegendary && animation && snake.boosting) {
       atlasManager.applyEpicEffect(ctx, animation, time, 0, 0, headDrawSize, snake.headColor);
@@ -850,12 +896,14 @@ export function renderSnakeAtlas(
     const equipped = getCachedEquipped();
     const hasCustomEyes = snake.isPlayer && equipped.eyes && equipped.eyes !== 'none';
     if (!hasCustomEyes) {
-      drawResponsiveEyes(ctx, hsx, hsy, renderAngle, snake.targetAngle, headDrawSize / 2, snake.boosting, snake.id, time);
+      // Eye sockets ride WITH the head (neck facing); pupils still track the
+      // mouse via targetAngle inside drawResponsiveEyes.
+      drawResponsiveEyes(ctx, hsx, hsy, headFacing, snake.targetAngle, headDrawSize / 2, snake.boosting, snake.id, time);
     }
 
     // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
     if (snake.isPlayer) {
-      renderEquippedCosmetics(ctx, { hx: hsx, hy: hsy, hr: headDrawSize / 2, angle: renderAngle, time, boosting: snake.boosting, mouseScreenX, mouseScreenY });
+      renderEquippedCosmetics(ctx, { hx: hsx, hy: hsy, hr: headDrawSize / 2, angle: headFacing, time, boosting: snake.boosting, mouseScreenX, mouseScreenY });
     }
 
     // Head glow pulse when boosting

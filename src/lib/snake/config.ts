@@ -22,13 +22,17 @@ export const BASE_SPEED = 3.0;
 /** Speed while boosting (pixels per tick at 60fps) — 2.0× base */
 export const BOOST_SPEED = 6.0;
 
-/** Turn rate at base speed (radians per tick) — ~2.9° per tick.
- *  Turn radius = speed / turn_rate → 3.0 / 0.050 = 60px. */
-export const BASE_TURN_RATE = 0.050;
+/** Turn rate at base speed (radians per tick) — ~4.3° per tick.
+ *  Turn radius = speed / turn_rate → 3.0 / 0.075 = 40px.
+ *  Reduced from 0.050 (60px) per user request: min turn circle now 40px
+ *  (~3 body radii at spawn size) for slither.io-style sharp turns. */
+export const BASE_TURN_RATE = 0.075;
 
-/** Turn rate at boost speed (radians per tick) — ~5.7° per tick.
- *  Turn radius = speed / turn_rate → 6.0 / 0.100 = 60px. */
-export const MIN_TURN_RATE = 0.100;
+/** Turn rate at boost speed (radians per tick) — ~8.6° per tick.
+ *  Turn radius = speed / turn_rate → 6.0 / 0.150 = 40px.
+ *  Kept equal to base radius so boost widens nothing (matches the old
+ *  60px-at-both-speeds design, just tighter overall). */
+export const MIN_TURN_RATE = 0.150;
 
 /** Steering inertia — fraction of remaining angle applied per tick (0–1).
  *  Controls how "heavy" the snake feels when changing direction.
