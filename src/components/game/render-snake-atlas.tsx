@@ -1115,6 +1115,21 @@ export function renderSnakeFallback(
   // Bot walk cache was removed to eliminate head-body separation bug.
   const walked = walkPathFixedStep(path, step, maxSegs, snake.angle, walkDistLimit);
 
+  // ── RIGID-HEAD (fallback path / bots): same neck-derived facing as the
+  // atlas renderer. Eye sockets previously pivoted with the STEERING heading,
+  // which made every bot's head look like it rotated on an invisible neck
+  // while turning. walked.xs[1] is one draw-step behind the head on the
+  // body — atan2(head − neck) is the body tangent at the junction.
+  let headFacingFb = renderAngle;
+  if (walked.count >= 2) {
+    const ndx2 = headWorldX - walked.xs[1];
+    const ndy2 = headWorldY - walked.ys[1];
+    if (ndx2 * ndx2 + ndy2 * ndy2 > 1e-4) {
+      headFacingFb = smoothHeadFacing(snake.id, Math.atan2(ndy2, ndx2));
+      if (_headFacingMap.size > _HEAD_FACING_MAX) _headFacingMap.clear();
+    }
+  }
+
   // ── BOOST GLOW: Per-segment soft glow (classic .io style) ──
   if (snake.boosting && walked.count > 0) {
     const boostGlow = getCachedBoostGlow(snake.color, segRadius, _cachedDpr);
@@ -1331,12 +1346,14 @@ export function renderSnakeFallback(
       const eq2 = getCachedEquipped();
       const hasCustomEyes2 = snake.isPlayer && eq2.eyes && eq2.eyes !== 'none';
       if (!hasCustomEyes2) {
-        drawResponsiveEyes(ctx, headSX, headSY, renderAngle, snake.targetAngle, headRadius, snake.boosting, snake.id, now);
+        // RIGID-HEAD: sockets ride with the body (neck facing), pupils still
+        // track the mouse via targetAngle inside drawResponsiveEyes.
+        drawResponsiveEyes(ctx, headSX, headSY, headFacingFb, snake.targetAngle, headRadius, snake.boosting, snake.id, now);
       }
 
       // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
       if (snake.isPlayer) {
-        renderEquippedCosmetics(ctx, { hx: headSX, hy: headSY, hr: headRadius, angle: renderAngle, time: now, boosting: snake.boosting, mouseScreenX, mouseScreenY });
+        renderEquippedCosmetics(ctx, { hx: headSX, hy: headSY, hr: headRadius, angle: headFacingFb, time: now, boosting: snake.boosting, mouseScreenX, mouseScreenY });
       }
     }
 

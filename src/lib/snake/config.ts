@@ -22,23 +22,25 @@ export const BASE_SPEED = 3.0;
 /** Speed while boosting (pixels per tick at 60fps) — 2.0× base */
 export const BOOST_SPEED = 6.0;
 
-/** Turn rate at base speed (radians per tick) — ~4.3° per tick.
- *  Turn radius = speed / turn_rate → 3.0 / 0.075 = 40px.
- *  Reduced from 0.050 (60px) per user request: min turn circle now 40px
- *  (~3 body radii at spawn size) for slither.io-style sharp turns. */
-export const BASE_TURN_RATE = 0.075;
+/** Turn rate at base speed (radians per tick) — ~5.2° per tick.
+ *  Turn radius = speed / turn_rate → 3.0 / 0.090 = 33px.
+ *  Raised twice per user request (0.050 → 0.075 → 0.090): min turn circle
+ *  now 33px (~2.5 body radii at spawn size) for slither.io-style sharp turns. */
+export const BASE_TURN_RATE = 0.090;
 
-/** Turn rate at boost speed (radians per tick) — ~8.6° per tick.
- *  Turn radius = speed / turn_rate → 6.0 / 0.150 = 40px.
- *  Kept equal to base radius so boost widens nothing (matches the old
- *  60px-at-both-speeds design, just tighter overall). */
-export const MIN_TURN_RATE = 0.150;
+/** Turn rate at boost speed (radians per tick) — ~10.3° per tick.
+ *  Turn radius = speed / turn_rate → 6.0 / 0.180 = 33px.
+ *  Kept equal to base radius so boost widens nothing. */
+export const MIN_TURN_RATE = 0.180;
 
 /** Steering inertia — fraction of remaining angle applied per tick (0–1).
- *  Controls how "heavy" the snake feels when changing direction.
- *  0.12 = 12% of remaining angle each tick → ~90% convergence in ~19 ticks (~0.3s at 60fps).
- *  Lower = heavier/more sluggish. Higher = more responsive (0.5+ = nearly instant). */
-export const STEERING_LERP = 0.12;
+ *  THE reason turns felt wide: with the mouse hovering near the snake
+ *  (slither-style control), the remaining angle diff is SMALL, and the old
+ *  0.12 applied only 12% of it per tick — so the snake never reached its
+ *  max turn rate and circles came out 60-100px even though the cap allowed
+ *  40px. 0.45 = near-direct slither.io steering; the maxTurn cap
+ *  (BASE/MIN_TURN_RATE) still prevents jitter and overshoot. */
+export const STEERING_LERP = 0.45;
 
 /** Maximum speed reduction during sharp turns (0–1).
  *  When the snake turns at its maximum rate, speed drops by this fraction.
