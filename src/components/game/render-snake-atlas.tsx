@@ -477,6 +477,44 @@ function walkPathFixedStep(
 // Reusable walk result
 const _walkResult: WalkResult = { xs: new Float64Array(64), ys: new Float64Array(64), angles: new Float64Array(64), count: 0 };
 
+// ─── Head facing: fixed-lookback probe ──────────────────────────────────────
+/** Direction of the last HEAD_LOOKBACK_PX of traveled path.
+ *  The previous scheme (head − walked[0]) spanned one full DRAW step, which in
+ *  world units is 1.3×bodyRadius/min(zoom,1) — up to 100+px on large snakes.
+ *  Against the 16.7px turn radius that chord wrapped up to 192° of curvature,
+ *  so the head sprite swung wildly during turns and read as "head rotating"
+ *  (measured: scripts/junction-probe.ts). A fixed 5px lookback keeps the
+ *  deviation ≤ 8.6° at ANY size. The offline path and the online rebuilt path
+ *  share the same ~3px point spacing, so behavior is IDENTICAL in both modes. */
+const HEAD_LOOKBACK_PX = 5;
+function computeHeadFacingFromPath(
+  path: { getX: (i: number) => number; getY: (i: number) => number; length: number; headX: number; headY: number },
+  fallback: number,
+): number {
+  const hx = path.headX;
+  const hy = path.headY;
+  let acc = 0;
+  let px = hx, py = hy;
+  const n = Math.min(path.length, 8); // ~2 points needed at 3px spacing; 8 = safe
+  for (let i = 1; i < n; i++) {
+    const qx = path.getX(i);
+    const qy = path.getY(i);
+    const dx = qx - px, dy = qy - py;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d > 0.001 && acc + d >= HEAD_LOOKBACK_PX) {
+      const t = (HEAD_LOOKBACK_PX - acc) / d;
+      const prX = px + dx * t;
+      const prY = py + dy * t;
+      const fx = hx - prX, fy = hy - prY;
+      const fl = Math.sqrt(fx * fx + fy * fy);
+      return fl > 0.001 ? Math.atan2(fy, fx) : fallback;
+    }
+    acc += d;
+    px = qx; py = qy;
+  }
+  return fallback;
+}
+
 // ─── Main atlas renderer ────────────────────────────────────────────────────
 
 export function renderSnakeAtlas(
@@ -650,19 +688,13 @@ export function renderSnakeAtlas(
   const vpDiag = Math.sqrt(cw * cw + ch * ch) / zoom;
   const walked = walkPathFixedStep(effectivePath, step, maxSegs, snake.angle, vpDiag + 500);
 
-  // ── RIGID-HEAD: face the exact visible body junction ──
-  // walked[0] is the first DRAWN body segment (one draw-step behind the head
-  // along the path). The vector walked[0] → head is precisely the direction
-  // the rendered body presents at the junction, so the head sprite is rigid
-  // with the body BY CONSTRUCTION — zero deviation, zero state, identical
-  // offline and online. (The removed smoothHeadFacing filter lagged 6-20°
-  // depending on sim rate — scripts/head-lag-probe.ts.)
-  let headFacing = renderAngle;
-  if (walked.count >= 1) {
-    const jx = headWx - walked.xs[0];
-    const jy = headWy - walked.ys[0];
-    if (jx * jx + jy * jy > 1e-6) headFacing = Math.atan2(jy, jx);
-  }
+  // ── RIGID-HEAD: fixed-lookback facing (identical offline / online) ──
+  // Direction of the last 5px of path. The previous chord (head − walked[0])
+  // spanned a full draw step (1.3×radius/zoom world px — 100+px on big snakes)
+  // and swung up to 192° on the 16.7px turn radius. See computeHeadFacingFromPath.
+  const headFacing = walked.count >= 1
+    ? computeHeadFacingFromPath(effectivePath, renderAngle)
+    : renderAngle;
 
   // ── BOOST GLOW: Per-segment soft glow (classic .io style) ──
   if (snake.boosting && walked.count > 0) {
@@ -686,7 +718,7 @@ export function renderSnakeAtlas(
   //  Drawn BEFORE individual segment sprites so any gaps between circles are
   //  filled by this continuous sausage-link base. Uses the body color at
   //  reduced opacity so it blends under the detailed segment sprites.
-  if (walked.count > 1) {
+  if (walked.count > 0) {
     ctx.save();
     ctx.strokeStyle = snake.color;
     ctx.lineWidth = segRadius * 1.6;
@@ -694,11 +726,13 @@ export function renderSnakeAtlas(
     ctx.lineJoin = 'round';
     ctx.globalAlpha = 0.85;
     ctx.beginPath();
-    // Draw from tail (last walked) to head (first walked)
-    const tailSx = (walked.xs[walked.count - 1] - camera.x) * zoom + camZoomX + renderOffX;
-    const tailSy = (walked.ys[walked.count - 1] - camera.y) * zoom + camZoomY + renderOffY;
-    ctx.moveTo(tailSx, tailSy);
-    for (let i = walked.count - 2; i >= 0; i--) {
+    // JUNCTION FIX: start the spine AT THE HEAD so the head-to-first-segment
+    // junction is always filled. Previously the spine stopped at walked[0]; at
+    // low zoom the head/segment circles stopped overlapping and a visible gap
+    // opened between head and body that grew as the snake grew (measured:
+    // scripts/junction-probe.ts — GAP 1.1px @300K score, 3.9px @1M).
+    ctx.moveTo(headSX, headSY);
+    for (let i = 0; i < walked.count; i++) {
       const sx = (walked.xs[i] - camera.x) * zoom + camZoomX + renderOffX;
       const sy = (walked.ys[i] - camera.y) * zoom + camZoomY + renderOffY;
       ctx.lineTo(sx, sy);
@@ -1081,17 +1115,14 @@ export function renderSnakeFallback(
   // Bot walk cache was removed to eliminate head-body separation bug.
   const walked = walkPathFixedStep(path, step, maxSegs, snake.angle, walkDistLimit);
 
-  // ── RIGID-HEAD (fallback path / bots): same visible-junction facing as the
-  // atlas renderer — vector from the first DRAWN body segment (walked[0]) to
-  // the head, no temporal smoothing (its rate-dependent lag rotated OFFLINE
-  // heads; see scripts/head-lag-probe.ts). Eye sockets pivot rigidly with
-  // the body; pupils still track the mouse.
-  let headFacingFb = renderAngle;
-  if (walked.count >= 1) {
-    const jx2 = headWorldX - walked.xs[0];
-    const jy2 = headWorldY - walked.ys[0];
-    if (jx2 * jx2 + jy2 * jy2 > 1e-6) headFacingFb = Math.atan2(jy2, jx2);
-  }
+  // ── RIGID-HEAD (fallback path / bots): same fixed-lookback facing as the
+  // atlas renderer — direction of the last 5px of path, identical offline and
+  // online at any snake size (the old walked[0] chord swung up to 192° on big
+  // snakes; see computeHeadFacingFromPath + scripts/junction-probe.ts).
+  // Eye sockets pivot rigidly with the body; pupils still track the mouse.
+  const headFacingFb = walked.count >= 1
+    ? computeHeadFacingFromPath(path, renderAngle)
+    : renderAngle;
 
   // ── BOOST GLOW: Per-segment soft glow (classic .io style) ──
   if (snake.boosting && walked.count > 0) {
@@ -1113,7 +1144,7 @@ export function renderSnakeFallback(
 
   // ── Body spine: thick line ensures visual continuity between segments ──
   //  Drawn BEFORE individual segment circles so any tiny gaps are filled.
-  if (walked.count > 1) {
+  if (walked.count > 0) {
     ctx.save();
     ctx.strokeStyle = snake.color;
     ctx.lineWidth = segRadius * 1.6;
@@ -1121,8 +1152,10 @@ export function renderSnakeFallback(
     ctx.lineJoin = 'round';
     ctx.globalAlpha = 0.85;
     ctx.beginPath();
-    ctx.moveTo(toSX(walked.xs[walked.count - 1], ct) + renderOffX, toSY(walked.ys[walked.count - 1], ct) + renderOffY);
-    for (let i = walked.count - 2; i >= 0; i--) {
+    // JUNCTION FIX (fallback): spine starts AT THE HEAD — same fix as the
+    // atlas renderer so the head junction is filled at every size/zoom.
+    ctx.moveTo(headSX, headSY);
+    for (let i = 0; i < walked.count; i++) {
       ctx.lineTo(toSX(walked.xs[i], ct) + renderOffX, toSY(walked.ys[i], ct) + renderOffY);
     }
     ctx.stroke();
