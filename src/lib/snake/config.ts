@@ -22,32 +22,29 @@ export const BASE_SPEED = 3.0;
 /** Speed while boosting (pixels per tick at 60fps) — 2.0× base */
 export const BOOST_SPEED = 6.0;
 
-/** Turn rate at base speed (radians per tick) — ~5.2° per tick.
- *  Turn radius = speed / turn_rate → 3.0 / 0.090 = 33px.
- *  Raised twice per user request (0.050 → 0.075 → 0.090): min turn circle
- *  now 33px (~2.5 body radii at spawn size) for slither.io-style sharp turns. */
-export const BASE_TURN_RATE = 0.090;
+/** Turn rate at base speed (radians per tick) — ~10.3° per tick.
+ *  Turn radius = speed / turn_rate → 3.0 / 0.180 = 17px.
+ *  Fourth raise per user request (0.050 → 0.075 → 0.090 → 0.120 → 0.180).
+ *  Min turn circle ≈ 33px diameter ≈ 1.3 body widths at spawn — slither.io-tight.
+ *  NOTE: SHARP_TURN_BRAKE (now 0) used to claw back 30% of every raise. */
+export const BASE_TURN_RATE = 0.180;
 
-/** Turn rate at boost speed (radians per tick) — ~10.3° per tick.
- *  Turn radius = speed / turn_rate → 6.0 / 0.180 = 33px.
- *  Kept equal to base radius so boost widens nothing. */
-export const MIN_TURN_RATE = 0.180;
+/** Turn rate at boost speed (radians per tick) — ~20.6° per tick.
+ *  Turn radius = speed / turn_rate → 6.0 / 0.360 = 17px (same as base). */
+export const MIN_TURN_RATE = 0.360;
 
 /** Steering inertia — fraction of remaining angle applied per tick (0–1).
- *  THE reason turns felt wide: with the mouse hovering near the snake
- *  (slither-style control), the remaining angle diff is SMALL, and the old
- *  0.12 applied only 12% of it per tick — so the snake never reached its
- *  max turn rate and circles came out 60-100px even though the cap allowed
- *  40px. 0.45 = near-direct slither.io steering; the maxTurn cap
- *  (BASE/MIN_TURN_RATE) still prevents jitter and overshoot. */
-export const STEERING_LERP = 0.45;
+ *  1.0 = DIRECT slither.io steering: turn = min(angleDiff, maxTurn). The
+ *  maxTurn cap alone limits rotation, so ANY mouse offset beyond ~7° turns
+ *  the snake at its full rate — no invisible inertia widening the circle. */
+export const STEERING_LERP = 1.0;
 
 /** Maximum speed reduction during sharp turns (0–1).
  *  When the snake turns at its maximum rate, speed drops by this fraction.
  *  Uses smoothstep curve so braking kicks in gradually, not abruptly.
  *  0.30 = up to 30% speed reduction at full turn.
  *  0.0 = no braking (old behavior). */
-export const SHARP_TURN_BRAKE = 0.30;
+export const SHARP_TURN_BRAKE = 0.0;
 
 /** Distance between consecutive segment positions in the path history */
 export const SEGMENT_SPACING = 8;
@@ -254,7 +251,7 @@ export const SPIRAL_TURN_THRESHOLD = 0.08;
 export const SPIRAL_ENTER_TICKS = 10;
 
 /** Max turn rate multiplier when spiral is fully ramped (1.0 = no boost, 1.8 = 80% faster turning) */
-export const SPIRAL_MAX_MULTIPLIER = 1.8;
+export const SPIRAL_MAX_MULTIPLIER = 1.0;
 
 /** Ticks to reach full spiral multiplier (gradual ramp-up) */
 export const SPIRAL_RAMP_TICKS = 40;

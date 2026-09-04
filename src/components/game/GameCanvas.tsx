@@ -14,7 +14,6 @@ import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrameWithDpr } from '
 import { cleanupDeadSnakeParticles, renderBackground, renderHUD, handleMinimapClick, resetMinimapZoom } from './hud';
 import { initSafeAreaTracking } from './safe-area';
 import { InputHandler, TOUCH_BOOST_THRESHOLD } from './input';
-import { makeCoiledPath } from './coil-path';
 import { SEGMENT_SPACING } from '@/lib/snake/config';
 import { useAuth } from '@/components/providers/auth-provider';
 
@@ -531,8 +530,10 @@ export default function GameCanvas({
         }
       }
       if (gameState.player && gameState.player.alive) {
-        const coiledPlayer = makeCoiledPath(gameState.player.path);
-        renderSnakeAtlas(ctx, gameState.player, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY, undefined, alpha, coiledPlayer);
+        // COIL DISTORTION REMOVED (user directive: all coiling work reverted).
+        // makeCoiledPath pulled body points inward on curves while the head
+        // stayed anchored — a visible head/body pinch during every turn.
+        renderSnakeAtlas(ctx, gameState.player, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY, undefined, alpha, undefined);
       }
 
       // Extraction progress ring on snake head (shared)

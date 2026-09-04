@@ -673,15 +673,18 @@ export function renderSnakeAtlas(
   const vpDiag = Math.sqrt(cw * cw + ch * ch) / zoom;
   const walked = walkPathFixedStep(effectivePath, step, maxSegs, snake.angle, vpDiag + 500);
 
-  // ── RIGID-HEAD: derive head facing from the neck (body junction), ──
-  // not from the steering heading. walked.xs[0] is the head position and
-  // walked.xs[1] is one draw-step (≈1.3×bodyRadius) behind it along the
-  // body, so atan2(head − neck) is the body tangent exactly where the
-  // head attaches — the head can no longer rotate independently.
+  // ── RIGID-HEAD: derive head facing from the true movement tangent ──
+  // (direction from the LAST PATH POINT — 3px behind the head, one tick of
+  // travel — to the head itself). This is the body's tangent exactly at the
+  // junction with near-zero chord error. The earlier version used the first
+  // WALK step (≈17px behind); on a 33px turn circle that chord tilted the
+  // head ~15° inside the arc for the whole turn — the visible offline
+  // 'head rotates' regression. The 3px tangent is error-free by comparison
+  // and smoothHeadFacing hides per-tick quantization.
   let headFacing = renderAngle;
-  if (walked.count >= 2) {
-    const ndx = headWx - walked.xs[1];
-    const ndy = headWy - walked.ys[1];
+  if (pathLen >= 2) {
+    const ndx = headWx - effectivePath.getX(1);
+    const ndy = headWy - effectivePath.getY(1);
     if (ndx * ndx + ndy * ndy > 1e-4) {
       headFacing = smoothHeadFacing(snake.id, Math.atan2(ndy, ndx));
       if (_headFacingMap.size > _HEAD_FACING_MAX) _headFacingMap.clear();
@@ -1115,15 +1118,15 @@ export function renderSnakeFallback(
   // Bot walk cache was removed to eliminate head-body separation bug.
   const walked = walkPathFixedStep(path, step, maxSegs, snake.angle, walkDistLimit);
 
-  // ── RIGID-HEAD (fallback path / bots): same neck-derived facing as the
-  // atlas renderer. Eye sockets previously pivoted with the STEERING heading,
-  // which made every bot's head look like it rotated on an invisible neck
-  // while turning. walked.xs[1] is one draw-step behind the head on the
-  // body — atan2(head − neck) is the body tangent at the junction.
+  // ── RIGID-HEAD (fallback path / bots): same true movement tangent as the
+  // atlas renderer — direction from the last path point (one tick of travel
+  // behind the head) to the head. Eye sockets previously pivoted with the
+  // STEERING heading; the interim walked-step chord biased heads ~15° inside
+  // turns. The 3px tangent keeps heads glued to the body in every mode.
   let headFacingFb = renderAngle;
-  if (walked.count >= 2) {
-    const ndx2 = headWorldX - walked.xs[1];
-    const ndy2 = headWorldY - walked.ys[1];
+  if (pathLen >= 2) {
+    const ndx2 = headWorldX - path.getX(1);
+    const ndy2 = headWorldY - path.getY(1);
     if (ndx2 * ndx2 + ndy2 * ndy2 > 1e-4) {
       headFacingFb = smoothHeadFacing(snake.id, Math.atan2(ndy2, ndx2));
       if (_headFacingMap.size > _HEAD_FACING_MAX) _headFacingMap.clear();

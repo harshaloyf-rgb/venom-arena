@@ -16,7 +16,6 @@ import { renderSnakeAtlas, renderSnakeFallback, beginRenderFrameWithDpr, clearAl
 import { renderBackground, renderHUD, resetMinimapZoom, handleMinimapClick } from './hud';
 import { initSafeAreaTracking } from './safe-area';
 import { drawEliminatedBanner, drawControlsHint } from './renderer';
-import { makeCoiledPath } from './coil-path';
 import { createExtractionState, updateExtractionProgress, drawExtractRing } from '@/lib/snake/extraction';
 import { InputHandler } from './input';
 
@@ -748,11 +747,11 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
             (snake as any).headColor = playerSkinAsset.headColor;
           }
           (snake as any).boosting = isBoosting;
-          const coiledPlayer = makeCoiledPath(snake.path);
+          // COIL DISTORTION REMOVED (user directive: all coiling work reverted).
           const mousePos = input.getMousePos();
           const alpha = mgr.getPlayerAlpha();
           try {
-            renderSnakeAtlas(ctx, snake, camera, viewport, atlasManager, now, mousePos?.x, mousePos?.y, undefined, alpha, coiledPlayer);
+            renderSnakeAtlas(ctx, snake, camera, viewport, atlasManager, now, mousePos?.x, mousePos?.y, undefined, alpha, undefined);
           } catch (e: any) { console.error('[Online] player render:', e.message); }
         } else {
           // Bot: fallback renderer
