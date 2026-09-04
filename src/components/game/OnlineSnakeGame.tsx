@@ -751,7 +751,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
           const mousePos = input.getMousePos();
           const alpha = mgr.getPlayerAlpha();
           try {
-            renderSnakeAtlas(ctx, snake, camera, viewport, atlasManager, now, mousePos?.x, mousePos?.y, undefined, alpha, undefined);
+            renderSnakeAtlas(ctx, snake, camera, viewport, atlasManager, now, mousePos?.x, mousePos?.y, undefined, alpha);
           } catch (e: any) { console.error('[Online] player render:', e.message); }
         } else {
           // Bot: fallback renderer
@@ -763,7 +763,7 @@ export default function OnlineSnakeGame({ onExit, arenaId }: OnlineSnakeGameProp
           // glides each snake smoothly between 20Hz snapshots instead of
           // stepping ~9px at the snapshot rate against the interpolated camera.
           try {
-            renderSnakeFallback(ctx, snake, camera, viewport, now, undefined, undefined, true, mgr.getPlayerAlpha(), undefined, lodFar);
+            renderSnakeFallback(ctx, snake, camera, viewport, now, undefined, undefined, true, mgr.getPlayerAlpha(), lodFar);
           } catch (e: any) { console.error('[Online] bot render:', id, e.message); }
         }
 

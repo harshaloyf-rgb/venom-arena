@@ -526,14 +526,12 @@ export default function GameCanvas({
           const dx = s.path.headX - camX;
           const dy = s.path.headY - camY;
           const lodFar = dx * dx + dy * dy > 1500 * 1500 ? 1 : 0;
-          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, alpha, undefined, lodFar);
+          renderSnakeFallback(ctx, s, cameraRef.current, viewport, now, undefined, undefined, true, alpha, lodFar);
         }
       }
       if (gameState.player && gameState.player.alive) {
         // COIL DISTORTION REMOVED (user directive: all coiling work reverted).
-        // makeCoiledPath pulled body points inward on curves while the head
-        // stayed anchored — a visible head/body pinch during every turn.
-        renderSnakeAtlas(ctx, gameState.player, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY, undefined, alpha, undefined);
+        renderSnakeAtlas(ctx, gameState.player, cameraRef.current, viewport, atlasManager, now, mouseSX, mouseSY, undefined, alpha);
       }
 
       // Extraction progress ring on snake head (shared)

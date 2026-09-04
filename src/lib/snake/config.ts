@@ -260,15 +260,6 @@ export const SPIRAL_RAMP_TICKS = 40;
 export const SPIRAL_EXIT_THRESHOLD = 0.03;
 
 // ============================================================================
-// 9. COIL PHYSICS — curvature-based body contraction
-// ============================================================================
-
-/** Body contraction strength when coiling (0 = off, 0.5 = moderate, 1.0 = strong).
- *  Pulls body segments inward on curves for a python-grip tightening effect.
- *  Applied at render time only — collision/physics use the raw path. */
-export const COIL_CONTRACTION = 0.45;
-
-// ============================================================================
 // 10. EXTRAPOLATION — server/client timing, interpolation, camera
 // ============================================================================
 

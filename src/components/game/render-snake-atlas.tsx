@@ -13,36 +13,16 @@ import { drawSegmentShape, readCustomSkinState, getSkinVisualProps, getPresetVis
 import { isCustomDBSkin, getCustomSkinSegments } from '@/lib/snake/skin-registry';
 import type { CustomSkinState } from '@/components/panels/cosmetics/cosmetics-types';
 import type { CustomSegment } from '@/components/panels/cosmetics/cosmetics-types';
-import { incrementCoilFrame, type PathLike } from './coil-path';
 
 // ─── Per-frame skin prop & lighten caches (avoid repeated Map.get per bot) ──
 // ─── RIGID-HEAD FIX state ───
-// The head sprite previously rotated to the STEERING heading (snake.angle).
-// During turns the steering heading rotates faster than the body tangent at
-// the junction, so the head visibly pivoted on what looked like an invisible
-// neck joint between it and segment 2. Fix: face the head along the NECK —
-// the direction from the first body step (walked.xs[1], 1.3r behind the head
-// on the path) back to the head position. That is exactly the body's tangent
-// at the junction, so the head is always rigidly attached to the body while
-// turning. Eyes keep tracking the mouse independently; the steering pointer
-// keeps using the raw heading (both are gaze/UX, not body attachment).
-const _headFacingMap = new Map<string, { angle: number; ready: boolean }>();
-const _HEAD_FACING_MAX = 1100; // 999 bots + player + margin
-
-/** Wrap-aware exponential smoothing toward the raw neck angle.
- *  Large jumps (> 1.2 rad, e.g. respawn/teleport) snap instead of lerping. */
-function smoothHeadFacing(snakeId: string, raw: number): number {
-  const prev = _headFacingMap.get(snakeId);
-  if (!prev || !prev.ready || !Number.isFinite(prev.angle)) {
-    _headFacingMap.set(snakeId, { angle: raw, ready: true });
-    return raw;
-  }
-  let d = raw - prev.angle;
-  d = Math.atan2(Math.sin(d), Math.cos(d));
-  const next = Math.abs(d) > 1.2 ? raw : prev.angle + d * 0.45;
-  _headFacingMap.set(snakeId, { angle: next, ready: true });
-  return next;
-}
+// RIGID-HEAD (see the junction-facing block inside the renderers below):
+// the head sprite faces the exact vector from the first DRAWN body segment
+// to the head. No temporal smoothing is applied anywhere — a per-frame
+// filter's lag scales with the simulation/snapshot rate, which made OFFLINE
+// heads (60Hz sim) visibly rotate during turns while ONLINE (slower feed)
+// looked attached. Measured with scripts/head-lag-probe.ts: 6-20° deviation
+// before, 0.0° now, identical in both modes.
 
 const _multiColorCache = new Map<string, boolean>();
 
@@ -242,7 +222,6 @@ export function setCachedDpr(dpr: number): void { _cachedDpr = dpr; }
 /** Call once at the start of each render frame to invalidate caches. */
 export function beginRenderFrame(): void {
   _frameCounter++;
-  incrementCoilFrame();
   // Clear per-frame skin prop caches (repopulated on first access each frame)
   _multiColorCache.clear();
   _patternVisCache.clear();
@@ -511,10 +490,8 @@ export function renderSnakeAtlas(
   mouseScreenY?: number,
   _snap?: boolean, // Tier-2: REMOVED — snapping retired by world-to-screen unify (kept for call-site compat)
   alpha: number = 1.0,
-  coiledPath?: PathLike,
 ): void {
-  // Use coiled path for body rendering if provided
-  const effectivePath = coiledPath ?? snake.path;
+  const effectivePath = snake.path;
 
   // Skins with custom segments (presets equipped via localStorage or
   // custom-lab-skin) must use the fallback renderer which supports
@@ -533,13 +510,13 @@ export function renderSnakeAtlas(
   const presetVisuals = !patternVisuals ? cachedGetPresetVisualProps(snake.skinId) : null;
 
   if (snake.skinId === 'custom-lab-skin' || hasCustomSegments || patternVisuals || presetVisuals) {
-    renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY, undefined, alpha, effectivePath); // Tier-2: snap retired
+    renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY, undefined, alpha); // Tier-2: snap retired
     return;
   }
 
   const atlas = atlasManager.getAtlas(snake.skinId);
   if (!atlas) {
-    renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY, undefined, alpha, effectivePath); // Tier-2: snap retired
+    renderSnakeFallback(ctx, snake, camera, viewport, time, mouseScreenX, mouseScreenY, undefined, alpha); // Tier-2: snap retired
     return;
   }
 
@@ -673,22 +650,18 @@ export function renderSnakeAtlas(
   const vpDiag = Math.sqrt(cw * cw + ch * ch) / zoom;
   const walked = walkPathFixedStep(effectivePath, step, maxSegs, snake.angle, vpDiag + 500);
 
-  // ── RIGID-HEAD: derive head facing from the true movement tangent ──
-  // (direction from the LAST PATH POINT — 3px behind the head, one tick of
-  // travel — to the head itself). This is the body's tangent exactly at the
-  // junction with near-zero chord error. The earlier version used the first
-  // WALK step (≈17px behind); on a 33px turn circle that chord tilted the
-  // head ~15° inside the arc for the whole turn — the visible offline
-  // 'head rotates' regression. The 3px tangent is error-free by comparison
-  // and smoothHeadFacing hides per-tick quantization.
+  // ── RIGID-HEAD: face the exact visible body junction ──
+  // walked[0] is the first DRAWN body segment (one draw-step behind the head
+  // along the path). The vector walked[0] → head is precisely the direction
+  // the rendered body presents at the junction, so the head sprite is rigid
+  // with the body BY CONSTRUCTION — zero deviation, zero state, identical
+  // offline and online. (The removed smoothHeadFacing filter lagged 6-20°
+  // depending on sim rate — scripts/head-lag-probe.ts.)
   let headFacing = renderAngle;
-  if (pathLen >= 2) {
-    const ndx = headWx - effectivePath.getX(1);
-    const ndy = headWy - effectivePath.getY(1);
-    if (ndx * ndx + ndy * ndy > 1e-4) {
-      headFacing = smoothHeadFacing(snake.id, Math.atan2(ndy, ndx));
-      if (_headFacingMap.size > _HEAD_FACING_MAX) _headFacingMap.clear();
-    }
+  if (walked.count >= 1) {
+    const jx = headWx - walked.xs[0];
+    const jy = headWy - walked.ys[0];
+    if (jx * jx + jy * jy > 1e-6) headFacing = Math.atan2(jy, jx);
   }
 
   // ── BOOST GLOW: Per-segment soft glow (classic .io style) ──
@@ -991,13 +964,11 @@ export function renderSnakeFallback(
   mouseScreenY?: number,
   _snap?: boolean, // Tier-2: REMOVED — snapping retired by world-to-screen unify (kept for call-site compat)
   alpha: number = 1.0,
-  coiledPath?: PathLike,
   lodFar?: number,
 ): void {
-  // P8: LOD — far bots skip coiled path, eyes, name, direction pointer, shield
+  // P8: LOD — far bots skip eyes, name, direction pointer, shield
   const isFar = lodFar === 1;
-  // P8: Far bots skip coil contraction (saves neighbor lookups per segment)
-  const path = (coiledPath && !isFar) ? coiledPath : snake.path;
+  const path = snake.path;
   const pathLen = path.length;
   if (pathLen < 2) return;
 
@@ -1118,19 +1089,16 @@ export function renderSnakeFallback(
   // Bot walk cache was removed to eliminate head-body separation bug.
   const walked = walkPathFixedStep(path, step, maxSegs, snake.angle, walkDistLimit);
 
-  // ── RIGID-HEAD (fallback path / bots): same true movement tangent as the
-  // atlas renderer — direction from the last path point (one tick of travel
-  // behind the head) to the head. Eye sockets previously pivoted with the
-  // STEERING heading; the interim walked-step chord biased heads ~15° inside
-  // turns. The 3px tangent keeps heads glued to the body in every mode.
+  // ── RIGID-HEAD (fallback path / bots): same visible-junction facing as the
+  // atlas renderer — vector from the first DRAWN body segment (walked[0]) to
+  // the head, no temporal smoothing (its rate-dependent lag rotated OFFLINE
+  // heads; see scripts/head-lag-probe.ts). Eye sockets pivot rigidly with
+  // the body; pupils still track the mouse.
   let headFacingFb = renderAngle;
-  if (pathLen >= 2) {
-    const ndx2 = headWorldX - path.getX(1);
-    const ndy2 = headWorldY - path.getY(1);
-    if (ndx2 * ndx2 + ndy2 * ndy2 > 1e-4) {
-      headFacingFb = smoothHeadFacing(snake.id, Math.atan2(ndy2, ndx2));
-      if (_headFacingMap.size > _HEAD_FACING_MAX) _headFacingMap.clear();
-    }
+  if (walked.count >= 1) {
+    const jx2 = headWorldX - walked.xs[0];
+    const jy2 = headWorldY - walked.ys[0];
+    if (jx2 * jx2 + jy2 * jy2 > 1e-6) headFacingFb = Math.atan2(jy2, jx2);
   }
 
   // ── BOOST GLOW: Per-segment soft glow (classic .io style) ──
