@@ -312,7 +312,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
                           {arenaStats[tier.id]
                             ? `${arenaStats[tier.id].players} / ${arenaStats[tier.id].maxPlayers.toLocaleString()}`
-                            : '0 / 1,000'}
+                            : '— / 1,000'}
                         </span>
                         </>
                       )}
@@ -455,7 +455,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                 <span className="font-mono text-indigo-400 font-semibold">
                   {arenaStats[selectedTier.id]
                     ? `${arenaStats[selectedTier.id].players} / ${arenaStats[selectedTier.id].maxPlayers.toLocaleString()}`
-                    : '0 / 1,000'}
+                    : '— / 1,000'}
                 </span>
               </div>
             )}

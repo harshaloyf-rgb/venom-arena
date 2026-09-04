@@ -127,6 +127,8 @@ export default function Home() {
   const [lastResult, setLastResult] = useState<MatchResult | undefined>(undefined);
   const [inspectedPlayer, setInspectedPlayer] = useState<InspectedPlayer | null>(null);
   const [pendingFriendCount, setPendingFriendCount] = useState(0);
+  // Real global standing for the dashboard bento (was hardcoded "LEADERBOARD RANK: Tier 1")
+  const [myRank, setMyRank] = useState<{ globalRank: number; totalGlobal: number } | null>(null);
   const [toastFn] = useState<(msg: string, type?: 'success' | 'error' | 'info') => void>(() => (msg: string, type?: 'success' | 'error' | 'info') => {
     if (type === 'error') toast.error(msg);
     else if (type === 'info') toast.info(msg);
@@ -168,8 +170,19 @@ export default function Home() {
     } catch { /* non-critical */ }
   }, []);
 
+  const fetchMyRank = useCallback(async () => {
+    try {
+      const res = await fetch('/api/leaderboard/my-rank', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setMyRank({ globalRank: data.globalRank, totalGlobal: data.totalGlobal });
+      }
+    } catch { /* non-critical — bento shows an em dash until it loads */ }
+  }, []);
+
   useEffect(() => { if (player) void fetchChallenges(); }, [player, fetchChallenges]);
   useEffect(() => { if (player) void fetchPendingFriends(); }, [player, fetchPendingFriends]);
+  useEffect(() => { if (player) void fetchMyRank(); }, [player, fetchMyRank]);
 
   // Listen for admin panel navigation requests
   useEffect(() => {
@@ -581,7 +594,7 @@ export default function Home() {
                     <BentoGate onClick={() => setActiveTab('arena')} icon={Compass} accent="indigo" badge="Battle Gate" title="Play Endless Arenas" desc="Buy in with chips, collect chips from defeated snakes, and extract alive to bank your winnings. Risk grows with every arena." footLeft="STAKES FROM: 10 chips" footRight="Enter" />
                     <BentoGate onClick={() => setActiveTab('shop')} icon={ShoppingBag} accent="purple" badge="Customize Lab" title="Identity Workshop & Shop" desc="Unlock glowing skins, trials, death burst novas, or design a custom repeating body segment sequence." footLeft={`EQUIPPED: ${player.currentSkin ? 'Custom DNA' : 'Gallery Skin'}`} footRight="Modify" />
                     <BentoGate onClick={() => setActiveTab('profile')} icon={User} accent="blue" badge="My Record" title="Agent Profile" desc="Examine your records, high scores, total banked wealth, and change your operative callsign." footLeft={`HIGH SCORE: ${(player.biggestExtract || 0).toLocaleString()}`} footRight="Inspect" />
-                    <BentoGate onClick={() => setActiveTab('leaderboard')} icon={Trophy} accent="amber" badge="Elite Standings" title="Global Standings" desc="Live global rankings by country and region. Compare your banked chip balance against the world's elite operators." footLeft="LEADERBOARD RANK: Tier 1" footRight="View" />
+                    <BentoGate onClick={() => setActiveTab('leaderboard')} icon={Trophy} accent="amber" badge="Elite Standings" title="Global Standings" desc="Live global rankings by country and region. Compare your banked chip balance against the world's elite operators." footLeft={myRank ? `LEADERBOARD RANK: #${myRank.globalRank.toLocaleString()} / ${myRank.totalGlobal.toLocaleString()}` : 'LEADERBOARD RANK: —'} footRight="View" />
                     <BentoGate onClick={() => setActiveTab('rewards')} icon={Gift} accent="emerald" badge="Complimentary" title="Daily Free Claims" desc="Secure your complimentary login chips. Claim daily streaks, hourly micro-rewards, and spin the lucky wheel!" footLeft={`STREAK: ${player.dailyStreak || 1} Days`} footRight="Claim" />
                     <BentoGate onClick={() => setActiveTab('store')} icon={ShieldCheck} accent="cyan" badge="No Ads" title="Ad-Free Pass & Tickets" desc="Remove every ad with a one-time Time Pass and earn free Jade Corridor entry tickets. Ads never interrupt gameplay." footLeft={`WALLET: ${player.bankedChips.toLocaleString()} c`} footRight="Go Ad-Free" />
                     <BentoGate onClick={() => setActiveTab('championships')} icon={Crown} accent="rose" badge="The Main Event" title="Championships" desc="Finish the year with the highest banked chips to win the Global Championship — virtual chip prizes and permanent recognition in the Hall of Fame." footLeft="JAN 1 — DEC 31" footRight="Compete" />
