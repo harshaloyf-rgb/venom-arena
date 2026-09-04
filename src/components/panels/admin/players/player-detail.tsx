@@ -17,6 +17,8 @@ import {
 import { countryFlag } from '@/lib/game-config';
 import { timeAgo } from '@/lib/date-utils';
 import { formatChipsShort as formatChips } from '@/lib/format-chips';
+import { PassTicketsSection } from './pass-tickets';
+import type { ToastFn } from '../../_panel-primitives';
 
 // ── Types ──
 
@@ -126,11 +128,12 @@ interface PlayerDetailPanelProps {
   onClose: () => void;
   onModifyChips: (type: 'add' | 'remove') => void;
   onBanToggle: () => void;
+  onToast?: ToastFn;
 }
 
 export function PlayerDetailPanel({
   selectedTag, playerDetail, detailLoading, chipAmount, busy,
-  onChipAmountChange, onClose, onModifyChips, onBanToggle,
+  onChipAmountChange, onClose, onModifyChips, onBanToggle, onToast,
 }: PlayerDetailPanelProps) {
   const kd = playerDetail
     ? playerDetail.lifetimeDeaths > 0
@@ -412,6 +415,9 @@ export function PlayerDetailPanel({
 
               {/* ── Actions ── */}
               <div className="space-y-3 lg:space-y-1 pt-2 lg:pt-1 border-t border-slate-800">
+                {/* Pass & Tickets (admin economy tools) */}
+                <PassTicketsSection userTag={playerDetail.userTag} onToast={onToast} />
+
                 {/* Chip modification */}
                 <div>
                   <span className="text-[9px] lg:text-[11px] font-mono uppercase tracking-widest text-slate-500 block mb-2 lg:mb-0.5">

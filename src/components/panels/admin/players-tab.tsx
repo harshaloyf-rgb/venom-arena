@@ -216,6 +216,7 @@ export function PlayersTab({ onToast }: { onToast?: ToastFn }) {
         onClose={closeDetail}
         onModifyChips={handleModifyChips}
         onBanToggle={handleBanToggle}
+        onToast={onToast}
       />
     </div>
   );

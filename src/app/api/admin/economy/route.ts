@@ -7,16 +7,161 @@ import { creditPassPurchase } from '@/lib/pass-order';
 import { walletResetStatus, forceWalletReset } from '@/lib/year-rollover';
 
 // Admin economy controls for the Time Pass / Ticket system (locked spec
-// 2026-09-04). Mirrors the modify-chips route's session+audit pattern.
+// 2026-09-04, extended 2026-09-05 with inspect/revoke tooling so the admin
+// can both CHECK and FIX pass/ticket issues without touching the DB by hand).
+// Mirrors the modify-chips route's session+audit pattern.
 //
-// GET  → reset status + pass plan catalog + active-pass count.
-// POST → { action: 'grant_pass',   userTag, sku }
-//        { action: 'set_tickets',  userTag, delta }        // +grant / -revoke
-//        { action: 'force_wallet_reset' }                   // immediate Jan-1-style reset
-export async function GET() {
+// GET ?view=player  &userTag=                          -> one player's pass state + history
+// GET ?view=orders  [&userTag=][&store=][&sku=][&limit=][&offset=] -> PassOrder table
+// GET ?view=ledger  [&userTag=][&reason=][&limit=][&offset=]       -> TicketLedger table
+// GET (no view)                                        -> reset status + plan catalog + totals
+//
+// POST { action: 'grant_pass',      userTag, sku }
+// POST { action: 'revoke_pass',     userTag }         // clears adFreeUntil immediately
+// POST { action: 'clear_ad_unlock', userTag }         // clears a stuck 10-min ad window
+// POST { action: 'set_tickets',     userTag, delta }  // +grant / -revoke (ledgered)
+// POST { action: 'force_wallet_reset' }               // DANGEROUS: gated by ADMIN_FORCE_WALLET_RESET=1
+
+const RESET_ENABLED = process.env.ADMIN_FORCE_WALLET_RESET === '1';
+
+function parseLimitOffset(req: NextRequest) {
+  const limit = Math.min(Math.max(Number(req.nextUrl.searchParams.get('limit')) || 50, 1), 200);
+  const offset = Math.max(Number(req.nextUrl.searchParams.get('offset')) || 0, 0);
+  return { limit, offset };
+}
+
+export async function GET(req: NextRequest) {
   const { session, error } = await requireAdmin();
   if (error) return error;
+  void session;
 
+  const view = req.nextUrl.searchParams.get('view') || '';
+
+  // ── Per-player pass dossier ──────────────────────────────────────────────
+  if (view === 'player') {
+    const userTag = req.nextUrl.searchParams.get('userTag')?.trim();
+    if (!userTag) return NextResponse.json({ error: 'userTag is required.' }, { status: 400 });
+    const player = await db.player.findUnique({
+      where: { userTag },
+      select: { id: true, name: true, userTag: true, adFreeUntil: true, adUnlockUntil: true, tickets: true },
+    });
+    if (!player) return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+
+    const now = new Date();
+    const [orders, ledger] = await Promise.all([
+      db.passOrder.findMany({
+        where: { playerId: player.id },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+      db.ticketLedger.findMany({
+        where: { playerId: player.id },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    ]);
+
+    return NextResponse.json({
+      player: {
+        ...player,
+        passActive: !!player.adFreeUntil && player.adFreeUntil > now,
+        windowActive: !!player.adUnlockUntil && player.adUnlockUntil > now,
+      },
+      orders: orders.map((o) => ({ ...o, verifierNote: o.verifierNote ?? null })),
+      ledger,
+    });
+  }
+
+  // ── Pass orders table (all players) ──────────────────────────────────────
+  if (view === 'orders') {
+    const { limit, offset } = parseLimitOffset(req);
+    const userTag = req.nextUrl.searchParams.get('userTag')?.trim();
+    const store = req.nextUrl.searchParams.get('store')?.trim();
+    const sku = req.nextUrl.searchParams.get('sku')?.trim();
+
+    const where: {
+      playerId?: string;
+      store?: string;
+      sku?: string;
+    } = {};
+    if (userTag) {
+      const p = await db.player.findUnique({ where: { userTag }, select: { id: true } });
+      if (!p) return NextResponse.json({ orders: [], total: 0 });
+      where.playerId = p.id;
+    }
+    if (store) where.store = store;
+    if (sku) where.sku = sku;
+
+    const [rows, total] = await Promise.all([
+      db.passOrder.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+        include: { player: { select: { userTag: true, name: true } } },
+      }),
+      db.passOrder.count({ where }),
+    ]);
+
+    return NextResponse.json({
+      orders: rows.map((o) => ({
+        id: o.id,
+        createdAt: o.createdAt,
+        userTag: o.player.userTag,
+        playerName: o.player.name,
+        sku: o.sku,
+        durationDays: o.durationDays,
+        priceUsdMicros: o.priceUsdMicros,
+        store: o.store,
+        storeOrderId: o.storeOrderId,
+        ticketsGranted: o.ticketsGranted,
+        adFreeUntilAfter: o.adFreeUntilAfter,
+        verifierNote: o.verifierNote,
+      })),
+      total,
+    });
+  }
+
+  // ── Ticket ledger table (all players) ────────────────────────────────────
+  if (view === 'ledger') {
+    const { limit, offset } = parseLimitOffset(req);
+    const userTag = req.nextUrl.searchParams.get('userTag')?.trim();
+    const reason = req.nextUrl.searchParams.get('reason')?.trim();
+
+    const where: { playerId?: string; reason?: string } = {};
+    if (userTag) {
+      const p = await db.player.findUnique({ where: { userTag }, select: { id: true } });
+      if (!p) return NextResponse.json({ ledger: [], total: 0 });
+      where.playerId = p.id;
+    }
+    if (reason) where.reason = reason;
+
+    const [rows, total] = await Promise.all([
+      db.ticketLedger.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+        include: { player: { select: { userTag: true, name: true } } },
+      }),
+      db.ticketLedger.count({ where }),
+    ]);
+
+    return NextResponse.json({
+      ledger: rows.map((r) => ({
+        id: r.id,
+        createdAt: r.createdAt,
+        userTag: r.player.userTag,
+        playerName: r.player.name,
+        delta: r.delta,
+        reason: r.reason,
+        refId: r.refId,
+      })),
+      total,
+    });
+  }
+
+  // ── Default: global status ───────────────────────────────────────────────
   const [status, activePasses, totalTickets] = await Promise.all([
     walletResetStatus(),
     db.player.count({ where: { adFreeUntil: { gt: new Date() } } }),
@@ -24,7 +169,7 @@ export async function GET() {
   ]);
 
   return NextResponse.json({
-    walletReset: status,
+    walletReset: { ...status, resetEnabled: RESET_ENABLED },
     activePasses,
     totalTickets: totalTickets._sum.tickets ?? 0,
     plans: PASS_PLANS.map((p) => ({ sku: p.id, label: p.label, days: p.durationDays, priceUsd: p.priceUsd, tickets: p.tickets })),
@@ -64,6 +209,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, ...result });
   }
 
+  if (action === 'revoke_pass') {
+    const userTag = String(body.userTag || '').trim();
+    if (!userTag) return NextResponse.json({ error: 'userTag is required.' }, { status: 400 });
+    const target = await db.player.findUnique({ where: { userTag }, select: { id: true, adFreeUntil: true } });
+    if (!target) return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+
+    await db.player.update({ where: { id: target.id }, data: { adFreeUntil: null } });
+    // Trail policy (user decision 2026-09-05): audit log only — PassOrder
+    // rows stay untouched so grant history remains queryable.
+    await logAdminAction(session, 'revoke_pass', 'player', userTag, {
+      previousAdFreeUntil: target.adFreeUntil ? target.adFreeUntil.toISOString() : null,
+    });
+    return NextResponse.json({ ok: true, userTag, previousAdFreeUntil: target.adFreeUntil });
+  }
+
+  if (action === 'clear_ad_unlock') {
+    const userTag = String(body.userTag || '').trim();
+    if (!userTag) return NextResponse.json({ error: 'userTag is required.' }, { status: 400 });
+    const target = await db.player.findUnique({ where: { userTag }, select: { id: true, adUnlockUntil: true } });
+    if (!target) return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+
+    await db.player.update({ where: { id: target.id }, data: { adUnlockUntil: null } });
+    await logAdminAction(session, 'clear_ad_unlock', 'player', userTag, {
+      previousAdUnlockUntil: target.adUnlockUntil ? target.adUnlockUntil.toISOString() : null,
+    });
+    return NextResponse.json({ ok: true, userTag, previousAdUnlockUntil: target.adUnlockUntil });
+  }
+
   if (action === 'set_tickets') {
     const userTag = String(body.userTag || '').trim();
     const rawDelta = Math.trunc(Number(body.delta));
@@ -91,6 +264,12 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'force_wallet_reset') {
+    if (!RESET_ENABLED) {
+      return NextResponse.json(
+        { error: 'force_wallet_reset is disabled. Set ADMIN_FORCE_WALLET_RESET=1 in the server environment to enable it.' },
+        { status: 403 },
+      );
+    }
     const count = await forceWalletReset();
     await logAdminAction(session, 'force_wallet_reset', 'system', 'all-players', { playersReset: count });
     return NextResponse.json({ ok: true, playersReset: count });

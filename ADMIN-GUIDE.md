@@ -305,3 +305,29 @@ Automatic reset: on Jan 1 (IST) the first authenticated request triggers an
 idempotent bulk `bankedChips -> 0` (marker: GameConfig key
 `wallet_reset_year`). Live matches settle into the zeroed wallet afterwards.
 Player re-registration / balances are unaffected otherwise.
+
+### Admin UI — Economy tab & player Pass & Tickets (2026-09-05)
+
+Everything above is now also available without touching the API by hand:
+
+- **Admin panel → Economy tab**:
+  - Status strip: active passes, tickets in circulation, wallet-reset state.
+  - Pass Orders table (filter by store `admin` / `play` / `appstore`, SKU,
+    player tag) — `store=admin` rows are admin grants, `play`/`appstore` are
+    real purchases.
+  - Ticket Ledger table (filter by player, reason) — every ticket grant and
+    spend.
+  - **Force wallet reset** button: requires typing `RESET`; the action is
+    additionally refused server-side unless the env flag
+    `ADMIN_FORCE_WALLET_RESET=1` is set on the server (default OFF — flip it
+    only when you actually intend to wipe wallets, e.g. New Year event).
+- **Admin panel → Players → select a player → "Pass & Tickets" section**:
+  shows the player's pass expiry (with countdown), ad-window state, ticket
+  balance, their 20 most recent pass orders + ticket ledger rows, and inline
+  actions: Grant pass (SKU picker), Revoke pass (clears adFreeUntil
+  immediately; PassOrder history is kept — revoke is audit-logged only),
+  Clear window (clears a stuck 10-min ad unlock), and ± tickets.
+
+Typical troubleshooting: "player shows a pass they never bought" → open their
+Pass & Tickets section; the order list shows which store/orderId granted it
+(`admin-…` orderIds are admin grants). If it was a mistake, hit Revoke.
