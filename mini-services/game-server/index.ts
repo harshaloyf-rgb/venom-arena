@@ -842,7 +842,11 @@ class ArenaInstance {
   _cachedFoodById: Map<number, FoodOrb>;
   // Track food array length between ticks for incremental lookup map updates
   _lastFoodLen: number = 0;
-  tickInterval: ReturnType<typeof setInterval> | null = null;
+  tickInterval: ReturnType<typeof setTimeout> | null = null;
+  // FIX NET-1: generation token — a tick() that calls stop() mid-run must not
+  // let the pacing loop re-arm itself after being cancelled.
+  private tickGen = 0;
+  private nextTickAt = 0;
   playerCount = 0;
   lastSeed = false;
   lastPlayerLeaveTime = 0;  // For arena cleanup timeout
@@ -905,19 +909,39 @@ class ArenaInstance {
   start(): void {
     if (this.tickInterval) return;
     console.log(`[Arena ${this.arenaId}] Starting game loop (${TICK_RATE} ticks/sec, snapshots at ${Math.floor(TICK_RATE / SNAPSHOT_INTERVAL)}Hz)`);
-    this.tickInterval = setInterval(() => {
+    // FIX NET-1 (drift-locked tick pacing): setInterval(TICK_MS) accumulates the
+    // timer's REAL period (TICK_MS + callback overhead + GC) as drift, so under
+    // load the 20Hz snapshot cadence degrades into burst-then-starve delivery —
+    // the source-side amplifier of the client "connected/disconnected" stutter.
+    // Anchoring every tick to an absolute timeline keeps the cadence locked: a
+    // late tick is followed by a slightly early one instead of shifting the
+    // whole schedule. A hard stall (>100ms — GC pause, suspended process)
+    // resyncs forward instead of firing a burst of catch-up ticks.
+    const gen = ++this.tickGen;
+    this.nextTickAt = performance.now() + TICK_MS;
+    const loop = () => {
+      if (gen !== this.tickGen) return; // stop() won the race
       try {
         this.tick();
       } catch (err) {
         console.error(`[Arena ${this.arenaId}] Tick error:`, err);
         dbg(`[Arena ${this.arenaId}] Tick error: ${err}`);
       }
-    }, TICK_MS);
+      const now = performance.now();
+      if (this.nextTickAt < now - 100) {
+        this.nextTickAt = now + TICK_MS; // stall resync — never burst
+      } else {
+        this.nextTickAt += TICK_MS;
+      }
+      this.tickInterval = setTimeout(loop, Math.max(0, this.nextTickAt - performance.now()));
+    };
+    this.tickInterval = setTimeout(loop, TICK_MS);
   }
 
   stop(): void {
+    this.tickGen++; // invalidates a loop that is mid-tick() right now
     if (this.tickInterval) {
-      clearInterval(this.tickInterval);
+      clearTimeout(this.tickInterval);
       this.tickInterval = null;
     }
     console.log(`[Arena ${this.arenaId}] Game loop stopped`);

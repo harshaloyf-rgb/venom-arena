@@ -7,8 +7,10 @@
 //
 // Strategy:
 // 1. Store head position history (only on new ticks — never duplicate)
-// 2. On new snapshot: rebuild dense PathBuffer by interpolating between entries
-// 3. Between snapshots: use time-based alpha for smooth head interpolation
+// 2. On new snapshot: rebuild dense PathBuffer by CATMULL-ROM smoothing between
+//    entries (FIX NET-3 — linear chords rendered turns as "V" polylines)
+// 3. Between snapshots: playout-clock alpha (FIX NET-2 — EMA-smoothed snapshot
+//    interval + bounded overshoot; raw elapsed/50ms froze on late snapshots)
 // 4. The renderer's built-in renderOffX/Y shifts the whole snake smoothly
 
 import { PathBuffer } from '@/lib/snake/pool';
@@ -65,6 +67,11 @@ interface TrackedSnake {
   decayFromX: number;
   decayFromY: number;
   decayStart: number;
+  // FIX NET-4: smoothed self-lead offset (player only) — chases the
+  // vel*SELF_LEAD_MS target per frame so direction changes are continuous.
+  leadX: number;
+  leadY: number;
+  lastLeadAt: number;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -84,6 +91,18 @@ const MAX_EXTRAP_PX = 40;
 const SELF_LEAD_MS = 75;
 const MAX_SELF_LEAD_PX = 30;
 const EXTRAP_DECAY_MS = 100;
+// FIX NET-4: the self-lead vector used to be recomputed from scratch every
+// frame as vel * SELF_LEAD_MS — and vel only updates at the snapshot rate.
+// During a turn its DIRECTION stepped at 20Hz, so the whole snake (and the
+// camera, which includes the offset) popped sideways up to 30px between
+// snapshots — the "connected/disconnected" desync feel. The applied offset now
+// chases the target continuously (frame-rate-independent exponential smoothing).
+const LEAD_SMOOTH_MS = 90; // time constant (~95% converge in 270ms)
+// FIX NET-2: playout clock — when a snapshot is late, alpha may overshoot 1.0
+// (extrapolate along the last snapshot step) up to this bound instead of hard-
+// freezing at the clamp. Overshoot carry is folded into the smoothed lead so
+// the next snapshot decays it smoothly instead of snapping back.
+const ALPHA_OVERSHOOT = 1.5;
 
 // ─── Manager ─────────────────────────────────────────────────────────────────
 
@@ -92,6 +111,14 @@ export class RemoteSnakeManager {
   private playerSnakeId: string | null = null;
   private lastProcessedTick = 0;
   private mapHalf: number;
+
+  // FIX NET-2: playout clock. The old alpha was elapsed / 50ms (hardcoded) —
+  // whenever a snapshot arrived late the render froze at the clamp, then
+  // caught up early (rubber-band); when it arrived early the render jumped
+  // forward. An EMA of the real arrival gaps drives the alpha divisor, so a
+  // consistently slower/faster stream is tracked within ~7 snapshots.
+  private playIv = SNAPSHOT_INTERVAL_MS;
+  private lastArrivalAt = 0;
 
   // ── Tier-2: zero-allocation per-frame reuse ──
   // buildGameState() previously allocated a NEW Map, a NEW adapter object per
@@ -120,6 +147,15 @@ export class RemoteSnakeManager {
     this.lastProcessedTick = snap.tick;
 
     const now = performance.now();
+
+    // FIX NET-2: track the real snapshot arrival gap (clamped to ignore
+    // pathological outliers — a single 500ms WiFi hiccup must not drag the
+    // playout clock; the overshoot bound covers transient lateness).
+    if (this.lastArrivalAt > 0) {
+      const gap = Math.min(Math.max(now - this.lastArrivalAt, SNAPSHOT_INTERVAL_MS * 0.5), SNAPSHOT_INTERVAL_MS * 3);
+      this.playIv += (gap - this.playIv) * 0.15;
+    }
+    this.lastArrivalAt = now;
 
     // Mark all current snakes as unseen (for removal)
     const seen = new Set<string>();
@@ -157,6 +193,8 @@ export class RemoteSnakeManager {
           extrapX: 0, extrapY: 0,
           decayFromX: 0, decayFromY: 0,
           decayStart: now,
+          leadX: 0, leadY: 0,
+          lastLeadAt: now,
         };
         this.snakes.set(rs.id, tracked);
         if (rs.ip) this.playerSnakeId = rs.id;
@@ -179,6 +217,18 @@ export class RemoteSnakeManager {
           const dtMs = Math.max(1, (snap.tick - tracked.history[0].tick) * SNAPSHOT_INTERVAL_MS);
           tracked.velX = (rs.hx - tracked.history[0].x) / dtMs;
           tracked.velY = (rs.hy - tracked.history[0].y) / dtMs;
+        }
+        // FIX NET-2 continuity: if the playout alpha had overshot (snapshot was
+        // late — the renderer extrapolated beyond the last head along the last
+        // snapshot step), fold that overshoot into the smoothed lead so the
+        // rendered position carries over EXACTLY (no snap-back) and the lead
+        // smoothing decays it over the next ~90ms.
+        if (tracked.isPlayer && tracked.lastSnapTime > 0 && tracked.history.length > 1) {
+          const aPrev = Math.min(ALPHA_OVERSHOOT, (now - tracked.lastSnapTime) / this.playIv);
+          if (aPrev > 1) {
+            tracked.leadX += (tracked.history[0].x - tracked.history[1].x) * (aPrev - 1);
+            tracked.leadY += (tracked.history[0].y - tracked.history[1].y) * (aPrev - 1);
+          }
         }
         // Update metadata
         tracked.bodyLen = rs.bl;
@@ -266,8 +316,14 @@ export class RemoteSnakeManager {
       totalEntryDist += Math.sqrt(dx * dx + dy * dy);
     }
 
-    // Build dense path by interpolating between entries
-    // Aim for DENSE_STEP (~3px) between consecutive path points
+    // Build dense path by CATMULL-ROM smoothing between consecutive entries
+    // FIX NET-3: linear chords between 20Hz heads (~9px apart) rendered every
+    // turn as a polygon — a hard semicircle came out as a "V" with visible
+    // corners, and the head-facing direction (last 5px of path) clicked
+    // between chord directions at the snapshot rate. Uniform Catmull-Rom
+    // through the same points (endpoints clamped to the first/last segment
+    // tangents) yields a smooth arc per pair at the same ~3px density with
+    // zero allocations.
     const estimatedPoints = Math.max(Math.ceil(totalEntryDist / DENSE_STEP) + 10, 20);
     if (tracked.path.capacity < estimatedPoints) {
       tracked.path = new PathBuffer(estimatedPoints + 50);
@@ -277,10 +333,12 @@ export class RemoteSnakeManager {
     tracked.path.resetTo(entries[0].x, entries[0].y);
 
     for (let i = 0; i < entries.length - 1; i++) {
-      const from = entries[i];
-      const to = entries[i + 1];
-      const dx = to.x - from.x;
-      const dy = to.y - from.y;
+      const p1 = entries[i];
+      const p2 = entries[i + 1];
+      const p0 = i > 0 ? entries[i - 1] : p1;
+      const p3 = i + 2 < entries.length ? entries[i + 2] : p2;
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
       if (dist < 0.01) continue; // Skip zero-distance entries
@@ -291,9 +349,16 @@ export class RemoteSnakeManager {
 
       for (let s = 1; s <= numSteps; s++) {
         const t = s / numSteps;
+        const t2 = t * t;
+        const t3 = t2 * t;
+        // Uniform Catmull-Rom basis (tangent continuity across segments)
         tracked.path.appendTail(
-          from.x + dx * t,
-          from.y + dy * t,
+          0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t
+            + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2
+            + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+          0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t
+            + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2
+            + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3),
         );
       }
     }
@@ -326,13 +391,19 @@ export class RemoteSnakeManager {
     tracked.pathReady = tracked.path.length >= 2;
   }
 
-  /** Get time-based interpolation alpha (0..1) for the player snake */
+  /** Get time-based interpolation alpha (0..1) for the player snake.
+   *  FIX NET-2: divisor is the EMA-smoothed snapshot interval (playout clock)
+   *  instead of the hardcoded 50ms, and alpha may overshoot up to
+   *  ALPHA_OVERSHOOT when a snapshot is late — the renderer extrapolates along
+   *  the last snapshot step (glide) instead of freezing at the clamp.
+   *  The overshoot carry is folded into the smoothed lead on the next
+   *  snapshot arrival, so there is no snap-back either. */
   getPlayerAlpha(): number {
     if (!this.playerSnakeId) return 1;
     const tracked = this.snakes.get(this.playerSnakeId);
     if (!tracked) return 1;
     const elapsed = performance.now() - tracked.lastSnapTime;
-    return Math.min(1, elapsed / SNAPSHOT_INTERVAL_MS);
+    return Math.min(ALPHA_OVERSHOOT, elapsed / this.playIv);
   }
 
   /** Build a Snake adapter for a remote snake (for the shared renderer).
@@ -414,7 +485,13 @@ export class RemoteSnakeManager {
     const nowMs = performance.now();
     const elapsed = nowMs - t.lastSnapTime;
     if (t.isPlayer) {
-      // Own snake: constant forward lead along last velocity (input-lag cancel)
+      // Own snake: constant forward lead along last velocity (input-lag cancel).
+      // FIX NET-4: the APPLIED offset chases the target with frame-rate-
+      // independent exponential smoothing — vel only updates at the snapshot
+      // rate, so the old recompute-from-scratch made the lead direction step
+      // at 20Hz during turns (whole-snake/camera sideways pops). The lead is
+      // also the carrier for the playout-clock overshoot carry (FIX NET-2),
+      // which decays smoothly through the same smoothing.
       let ex = t.velX * SELF_LEAD_MS;
       let ey = t.velY * SELF_LEAD_MS;
       const magSq = ex * ex + ey * ey;
@@ -422,7 +499,13 @@ export class RemoteSnakeManager {
         const s = MAX_SELF_LEAD_PX / Math.sqrt(magSq);
         ex *= s; ey *= s;
       }
-      t.extrapX = ex; t.extrapY = ey;
+      const dtLead = Math.min(Math.max(nowMs - t.lastLeadAt, 1), 100);
+      t.lastLeadAt = nowMs;
+      const k = 1 - Math.exp(-dtLead / LEAD_SMOOTH_MS);
+      t.leadX += (ex - t.leadX) * k;
+      t.leadY += (ey - t.leadY) * k;
+      t.extrapX = t.leadX;
+      t.extrapY = t.leadY;
     } else if (elapsed <= SNAPSHOT_INTERVAL_MS) {
       // Fresh snapshot — decay the previously-applied offset back to 0
       const k = Math.max(0, 1 - (nowMs - t.decayStart) / EXTRAP_DECAY_MS);
