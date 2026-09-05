@@ -772,8 +772,22 @@ export default function OnlineSnakeGame({ onExit, arenaId, useTicket }: OnlineSn
         // ── Carried chips label above player head (real players only) ──
         const cc = (snake as any).carriedChips as number | undefined;
         if (cc && cc > 0 && !snake.isBot) {
-          const headSx = (headWx - camX) * zoom + w / 2;
-          const headSy = (headWy - camY) * zoom + h / 2;
+          // FIX PILL-SHAKE (2026-09-05): pin the pill to the VISIBLE head, not
+          // the raw 20Hz snapshot point. Both renderers (atlas + fallback) draw
+          // the visible head at (interp + extrap - camera) * zoom + w/2, where
+          // interp = prevHead + (head - prevHead) * alpha. The old code used
+          // raw path.headX/Y only, so within every snapshot interval the pill
+          // swept against the gliding head and snapped back at the snapshot
+          // rate (≈7px swing at typical speed × zoom) — the same bug class
+          // already fixed on the extraction ring (FIX EXTRACT-SHAKE). Same
+          // alpha + same formula here → pixel-locked to the drawn head.
+          const a = mgr.getPlayerAlpha();
+          const safePrevX = Number.isFinite(snake.prevHeadX) ? snake.prevHeadX : headWx;
+          const safePrevY = Number.isFinite(snake.prevHeadY) ? snake.prevHeadY : headWy;
+          const interpX = safePrevX + (headWx - safePrevX) * a;
+          const interpY = safePrevY + (headWy - safePrevY) * a;
+          const headSx = (interpX + (snake.extrapX || 0) - camX) * zoom + w / 2;
+          const headSy = (interpY + (snake.extrapY || 0) - camY) * zoom + h / 2;
           const fontSize = Math.max(9, Math.min(13, Math.floor(11 * zoom)));
           const label = formatChips(cc);
           ctx.save();
