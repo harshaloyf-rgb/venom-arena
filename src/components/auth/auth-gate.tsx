@@ -52,11 +52,13 @@ function getPasswordStrength(pw: string): { label: string; color: string; width:
 }
 
 // ---------------------------------------------------------------------------
-// Guest Play Section — country picker + play button
+// CountryPicker — shared country selector + region badge.
+// Used by BOTH the guest section and the register form: the register API
+// accepts an explicit `country`, so registered accounts no longer fall back
+// to a silent GeoIP guess when detection is unavailable.
 // ---------------------------------------------------------------------------
-function GuestPlaySection({ busy, onPlay }: { busy: boolean; onPlay: (country: string) => Promise<boolean> }) {
+function CountryPicker({ selected, onSelect }: { selected: string; onSelect: (code: string) => void }) {
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState('');
   const [showPicker, setShowPicker] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
 
@@ -84,70 +86,67 @@ function GuestPlaySection({ busy, onPlay }: { busy: boolean; onPlay: (country: s
   }, [showPicker]);
 
   return (
-    <div className="space-y-1.5" ref={pickerRef}>
-      {/* Country selector — REQUIRED */}
-      <div className="space-y-1">
-        <label className="flex items-center gap-1 text-[11px] font-medium text-foreground">
-          <Globe className="w-3 h-3 text-primary" />
-          Select your country <span className="text-destructive">*</span>
-        </label>
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setShowPicker(!showPicker)}
-            className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs text-left transition ${
-              selected
-                ? 'border-primary/50 bg-primary/5'
-                : 'border-border bg-background hover:bg-accent/50'
-            }`}
-          >
-            {selectedCountry ? (
-              <span className="flex items-center gap-1.5">
-                <span className="text-base">{selectedCountry.flag}</span>
-                <span className="font-medium">{selectedCountry.name}</span>
-              </span>
-            ) : (
-              <span className="text-muted-foreground">Choose your country…</span>
-            )}
-          </button>
-
-          {showPicker && (
-            <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-border rounded-md shadow-lg overflow-hidden">
-              <div className="p-1.5 border-b border-border">
-                <Input
-                  placeholder="Search country..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="h-7 text-[11px]"
-                  autoFocus
-                />
-              </div>
-              <div className="max-h-40 overflow-y-auto">
-                {filtered.map(c => (
-                  <button
-                    key={c.code}
-                    type="button"
-                    onClick={() => { setSelected(c.code); setShowPicker(false); setSearch(''); }}
-                    className={`w-full flex items-center gap-2 px-2.5 py-1 text-[11px] text-left hover:bg-accent/50 transition ${selected === c.code ? 'bg-primary/10 text-primary' : ''}`}
-                  >
-                    <span>{c.flag}</span>
-                    <span>{c.name}</span>
-                    {selected === c.code && <span className="ml-auto text-[9px]">✓</span>}
-                  </button>
-                ))}
-              </div>
-              {selected && (
-                <button
-                  type="button"
-                  onClick={() => { setSelected(''); setSearch(''); }}
-                  className="w-full text-center py-1 text-[10px] text-muted-foreground hover:text-foreground border-t border-border transition"
-                >
-                  Clear selection
-                </button>
-              )}
-            </div>
+    <div className="space-y-1" ref={pickerRef}>
+      <label className="flex items-center gap-1 text-[11px] font-medium text-foreground">
+        <Globe className="w-3 h-3 text-primary" />
+        Select your country <span className="text-destructive">*</span>
+      </label>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setShowPicker(!showPicker)}
+          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs text-left transition ${
+            selected
+              ? 'border-primary/50 bg-primary/5'
+              : 'border-border bg-background hover:bg-accent/50'
+          }`}
+        >
+          {selectedCountry ? (
+            <span className="flex items-center gap-1.5">
+              <span className="text-base">{selectedCountry.flag}</span>
+              <span className="font-medium">{selectedCountry.name}</span>
+            </span>
+          ) : (
+            <span className="text-muted-foreground">Choose your country…</span>
           )}
-        </div>
+        </button>
+
+        {showPicker && (
+          <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-border rounded-md shadow-lg overflow-hidden">
+            <div className="p-1.5 border-b border-border">
+              <Input
+                placeholder="Search country..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="h-7 text-[11px]"
+                autoFocus
+              />
+            </div>
+            <div className="max-h-40 overflow-y-auto">
+              {filtered.map(c => (
+                <button
+                  key={c.code}
+                  type="button"
+                  onClick={() => { onSelect(c.code); setShowPicker(false); setSearch(''); }}
+                  className={`w-full flex items-center gap-2 px-2.5 py-1 text-[11px] text-left hover:bg-accent/50 transition ${selected === c.code ? 'bg-primary/10 text-primary' : ''}`}
+                >
+                  <span>{c.flag}</span>
+                  <span>{c.name}</span>
+                  {selected === c.code && <span className="ml-auto text-[9px]">✓</span>}
+                </button>
+              ))}
+            </div>
+            {selected && (
+              <button
+                type="button"
+                onClick={() => { onSelect(''); setSearch(''); }}
+                className="w-full text-center py-1 text-[10px] text-muted-foreground hover:text-foreground border-t border-border transition"
+              >
+                Clear selection
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Region badge — shows after country is selected */}
@@ -157,6 +156,20 @@ function GuestPlaySection({ busy, onPlay }: { busy: boolean; onPlay: (country: s
           <span>Region: <strong>{regionName}</strong> — You&apos;ll play on the nearest server</span>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Guest Play Section — country picker + play button
+// ---------------------------------------------------------------------------
+function GuestPlaySection({ busy, onPlay }: { busy: boolean; onPlay: (country: string) => Promise<boolean> }) {
+  const [selected, setSelected] = useState('');
+
+  return (
+    <div className="space-y-1.5">
+      {/* Country selector — REQUIRED */}
+      <CountryPicker selected={selected} onSelect={setSelected} />
 
       {/* Play button — disabled until country is selected */}
       <Button
@@ -406,7 +419,7 @@ function AuthScreen() {
             <div className="mt-0 space-y-0">
               <p className="text-[11px] text-muted-foreground text-center">
                 <Zap className="w-3 h-3 inline mr-1" />
-                Guests get 150 starter chips. Guest progress isn&apos;t saved — register to build a permanent career.
+                Guests get 150 starter chips. A guest account lives only on this device — register (or upgrade later in Profile) to make your career permanent.
               </p>
 
               {/* Bottom links: Rules & Guide + Privacy Policy */}
@@ -599,6 +612,8 @@ function RegisterForm({
   const [pin, setPin] = useState('');
   const [referralCode, setReferralCode] = useState('');
   const [confirmError, setConfirmError] = useState('');
+  const [country, setCountry] = useState('');
+  const [countryError, setCountryError] = useState('');
 
   const strength = getPasswordStrength(password);
 
@@ -612,7 +627,15 @@ function RegisterForm({
       return;
     }
     setConfirmError('');
-    onSubmit('/api/auth/register', { name, email, password, pin, referralCode: referralCode.trim() || undefined });
+    // Country is required: it decides your regional server. Without an
+    // explicit choice, the server would silently fall back to a GeoIP guess
+    // (or 'US') when detection is unavailable.
+    if (!country) {
+      setCountryError('Please select your country — it decides your regional server.');
+      return;
+    }
+    setCountryError('');
+    onSubmit('/api/auth/register', { name, email, password, pin, country, referralCode: referralCode.trim() || undefined });
   }
 
   return (
@@ -738,6 +761,14 @@ function RegisterForm({
           className="text-xs h-6 font-mono"
         />
         <p className="text-[11px] text-muted-foreground">Enter a friend&apos;s code — you both earn 2,500 chips after you play 5 matches!</p>
+      </div>
+      <div className="space-y-1">
+        <CountryPicker selected={country} onSelect={(code) => { setCountry(code); if (code) setCountryError(''); }} />
+        {countryError && (
+          <p className="text-xs text-destructive flex items-center gap-1">
+            <Shield className="w-3 h-3 shrink-0" /> {countryError}
+          </p>
+        )}
       </div>
 
       {error && (

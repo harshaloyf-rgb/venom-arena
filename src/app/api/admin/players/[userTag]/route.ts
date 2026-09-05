@@ -46,6 +46,8 @@ export async function GET(
       lastDailyClaim: true,
       lastHourlyClaim: true,
       streakFreezes: true,
+      emailVerified: true,
+      region: true,
       referralCode: true,
       unlockedSkins: true,
       currentSkin: true,
@@ -77,7 +79,7 @@ export async function GET(
     return NextResponse.json({ error: 'Player not found' }, { status: 404 });
   }
 
-  const [matchCount, giftsSent, giftsReceived, friendsCount, clipCount] =
+  const [matchCount, giftsSent, giftsReceived, friendsCount, clipCount, referredBy, referredPlayers] =
     await Promise.all([
       db.matchHistory.count({ where: { playerId: player.id } }),
       db.gift.count({ where: { fromId: player.id } }),
@@ -91,6 +93,30 @@ export async function GET(
         },
       }),
       db.clip.count({ where: { playerId: player.id } }),
+      // Referral support: who brought this player in (they entered a code at
+      // registration) — needed to debug "my referral never paid out" tickets.
+      db.referral.findFirst({
+        where: { referredId: player.id },
+        select: {
+          status: true,
+          matchesPlayed: true,
+          reward: true,
+          createdAt: true,
+          referrer: { select: { userTag: true, name: true } },
+        },
+      }),
+      // Referral support: players this person referred (their payout pipeline).
+      db.referral.findMany({
+        where: { referrerId: player.id },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          status: true,
+          matchesPlayed: true,
+          reward: true,
+          createdAt: true,
+          referred: { select: { userTag: true, name: true } },
+        },
+      }),
     ]);
 
   const clanMembers = player.clan
@@ -107,5 +133,7 @@ export async function GET(
     giftsReceived,
     friendsCount,
     clipCount,
+    referredBy,
+    referredPlayers,
   });
 }

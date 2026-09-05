@@ -13,6 +13,8 @@ import {
   ExternalLink,
   Eye,
   Coins,
+  MailCheck,
+  MailX,
 } from 'lucide-react';
 import { countryFlag } from '@/lib/game-config';
 import { timeAgo } from '@/lib/date-utils';
@@ -59,7 +61,23 @@ export interface PlayerDetail {
   giftsReceived: number;
   friendsCount: number;
   clipCount: number;
+  emailVerified?: boolean;
+  region?: string;
   clanMembers: { clanName: string; memberCount: number } | null;
+  referredBy?: {
+    status: string;
+    matchesPlayed: number;
+    reward: number;
+    createdAt: string;
+    referrer: { userTag: string; name: string };
+  } | null;
+  referredPlayers?: Array<{
+    status: string;
+    matchesPlayed: number;
+    reward: number;
+    createdAt: string;
+    referred: { userTag: string; name: string };
+  }> | null;
 }
 
 // ── Shared Badge Components ──
@@ -128,12 +146,13 @@ interface PlayerDetailPanelProps {
   onClose: () => void;
   onModifyChips: (type: 'add' | 'remove') => void;
   onBanToggle: () => void;
+  onVerifyEmail: () => Promise<void>;
   onToast?: ToastFn;
 }
 
 export function PlayerDetailPanel({
   selectedTag, playerDetail, detailLoading, chipAmount, busy,
-  onChipAmountChange, onClose, onModifyChips, onBanToggle, onToast,
+  onChipAmountChange, onClose, onModifyChips, onBanToggle, onVerifyEmail, onToast,
 }: PlayerDetailPanelProps) {
   const kd = playerDetail
     ? playerDetail.lifetimeDeaths > 0
@@ -379,7 +398,7 @@ export function PlayerDetailPanel({
                 </div>
               </div>
 
-              {/* ── Referral code ── */}
+              {/* ── Referral support: code, referred-by, referred players ── */}
               {playerDetail.referralCode && (
                 <div className="rounded-xl border border-slate-800/60 bg-slate-950/50 p-3 lg:p-1.5">
                   <span className="text-[9px] lg:text-[11px] font-mono uppercase tracking-widest text-slate-500 block mb-1 lg:mb-0">
@@ -388,6 +407,70 @@ export function PlayerDetailPanel({
                   <p className="text-xs lg:text-[11px] font-mono font-bold text-emerald-400">
                     {playerDetail.referralCode}
                   </p>
+
+                  {playerDetail.referredBy && (
+                    <p className="text-[10px] lg:text-[11px] text-slate-400 mt-1.5">
+                      Referred by:{' '}
+                      <span className="text-white font-mono">{playerDetail.referredBy.referrer.userTag}</span>
+                      {' '}({playerDetail.referredBy.referrer.name}) · {playerDetail.referredBy.status}
+                      {' '}· {playerDetail.referredBy.matchesPlayed}/5 matches
+                    </p>
+                  )}
+
+                  {playerDetail.referredPlayers && playerDetail.referredPlayers.length > 0 && (
+                    <div className="mt-1.5">
+                      <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500 block mb-0.5">
+                        Referred players ({playerDetail.referredPlayers.length})
+                      </span>
+                      <div className="space-y-0.5">
+                        {playerDetail.referredPlayers.map((r) => (
+                          <p key={r.referred.userTag} className="text-[10px] lg:text-[11px] text-slate-400">
+                            <span className="text-white font-mono">{r.referred.userTag}</span>
+                            {' '}({r.referred.name}) · {r.status} · {r.matchesPlayed}/5 matches
+                            {r.reward > 0 && <span className="text-emerald-400"> · +{formatChips(r.reward)}</span>}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Email verification (support action) ── */}
+              {playerDetail.email && (
+                <div className="rounded-xl border border-slate-800/60 bg-slate-950/50 p-3 lg:p-1.5">
+                  <span className="text-[9px] lg:text-[11px] font-mono uppercase tracking-widest text-slate-500 block mb-1 lg:mb-0">
+                    Email Verification
+                  </span>
+                  <p className="text-[10px] lg:text-[11px] text-slate-400 truncate" title={playerDetail.email}>
+                    {playerDetail.email}
+                  </p>
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    {playerDetail.emailVerified ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400">
+                        <MailCheck className="w-3 h-3" /> Verified
+                      </span>
+                    ) : (
+                      <>
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-400">
+                          <MailX className="w-3 h-3" /> Not verified
+                        </span>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void onVerifyEmail()}
+                          className="px-2 py-0.5 rounded-lg text-[9px] lg:text-[10px] font-bold uppercase tracking-wider bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-600 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Mark Verified
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  {!playerDetail.emailVerified && (
+                    <p className="text-[9px] text-slate-500 mt-1">
+                      Support action for bounced verification emails. Does not grant the +850 bonus.
+                    </p>
+                  )}
                 </div>
               )}
 

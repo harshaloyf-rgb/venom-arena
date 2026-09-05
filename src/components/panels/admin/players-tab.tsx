@@ -181,6 +181,33 @@ export function PlayersTab({ onToast }: { onToast?: ToastFn }) {
     }
   }
 
+  // ── Verify email (support action) ──
+  async function handleVerifyEmail() {
+    if (!selectedTag || !playerDetail) return;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/admin/verify-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userTag: selectedTag }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+      };
+      if (!res.ok) {
+        notify(data?.error || 'Failed to verify email.', 'error', onToast);
+        return;
+      }
+      notify(`Email verified for ${playerDetail.name}.`, 'success', onToast);
+      await refreshAll();
+    } catch {
+      notify('Network error.', 'error', onToast);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // ── Guard: not admin ──
   if (!isAdmin) {
     return (
@@ -216,6 +243,7 @@ export function PlayersTab({ onToast }: { onToast?: ToastFn }) {
         onClose={closeDetail}
         onModifyChips={handleModifyChips}
         onBanToggle={handleBanToggle}
+        onVerifyEmail={handleVerifyEmail}
         onToast={onToast}
       />
     </div>

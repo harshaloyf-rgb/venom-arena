@@ -15,9 +15,11 @@ export function Section00_Accounts() {
           <ul className="list-disc pl-4 space-y-1 text-slate-400 text-[11px]">
             <li>Choose a <strong>display name</strong> (up to 20 chars)</li>
             <li>Enter a valid <strong>email</strong> + password (min 6 chars)</li>
-            <li>Set a <strong>4-digit Security PIN</strong> (needed for password recovery)</li>
+            <li><strong>Select your country</strong> — it decides your regional server (see below)</li>
+            <li>Optional: a <strong>4-digit Security PIN</strong> (needed for password recovery)</li>
+            <li>Optional: a friend&apos;s <strong>Referral Code</strong> — you both earn 2,500 chips (see below)</li>
             <li>Receive a unique <strong>VM-XXXXXX</strong> tag (your permanent ID)</li>
-            <li>Start with <strong>150 starter chips</strong> (free!)</li>
+            <li>Start with <strong>150 starter chips</strong> — verify your email for <strong>+850 more</strong> (1,000 total)</li>
             <li>Your progress is <strong>saved permanently</strong></li>
           </ul>
         </div>
@@ -38,7 +40,7 @@ export function Section00_Accounts() {
             <Shield className="w-3.5 h-3.5" /> Guest Play
           </span>
           <ul className="list-disc pl-4 space-y-1 text-slate-400 text-[11px]">
-            <li><strong>No email needed</strong> — one-click to play</li>
+            <li><strong>No email needed</strong> — pick your country and play</li>
             <li>Also starts with <strong>150 starter chips</strong></li>
             <li>Gets a random VM-XXXXXX tag</li>
             <li>Guest accounts can <strong>upgrade to registered</strong> later (in Profile panel)</li>
@@ -46,6 +48,33 @@ export function Section00_Accounts() {
           </ul>
         </div>
       </div>
+      <InfoCard title="👥 Referral Program — Both Earn 2,500 Chips" accent="text-cyan-300">
+        <ul className="list-disc pl-4 space-y-0.5">
+          <li>Your referral code is in <strong>Profile → Tag &amp; Referral</strong> — format <strong>VIPER-XXXX</strong>. Copy it and share with friends</li>
+          <li>Your friend enters your code in the <strong>“Referral Code (optional)”</strong> field on the Register form — it can only be entered <strong>during registration</strong>, never added afterwards</li>
+          <li>When your friend finishes <strong>5 matches</strong>, you <strong>BOTH automatically receive 2,500 chips</strong> — credited to your banks right after their 5th match ends</li>
+          <li>Track your referred friends in <strong>Profile → Referrals</strong>: see each friend&apos;s status (pending → claimed) and their match progress</li>
+          <li>No limit on how many friends you can refer — every friend who completes 5 matches pays out</li>
+        </ul>
+      </InfoCard>
+      <InfoCard title="🌍 Your Country &amp; Regional Server" accent="text-sky-300">
+        <ul className="list-disc pl-4 space-y-0.5">
+          <li>Your country decides which <strong>regional server</strong> you play on — the nearest one, for the lowest latency</li>
+          <li>Regions: <strong>Asia-Pacific, South Asia, Middle East &amp; Africa, Europe, North America, South America, CIS &amp; Central Asia, Oceania</strong></li>
+          <li><strong>Guests:</strong> pick your country on the login screen — the Play as Guest button unlocks once a country is chosen</li>
+          <li><strong>Registered:</strong> pick your country during registration — your region is shown right under the selector</li>
+          <li>Moved house? Change your Faction Region (Country) later in <strong>Profile → Stats → edit</strong> — once every <strong>7 days</strong> (see Identity Change Policy above)</li>
+        </ul>
+      </InfoCard>
+      <InfoCard title="✉️ Email Verification — +850 Bonus Chips" accent="text-emerald-300">
+        <ul className="list-disc pl-4 space-y-0.5">
+          <li>New registered accounts start with <strong>150 chips</strong></li>
+          <li>Verify your email from the <strong>banner in Profile → Stats</strong> and receive an instant <strong>+850 chip bonus</strong> — <strong>1,000 chips total</strong></li>
+          <li>The bonus is <strong>one-time per account</strong> and is credited automatically the moment verification succeeds</li>
+          <li>Social-login accounts (Google/Facebook/Apple) are <strong>verified automatically</strong> — no banner, no extra step</li>
+          <li>Guests who upgrade to a registered account in Profile can verify afterwards to claim the bonus too</li>
+        </ul>
+      </InfoCard>
       <InfoCard title="Chip Economy Basics" accent="text-amber-300">
         <ul className="list-disc pl-4 space-y-0.5">
           <li>Chips are <strong>free in-game currency</strong> — no real-world value</li>
