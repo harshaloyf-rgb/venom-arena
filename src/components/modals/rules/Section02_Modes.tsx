@@ -18,11 +18,11 @@ export function Section02_Modes() {
               <li><strong>Chip Buy-In:</strong> Deducts buy-in from your banked chips into carried match chips.</li>
               <li><strong>Real Players:</strong> Live PvP with real opponents and leaderboard rankings.</li>
               <li><strong>Graduated Commission:</strong> 0% if ≤3 real players, 35% if ≥4. Extract anytime.</li>
-              <li><strong>Full Death Penalty:</strong> On death, your carried chips transform into 10 stars at your last position for others to collect.</li>
+              <li><strong>Full Death Penalty:</strong> On death, your carried chips transform into 10 stars dropped along your body trail for others to collect.</li>
               <li><strong>Star Chips:</strong> Golden stars dropped when real players die. Each star = player&apos;s carried chips ÷ 10. Collect to increase your carried chips.</li>
               <li><strong>XP:</strong> Earned on extraction AND on death (score ×5 + kills ×50, scaled by arena multiplier). Chips are only banked on extraction.</li>
               <li><strong>Map:</strong> Circular boundary that breathes. Stay inside!</li>
-              <li><strong>Bots:</strong> Every arena is filled to capacity with AI snakes (up to ~1,000 agents). Self-destruct at score≥100. Bots never drop or collect stars.</li>
+              <li><strong>Bots:</strong> Every arena is filled to capacity with AI snakes (up to ~1,000 agents) that harvest food, dodge and fight. Bots never drop or collect stars.</li>
             </ul>
           </div>
 
@@ -44,27 +44,22 @@ export function Section02_Modes() {
         <InfoCard title="🏆 Arena Leaderboard: Online vs Offline" accent="text-yellow-300">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
             <div className="bg-emerald-950/20 border border-emerald-500/20 rounded-lg p-2.5 space-y-1">
-              <span className="font-bold text-emerald-300 text-[11px]">Online Arena Leaderboard</span>
+              <span className="font-bold text-emerald-300 text-[11px]">Online Arena Leaderboard (top-right)</span>
               <ul className="list-disc pl-4 space-y-0.5 text-slate-400 text-[11px]">
-                <li><strong>Who appears:</strong> Real players only (no bots)</li>
-                <li><strong>Sorted by:</strong> Carried Chips (highest first)</li>
-                <li><strong>Value shown:</strong> Carried chips in green (e.g., &quot;100c&quot;)</li>
-                <li><strong>Your entry:</strong> Highlighted with indigo background + &quot;YOU&quot; badge</li>
-                <li><strong>Country flags:</strong> ✅ Shown next to each player name</li>
-                <li><strong>Ranking format:</strong> &quot;#X of Y&quot; (e.g., &quot;#1 of 3&quot;)</li>
-                <li><strong>Empty state:</strong> Shows &quot;No real players yet.&quot;</li>
+                <li><strong>Top 10</strong> live entries, refreshed from the server</li>
+                <li><strong>Toggle:</strong> <strong>Chips</strong> (default, sorted by carried chips) or <strong>Score</strong> (sorted by body length — #1 gets a 👑 crown)</li>
+                <li><strong>Your entry:</strong> Highlighted in green</li>
+                <li><strong>Empty state:</strong> &quot;No chip holders yet&quot; (Chips view) / &quot;Waiting...&quot; (Score view)</li>
+                <li>Your exact rank among all alive snakes is always shown below the minimap (&quot;Rank X / Y&quot;)</li>
               </ul>
             </div>
             <div className="bg-amber-950/20 border border-amber-500/20 rounded-lg p-2.5 space-y-1">
-              <span className="font-bold text-amber-300 text-[11px]">Offline Practice Leaderboard</span>
+              <span className="font-bold text-amber-300 text-[11px]">Offline Practice (no list)</span>
               <ul className="list-disc pl-4 space-y-0.5 text-slate-400 text-[11px]">
-                <li><strong>Who appears:</strong> You + nearby active bots (top 10)</li>
-                <li><strong>Sorted by:</strong> Score / body length (highest first)</li>
-                <li><strong>Value shown:</strong> Score in indigo (e.g., &quot;42&quot;)</li>
-                <li><strong>Your entry:</strong> Highlighted with green background</li>
-                <li><strong>Country flags:</strong> ❌ Not shown</li>
-                <li><strong>Ranking format:</strong> &quot;#X&quot; only (e.g., &quot;#31&quot;)</li>
-                <li><strong>Always populated:</strong> Player + bots always visible</li>
+                <li><strong>No list overlay</strong> — practice is just you vs 1,000 bots</li>
+                <li><strong>Rank X / Y</strong> below the minimap compares your score with every alive snake</li>
+                <li><strong>Score</strong> (body length) shown bottom-center; <strong>Kills</strong> bottom-right</li>
+                <li>No chips, stars or country flags in practice</li>
               </ul>
             </div>
           </div>

@@ -11,18 +11,23 @@ export function Section19_Highlights() {
         <InfoCard title="🔥 What Are Highlights?" accent="text-orange-300">
           <p className="mb-1.5">The <strong>Highlights</strong> tab is the community showcase where great matches and player-submitted clips live. Two types of content appear:</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong className="text-emerald-300">Match Cards</strong> — Stat cards generated when you share a match from your history or profile. Instantly approved, always visible.</li>
-            <li><strong className="text-amber-300">Video Clips</strong> — Player-submitted YouTube/Instagram links. Require admin review before going live.</li>
+            <li><strong className="text-emerald-300">Match Cards</strong> — Stat cards auto-published by the server when a match is impressive enough. Instantly approved, always visible.</li>
+            <li><strong className="text-amber-300">Video Clips</strong> — Player-submitted YouTube / YouTube Shorts / Instagram links. Require admin review before going live.</li>
           </ul>
         </InfoCard>
-        <InfoCard title="📹 Share Your Matches" accent="text-emerald-300">
-          <p className="mb-1.5">Open any match in your <strong>Match History</strong> and hit share to generate a <strong>Match Card</strong> — a stat card for the Highlights feed showing arena name, chips earned/lost, kills, snake length, duration, and your clan tag.</p>
-          <p className="text-slate-500">Match Cards are <strong>auto-approved</strong> — no waiting. Video clips require admin review.</p>
+        <InfoCard title="⚡ Match Cards — Auto-Published" accent="text-emerald-300">
+          <p className="mb-1.5">No manual action needed — when a match of yours is impressive enough, the server automatically publishes a <strong>Match Card</strong> to the feed (arena name, chips earned/lost, kills, snake length, duration, and your clan tag). Any of these triggers it:</p>
+          <ul className="list-disc pl-4 space-y-0.5">
+            <li>Extraction with <strong>5,000+ chips earned</strong></li>
+            <li>Extraction with <strong>3+ kills</strong></li>
+            <li>Death with <strong>5+ kills</strong></li>
+          </ul>
+          <p className="text-slate-500 mt-1">Match Cards are <strong>auto-approved</strong> — no waiting. Video clips require admin review.</p>
         </InfoCard>
         <InfoCard title="📹 Submitting Video Clips" accent="text-amber-300">
           <ul className="list-disc pl-4 space-y-0.5">
             <li>Click <strong>Upload Clip</strong> on the Highlights tab</li>
-            <li>Choose platform: <strong>YouTube</strong> or <strong>Instagram</strong></li>
+            <li>Choose platform: <strong>YouTube</strong>, <strong>YouTube Shorts</strong>, or <strong>Instagram</strong> (auto-detected from the URL)</li>
             <li>Paste the video URL — YouTube thumbnails are auto-extracted</li>
             <li>Title: 5-120 characters. Description: up to 300 characters</li>
             <li>Profanity filter applies (English + Hindi)</li>
@@ -41,13 +46,13 @@ export function Section19_Highlights() {
           </ol>
           <p className="mt-1.5 text-slate-500">Only approved clips are eligible. The spotlight updates when you refresh the page.</p>
         </InfoCard>
-        <InfoCard title="👍 Upvoting" accent="text-rose-300">
+        <InfoCard title="👍 Voting (Like / Dislike)" accent="text-rose-300">
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>Click the <strong>🔥 Flame</strong> button on any clip to upvote it</li>
+            <li>Every clip has <strong>👍 Like</strong> and <strong>👎 Dislike</strong> buttons</li>
             <li><strong>One vote per player per clip</strong> — enforced at the database level</li>
-            <li>You can change your vote — clicking again removes it</li>
-            <li>Must be logged in to upvote</li>
-            <li>Upvote count is used in the Top Play fallback (highest upvoted ever)</li>
+            <li><strong>You can change or remove your vote</strong> — click the same button again to undo it, or click the other one to switch</li>
+            <li>Must be logged in to vote</li>
+            <li>Like counts feed the Top Play fallback (highest upvoted ever)</li>
           </ul>
         </InfoCard>
         <InfoCard title="📊 Live Stats Ticker" accent="text-cyan-300">

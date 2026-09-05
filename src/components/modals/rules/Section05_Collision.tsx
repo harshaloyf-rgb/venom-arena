@@ -9,8 +9,8 @@ export function Section05_Collision() {
     <Section icon={<Crosshair className="w-4 h-4" />} title="5. COLLISION RULES" accent="text-rose-400">
       <div className="space-y-3">
         <InfoCard title="Head-to-Body Collision" accent="text-rose-300">
-          If your head hits another snake&apos;s body, <strong>YOU die</strong>. Your body transforms into food orbs spread along your body path. If you had carried chips, <strong>10 stars</strong> appear at your last position.
-          <strong>Neck protection:</strong> First 5 segments behind a head cannot kill (prevents unfair &quot;neck touch&quot;).
+          If your head hits another snake&apos;s body, <strong>YOU die</strong>. Your body transforms into food orbs spread along your body path, and if you had carried chips, <strong>10 stars</strong> drop along your body trail.
+          <strong>Every body segment is lethal</strong> — there is no &quot;neck&quot; immunity. If two snakes hit each other&apos;s bodies in the same instant, only the <strong>shorter</strong> snake dies (equal length = both die).
         </InfoCard>
         <InfoCard title="Head-on Collision (Head vs Head)" accent="text-amber-300">
           <ul className="list-disc pl-4 space-y-0.5">
@@ -22,9 +22,9 @@ export function Section05_Collision() {
         </InfoCard>
         <InfoCard title="Map Boundary (Online Only)" accent="text-emerald-300">
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>Going outside the circular map = <strong>instant death</strong>. Boundary gently breathes (±40px).</li>
+            <li>Going outside the circular map = <strong>instant death</strong>. The boundary <strong>breathes</strong> — it slowly shrinks and grows by up to ~8% of the arena radius on a 60-second cycle (30s in, 30s out).</li>
             <li><strong>Food Orbs:</strong> NONE — score is completely destroyed (prevents edge farming).</li>
-            <li><strong>Stars:</strong> YES — if player had carried chips &gt; 0, exactly <strong>10 stars</strong> drop at death position. Other players can collect them.</li>
+            <li><strong>Stars:</strong> YES — if a player with carried chips hits the wall, their <strong>10 stars</strong> drop along their body trail. Other players can collect them.</li>
             <li><strong>Player loses everything:</strong> Both score and carried chips are gone.</li>
             <li><strong>Bot wall death:</strong> Vanish cleanly — 0 food, 0 stars (bots never carry chips).</li>
           </ul>

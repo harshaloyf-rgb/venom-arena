@@ -8,50 +8,42 @@ export function Section09_HUD() {
   return (
     <Section icon={<Gamepad className="w-4 h-4" />} title="9. IN-GAME HUD EXPLAINED" accent="text-indigo-400">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <InfoCard title="Top-Left: Status Cards" accent="text-emerald-300">
+        <InfoCard title="Top-Left: Exit, Connection &amp; Status Stack" accent="text-emerald-300">
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong>Carried Chips (online only):</strong> Green card showing total carried chips with &quot;c&quot; suffix. Starts at buy-in amount, increases when you collect star chips from dead players. Hidden in offline mode</li>
-            <li><strong>Stars Earned (online only):</strong> Amber card showing extra chips earned from collecting star collectibles (Carried Chips − Buy-In)</li>
-            <li><strong>Stars in Arena (online only):</strong> Shows how many golden star collectibles are currently on the arena floor (drops when real players die, decreases when collected)</li>
-            <li><strong>Rank:</strong> Yellow trophy icon + arena rank number</li>
-            <li><strong>Score:</strong> Purple shield icon + snake body length</li>
-            <li><strong>Kills:</strong> Red skull icon + opponents eliminated</li>
-            <li><strong>Boost:</strong> Amber zap icon + &quot;SPACE&quot; reminder</li>
-            <li><strong>Active Competitors:</strong> &quot;Real Players: N Active&quot; (pulsing indigo) or &quot;Offline Mode: 1 Player&quot; (amber)</li>
+            <li><strong>Exit button (✕):</strong> Top-left corner. Leaves the match (online: you forfeit your carried chips)</li>
+            <li><strong>Connection badge:</strong> Next to it — <strong>LIVE</strong> (green) when connected, or the current status (e.g. CONNECTING / DISCONNECTED) in red</li>
+            <li><strong>Minimap:</strong> Always-on circular radar below the exit button — shows you, other snakes and the arena edge</li>
+            <li><strong>Rank:</strong> Under the minimap — &quot;Rank X / Y&quot; among all alive snakes</li>
+            <li><strong>Carried Chips (online only):</strong> Under the rank — your carried chip total plus the breakdown (&quot;buy-in + stars collected&quot;). Hidden in offline practice</li>
           </ul>
         </InfoCard>
-        <InfoCard title="Top-Right: Network &amp; Leaderboard" accent="text-cyan-300">
+        <InfoCard title="Top-Right: Best Ever &amp; Arena Leaderboard" accent="text-cyan-300">
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong>Banked Chips:</strong> Amber card showing your banked chip balance (deducts buy-in on match start)</li>
-            <li><strong>FPS / Ping:</strong> Frames per second + latency in ms. Color-coded. &quot;LQ&quot; badge if low quality</li>
-            <li><strong>Chat / Minimap:</strong> Below banked card. Chat opens message dialog. Minimap toggles radar</li>
-            <li><strong>Arena Leaders (Online):</strong> Collapsible top-10 leaderboard of real players only. Sorted by carried chips (e.g., &quot;100c&quot; in green). Shows player name, country flag, carried chips. Your entry highlighted with &quot;YOU&quot; badge in indigo. Shows &quot;No real players yet.&quot; if you&apos;re the only one</li>
-            <li><strong>Arena Leaders (Offline):</strong> Top-10 of you + nearby active bots. Sorted by score (body length, shown in indigo). Your entry highlighted in green. No country flags shown</li>
+            <li><strong>Best Ever:</strong> Your all-time high score for quick reference</li>
+            <li><strong>Arena Leaderboard (top 10):</strong> Toggle between <strong>Chips</strong> (default — carried chips) and <strong>Score</strong> (body length, 👑 crown for #1)</li>
+            <li>Your entry is <strong>highlighted in green</strong></li>
+            <li><strong>Empty state:</strong> &quot;No chip holders yet&quot; / &quot;Waiting...&quot;</li>
+            <li>In Score view, bots appear too; in Chips view only chip holders are listed (bots carry no chips)</li>
           </ul>
         </InfoCard>
-        <InfoCard title="Bottom-Left: Quick Chat Emotes" accent="text-violet-300">
+        <InfoCard title="Bottom Edge: Score, Kills &amp; Action Buttons" accent="text-amber-300">
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>5 emotes: GG! 🏆, Target! 🎯, Flee! 🏃💨, Ripped! 💪, Extracting! ⚡</li>
-            <li>Keyboard shortcuts: Keys 1-5 for instant emotes</li>
-            <li>Emotes appear as chat bubbles above snake head for 4 seconds</li>
+            <li><strong>Score:</strong> Bottom-center card — your current body length/score</li>
+            <li><strong>Kills:</strong> Bottom-right card — opponents you&apos;ve eliminated</li>
+            <li><strong>BOOST button:</strong> Bottom-left orange button (B / Left Click). Hold to boost — drains score, drops food</li>
+            <li><strong>EXTRACT button:</strong> Bottom-left amber button (E / Right Click). Hold for 3s to bank your carried chips</li>
+            <li><strong>Keyboard:</strong> WASD/Arrows steer, Space/Shift/B boost, hold E to extract</li>
           </ul>
         </InfoCard>
-        <InfoCard title="Bottom-Right: Action Buttons" accent="text-amber-300">
+        <InfoCard title="Overlays &amp; Indicators" accent="text-rose-300">
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong>BOOST:</strong> 64px amber circle. Hold to activate</li>
-            <li><strong>EXTRACT:</strong> 80px green circle. Hold to extract. Shows % during extraction</li>
-            <li><strong>EXIT:</strong> Small pill button at far-left bottom. Leaves match (forfeits carried chips online)</li>
+            <li><strong>Extraction ring:</strong> White-to-green ring around your head while extracting (only you can see it)</li>
+            <li><strong>Death screen:</strong> &quot;ELIMINATED&quot; card with your killer highlighted, plus View Profile / Add Friend / Add Rival actions and your banked/lost summary</li>
+            <li><strong>Spectating:</strong> After death you can watch the arena while the death card floats over the action</li>
+            <li><strong>Disconnect grace:</strong> If you drop, your snake stays alive for 12 seconds so you can reconnect</li>
           </ul>
         </InfoCard>
       </div>
-      <InfoCard title="Overlays &amp; Indicators" accent="text-rose-300">
-        <ul className="list-disc pl-4 space-y-0.5">
-          <li><strong>Reconnecting:</strong> Amber pill at top-center with Wifi icon</li>
-          <li><strong>Minimap:</strong> Bottom-left circular radar (toggle M key). Player, food, boundary</li>
-          <li><strong>Full Map:</strong> Press M for full-screen arena map</li>
-          <li><strong>Commission indicator:</strong> Rate shown below extraction progress bar</li>
-        </ul>
-      </InfoCard>
     </Section>
   );
 }

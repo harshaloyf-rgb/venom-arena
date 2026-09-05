@@ -20,9 +20,9 @@ export function Section03_Food() {
         <InfoCard title="💀 Death Food Orbs (Body Drop)" accent="text-rose-300">
           <ul className="list-disc pl-4 space-y-0.5">
             <li>When any snake (bot or player) dies from <strong>collision</strong>, their body transforms into food orbs <strong>scattered along the body path</strong>.</li>
-            <li>Total food value = the dead snake&apos;s <strong>entire score</strong>, broken into S/M/L orbs.</li>
-            <li><strong>Large (5pts, pink):</strong> score ÷ 5. <strong>Medium (3pts, blue):</strong> remainder ÷ 3. <strong>Small (1pt, green):</strong> whatever&apos;s left.</li>
-            <li><strong>Example:</strong> A snake with score 23 dies → 4 large (4×5=20), 1 medium (1×3=3), 0 small. Total = 23 ✓</li>
+            <li>Total food value = the dead snake&apos;s <strong>entire score</strong>, guaranteed — nothing is lost.</li>
+            <li>The corpse drops up to <strong>500 orb slots</strong> (capped by body length): roughly <strong>40% large, 30% medium, 30% small</strong>, shuffled along the body. Each orb&apos;s point value is <strong>stacked</strong> so the orbs always sum to the full score.</li>
+            <li>Bigger kills pay better: a long high-score corpse drops more slots carrying more value per orb — cutting off a giant is worth the effort.</li>
             <li><strong>ALL snakes</strong> (players + bots) can eat death food → increases score/size only.</li>
             <li><strong>Wall death:</strong> NO food orbs drop (score is destroyed to prevent edge farming), but carried chips <strong>DO</strong> drop as stars along the body trail.</li>
             <li>Death food orbs are <strong>completely separate from stars</strong> — food affects score/size, stars affect carried chips.</li>

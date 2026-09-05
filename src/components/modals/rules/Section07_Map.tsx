@@ -10,9 +10,9 @@ export function Section07_Map() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <InfoCard title="Online Map" accent="text-emerald-300">
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>Circular arena (breathes ±40px over 10s)</li>
-            <li>Radius scales with player count</li>
-            <li>Outside boundary = death</li>
+            <li>Circular arena (29,000px radius) shared by every tier</li>
+            <li>Boundary <strong>breathes</strong>: shrinks/grows by up to ~8% of the radius on a 60-second cycle (30s in, 30s out) — watch the edge!</li>
+            <li>Outside boundary = instant death</li>
           </ul>
         </InfoCard>
         <InfoCard title="Offline Map" accent="text-amber-300">
@@ -23,8 +23,9 @@ export function Section07_Map() {
         </InfoCard>
         <InfoCard title="Safe Spawning" accent="text-cyan-300">
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>400px from every other snake</li>
-            <li>500px inside map boundary (online)</li>
+            <li><strong>Online:</strong> at least 600px from every snake&apos;s head, with extra body-aware checks so you never materialize inside a coil</li>
+            <li><strong>Offline:</strong> 400px from every snake</li>
+            <li>Spawn zone sits well inside the boundary (within ~85% of the map radius)</li>
             <li><strong>2s spawn protection</strong> (invulnerable)</li>
           </ul>
         </InfoCard>

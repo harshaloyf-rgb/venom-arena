@@ -171,14 +171,12 @@ export function Section12_Leaderboards() {
         </InfoCard>
 
         <InfoCard title="📊 Milestone History — Your Achievement Timeline" accent="text-amber-300">
-          <p className="mb-1.5">Above the tabs, a collapsible <strong>&quot;Milestone History&quot;</strong> section shows your personal tier achievement journey:</p>
+          <p className="mb-1.5">The <strong>Find Me</strong> rank summary card shows your personal milestone journey:</p>
           <ul className="list-disc pl-4 space-y-0.5 mb-1.5">
-            <li><strong>Progress bar</strong> — Visual representation of all 6 tiers. Filled segments = achieved, empty = not yet reached.</li>
-            <li><strong>Timeline entries</strong> — Each achieved milestone shows: badge icon, tier name, chips you had when you reached it, and the <strong>exact date + time (UTC)</strong> you achieved it.</li>
-            <li><strong>&quot;🔥 Current&quot; badge</strong> — Marks your most recently achieved tier.</li>
-            <li><strong>&quot;Next milestone&quot; hint</strong> — Shows the next tier to aim for and its chip threshold.</li>
+            <li><strong>Timeline entries</strong> — Each achieved milestone shows: badge icon, tier name, the chips you had when you reached it, and the <strong>exact date + time (UTC)</strong> you achieved it.</li>
+            <li>Only tiers you have actually reached are listed — the card stays clean while you&apos;re still climbing.</li>
           </ul>
-          <p>If you haven&apos;t achieved any milestones yet, <strong>demo milestone data</strong> (clearly labeled with a DEMO badge) is shown so you can see what it will look like. Milestones are recorded automatically when your banked chips cross a tier threshold.</p>
+          <p>Milestones are recorded automatically the moment your banked chips cross a tier threshold.</p>
         </InfoCard>
 
         <InfoCard title="🏆 Championship Prize Badges on Rows" accent="text-yellow-300">
@@ -193,16 +191,12 @@ export function Section12_Leaderboards() {
         </InfoCard>
 
         <InfoCard title="🔍 Search &amp; Player Inspector" accent="text-indigo-300">
-          <p><strong>Search:</strong> A search box at the top lets you filter the visible list in real-time. Type a player name, VENOM tag, or clan tag to find specific players.</p>
+          <p><strong>Search:</strong> A search box at the top lets you filter the visible list in real-time. Type a player name, VM tag (VM-XXXXXX), or clan tag to find specific players.</p>
           <p className="mt-1.5"><strong>Player Inspector:</strong> Click any player row to open their profile inspector showing name, country, chips, level, clan, milestone badge, and their rank from the leaderboard.</p>
         </InfoCard>
 
-        <InfoCard title="Empty Boards &amp; Demo Data" accent="text-slate-300">
-          <p>If no real players appear for a view (e.g., no players from a specific country, or no one has reached a tier yet), <strong>3 demo entries</strong> appear as placeholders so you can see what the board looks like. This is temporary — once real players qualify, the demo rows disappear.</p>
-          <ul className="list-disc pl-4 space-y-0.5 mt-1.5">
-            <li><strong>Admin users</strong> see a &quot;DEMO&quot; label on each demo row and a &quot;· Showing demo data&quot; note in the header</li>
-            <li><strong>Non-admin users</strong> see demo rows without any DEMO label, and the header shows &quot;No players ranked yet&quot;</li>
-          </ul>
+        <InfoCard title="Empty Boards" accent="text-slate-300">
+          <p>If no real players qualify for a view yet (e.g., no players from a specific country, or no one has reached a tier), the tab simply shows an <strong>empty state</strong> — no fake filler rows. The moment real players qualify, they appear here automatically.</p>
         </InfoCard>
 
         <InfoCard title="Auto-Refresh" accent="text-emerald-300">
@@ -210,11 +204,10 @@ export function Section12_Leaderboards() {
         </InfoCard>
 
         <InfoCard title="📺 Live Ticker Bar" accent="text-rose-300">
-          <p>At the <strong>very top</strong> of the Leaderboard panel, a small scrolling <strong>Live Ticker</strong> bar appears when real data is available. It cycles through simulated messages like &quot;A challenger from India 🇮🇳 extracted 2.5M chips!&quot; for an esports-style atmosphere.</p>
+          <p>At the <strong>very top</strong> of the Leaderboard panel, a small scrolling <strong>Live Ticker</strong> bar shows <strong>real platform activity</strong> — live aggregate stats and events straight from the server (matches, extractions, records).</p>
           <ul className="list-disc pl-4 space-y-0.5 mt-1.5">
-            <li>Messages are <strong>100% random and cosmetic</strong> — they do NOT reflect actual game events</li>
-            <li>A new fake message appears every ~8 seconds (max 20 stored)</li>
-            <li>Only visible when real player data exists (hidden during demo/placeholder mode)</li>
+            <li>Messages come from the live stats endpoint — they reflect <strong>actual platform activity</strong>, not fabricated hype</li>
+            <li>Only visible when real player data exists (hidden on a fresh/empty server)</li>
           </ul>
         </InfoCard>
       </div>

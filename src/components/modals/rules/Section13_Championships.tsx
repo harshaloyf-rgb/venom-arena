@@ -9,22 +9,22 @@ export function Section13_Championships() {
     <Section icon={<Trophy className="w-4 h-4" />} title="13. ANNUAL CHAMPIONSHIPS" accent="text-amber-400">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <InfoCard title="🏆 What is the Annual Championship?" accent="text-amber-300">
-          <p className="mb-1">The <strong>Annual Championship</strong> is a year-long competitive event that tracks every player&apos;s performance across all online matches. Unlike the lobby leaderboard (which is live/session-based), championship standings persist across the entire calendar year and culminate in the <strong>Jan 1st season close</strong>.</p>
+          <p className="mb-1">The <strong>Annual Championship</strong> is a year-long competitive event. Unlike the lobby leaderboard (which is live/session-based), championship standings persist across the entire calendar year and culminate in the <strong>Jan 1st season close</strong>.</p>
           <ul className="list-disc pl-4 space-y-0.5">
             <li>Runs from <strong>Jan 1 to Dec 31</strong> each year</li>
-            <li>Every online match counts toward your championship score</li>
+            <li><strong>What counts:</strong> your <strong>banked wallet chips</strong> at year-end decide the final ranking — &quot;Max chips at year-end decides rank!&quot;</li>
             <li>Top finishers earn prizes and Hall of Fame induction</li>
             <li>Results are archived and viewable in perpetuity</li>
           </ul>
         </InfoCard>
 
         <InfoCard title="📋 DB-Backed Registration" accent="text-cyan-300">
-          <p className="mb-1">Championship registration is handled entirely through the database — no separate sign-up needed:</p>
+          <p className="mb-1">Championship registration is handled entirely through the database — one click, free entry:</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong>Free registration:</strong> Register from the Championships tab (one click, free entry) — then every online match of the year counts toward your standings</li>
-            <li><strong>Persistent:</strong> Your registration status, match history, and standings are stored server-side in the database</li>
-            <li><strong>One account per player:</strong> Duplicate or alt accounts are merged using your VM-XXXXXX tag</li>
-            <li><strong>Guest players:</strong> Must register or link a social account before their championship stats are tracked</li>
+            <li><strong>Free registration:</strong> Click <strong>Register</strong> on the Championships tab — everyone can enter (guests and registered players alike)</li>
+            <li><strong>Not automatic:</strong> Until you register, your online matches do NOT count toward the standings — registering takes 2 seconds, do it early!</li>
+            <li><strong>Persistent:</strong> Your registration status, match count, and standings are stored server-side in the database</li>
+            <li><strong>One account per player:</strong> Your VM-XXXXXX tag is your single championship identity</li>
           </ul>
         </InfoCard>
 
@@ -73,12 +73,12 @@ export function Section13_Championships() {
         <InfoCard title="📊 My Championship Summary" accent="text-emerald-300">
           <p className="mb-1">A personal dashboard card shows your championship progress at a glance:</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong>Current Rank:</strong> Your live position in the championship standings</li>
-            <li><strong>Matches Played:</strong> Total online matches this year</li>
-            <li><strong>Total Extracted:</strong> Cumulative chips extracted across all matches</li>
-            <li><strong>Win Rate:</strong> Percentage of matches where you successfully extracted</li>
-            <li><strong>Best Streak:</strong> Longest consecutive extraction streak</li>
-            <li><strong>Projected Tier:</strong> Based on current pace, which HOF tier you&apos;re on track for</li>
+            <li><strong>Projected Rank:</strong> Your live position — top 100 = <strong>HOF Eligible</strong></li>
+            <li><strong>Projected Prize:</strong> The prize tier your current rank would earn</li>
+            <li><strong>Avg Chips / Game:</strong> Your efficiency (banked chips ÷ games played)</li>
+            <li><strong>▲ Player Ahead / ▼ Player Behind:</strong> The exact chip gap to the players around you in the standings</li>
+            <li><strong>Matches Limit Progress:</strong> X / 10,000 games played, with escalating warnings as you approach the cap</li>
+            <li><strong>Competing Wallet Chips:</strong> The balance that decides your final rank — max chips at year-end wins!</li>
           </ul>
         </InfoCard>
 

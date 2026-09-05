@@ -12,7 +12,7 @@ export function Section11_Death() {
           <ul className="list-disc pl-4 space-y-0.5">
             <li>Body transforms to food orbs <strong>spread along your body path</strong></li>
             <li>Food values sum to exactly your total score</li>
-            <li>10 golden star chips appear at your death position if you had carried chips</li>
+            <li>10 golden star chips drop <strong>along your body trail</strong> if you had carried chips</li>
             <li>Anyone can collect your dropped food/stars</li>
             <li>Killed by real player → View Profile / Add Friend / Add Rival buttons</li>
           </ul>

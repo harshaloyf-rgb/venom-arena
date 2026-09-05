@@ -18,7 +18,7 @@ export function Section17_Social() {
             <li><strong>Search Players</strong> — Find any player by name, tag, or country</li>
             <li><strong>Gift History</strong> — Log of all sent and received chip gifts</li>
           </ol>
-          <p className="mt-1.5">An <strong>Add Friend</strong> input bar is always visible at the top of the panel — enter a player tag (e.g. COBRA-4231) to send a request directly.</p>
+          <p className="mt-1.5">An <strong>Add Friend</strong> input bar is always visible at the top of the panel — enter a player tag (e.g. VM-89BE44) to send a request directly.</p>
         </InfoCard>
 
         <InfoCard title="👥 My Friends Tab" accent="text-emerald-300">
@@ -100,7 +100,7 @@ export function Section17_Social() {
         <InfoCard title="💬 Ways to Connect with Players" accent="text-pink-300">
           <p className="mb-1.5">There are <strong>4 ways</strong> to interact with other players:</p>
           <ol className="list-decimal pl-4 space-y-0.5">
-            <li><strong>Add Friend bar</strong> — Enter a VENOM tag at the top of the Social panel to send a direct request</li>
+            <li><strong>Add Friend bar</strong> — Enter a player&apos;s VM tag (VM-XXXXXX) at the top of the Social panel to send a direct request</li>
             <li><strong>Search Players tab</strong> — Find anyone by name/tag/country and click &quot;Connect&quot;</li>
             <li><strong>Game-Over Kill Screen</strong> — When killed by a real player, buttons appear: View Profile, Add Rival, Add Friend</li>
             <li><strong>Player Inspector</strong> — Click any player name (leaderboards, friends, search) to open their profile, then follow or send friend request</li>
