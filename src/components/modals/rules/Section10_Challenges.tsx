@@ -11,6 +11,7 @@ export function Section10_Challenges() {
         Tactical Challenges are daily and weekly missions that reward bonus chips for completing
         specific in-game objectives. View them in the right sidebar of the Lobby Headquarters.
         Challenges <strong>scale with your level</strong> — as you grow, missions get harder but pay more.
+        Every claim also grants <strong>+25 XP</strong> toward your player level and Season Pass progress.
       </p>
 
       {/* Level Tiers */}

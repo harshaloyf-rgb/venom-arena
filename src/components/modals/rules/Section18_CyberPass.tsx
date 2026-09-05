@@ -39,7 +39,7 @@ export function Section18_CyberPass() {
         <InfoCard title="🎁 Claiming Rewards" accent="text-cyan-300">
           <p className="mb-1.5">Rewards must be <strong>manually claimed</strong> from the Pass tab:</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>Once your level meets a tier&apos;s requirement, the <strong>Claim</strong> button activates</li>
+            <li>Once your <strong>Pass XP</strong> meets a tier&apos;s requirement, the <strong>Claim</strong> button activates</li>
             <li>Claiming adds the cosmetic to your <strong>inventory</strong> (unlockedSkins — server-persisted)</li>
             <li>After claiming, equip it in <strong>Shop &amp; Lab</strong> like any other cosmetic</li>
             <li>Each reward can only be claimed <strong>once</strong> (server-enforced, no double-claim)</li>
@@ -53,29 +53,27 @@ export function Section18_CyberPass() {
             <li>Click <strong>&quot;Unlock Elite (1,00,000c)&quot;</strong></li>
             <li>100,000 chips are deducted <strong>server-side</strong></li>
             <li>Elite is permanent for the season — no subscription</li>
-            <li>All previously-locked elite tiers become claimable immediately (if your level qualifies)</li>
+            <li>All previously-locked elite tiers become claimable immediately (if your Pass XP qualifies)</li>
           </ul>
         </InfoCard>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
         <InfoCard title="🎭 Reward Types" accent="text-pink-300">
-          <p className="mb-1.5">The 40 pass cosmetics span all cosmetic categories:</p>
+          <p className="mb-1.5">All 40 pass rewards are <strong>exclusive snake skins + chip bonuses</strong>:</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong>Skins</strong> — Snake appearances (Ember Worm, Cyber Serpent God, Rainbow Viper, etc.)</li>
-            <li><strong>Trails</strong> — Visual effects behind your snake (Venom Drip, Hypernova, Galaxy Drift, etc.)</li>
-            <li><strong>Death FX</strong> — Explosion effects on death (Phantom Burst, Void Reaper, Apocalypse Burst, etc.)</li>
-            <li><strong>Flags</strong> — Custom flag cosmetics (Clan Crest, Elite Standard)</li>
-            <li><strong>Banners</strong> — Profile background banners (War Banner, Throne Room, Genesis Crown Frame)</li>
+            <li><strong>Free track:</strong> an exclusive skin at EVERY tier, plus chip bonuses (200c at Tier 3 up to 3,000c at Tiers 18–20)</li>
+            <li><strong>Elite track:</strong> a premium skin at every tier, plus bigger chip bonuses (500c up to 10,000c)</li>
+            <li>Example skins: Ember Worm, Jade Scales, Chrome King (free) · Cyber Serpent God, Dragon Scale, Genesis Crown (elite)</li>
           </ul>
         </InfoCard>
         <InfoCard title="📊 Current Season: Genesis" accent="text-emerald-300">
           <p className="mb-1.5">Season 1 — <strong>Genesis</strong>:</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>20 tiers from Level 2 to Level 38</li>
-            <li>20 free cosmetics (mix of skins, trails, deaths, flags, banners)</li>
-            <li>20 elite-exclusive cosmetics (premium variants)</li>
-            <li>Elite cost: <strong>1,00,000 chips</strong> (one-time)</li>
+            <li>20 tiers on a Pass-XP ladder — Tier 1 is free (0 Pass XP), Tier 20 needs <strong>55,000 Pass XP</strong> total</li>
+            <li>20 free rewards (exclusive skin + chip bonus at every tier)</li>
+            <li>20 elite-exclusive premium skins (bigger chip bonuses)</li>
+            <li>Elite cost: <strong>100,000 chips</strong> (one-time)</li>
             <li>All rewards are <strong>pass-exclusive</strong> — not available anywhere else</li>
           </ul>
         </InfoCard>

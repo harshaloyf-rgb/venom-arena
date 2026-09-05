@@ -45,11 +45,29 @@ import {
   DropdownMenuItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 
-import { xpForLevel, type InspectedPlayer } from '@/lib/game-config';
-import { getSettings } from '@/lib/settings';
+import { xpForLevel, getCosmeticById, type InspectedPlayer } from '@/lib/game-config';
+import { getSettings, APP_VERSION } from '@/lib/settings';
+import { DEFAULT_SKINS } from '@/lib/snake/atlas';
+import { SKIN_PRESETS, resolveLegacySkinId } from '@/components/panels/cosmetics/cosmetics-types';
 import { applyOrientation } from '@/lib/orientation';
 import { initAudio } from '@/lib/audio';
 import type { MatchResult } from '@/lib/types';
+
+// Resolve the equipped skin's human-readable name from static registries
+// (premium/pass cosmetics → free presets → built-in atlas defaults → lab DNA).
+// NOTE: skin-registry.getSkinAsset() can't be used here — its default-skin map
+// is only populated once GameCanvas registers it inside a live game.
+function equippedSkinName(currentSkin: string | undefined): string {
+  const id = resolveLegacySkinId(currentSkin || 'skin-viper-green');
+  const preset = SKIN_PRESETS.find((p) => p.id === id);
+  if (preset) return preset.name;
+  const cosmetic = getCosmeticById(id);
+  if (cosmetic) return cosmetic.name;
+  const builtin = DEFAULT_SKINS.find((s) => s.id === id);
+  if (builtin) return builtin.name;
+  if (id === 'custom-lab-skin' || id.startsWith('custom-')) return 'Custom DNA';
+  return 'Gallery Skin';
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -518,11 +536,11 @@ export default function Home() {
               <div className="grid grid-cols-4 gap-2">
                 <div className="bg-slate-900/60 border border-slate-800/80 rounded-lg px-2 py-1.5 text-center">
                   <span className="text-[9px] text-slate-500 block uppercase font-semibold">Streak</span>
-                  <span className="text-xs font-bold text-amber-400 font-mono">{player.dailyStreak || 1}d</span>
+                  <span className="text-xs font-bold text-amber-400 font-mono">{player.dailyStreak ?? 0}d</span>
                 </div>
                 <div className="bg-slate-900/60 border border-slate-800/80 rounded-lg px-2 py-1.5 text-center">
                   <span className="text-[9px] text-slate-500 block uppercase font-semibold">Matches</span>
-                  <span className="text-xs font-bold text-white font-mono">{player.lifetimeKills + player.lifetimeDeaths || 0}</span>
+                  <span className="text-xs font-bold text-white font-mono">{(player.lifetimeExtracts || 0) + (player.lifetimeDeaths || 0)}</span>
                 </div>
                 <div className="bg-slate-900/60 border border-slate-800/80 rounded-lg px-2 py-1.5 text-center">
                   <span className="text-[9px] text-slate-500 block uppercase font-semibold">Extracts</span>
@@ -539,7 +557,7 @@ export default function Home() {
                 onClick={() => setActiveTab('arena')}
                 className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-sans font-bold text-xs flex items-center justify-center gap-2 transition duration-200 cursor-pointer shadow-lg shadow-indigo-950/40 border border-indigo-500 active:scale-[0.98]"
               >
-                <Swords className="w-4 h-4" /> LAUNCH MATCHMAKER
+                <Swords className="w-4 h-4" /> CHOOSE YOUR ARENA
               </button>
 
               {/* Last match banner */}
@@ -593,7 +611,7 @@ export default function Home() {
                     </div>
                   </div>
                   <button onClick={() => setActiveTab('arena')} className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-sans font-bold text-[11px] flex items-center gap-1 transition duration-200 cursor-pointer shadow-lg shadow-indigo-950/40 border border-indigo-500 shrink-0 justify-center">
-                    <Play className="w-3 h-3 fill-current" /> LAUNCH MATCHMAKER
+                    <Play className="w-3 h-3 fill-current" /> CHOOSE YOUR ARENA
                   </button>
                 </div>
 
@@ -602,17 +620,17 @@ export default function Home() {
                   <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Lobby Stations</span>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">
                     <BentoGate onClick={() => setActiveTab('arena')} icon={Compass} accent="indigo" badge="Battle Gate" title="Play Endless Arenas" desc="Buy in with chips, collect chips from defeated snakes, and extract alive to bank your winnings. Risk grows with every arena." footLeft="STAKES FROM: 10 chips" footRight="Enter" />
-                    <BentoGate onClick={() => setActiveTab('shop')} icon={ShoppingBag} accent="purple" badge="Customize Lab" title="Identity Workshop & Shop" desc="Unlock glowing skins, trials, death burst novas, or design a custom repeating body segment sequence." footLeft={`EQUIPPED: ${player.currentSkin ? 'Custom DNA' : 'Gallery Skin'}`} footRight="Modify" />
+                    <BentoGate onClick={() => setActiveTab('shop')} icon={ShoppingBag} accent="purple" badge="Customize Lab" title="Identity Workshop & Shop" desc="Unlock glowing skins, trials, death burst novas, or design a custom repeating body segment sequence." footLeft={`EQUIPPED: ${equippedSkinName(player.currentSkin)}`} footRight="Modify" />
                     <BentoGate onClick={() => setActiveTab('profile')} icon={User} accent="blue" badge="My Record" title="Agent Profile" desc="Examine your records, high scores, total banked wealth, and change your operative callsign." footLeft={`HIGH SCORE: ${(player.biggestExtract || 0).toLocaleString()}`} footRight="Inspect" />
                     <BentoGate onClick={() => setActiveTab('leaderboard')} icon={Trophy} accent="amber" badge="Elite Standings" title="Global Standings" desc="Live global rankings by country and region. Compare your banked chip balance against the world's elite operators." footLeft={myRank ? `LEADERBOARD RANK: #${myRank.globalRank.toLocaleString()} / ${myRank.totalGlobal.toLocaleString()}` : 'LEADERBOARD RANK: —'} footRight="View" />
-                    <BentoGate onClick={() => setActiveTab('rewards')} icon={Gift} accent="emerald" badge="Complimentary" title="Daily Free Claims" desc="Secure your complimentary login chips. Claim daily streaks, hourly micro-rewards, and spin the lucky wheel!" footLeft={`STREAK: ${player.dailyStreak || 1} Days`} footRight="Claim" />
-                    <BentoGate onClick={() => setActiveTab('store')} icon={ShieldCheck} accent="cyan" badge="No Ads" title="Ad-Free Pass & Tickets" desc="Remove every ad with a one-time Time Pass and earn free Jade Corridor entry tickets. Ads never interrupt gameplay." footLeft={`WALLET: ${player.bankedChips.toLocaleString()} c`} footRight="Go Ad-Free" />
+                    <BentoGate onClick={() => setActiveTab('rewards')} icon={Gift} accent="emerald" badge="Complimentary" title="Daily Free Claims" desc="Secure your complimentary login chips. Claim daily streaks, hourly micro-rewards, and spin the lucky wheel!" footLeft={`STREAK: ${player.dailyStreak ?? 0} Days`} footRight="Claim" />
+                    <BentoGate onClick={() => setActiveTab('store')} icon={ShieldCheck} accent="cyan" badge="No Ads" title="Ad-Free Pass & Tickets" desc="Remove every ad with a one-time Time Pass — every pass bundles free Jade Corridor entry tickets. Ads never interrupt gameplay." footLeft={`WALLET: ${player.bankedChips.toLocaleString()} c`} footRight="Go Ad-Free" />
                     <BentoGate onClick={() => setActiveTab('championships')} icon={Crown} accent="rose" badge="The Main Event" title="Championships" desc="Finish the year with the highest banked chips to win the Global Championship — virtual chip prizes and permanent recognition in the Hall of Fame." footLeft="JAN 1 — DEC 31" footRight="Compete" />
                     <BentoGate onClick={() => setActiveTab('halloffame')} icon={Award} accent="yellow" badge="Legends" title="Hall of Fame" desc="Permanent recognition for the greatest operators of all time — champions, record extracts, legendary runs." footLeft="LEGENDARY RANKINGS" footRight="View Legends" />
                     <BentoGate onClick={() => setActiveTab('clans')} icon={Shield} accent="violet" badge="Team Ops" title="Syndicates" desc="Create or join a syndicate. Team up with allies, pool resources, and dominate arenas together." footLeft="CLAN WARFARE" footRight="Assemble" />
                     <BentoGate onClick={() => setActiveTab('seasonpass')} icon={Sparkles} accent="pink" badge="Pass XP" title="Season Pass" desc="Earn Pass XP from matches (50% of match XP, daily cap). Unlock cosmetics and chip rewards across 20 tiers." footLeft={player ? (() => { const tiers = PASS_TIER_XP.filter(x => (player.passXp ?? 0) >= x).length; const unclaimed = PASS_TIER_XP.filter((x, i) => (player.passXp ?? 0) >= x && !(player.passClaimedFree ?? []).includes(i + 1)).length; return unclaimed > 0 ? `Tier ${tiers}/20 · ${unclaimed} to claim!` : `Tier ${tiers}/20`; })() : 'EARN XP'}
                     footRight="View Pass" />
-                    <BentoGate onClick={() => setActiveTab('clips')} icon={Film} accent="red" badge="Replays" title="Highlights" desc="Watch and share your greatest moments. Review match replays, clutch extractions, and legendary eliminations." footLeft="MATCH HIGHLIGHTS" footRight="Watch" />
+                    <BentoGate onClick={() => setActiveTab('clips')} icon={Film} accent="red" badge="Clips" title="Highlights" desc="Watch and share your greatest moments. Auto-generated Match Cards, community video clips, upvotes, and the daily Top Play spotlight." footLeft="MATCH HIGHLIGHTS" footRight="Watch" />
                     <div className="relative">
                       <BentoGate onClick={() => setActiveTab('social')} icon={Users} accent="violet" badge="Friends & Search" title="Friends & Global Player Search" desc="Search players by name or tag, send chip gifts, block players, and manage your friend network!" footLeft="SOCIAL HUB" footRight="Connect" />
                       {pendingFriendCount > 0 && (
@@ -691,7 +709,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-1">
           <p className="font-sans">&copy; 2026 Venom Arena. All Rights Reserved. Fully store-safe, non-gambling gameplay edition.</p>
           <div className="flex gap-4 font-mono text-[11px] text-slate-400">
-            <span>APP_VERSION: 1.0.0-MVP</span>
+            <span>APP_VERSION: {APP_VERSION}</span>
             <span>ENGINE: TSX_CANVAS</span>
           </div>
         </div>

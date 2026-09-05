@@ -83,6 +83,28 @@ export function Section00_Accounts() {
           <li>Need more chips? Claim Daily Rewards, complete challenges — or buy chip packs in the Chip Store inside the mobile app</li>
         </ul>
       </InfoCard>
+      <InfoCard title="🎁 Daily Claims Hub — Free Chips Every Day" accent="text-emerald-300">
+        <p className="mb-1.5">Open it from the <strong>Claims</strong> tab (mobile bottom bar) or the <strong>Daily Free Claims</strong> card on the Lobby HQ dashboard. Six tabs inside:</p>
+        <ul className="list-disc pl-4 space-y-1">
+          <li><strong>Daily Streak:</strong> One claim per day on a repeating 7-day cycle — <strong>10 → 20 → 50 → 100 → 250 → 500 → 1,000 chips</strong>. Rewards scale with your level multiplier (×1.0 up to ×4.0) and double on special seasonal bonus days. Miss a calendar day and the streak resets to 0 (a Streak Freeze can protect exactly one missed day)</li>
+          <li><strong>Streak Milestones:</strong> Day 30 = <strong>5,000c</strong> (Iron Veteran 🛡️), Day 60 = <strong>15,000c</strong> (Steel Sentinel ⚔️), Day 90 = <strong>50,000c</strong> (Diamond Immortal 👑) — credited automatically when you hit the day</li>
+          <li><strong>Streak Freeze:</strong> Buy for <strong>500c</strong> each, hold up to <strong>3</strong>. A freeze is consumed automatically if you miss exactly one day; longer gaps still reset the streak</li>
+          <li><strong>Hourly:</strong> One micro-claim every hour — a random <strong>10–150 chips</strong> base, scaled by your level multiplier and seasonal bonuses</li>
+          <li><strong>Lucky Spin:</strong> <strong>1 free spin daily</strong>; extra spins cost <strong>200c</strong>. Prize wheel ranges from 5c up to a <strong>5,000c JACKPOT</strong> (rare)</li>
+          <li><strong>Calendar:</strong> A month-view calendar of your past daily claims</li>
+          <li><strong>Bonus:</strong> Redeem <strong>Promo Codes</strong> (distributed via official channels only) and, in the mobile app, watch <strong>user-initiated reward ads</strong> — up to 12 per day × 50c each</li>
+          <li><strong>History:</strong> Every claim you have ever made, with amounts and timestamps</li>
+        </ul>
+      </InfoCard>
+      <InfoCard title="📈 Player Levels & XP" accent="text-sky-300">
+        <ul className="list-disc pl-4 space-y-0.5">
+          <li>Every online match grants XP: <strong>(score × 5 + kills × 50) × arena reward multiplier</strong> — you earn XP whether you extract or die (practice arenas grant 0 XP)</li>
+          <li>Each <strong>challenge claim</strong> adds <strong>+25 XP</strong> on top of its chip reward</li>
+          <li>Level N requires <strong>(N − 1) × 200 total XP</strong> — a steady 200 XP between every level, forever</li>
+          <li>Your level is shown in the header badge and on the Lobby HQ dashboard, with an XP progress bar</li>
+          <li>Levels drive your <strong>challenge tier</strong> (Novice → Elite) and <strong>reward multiplier</strong> — see Section 10</li>
+        </ul>
+      </InfoCard>
       <InfoCard title="🔑 Password Recovery (Forgot Password)" accent="text-cyan-300">
         <ul className="list-disc pl-4 space-y-0.5">
           <li>On the Login page, click <strong>&quot;Forgot Password?&quot;</strong></li>
