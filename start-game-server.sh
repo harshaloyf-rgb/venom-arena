@@ -13,6 +13,13 @@ if [ -f "$ROOT/.env" ]; then
   source "$ROOT/.env"
   set +a
 fi
+# .env.local holds INTERNAL_SECRET (Next.js loads it too). Without it the
+# game server fails fast with 'INTERNAL_SECRET env var missing or insecure'.
+if [ -f "$ROOT/.env.local" ]; then
+  set -a
+  source "$ROOT/.env.local"
+  set +a
+fi
 
 # Check if port 3001 is already listening
 if ss -tlnp 2>/dev/null | grep -q ':3001 '; then

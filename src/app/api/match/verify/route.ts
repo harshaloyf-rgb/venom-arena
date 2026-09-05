@@ -43,14 +43,16 @@ export async function POST(req: NextRequest) {
 
     const skin = getCosmeticById(p.currentSkin);
 
-    // Determine rarity from the cosmetic skin's cost, or from the skin ID.
+    // Determine rarity — honor the Skin.rarity override first (epic-clean
+    // character faces), then fall back to the cost-derived default.
     let skinId = p.currentSkin || 'skin-default';
     let rarity = 'common';
     if (skin) {
-      if (skin.cost <= 200) rarity = 'common';
-      else if (skin.cost <= 500) rarity = 'rare';
-      else if (skin.cost <= 1000) rarity = 'epic';
-      else rarity = 'legendary';
+      rarity = skin.rarity ?? (
+        skin.cost <= 200 ? 'common'
+        : skin.cost <= 500 ? 'rare'
+        : skin.cost <= 1000 ? 'epic'
+        : 'legendary');
     } else if (skinId.startsWith('preset-')) {
       rarity = 'common';
     } else if (skinId === 'custom-lab-skin' || skinId.startsWith('custom-')) {
