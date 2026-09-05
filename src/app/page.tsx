@@ -46,6 +46,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 import { xpForLevel, type InspectedPlayer } from '@/lib/game-config';
+import { getSettings } from '@/lib/settings';
+import { applyOrientation } from '@/lib/orientation';
+import { initAudio } from '@/lib/audio';
 import type { MatchResult } from '@/lib/types';
 
 // ---------------------------------------------------------------------------
@@ -183,6 +186,13 @@ export default function Home() {
   useEffect(() => { if (player) void fetchChallenges(); }, [player, fetchChallenges]);
   useEffect(() => { if (player) void fetchPendingFriends(); }, [player, fetchPendingFriends]);
   useEffect(() => { if (player) void fetchMyRank(); }, [player, fetchMyRank]);
+
+  // VA-SETTINGS boot: apply the saved orientation (default portrait) and
+  // arm the audio engine (lazy — context only spawns on first gesture).
+  useEffect(() => {
+    void applyOrientation(getSettings().orientation);
+    initAudio();
+  }, []);
 
   // Listen for admin panel navigation requests
   useEffect(() => {

@@ -16,6 +16,7 @@ import { initSafeAreaTracking } from './safe-area';
 import { InputHandler, TOUCH_BOOST_THRESHOLD } from './input';
 import { SEGMENT_SPACING } from '@/lib/snake/config';
 import { useAuth } from '@/components/providers/auth-provider';
+import { renderDpr } from '@/lib/settings';
 
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -147,7 +148,7 @@ export default function GameCanvas({
       if (!parent) return;
       // FIX (mobile perf): cap DPR at 2 — raw devicePixelRatio (3.0 on many
       // phones) quadruples fill-rate for marginal visual gain.
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = renderDpr(); // shared cap; 1x in Performance Mode (settings)
       _cachedW = parent.clientWidth;
       _cachedH = parent.clientHeight;
       canvas.width = _cachedW * dpr;
@@ -490,7 +491,7 @@ export default function GameCanvas({
       const mouseSY = mousePos?.y;
 
       // ── Render: background ──
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = renderDpr(); // shared cap; 1x in Performance Mode (settings)
       beginRenderFrameWithDpr(dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       // FIX G2: cull food via the spatial hash before drawing. The old path

@@ -18,6 +18,9 @@ import { initSafeAreaTracking } from './safe-area';
 import { drawEliminatedBanner, drawControlsHint } from './renderer';
 import { createExtractionState, updateExtractionProgress, drawExtractRing } from '@/lib/snake/extraction';
 import { InputHandler } from './input';
+import { playSfx } from '@/lib/audio';
+import { haptic, HAPTIC } from '@/lib/haptics';
+import { renderDpr } from '@/lib/settings';
 
 // ─── Star Chip Renderer ─────────────────────────────────────────────────
 // Draws a golden 5-pointed star that rotates and pulses.
@@ -340,6 +343,8 @@ export default function OnlineSnakeGame({ onExit, arenaId, useTicket }: OnlineSn
 
           if (state.matchEnd.outcome === 'extract') {
             // Extraction success — no 5s elimination banner
+            playSfx('cash');
+            haptic(HAPTIC.cash);
             const ed = {
               score: state.matchEnd.score,
               kills: state.matchEnd.kills || 0,
@@ -353,6 +358,8 @@ export default function OnlineSnakeGame({ onExit, arenaId, useTicket }: OnlineSn
             setExtractData(ed);
           } else {
             // Death — 5s elimination banner then death screen
+            playSfx('death');
+            haptic(HAPTIC.death);
             setDeathData({
               killerName: state.killerName,
               killerTag: state.killerTag,
@@ -467,7 +474,7 @@ export default function OnlineSnakeGame({ onExit, arenaId, useTicket }: OnlineSn
     let _cachedW = 0;
     let _cachedH = 0;
     const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2); // FIX (mobile perf): cap DPR
+      const dpr = renderDpr(); // cap 2x, 1x in Performance Mode (settings)
       _cachedW = parent.clientWidth;
       _cachedH = parent.clientHeight;
       canvas.width = _cachedW * dpr;
@@ -545,7 +552,7 @@ export default function OnlineSnakeGame({ onExit, arenaId, useTicket }: OnlineSn
     const loop = () => {
       animRef.current = requestAnimationFrame(loop);
 
-      const dpr = Math.min(window.devicePixelRatio || 1, 2); // FIX (mobile perf): cap DPR
+      const dpr = renderDpr(); // cap 2x, 1x in Performance Mode (settings)
       const w = _cachedW || parent.clientWidth;
       const h = _cachedH || parent.clientHeight;
       if (w === 0 || h === 0) return;
@@ -621,6 +628,9 @@ export default function OnlineSnakeGame({ onExit, arenaId, useTicket }: OnlineSn
       const didUpdate = mgr.updateSnapshot(snap);
 
       // ── Update cached player state from snapshot ──
+      // AUDIO-EAT: a score increase is server-confirmed chip pickup — one
+      // numeric compare per frame, zero allocations.
+      if (snap.playerScore > playerScoreRef.current) playSfx('eat');
       playerScoreRef.current = snap.playerScore;
       playerKillsRef.current = snap.playerKills;
 

@@ -21,6 +21,7 @@
     "@capacitor-community/admob": "^8.1.0",
     "@capacitor/android": "^8.5.1",
     "@capacitor/core": "^8.5.1",
+    "@capacitor/screen-orientation": "8.0.1",
     "@prisma/client": "^6.11.1",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-dialog": "^1.1.14",

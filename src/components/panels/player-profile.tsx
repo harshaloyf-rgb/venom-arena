@@ -32,6 +32,7 @@ import {
   UserMinus,
   Swords,
   Share2,
+  Settings,
   X,
   Download,
   Gift,
@@ -74,6 +75,7 @@ import { TournamentGuardrailsSection, type TournamentStats } from './player-prof
 import { DeleteAccountSection } from './player-profile/delete-account';
 import { IdentityEditor } from './player-profile/identity-editor';
 import { SecuritySettingsCard } from './player-profile/security';
+import { SettingsSection } from './settings-section';
 import { GuestUpgradeBanner } from './player-profile/guest-upgrade';
 
 interface PlayerProfilePanelProps {
@@ -115,7 +117,7 @@ interface MatchHistoryEntry {
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
-type ProfileTab = 'stats' | 'history';
+type ProfileTab = 'stats' | 'history' | 'settings';
 
 // ---------------------------------------------------------------------------
 // Email Verification Banner
@@ -1060,6 +1062,17 @@ function ProfileContent({
             </div>
           </div>
 
+          {/* Settings — next to Sign Out (approved placement) */}
+          <button
+            type="button"
+            onClick={() => { setActiveTab('settings'); setIsEditing(false); }}
+            className="px-4 py-3 lg:px-2.5 lg:py-1 bg-indigo-950/20 hover:bg-indigo-950/40 border border-indigo-500/20 text-indigo-400 hover:text-indigo-300 rounded-xl text-xs font-bold transition duration-200 cursor-pointer flex items-center justify-center gap-1.5 shadow h-[52px] lg:h-8"
+            title="Open Settings"
+          >
+            <Settings className="w-4 h-4" />
+            <span className="whitespace-nowrap">Settings</span>
+          </button>
+
           {/* Logout with confirmation */}
           <AlertDialog>
             <AlertDialogTrigger asChild>
@@ -1111,6 +1124,7 @@ function ProfileContent({
           [
             { id: 'stats', label: 'Records & Statistics', icon: Target },
             { id: 'history', label: 'Match History Ledger', icon: History },
+            { id: 'settings', label: 'Settings', icon: Settings },
           ] as const
         ).map((tab) => {
           const Icon = tab.icon;
@@ -1803,6 +1817,9 @@ function ProfileContent({
           )}
         </div>
       )}
+
+      {/* TAB: SETTINGS — entry button sits next to Sign Out */}
+      {activeTab === 'settings' && <SettingsSection onToast={onToast} />}
 
       {/* PROFILE CARD MODAL */}
       {profileCardPreview && (
