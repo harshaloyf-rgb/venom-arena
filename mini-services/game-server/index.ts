@@ -730,7 +730,7 @@ function resolveArenaConfig(arenaId: string): ArenaConfig {
     return ONLINE_ARENA_CONFIG;
   }
 
-  // Practice arenas use full-size configs (1000 bots)
+  // Practice arenas use full-size configs (999 bots per botMix)
   const direct = ARENA_CONFIGS[arenaId];
   if (direct) return direct;
 

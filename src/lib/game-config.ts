@@ -64,19 +64,23 @@ export const ARENA_TIERS: ArenaTier[] = [
   { id: 'tier-30', name: 'The Singularity',     buyIn: 1_000_000_000,       description: 'The ultimate arena. One billion chips. Mythical territory where fortunes are made and destroyed in an instant.', difficulty: 'Legendary', color: 'bg-yellow-400/10 border-yellow-400/30 text-yellow-300', accentColor: '#facc15', borderAccent: '#eab308', botsCount: 999, rewardMultiplier: 150.0 },
 ];
 
-// ── 3 PRACTICE TIERS (all FREE, 0 XP, 1000 bots each) ──
+// ── 3 PRACTICE TIERS (all FREE, 0 XP) ──
+// botsCount = 999 to match the real per-arena botMix sums in snake/config.ts
+// (offline population is adaptive: device heuristic scales the mix down to
+// 350/600 on phones/weak hardware — see resolveOfflineBotTarget).
 
 export const PRACTICE_TIERS: ArenaTier[] = [
   {
     id: 'practice-easy',
     name: 'Easy Practice Arena',
     buyIn: 0,
+    // (botsCount 999 = the ARENA_EASY botMix sum — displayed, not spawned here)
     description: 'A relaxed learning zone. Slow speeds, simple AI behavior, and forgiving competition.',
     difficulty: 'Beginner',
     color: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
     accentColor: '#10b981',
     borderAccent: '#059669',
-    botsCount: 1000,
+    botsCount: 999,
     rewardMultiplier: 0.0,
     isPractice: true,
   },
@@ -89,7 +93,7 @@ export const PRACTICE_TIERS: ArenaTier[] = [
     color: 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400',
     accentColor: '#06b6d4',
     borderAccent: '#0891b2',
-    botsCount: 1000,
+    botsCount: 999,
     rewardMultiplier: 0.0,
     isPractice: true,
   },
@@ -102,7 +106,7 @@ export const PRACTICE_TIERS: ArenaTier[] = [
     color: 'bg-rose-500/10 border-rose-500/30 text-rose-400',
     accentColor: '#f43f5e',
     borderAccent: '#e11d48',
-    botsCount: 1000,
+    botsCount: 999,
     rewardMultiplier: 0.0,
     isPractice: true,
   },

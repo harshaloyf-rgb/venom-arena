@@ -150,6 +150,13 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
     }
   }
 
+  function handleJumpToAffordable() {
+    if (!highestAffordableTier) return;
+    setDifficultyFilter(null);
+    setSelectedTierId(highestAffordableTier.id);
+    setMobileExpandedId(highestAffordableTier.id); // expand the accordion on mobile too
+  }
+
   function handleEnterArena() {
     if (isOnline && !canAfford) {
       notify(
@@ -240,10 +247,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
           <div className="px-1">
             <button
               type="button"
-              onClick={() => {
-                setDifficultyFilter(null);
-                setSelectedTierId(highestAffordableTier.id);
-              }}
+              onClick={handleJumpToAffordable}
               className="text-[11px] lg:text-[11px] font-sans text-emerald-400/70 hover:text-emerald-400 transition-colors cursor-pointer flex items-center gap-1"
             >
               <Zap className="w-2.5 h-2.5" />
@@ -351,15 +355,15 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
                     {/* Stats row */}
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] font-sans text-slate-400">
                       <span><span className="text-slate-500">Extraction:</span> <span className="font-mono font-semibold text-emerald-400">EXIT ANYTIME</span></span>
-                      <span><span className="text-slate-500">Bots:</span> <span className="font-mono font-semibold text-cyan-400">{tier.botsCount.toLocaleString()}</span></span>
-                      <span><span className="text-slate-500">XP:</span> <span className="font-mono font-semibold text-indigo-400">x{tier.rewardMultiplier}</span></span>
+                      <span><span className="text-slate-500">Bots:</span> <span className="font-mono font-semibold text-cyan-400">{isOnline ? tier.botsCount.toLocaleString() : offlineBotLabel}</span></span>
+                      <span><span className="text-slate-500">XP:</span> <span className="font-mono font-semibold text-indigo-400">{isOnline ? `x${tier.rewardMultiplier}` : 'None (0 XP)'}</span></span>
                     </div>
 
                     {/* Warning — full text matching desktop */}
                     <div className="text-[11px] text-indigo-300/80 font-sans leading-tight">
                       {isOnline
-                        ? <><strong>ONLINE MULTIPLAYER:</strong> High-stakes arena for up to 1,000 players. Collect star chips from defeated opponents and extract safely. Graduated commission: <strong>0% if ≤3 players</strong>, <strong>35% if ≥4 players</strong>.</>
-                        : <><strong>OFFLINE PRACTICE MODE:</strong> Risk-free training ground. Test your skills against {tier.botsCount.toLocaleString()} bots without wagering, losing, or earning any of your banked chips!</>
+                        ? <><strong>ONLINE MULTIPLAYER:</strong> Live arena filled with 999 AI bots — real players join on top. Collect star chips from defeated <strong>real</strong> players (bots never drop stars) and extract alive to bank. Commission: <strong>0% with ≤3 real players</strong>, <strong>35% with ≥4</strong>. Die and your buy-in is gone.</>
+                        : <><strong>OFFLINE PRACTICE MODE:</strong> Risk-free training ground. Test your skills against {offlineBotLabel} in a bounded practice arena — no wagering, no chip loss, no XP. Extract or exit anytime!</>
                       }
                     </div>
 
@@ -463,7 +467,7 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
             <DetailRow
               icon={<Zap className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-slate-500" />}
               label="XP Multiplier"
-              value={`x${selectedTier.rewardMultiplier} Multi`}
+              value={isOnline ? `x${selectedTier.rewardMultiplier} Multi` : 'None (0 XP)'}
               valueClass="text-indigo-400"
             />
           </div>
@@ -474,15 +478,17 @@ export function ArenaSelector({ onPlay, onToast }: ArenaSelectorProps) {
             <div>
               {isOnline ? (
                 <span>
-                  <strong>ONLINE MULTIPLAYER:</strong> High-stakes arena for up to 1,000 players.
-                  Collect star chips from defeated opponents and extract safely.
-                  Graduated commission: <strong>0% if ≤3 players</strong>, <strong>35% if ≥4 players</strong>.
+                  <strong>ONLINE MULTIPLAYER:</strong> Live arena filled with 999 AI bots — real
+                  players join on top. Collect star chips from defeated <strong>real</strong> players
+                  (bots never drop stars) and extract alive to bank your winnings.
+                  Graduated commission: <strong>0% with ≤3 real players</strong>, <strong>35% with ≥4</strong>.
+                  Die and your buy-in is gone.
                 </span>
               ) : (
                 <span>
                   <strong>OFFLINE PRACTICE MODE:</strong> Risk-free training
-                  ground. Test your skills against {selectedTier.botsCount.toLocaleString()} bots without wagering,
-                  losing, or earning any of your banked chips!
+                  ground. Test your skills against {offlineBotLabel} in a bounded practice
+                  arena — no wagering, no chip loss, no XP. Extract or exit anytime!
                 </span>
               )}
             </div>

@@ -17,8 +17,9 @@ export function Section07_Map() {
         </InfoCard>
         <InfoCard title="Offline Map" accent="text-amber-300">
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong>Infinite</strong> — no boundaries, no wall death</li>
-            <li>Roam freely in any direction</li>
+            <li>Circular arena — size depends on the practice tier: <strong>Easy 29,000px</strong>, <strong>Medium 20,000px</strong>, <strong>Hard 14,000px</strong> radius</li>
+            <li>Boundary <strong>breathes</strong> exactly like online (~8% on a 60-second cycle) — <strong>touching the edge kills you</strong>, so watch it while practicing!</li>
+            <li>Hard is 4× denser than Easy — smaller map, scarcer food, more aggressive bots</li>
           </ul>
         </InfoCard>
         <InfoCard title="Safe Spawning" accent="text-cyan-300">
