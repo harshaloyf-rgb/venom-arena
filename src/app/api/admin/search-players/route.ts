@@ -50,6 +50,12 @@ export async function GET(req: NextRequest) {
         clanRank: true,
         lastSeenAt: true,
         createdAt: true,
+        // AUDIT auth-support fields (hashes are stripped below — never sent):
+        email: true,
+        emailVerified: true,
+        oauthProvider: true,
+        passwordHash: true,
+        securityPin: true,
       },
       orderBy: { lastSeenAt: 'desc' },
       take: limit,
@@ -57,5 +63,15 @@ export async function GET(req: NextRequest) {
     db.player.count({ where: whereClause }),
   ]);
 
-  return NextResponse.json({ players, total });
+  // Strip secret material — the admin UI only needs presence booleans.
+  const safePlayers = players.map((p) => {
+    const { passwordHash, securityPin, ...rest } = p;
+    return {
+      ...rest,
+      hasPassword: !!passwordHash,
+      hasPin: !!securityPin,
+    };
+  });
+
+  return NextResponse.json({ players: safePlayers, total });
 }

@@ -17,6 +17,7 @@ import {
 import { useAuth } from '@/components/providers/auth-provider';
 import { GameRulesModal } from '@/components/modals/game-rules-modal';
 import { COUNTRIES, regionOf, REGION_NAMES } from '@/lib/game-config';
+import { SUPPORT_EMAIL } from '@/lib/settings';
 import {
   Skull,
   Zap,
@@ -213,6 +214,12 @@ export default function AuthGate() {
             This account has been suspended for violating the arena rules. If you believe this is a
             mistake, contact support with your player tag.
           </p>
+          <a
+            href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Venom Arena — Ban Appeal')}`}
+            className="inline-block text-xs font-bold text-red-300 hover:text-red-200 underline underline-offset-2"
+          >
+            {SUPPORT_EMAIL}
+          </a>
         </div>
       </div>
     );
@@ -258,10 +265,28 @@ function AuthScreen() {
     }
   }
 
-  function handleSocialLogin(provider: string) {
+  async function handleSocialLogin(provider: string) {
     setError(null);
-    // Redirect to the server-side OAuth initiation
-    window.location.href = `/api/auth/social-login?provider=${provider}`;
+    const url = `/api/auth/social-login?provider=${provider}`;
+    try {
+      // AUDIT-FIX: the route 302s to the OAuth provider when configured, but
+      // returns JSON when the provider has no credentials. Navigating directly
+      // used to paint raw JSON on screen. Probe first: an opaque redirect means
+      // configured (real navigation), JSON means show a friendly inline error.
+      const res = await fetch(url, { redirect: 'manual' });
+      if (res.type === 'opaqueredirect' || res.status === 302 || res.status === 0) {
+        window.location.href = url;
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      setError(
+        data?.notConfigured
+          ? `${provider.charAt(0).toUpperCase() + provider.slice(1)} sign-in isn't set up yet — use email or guest play for now.`
+          : data?.error || 'Social sign-in is unavailable right now.',
+      );
+    } catch {
+      setError('Network error. Please try again.');
+    }
   }
 
   return (
@@ -381,11 +406,11 @@ function AuthScreen() {
             <div className="mt-0 space-y-0">
               <p className="text-[11px] text-muted-foreground text-center">
                 <Zap className="w-3 h-3 inline mr-1" />
-                Guests get 150 starter chips. Register to keep your progress.
+                Guests get 150 starter chips. Guest progress isn&apos;t saved — register to build a permanent career.
               </p>
 
-              {/* View Rules & Guide link */}
-              <div className="text-center">
+              {/* Bottom links: Rules & Guide + Privacy Policy */}
+              <div className="text-center flex items-center justify-center gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => setRulesOpen(true)}
@@ -394,6 +419,13 @@ function AuthScreen() {
                   <BookOpen className="w-3 h-3" />
                   View Rules &amp; Guide
                 </button>
+                <span className="text-[11px] text-border">·</span>
+                <a
+                  href="/privacy"
+                  className="text-[11px] text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+                >
+                  Privacy Policy
+                </a>
               </div>
             </div>
           </CardContent>
@@ -506,7 +538,7 @@ function LoginForm({
           onChange={(e) => setRemember(e.target.checked)}
           className="rounded border-border"
         />
-        <Label htmlFor="l-remember" className="text-[11px] text-muted-foreground cursor-pointer">
+        <Label htmlFor="l-remember" className="text-[11px] text-muted-foreground cursor-pointer" title="Unchecked, you stay signed in for 7 days on this device">
           Remember me (30 days)
         </Label>
       </div>
@@ -587,7 +619,7 @@ function RegisterForm({
     <form onSubmit={handleSubmit} className="space-y-0.5">
       <div className="space-y-1">
         <Label htmlFor="r-name" className="text-xs">Display name (up to 20 chars)</Label>
-        <Input id="r-name" required maxLength={20} value={name} onChange={(e) => setName(e.target.value)} placeholder="ViperStrike" className="text-xs h-6" />
+        <Input id="r-name" required minLength={2} maxLength={20} value={name} onChange={(e) => setName(e.target.value)} placeholder="ViperStrike" className="text-xs h-6" />
       </div>
       <div className="space-y-1">
         <Label htmlFor="r-email" className="text-xs">Email</Label>
@@ -616,7 +648,12 @@ function RegisterForm({
             minLength={6}
             autoComplete="new-password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              // AUDIT-FIX: clear the mismatch error reactively once fields agree
+              // (was: only cleared on resubmit).
+              if (confirmError && confirmPassword && confirmPassword === e.target.value) setConfirmError('');
+            }}
             placeholder="••••••••"
             className="pl-7 pr-8 text-xs h-6"
           />
@@ -653,10 +690,12 @@ function RegisterForm({
             autoComplete="new-password"
             value={confirmPassword}
             onChange={(e) => {
-              setConfirmPassword(e.target.value);
-              // Clear match error if they now match
-              const errEl = document.querySelector('[data-register-error]');
-              if (errEl && e.target.value === password) errEl.textContent = '';
+              const v = e.target.value;
+              setConfirmPassword(v);
+              // AUDIT-FIX: clear via React state when the fields now match.
+              // The old DOM textContent hack mutated the SERVER-error <p> and
+              // never cleared this state.
+              if (confirmError && v === password) setConfirmError('');
             }}
             placeholder="••••••••"
             className="pl-7 pr-8 text-xs h-6"
@@ -698,7 +737,7 @@ function RegisterForm({
           placeholder="e.g. VIPER-A7X2"
           className="text-xs h-6 font-mono"
         />
-        <p className="text-[11px] text-muted-foreground">Enter a friend's code to earn 2,500 bonus chips each!</p>
+        <p className="text-[11px] text-muted-foreground">Enter a friend&apos;s code — you both earn 2,500 chips after you play 5 matches!</p>
       </div>
 
       {error && (
@@ -842,7 +881,14 @@ function ForgotPasswordForm({
           className="text-sm"
         />
         <p className="text-[11px] text-muted-foreground">
-          This is the PIN you set during registration.
+          This is the PIN you set during registration. Didn&apos;t set one? Email{' '}
+          <a
+            href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Venom Arena — Account Recovery')}`}
+            className="text-primary hover:text-primary/80 underline underline-offset-2"
+          >
+            {SUPPORT_EMAIL}
+          </a>{' '}
+          to recover your account.
         </p>
       </div>
       <div className="space-y-1.5">

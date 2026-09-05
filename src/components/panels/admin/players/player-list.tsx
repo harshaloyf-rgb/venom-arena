@@ -28,6 +28,32 @@ export interface AdminPlayer {
   clanRank: string | null;
   lastSeenAt: string;
   createdAt: string;
+  // Auth-support info (presence booleans only — no secrets):
+  email?: string | null;
+  emailVerified?: boolean;
+  oauthProvider?: string | null;
+  hasPassword?: boolean;
+  hasPin?: boolean;
+}
+
+/** Auth badge: Guest / Email (✓ verified) / social provider name. */
+function AuthBadge({ p }: { p: AdminPlayer }) {
+  const base = 'text-[9px] lg:text-[10px] font-bold px-1.5 py-0.5 rounded border';
+  if (p.oauthProvider) {
+    const label = p.oauthProvider.charAt(0).toUpperCase() + p.oauthProvider.slice(1);
+    return <span title={`Social sign-in: ${label}`} className={`${base} bg-violet-500/10 border-violet-500/20 text-violet-400`}>{label}</span>;
+  }
+  if (p.email) {
+    return (
+      <span
+        title={p.emailVerified ? 'Registered + email verified' : 'Registered — email NOT verified'}
+        className={`${base} ${p.emailVerified ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'}`}
+      >
+        Email{p.emailVerified ? ' ✓' : ' ⚠'}
+      </span>
+    );
+  }
+  return <span title="Guest account — no email/password" className={`${base} bg-slate-500/10 border-slate-500/20 text-slate-400`}>Guest</span>;
 }
 
 // ── Player List Component ──
@@ -163,6 +189,10 @@ export function PlayerList({
 
                     {/* Right side: badges + chevron */}
                     <div className="flex items-center gap-1.5 lg:gap-1 shrink-0">
+                      <AuthBadge p={p} />
+                      {p.hasPin && (
+                        <span title="Security PIN set (password recovery possible)" className="text-[9px] lg:text-[10px] font-bold px-1.5 py-0.5 rounded border bg-sky-500/10 border-sky-500/20 text-sky-400">PIN</span>
+                      )}
                       {p.banned && <BannedBadge />}
                       {p.role === 'admin' && <RoleBadge role="admin" />}
                       {p.role !== 'admin' && !p.banned && <RoleBadge role="player" />}
