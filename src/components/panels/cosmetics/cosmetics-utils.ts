@@ -6,7 +6,7 @@ import type {
   SkinPreset,
   TaperStyle,
 } from './cosmetics-types';
-import { CUSTOM_SKIN_KEY, SKIN_PRESETS } from './cosmetics-types';
+import { CUSTOM_SKIN_KEY, SKIN_PRESETS, LEGACY_SKIN_ALIAS } from './cosmetics-types';
 import { ALL_COSMETICS, PASS_FREE_COSMETICS, PASS_ELITE_COSMETICS } from '@/lib/game-config';
 import type { SkinPattern } from '@/lib/game-config';
 
@@ -255,21 +255,41 @@ export function mapPatternToVisuals(pattern: SkinPattern): Omit<SkinVisualProps,
  * so the caller can render in "lab mode" with proper shapes/effects.
  */
 export function getSkinVisualProps(skinId: string): SkinVisualProps | null {
+  // PERF (2026-09-05 flicker fix): cache by skinId. This is called during
+  // render by every preview card — returning a fresh object/array each call
+  // changed identity on every re-render, which re-ran the canvas effect of
+  // EVERY shop card on any state change (equip) and flashed the whole page.
+  // Inputs are static module data, so caching is safe.
+  const cached = skinVisualPropsCache.get(skinId);
+  if (cached !== undefined) return cached;
+
   const pattern = skinPatternMap.get(skinId);
-  if (!pattern) return null; // No pattern → simple solid skin
+  if (!pattern) {
+    skinVisualPropsCache.set(skinId, null);
+    return null; // No pattern → simple solid skin
+  }
 
   const colors_data = skinColorMap.get(skinId);
   const colors = [colors_data?.color ?? '#22c55e'];
   if (colors_data?.secondaryColor) colors.push(colors_data.secondaryColor);
 
   const { bodyStyle, taperStyle, glow } = mapPatternToVisuals(pattern);
-  return { colors, bodyStyle, taperStyle, glow };
+  const result: SkinVisualProps = { colors, bodyStyle, taperStyle, glow };
+  skinVisualPropsCache.set(skinId, result);
+  return result;
 }
+
+const skinVisualPropsCache = new Map<string, SkinVisualProps | null>();
 
 /** Build a flat lookup: skinId → SkinPreset for fast preset resolution */
 const presetLookupMap = new Map<string, SkinPreset>();
 for (const p of SKIN_PRESETS) {
   presetLookupMap.set(p.id, p);
+}
+// Legacy manufactured ids resolve to their preset twin (2026-09-05 relocation)
+for (const [legacyId, targetId] of Object.entries(LEGACY_SKIN_ALIAS)) {
+  const target = presetLookupMap.get(targetId);
+  if (target && !presetLookupMap.has(legacyId)) presetLookupMap.set(legacyId, target);
 }
 
 /**
@@ -278,15 +298,26 @@ for (const p of SKIN_PRESETS) {
  * Used by the fallback renderer to draw bots with their preset shapes/taper/glow/colors.
  */
 export function getPresetVisualProps(skinId: string): SkinVisualProps | null {
+  // PERF (2026-09-05 flicker fix): cached — see getSkinVisualProps.
+  const cached = presetVisualPropsCache.get(skinId);
+  if (cached !== undefined) return cached;
+
   const preset = presetLookupMap.get(skinId);
-  if (!preset) return null;
-  return {
+  if (!preset) {
+    presetVisualPropsCache.set(skinId, null);
+    return null;
+  }
+  const result: SkinVisualProps = {
     colors: preset.colors,
     bodyStyle: preset.shape,
     taperStyle: preset.taper,
     glow: preset.glow,
   };
+  presetVisualPropsCache.set(skinId, result);
+  return result;
 }
+
+const presetVisualPropsCache = new Map<string, SkinVisualProps | null>();
 
 // ---------------------------------------------------------------------------
 // PERF: Pre-rendered glow sprite cache

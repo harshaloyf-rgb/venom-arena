@@ -217,6 +217,13 @@ export function GameSnakePreview({
   const effectiveTaper = taperStyle ?? autoTaper ?? 'natural';
   // Glow disabled in previews — glow only renders in-game while boosting
   const effectiveGlow = false;
+  // PERF (2026-09-05 flicker fix): the canvas effect below previously depended
+  // on the effectiveColors ARRAY IDENTITY. autoColors is rebuilt every render
+  // (localStorage/registry lookups), so any parent re-render (e.g. equip →
+  // refresh()) re-ran the effect of EVERY preview canvas on the page — tearing
+  // down, re-simulating and flashing all of them for ~1-2s. Depend on the
+  // colors CONTENT (stable string) instead of the array identity.
+  const effectiveColorsKey = effectiveColors ? effectiveColors.join('|') : '';
 
   // Derive a unique seed from skinId or color combination
   const instanceSeed = (() => {
@@ -804,7 +811,7 @@ export function GameSnakePreview({
       c.removeEventListener('mousemove', onMove);
       c.removeEventListener('mouseleave', onLeave);
     };
-  }, [width, height, segments, speed, scale, resolvedHead, resolvedBody, resolvedFace, effectiveBodyStyle, effectiveTaper, effectiveGlow, isLabMode, effectiveColors, instanceSeed, economy, showCosmetics]);
+  }, [width, height, segments, speed, scale, resolvedHead, resolvedBody, resolvedFace, effectiveBodyStyle, effectiveTaper, effectiveGlow, isLabMode, effectiveColorsKey, instanceSeed, economy, showCosmetics]);
 
   // Get skin name for label
   let skinName = '';

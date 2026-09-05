@@ -5,7 +5,7 @@
 import type { SkinAsset, SkinRarity } from './types';
 import { ALL_COSMETICS, PASS_FREE_COSMETICS, PASS_ELITE_COSMETICS } from '@/lib/game-config';
 import type { Skin } from '@/lib/game-config';
-import { SKIN_PRESETS, CUSTOM_SKIN_KEY } from '@/components/panels/cosmetics/cosmetics-types';
+import { SKIN_PRESETS, CUSTOM_SKIN_KEY, LEGACY_SKIN_ALIAS, resolveLegacySkinId } from '@/components/panels/cosmetics/cosmetics-types';
 import type { CustomSkinState } from '@/components/panels/cosmetics/cosmetics-types';
 import { lightenHex } from '../../components/panels/cosmetics/cosmetics-utils';
 
@@ -117,6 +117,16 @@ for (const preset of SKIN_PRESETS) {
     pattern,
     animation: preset.glow ? 'glow' : 'none',
   });
+}
+
+// Legacy manufactured-skin ids ('skin-fish', 'skin-lion', 'skin-motorbike',
+// 'skin-coin') resolve to their free preset twins so accounts that still wear
+// one keep rendering it after the 2026-09-05 premium-shop relocation.
+for (const [legacyId, targetId] of Object.entries(LEGACY_SKIN_ALIAS)) {
+  const target = presetSkinMap.get(targetId);
+  if (target && !presetSkinMap.has(legacyId)) {
+    presetSkinMap.set(legacyId, { ...target, id: legacyId });
+  }
 }
 
 // ─── Built-in DEFAULT_SKINS from atlas.ts (already have SkinAsset format) ───
@@ -320,8 +330,8 @@ function buildSkinAssetFromSegments(skinId: string, segs: any[]): SkinAsset {
  * Get the body color for a specific segment index of a multi-color skin.
  */
 export function getSegmentColor(skinId: string, segmentIndex: number): string | null {
-  // Check presets
-  const preset = SKIN_PRESETS.find((p) => p.id === skinId);
+  // Check presets (legacy manufactured ids alias onto their preset twin)
+  const preset = SKIN_PRESETS.find((p) => p.id === resolveLegacySkinId(skinId));
   if (preset) {
     return preset.colors[segmentIndex % preset.colors.length];
   }
@@ -373,7 +383,7 @@ export function registerSkinAsset(asset: SkinAsset): void {
 
 /** List of all alternating-color skin IDs (need special per-segment rendering) */
 export function isMultiColorSkin(skinId: string): boolean {
-  const preset = SKIN_PRESETS.find((p) => p.id === skinId);
+  const preset = SKIN_PRESETS.find((p) => p.id === resolveLegacySkinId(skinId));
   if (preset && preset.colors.length > 1) return true;
   if (skinId === 'custom-lab-skin') return true;
   if (isCustomDBSkin(skinId)) return true;

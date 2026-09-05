@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifySession } from '@/lib/auth';
 import { getCosmeticById } from '@/lib/game-config';
+import { SKIN_PRESETS, resolveLegacySkinId } from '@/components/panels/cosmetics/cosmetics-types';
 import { verifyInternalSecret } from '@/lib/api-helpers';
 
 // POST /api/match/verify
@@ -42,6 +43,12 @@ export async function POST(req: NextRequest) {
     try { unlocked = JSON.parse(p.unlockedSkins || '[]') as string[]; } catch {}
 
     const skin = getCosmeticById(p.currentSkin);
+    // 2026-09-05: the 13 manufactured originals moved to free SKIN_PRESETS —
+    // resolve preset (and legacy aliased) ids too so color/secondaryColor
+    // stay truthful for players wearing them.
+    const preset = skin
+      ? undefined
+      : SKIN_PRESETS.find((pr) => pr.id === resolveLegacySkinId(p.currentSkin || ''));
 
     // Determine rarity — honor the Skin.rarity override first (epic-clean
     // character faces), then fall back to the cost-derived default.
@@ -53,7 +60,7 @@ export async function POST(req: NextRequest) {
         : skin.cost <= 500 ? 'rare'
         : skin.cost <= 1000 ? 'epic'
         : 'legendary');
-    } else if (skinId.startsWith('preset-')) {
+    } else if (preset || skinId.startsWith('preset-')) {
       rarity = 'common';
     } else if (skinId === 'custom-lab-skin' || skinId.startsWith('custom-')) {
       rarity = 'rare';
@@ -90,8 +97,8 @@ export async function POST(req: NextRequest) {
         currentTrail: p.currentTrail,
         currentDeath: p.currentDeath,
         currentFlag: p.currentFlag,
-        color: skin?.color || '#22c55e',
-        secondaryColor: skin?.secondaryColor,
+        color: skin?.color || preset?.colors[0] || '#22c55e',
+        secondaryColor: skin?.secondaryColor ?? (preset ? preset.colors[1] : undefined),
         skinId,
         rarity,
         pattern: skin?.pattern,

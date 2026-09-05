@@ -252,14 +252,6 @@ export function SkinCard({
           </h3>
         </div>
 
-        {item.headStyle && (
-          <div className="flex justify-center mb-1">
-            <span className="text-[9px] lg:text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
-              🎭 Character Face · Lab-Proof
-            </span>
-          </div>
-        )}
-
         <p className="text-[11px] text-slate-500 text-center leading-snug lg:leading-tight mb-2.5 lg:mb-1 px-1">
           {item.description}
         </p>

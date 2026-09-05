@@ -38,6 +38,7 @@ import {
   BODY_STYLE_OPTIONS,
   TAPER_OPTIONS,
   CATEGORY_TABS,
+  resolveLegacySkinId,
 } from './cosmetics/cosmetics-types';
 import type { CosmeticsShopProps } from './cosmetics/cosmetics-types';
 import {
@@ -144,7 +145,8 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
           writeCustomSkinState(next);
           setCustomState(next);
         }
-        refresh();
+        // NOTE: postCosmetic already refresh()es — a second refresh here caused
+        // two app-wide re-renders per equip (page-wide canvas flash).
         notify(`Equipped Body Skin: ${item.name}`, 'success', onToast);
       }
     } else {
@@ -162,7 +164,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
           writeCustomSkinState(next);
           setCustomState(next);
         }
-        refresh();
+        // NOTE: postCosmetic already refresh()es — see equip branch above.
         notify(
           `Unlocked & Equipped ${item.name}! -${item.cost} CHIPS`,
           'success',
@@ -244,8 +246,9 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
       return;
     }
 
-    // Check if it's a free preset
-    const preset = SKIN_PRESETS.find((pr) => pr.id === skinId);
+    // Check if it's a free preset (legacy manufactured ids alias onto their
+    // preset twin after the 2026-09-05 premium-shop relocation)
+    const preset = SKIN_PRESETS.find((pr) => pr.id === resolveLegacySkinId(skinId));
     if (preset) {
       await handleEquipSkinPreset(preset);
       return;

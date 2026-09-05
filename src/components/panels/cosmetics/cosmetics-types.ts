@@ -806,7 +806,131 @@ export const SKIN_PRESETS: SkinPreset[] = [
     category: 'Classic',
     description: 'Mythic banded coils long enough to ring an arena.',
   },
+
+  // ---------------------------------------------------------------------------
+  // SKIN_PRESETS batch 3 (2026-09-05): the 13 manufactured premium originals
+  // relocated to the FREE pool (user decision "yes relocate to free presets").
+  // Original ids are KEPT (skin-venom, skin-gold, ...) so accounts that still
+  // have them as currentSkin keep resolving in the skin registry with zero
+  // migration. The 4 that already had preset twins (fish/lion/motorbike/coin)
+  // are NOT duplicated here — see LEGACY_SKIN_ALIAS below.
+  // ---------------------------------------------------------------------------
+  {
+    id: 'skin-default',
+    name: 'Toxic Slime',
+    colors: ['#22c55e', '#22c55e', '#22c55e', '#22c55e'],
+    shape: 'smooth',
+    taper: 'natural',
+    glow: false,
+    emoji: '🐍',
+    category: 'Classic',
+    description: 'The standard issue bio-luminescent skin.',
+  },
+  {
+    id: 'skin-venom',
+    name: 'Venom Stryker',
+    colors: ['#a855f7', '#6b21a8', '#a855f7', '#6b21a8'],
+    shape: 'smooth',
+    taper: 'natural',
+    glow: false,
+    emoji: '👾',
+    category: 'Cyber',
+    description: 'A striking royal purple skin designed to intimidate.',
+  },
+  {
+    id: 'skin-cyber',
+    name: 'Cyber Grid',
+    colors: ['#06b6d4', '#0891b2', '#22d3ee', '#0891b2'],
+    shape: 'smooth',
+    taper: 'natural',
+    glow: false,
+    emoji: '🤖',
+    category: 'Cyber',
+    description: 'Futuristic grid design that flows like computer data.',
+  },
+  {
+    id: 'skin-rainbow',
+    name: 'Chameleon Aurora',
+    colors: ['#ec4899', '#3b82f6', '#22c55e', '#f59e0b'],
+    shape: 'crystal',
+    taper: 'wave',
+    glow: true,
+    emoji: '🌈',
+    category: 'Classic',
+    description: 'A high-fidelity skin that transitions smoothly through a full color spectrum.',
+  },
+  {
+    id: 'skin-neonglow',
+    name: 'Cyber Glow Pulsar',
+    colors: ['#06b6d4', '#a855f7', '#22d3ee', '#a855f7'],
+    shape: 'crystal',
+    taper: 'natural',
+    glow: true,
+    emoji: '⚡',
+    category: 'Cyber',
+    description: 'Radiates intense neon cyberpunk particles and a glowing high-contrast energy aura.',
+  },
+  {
+    id: 'skin-metallic',
+    name: 'Ironclad Titanium',
+    colors: ['#64748b', '#475569', '#94a3b8', '#475569'],
+    shape: 'fortress',
+    taper: 'uniform',
+    glow: false,
+    emoji: '⚙️',
+    category: 'Cyber',
+    description: 'Sleek metallic armor plating that reflects light with heavy specularity.',
+  },
+  {
+    id: 'skin-camo',
+    name: 'Bio-Desert Camo',
+    colors: ['#10b981', '#d97706', '#10b981', '#d97706'],
+    shape: 'stingray',
+    taper: 'natural',
+    glow: false,
+    emoji: '🛡️',
+    category: 'Classic',
+    description: 'Tactical jungle and sand digital scales to blend into toxic terrains.',
+  },
+  {
+    id: 'skin-gold',
+    name: 'Midas Touch',
+    colors: ['#fbbf24', '#b45309', '#fbbf24', '#b45309'],
+    shape: 'smooth',
+    taper: 'natural',
+    glow: true,
+    emoji: '👑',
+    category: 'Classic',
+    description: 'A skin layered in solid gold to boast extreme wealth.',
+  },
+  {
+    id: 'skin-crimson',
+    name: 'Crimson Fury',
+    colors: ['#ef4444', '#991b1b', '#ef4444', '#991b1b'],
+    shape: 'smooth',
+    taper: 'natural',
+    glow: false,
+    emoji: '🔥',
+    category: 'Classic',
+    description: 'For players who leave a trail of blood in their wake.',
+  },
 ];
+
+// ---------------------------------------------------------------------------
+// Legacy manufactured-skin ids (removed from the premium shop 2026-09-05)
+// that map onto their existing free preset twins. Keeps previously-equipped
+// ids ('skin-fish', ...) resolvable in the skin registry and inventory equip.
+// ---------------------------------------------------------------------------
+export const LEGACY_SKIN_ALIAS: Record<string, string> = {
+  'skin-fish': 'preset-fish',
+  'skin-lion': 'preset-lion',
+  'skin-motorbike': 'preset-motorbike',
+  'skin-coin': 'preset-coin',
+};
+
+export function resolveLegacySkinId(skinId: string): string {
+  return LEGACY_SKIN_ALIAS[skinId] ?? skinId;
+}
 
 // ---------------------------------------------------------------------------
 // localStorage custom-skin persistence
