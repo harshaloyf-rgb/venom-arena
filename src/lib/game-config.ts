@@ -139,9 +139,15 @@ export interface Skin {
   description: string;
   emoji?: string;
   pattern?: SkinPattern;
+  /** Explicit rarity override. When omitted, rarity is derived from cost —
+   *  which made every premium skin cost>1000 'legendary' and silently armed
+   *  the legendary particle emitter (2026-09-05 online crash/lag). Set this
+   *  field deliberately on any skin that must NOT auto-legendary. */
+  rarity?: 'common' | 'rare' | 'epic' | 'legendary';
   /** Premium exclusive: id of a code-drawn character face (character-faces.ts).
-   *  The face replaces the head's default eyes and CANNOT be reproduced in the
-   *  Genetic Pattern Lab (the lab only edits body patterns, never faces). */
+   *  The face REPLACES the entire head (full character head, own colors,
+   *  ears/horns may extend past the head circle) and CANNOT be reproduced in
+   *  the Genetic Pattern Lab (the lab only edits body patterns, never faces). */
   headStyle?: string;
 }
 
@@ -160,44 +166,18 @@ export const ALL_COSMETICS: Skin[] = [
   { id: 'skin-camo', name: 'Bio-Desert Camo', cost: 900, type: 'skin', color: '#10b981', secondaryColor: '#d97706', description: 'Tactical jungle and sand digital scales to blend into toxic terrains.', emoji: '🛡️', pattern: 'camo' },
   { id: 'skin-gold', name: 'Midas Touch', cost: 1200, type: 'skin', color: '#fbbf24', secondaryColor: '#b45309', description: 'A skin layered in solid gold to boast extreme wealth.', emoji: '👑' },
   { id: 'skin-crimson', name: 'Crimson Fury', cost: 1800, type: 'skin', color: '#ef4444', secondaryColor: '#991b1b', description: 'For players who leave a trail of blood in their wake.', emoji: '🔥' },
-  // ----- Skins batch 2 (2026-09-05 catalog expansion, 24 data-only) -----
-  { id: 'skin-emerald-fang', name: 'Emerald Fang', cost: 40, type: 'skin', color: '#10b981', secondaryColor: '#065f46', description: 'Polished green scales with a venomous edge.', emoji: '🟢' },
-  { id: 'skin-rose-quartz', name: 'Rose Quartz', cost: 100, type: 'skin', color: '#fb7185', secondaryColor: '#be123c', description: 'Soft crystal pink that shimmers through the spectrum.', emoji: '🌸', pattern: 'rainbow' },
-  { id: 'skin-sapphire-ice', name: 'Sapphire Ice', cost: 100, type: 'skin', color: '#38bdf8', secondaryColor: '#0369a1', description: 'Frozen sapphire facets with a sub-zero glow.', emoji: '💎', pattern: 'neon' },
-  { id: 'skin-amber-royal', name: 'Amber Royal', cost: 200, type: 'skin', color: '#f59e0b', secondaryColor: '#78350f', description: 'Fossilized amber plating fit for a Pharaoh.', emoji: '🟠', pattern: 'metallic' },
-  { id: 'skin-violet-storm', name: 'Violet Storm', cost: 200, type: 'skin', color: '#8b5cf6', secondaryColor: '#4c1d95', description: 'Charged violet cells that pulse before the strike.', emoji: '🌩️', pattern: 'pulse' },
-  { id: 'skin-crimson-ops', name: 'Crimson Ops', cost: 350, type: 'skin', color: '#ef4444', secondaryColor: '#450a0a', description: 'Tactical red-on-black digital scales for covert runs.', emoji: '🎯', pattern: 'camo' },
-  { id: 'skin-deep-abyss', name: 'Deep Abyss', cost: 350, type: 'skin', color: '#0f172a', secondaryColor: '#334155', description: 'Pressure-proof plating from the midnight zone.', emoji: '🌑', pattern: 'metallic' },
-  { id: 'skin-toxic-bloom', name: 'Toxic Bloom', cost: 350, type: 'skin', color: '#84cc16', secondaryColor: '#365314', description: 'Bio-luminous flora that thrives on venom.', emoji: '☣️', pattern: 'camo' },
-  { id: 'skin-solar-pegasus', name: 'Solar Pegasus', cost: 500, type: 'skin', color: '#fbbf24', secondaryColor: '#f97316', description: 'Winged-light spectrum flowing stallion-fast.', emoji: '🐴', pattern: 'rainbow' },
-  { id: 'skin-midnight-racer', name: 'Midnight Racer', cost: 500, type: 'skin', color: '#090d16', secondaryColor: '#06b6d4', description: 'Night-circuit livery with glowing data lines.', emoji: '🏁', pattern: 'cyber' },
-  { id: 'skin-coral-reef', name: 'Coral Reef', cost: 500, type: 'skin', color: '#ff7f50', secondaryColor: '#0ea5e9', description: 'Warm coral polyps over deep sea blue.', emoji: '🪸', pattern: 'neon' },
-  { id: 'skin-onyx-plate', name: 'Onyx Plate', cost: 750, type: 'skin', color: '#1e293b', secondaryColor: '#94a3b8', description: 'Black stone armor edged in brushed silver.', emoji: '⚫', pattern: 'metallic' },
-  { id: 'skin-gold-pharaoh', name: 'Golden Pharaoh', cost: 750, type: 'skin', color: '#fbbf24', secondaryColor: '#b45309', description: 'Wrapped gold banding for a tomb-guarding monarch.', emoji: '🏺', pattern: 'zebra' },
-  { id: 'skin-plasma-burst', name: 'Plasma Burst', cost: 750, type: 'skin', color: '#e879f9', secondaryColor: '#06b6d4', description: 'Contained plasma surge on the verge of rupture.', emoji: '💥', pattern: 'pulse' },
-  { id: 'skin-jade-emperor', name: 'Jade Emperor', cost: 900, type: 'skin', color: '#059669', secondaryColor: '#fbbf24', description: 'Imperial jade with gilded ceremony trim.', emoji: '🀄', pattern: 'metallic' },
-  { id: 'skin-frost-wolf', name: 'Frost Wolf', cost: 900, type: 'skin', color: '#e0f2fe', secondaryColor: '#1e40af', description: 'Tundra camouflage for a pack hunter.', emoji: '🐺', pattern: 'camo' },
-  { id: 'skin-magma-heart', name: 'Magma Heart', cost: 900, type: 'skin', color: '#f97316', secondaryColor: '#7f1d1d', description: 'A molten core glowing through cracked crust.', emoji: '❤️‍🔥', pattern: 'glow' },
-  { id: 'skin-quantum-ghost', name: 'Quantum Ghost', cost: 1200, type: 'skin', color: '#a5f3fc', secondaryColor: '#7c3aed', description: 'Exists in two arenas at once. Renders in one.', emoji: '🫧', pattern: 'cyber' },
-  { id: 'skin-dragon-ember', name: 'Dragon Ember', cost: 1200, type: 'skin', color: '#b91c1c', secondaryColor: '#f59e0b', description: 'Last embers of a furnace-breathing bloodline.', emoji: '🐲', pattern: 'rainbow' },
-  { id: 'skin-void-walker', name: 'Void Walker', cost: 1200, type: 'skin', color: '#090d16', secondaryColor: '#6366f1', description: 'Steps between worlds, trailing indigo starlight.', emoji: '🕳️', pattern: 'glow' },
-  { id: 'skin-candy-pop', name: 'Candy Pop', cost: 1500, type: 'skin', color: '#f472b6', secondaryColor: '#22d3ee', description: 'Sugar-rush spectrum with a fizzy finish.', emoji: '🍭', pattern: 'rainbow' },
-  { id: 'skin-thunder-raja', name: 'Thunder Raja', cost: 1500, type: 'skin', color: '#facc15', secondaryColor: '#7c3aed', description: 'Storm-crowned king whose coils crackle.', emoji: '👑', pattern: 'pulse' },
-  { id: 'skin-oblivion', name: 'Oblivion', cost: 1800, type: 'skin', color: '#111827', secondaryColor: '#dc2626', description: 'The last thing a run-away snake never sees.', emoji: '♏', pattern: 'cyber' },
-  { id: 'skin-world-serpent', name: 'World Serpent', cost: 1800, type: 'skin', color: '#14532d', secondaryColor: '#fbbf24', description: 'Mythic banded coils long enough to ring an arena.', emoji: '🌍', pattern: 'zebra' },
-  // ----- CHARACTER-FACE premium exclusives (2026-09-05, headStyle faces) -----
-  { id: 'skin-cf-panda', name: 'Panda Brawler', cost: 2500, type: 'skin', color: '#090d16', secondaryColor: '#f8fafc', description: 'Snow-white face on a midnight body. Character-face exclusive — cannot be recreated in the Genetic Lab.', emoji: '🐼', headStyle: 'panda' },
-  { id: 'skin-cf-frog', name: 'Lucky Frog', cost: 2000, type: 'skin', color: '#059669', secondaryColor: '#22c55e', description: 'Top-mounted eye bulbs and a fortune-cat grin. Character-face exclusive — lab-proof.', emoji: '🐸', headStyle: 'frog' },
-  { id: 'skin-cf-ghost', name: 'Boo Wraith', cost: 3000, type: 'skin', color: '#64748b', secondaryColor: '#e2e8f0', description: 'Hollow eyes, soft Ooo. Spook the lobby. Character-face exclusive — lab-proof.', emoji: '👻', headStyle: 'ghost' },
-  { id: 'skin-cf-tiger', name: 'Turbo Tiger', cost: 2500, type: 'skin', color: '#b45309', secondaryColor: '#f97316', description: 'Striped forehead, whiskers, zero mercy. Character-face exclusive — lab-proof.', emoji: '🐯', headStyle: 'tiger' },
-  { id: 'skin-cf-shark', name: 'Abyss Shark', cost: 3000, type: 'skin', color: '#334155', secondaryColor: '#94a3b8', description: 'Jagged grin, dead black eyes. Blood in the water. Character-face exclusive — lab-proof.', emoji: '🦈', headStyle: 'shark' },
-  { id: 'skin-cf-fox', name: 'Sly Fox', cost: 3500, type: 'skin', color: '#ea580c', secondaryColor: '#fb923c', description: 'Half-lid eyes that already know your route. Character-face exclusive — lab-proof.', emoji: '🦊', headStyle: 'fox' },
-  { id: 'skin-cf-robot', name: 'Circuit Bot', cost: 3000, type: 'skin', color: '#1e293b', secondaryColor: '#475569', description: 'Scanning visor with pulsing LED eyes. Character-face exclusive — lab-proof.', emoji: '🤖', headStyle: 'robot' },
-  { id: 'skin-cf-alien', name: 'Nebula Grey', cost: 3500, type: 'skin', color: '#065f46', secondaryColor: '#4ade80', description: 'It studied your banked chips. It approves. Character-face exclusive — lab-proof.', emoji: '👽', headStyle: 'alien' },
-  { id: 'skin-cf-ninja', name: 'Shadow Shinobi', cost: 4000, type: 'skin', color: '#0f172a', secondaryColor: '#1e293b', description: 'Crimson headband, silent entry, unseen exit. Character-face exclusive — lab-proof.', emoji: '🥷', headStyle: 'ninja' },
-  { id: 'skin-cf-pirate', name: 'Reef Raider', cost: 4500, type: 'skin', color: '#92400e', secondaryColor: '#d4a373', description: 'Polka bandana, eyepatch, plundered gold. Character-face exclusive — lab-proof.', emoji: '🏴‍☠️', headStyle: 'pirate' },
-  { id: 'skin-cf-devil', name: 'Inferno Imp', cost: 4000, type: 'skin', color: '#7f1d1d', secondaryColor: '#dc2626', description: 'Horned, fanged, and very interested in your extract. Character-face exclusive — lab-proof.', emoji: '😈', headStyle: 'devil' },
-  { id: 'skin-cf-angel', name: 'Seraph Glow', cost: 4000, type: 'skin', color: '#a8a29e', secondaryColor: '#fefce8', description: 'Gold halo, serene eyes, merciful extract runs. Character-face exclusive — lab-proof.', emoji: '😇', headStyle: 'angel' },
+  { id: 'skin-cf-panda', name: 'Panda Brawler', cost: 2500, type: 'skin', color: '#090d16', secondaryColor: '#f8fafc', description: 'Snow-white face on a midnight body. Character-face exclusive — cannot be recreated in the Genetic Lab.', emoji: '🐼', headStyle: 'panda', rarity: 'epic' },
+  { id: 'skin-cf-frog', name: 'Lucky Frog', cost: 2000, type: 'skin', color: '#059669', secondaryColor: '#22c55e', description: 'Top-mounted eye bulbs and a fortune-cat grin. Character-face exclusive — lab-proof.', emoji: '🐸', headStyle: 'frog', rarity: 'epic' },
+  { id: 'skin-cf-ghost', name: 'Boo Wraith', cost: 3000, type: 'skin', color: '#64748b', secondaryColor: '#e2e8f0', description: 'Hollow eyes, soft Ooo. Spook the lobby. Character-face exclusive — lab-proof.', emoji: '👻', headStyle: 'ghost', rarity: 'epic' },
+  { id: 'skin-cf-tiger', name: 'Turbo Tiger', cost: 2500, type: 'skin', color: '#b45309', secondaryColor: '#f97316', description: 'Striped forehead, whiskers, zero mercy. Character-face exclusive — lab-proof.', emoji: '🐯', headStyle: 'tiger', rarity: 'epic' },
+  { id: 'skin-cf-shark', name: 'Abyss Shark', cost: 3000, type: 'skin', color: '#334155', secondaryColor: '#94a3b8', description: 'Jagged grin, dead black eyes. Blood in the water. Character-face exclusive — lab-proof.', emoji: '🦈', headStyle: 'shark', rarity: 'epic' },
+  { id: 'skin-cf-fox', name: 'Sly Fox', cost: 3500, type: 'skin', color: '#ea580c', secondaryColor: '#fb923c', description: 'Half-lid eyes that already know your route. Character-face exclusive — lab-proof.', emoji: '🦊', headStyle: 'fox', rarity: 'epic' },
+  { id: 'skin-cf-robot', name: 'Circuit Bot', cost: 3000, type: 'skin', color: '#1e293b', secondaryColor: '#475569', description: 'Scanning visor with pulsing LED eyes. Character-face exclusive — lab-proof.', emoji: '🤖', headStyle: 'robot', rarity: 'epic' },
+  { id: 'skin-cf-alien', name: 'Nebula Grey', cost: 3500, type: 'skin', color: '#065f46', secondaryColor: '#4ade80', description: 'It studied your banked chips. It approves. Character-face exclusive — lab-proof.', emoji: '👽', headStyle: 'alien', rarity: 'epic' },
+  { id: 'skin-cf-ninja', name: 'Shadow Shinobi', cost: 4000, type: 'skin', color: '#0f172a', secondaryColor: '#1e293b', description: 'Crimson headband, silent entry, unseen exit. Character-face exclusive — lab-proof.', emoji: '🥷', headStyle: 'ninja', rarity: 'epic' },
+  { id: 'skin-cf-pirate', name: 'Reef Raider', cost: 4500, type: 'skin', color: '#92400e', secondaryColor: '#d4a373', description: 'Polka bandana, eyepatch, plundered gold. Character-face exclusive — lab-proof.', emoji: '🏴‍☠️', headStyle: 'pirate', rarity: 'epic' },
+  { id: 'skin-cf-devil', name: 'Inferno Imp', cost: 4000, type: 'skin', color: '#7f1d1d', secondaryColor: '#dc2626', description: 'Horned, fanged, and very interested in your extract. Character-face exclusive — lab-proof.', emoji: '😈', headStyle: 'devil', rarity: 'epic' },
+  { id: 'skin-cf-angel', name: 'Seraph Glow', cost: 4000, type: 'skin', color: '#a8a29e', secondaryColor: '#fefce8', description: 'Gold halo, serene eyes, merciful extract runs. Character-face exclusive — lab-proof.', emoji: '😇', headStyle: 'angel', rarity: 'epic' },
 ];
 
 export function getCosmeticById(id: string): Skin | undefined {

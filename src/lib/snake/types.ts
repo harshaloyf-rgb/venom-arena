@@ -103,6 +103,10 @@ export interface SkinAtlas {
   body: AtlasRegion[];
   /** Tail sprite region */
   tail: AtlasRegion;
+  /** Character-face skins ONLY: scale factor the head sprite must be drawn at
+   *  (the face was baked at a reduced radius so ears/horns fit the region —
+   *  drawing at this scale keeps the visible head circle at its normal size). */
+  headStyleDrawScale?: number;
 }
 
 /** Particle emitter config for legendary skins */

@@ -87,6 +87,7 @@ export function CosmeticsSection({
           speed={1.2}
           scale={1.1}
           responsive
+          showCosmetics
         />
       </div>
 

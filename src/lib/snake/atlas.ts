@@ -19,7 +19,7 @@ import {
   LEGENDARY_GLOW_SIZE,
 } from './config';
 import type { IPathBuffer } from './pool';
-import { drawCharacterFace } from '../../components/panels/cosmetics/character-faces';
+import { drawCharacterFace, characterFaceBakeRadius } from '../../components/panels/cosmetics/character-faces';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -97,7 +97,7 @@ export class SkinAtlasManager {
       width: HEAD_SPRITE_SIZE,
       height: HEAD_SPRITE_SIZE,
     };
-    this.renderHeadSprite(ctx, headRegion, asset.headColor, accent, asset.headStyle);
+    const headMeta = this.renderHeadSprite(ctx, headRegion, asset.headColor, accent, asset.headStyle);
 
     // ── Body regions ──
     const bodyRegions: AtlasRegion[] = [];
@@ -139,6 +139,7 @@ export class SkinAtlasManager {
       head: headRegion,
       body: bodyRegions,
       tail: tailRegion,
+      headStyleDrawScale: headMeta.headStyleDrawScale,
     };
 
     this.atlases.set(asset.id, atlas);
@@ -153,10 +154,21 @@ export class SkinAtlasManager {
     color: string,
     accent: string,
     headStyle?: string,
-  ): void {
+  ): { headStyleDrawScale?: number } {
     const cx = region.x + region.width / 2;
     const cy = region.y + region.height / 2;
     const r = region.width / 2 - 4;
+
+    // Premium character face — FULL head replacement, baked INTO the sprite
+    // (facing +x / angle 0) so it rotates with the head at render time. The
+    // face fills its own head circle and draws ears/horns up to 1.3× its
+    // radius, so it is baked at a reduced radius and the renderer draws the
+    // sprite proportionally larger — visible head size stays unchanged.
+    if (headStyle) {
+      const rBake = characterFaceBakeRadius(region.width / 2);
+      drawCharacterFace(ctx, cx, cy, rBake, 0, headStyle);
+      return { headStyleDrawScale: (region.width / 2) / rBake };
+    }
 
     // Flat fill — no 3D gradient baked in. The gradient is applied at render time
     // in screen space so it doesn't rotate with the head (fixes tilt illusion).
@@ -165,22 +177,15 @@ export class SkinAtlasManager {
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
 
-    // Premium character face — baked INTO the sprite (facing +x / angle 0) so
-    // it rotates with the head at render time. The face draws its own eyes;
-    // the renderer skips drawResponsiveEyes for these skins.
-    if (headStyle) {
-      drawCharacterFace(ctx, cx, cy, r, 0, headStyle);
-    }
-    else {
-      // Accent ring only for non-face heads (a ring would clash with a face)
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.stroke();
-    }
+    // Accent ring (non-face heads only — a ring would clash with a face)
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
 
     // No baked-in eyes — responsive eyes are drawn at render time in screen space.
+    return {};
   }
 
   // ── Tail sprite ─────────────────────────────────────────────────────────
@@ -521,14 +526,26 @@ export class SkinAtlasManager {
     time: number,
     config: ParticleEmitterConfig,
   ): Array<{ x: number; y: number; vx: number; vy: number; life: number; maxLife: number; radius: number; color: string }> {
-    const dt = time - this.lastEmitTime;
+    // ── HARDENING (2026-09-05 hotfix) ──
+    // This emitter previously had three latent bugs that produced a
+    // RangeError "Maximum call stack size exceeded" + permanent lag the first
+    // time a legendary skin was worn online (dt was milliseconds-since-page-
+    // load on the first call, multiplied by an unclamped rate, then spread
+    // into pool.push). None of these are reachable anymore:
+    const rawDt = time - this.lastEmitTime;
     this.lastEmitTime = time;
-    if (dt <= 0 || path.length === 0) return [];
-
-    this.emitAccumulator += dt * config.rate;
+    // (1) First call after mount: lastEmitTime=0, dt = whole page lifetime.
+    //     Initialize and skip instead of emitting a page-lifetime burst.
+    if (this.lastEmitTime === 0 || rawDt <= 0 || path.length === 0) return [];
+    // (2) Clamp dt to at most 100ms (tab background / long frames).
+    const dt = Math.min(rawDt, 100);
+    // (3) rate is per-SECOND; dt is milliseconds. Convert explicitly.
+    this.emitAccumulator += (dt / 1000) * config.rate;
     const count = Math.floor(this.emitAccumulator);
     this.emitAccumulator -= count;
-    if (count <= 0) return [];
+    // (4) Never emit more than a small burst per frame, no matter what.
+    const capped = Math.min(count, 6);
+    if (capped <= 0) return [];
 
     const particles: Array<{
       x: number; y: number; vx: number; vy: number;
@@ -539,7 +556,7 @@ export class SkinAtlasManager {
     const headY = path.headY;
     const backAngle = angle + Math.PI; // behind the snake
 
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < capped; i++) {
       const spreadAngle = backAngle + (Math.random() - 0.5) * config.spread;
       const speed = config.speed * (0.5 + Math.random() * 0.5);
       particles.push({

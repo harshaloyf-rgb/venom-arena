@@ -32,8 +32,12 @@ function registerCosmeticSkin(item: Skin): void {
   const headColor = item.secondaryColor ?? bodyColor;
   const accentColor = lightenHex(bodyColor, 0.4);
   const pattern = mapCosmeticPattern(item.pattern);
-  const animation = mapCosmeticAnimation(item.pattern, item.cost);
-  const rarity = rarityFromCost(item.cost);
+  // Character-face skins are EPIC-CLEAN by product decision (2026-09-05):
+  // epic badge, no legendary particle emitter, no glow/pulse animation.
+  const animation = item.headStyle ? 'none' as const : mapCosmeticAnimation(item.pattern, item.cost);
+  // Explicit Skin.rarity overrides the cost-derived default (cost>1000 used to
+  // auto-legendary every premium skin and arm the particle emitter).
+  const rarity = item.rarity ?? rarityFromCost(item.cost);
 
   cosmeticSkinMap.set(item.id, {
     id: item.id,

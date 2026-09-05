@@ -326,7 +326,9 @@ function getGlowSprite(color: string, r: number): OffscreenCanvas | HTMLCanvasEl
     (oc as HTMLCanvasElement).width = diameter;
     (oc as HTMLCanvasElement).height = diameter;
   }
-  const cx = oc.getContext('2d')!;
+  // TS: the union canvas type makes getContext return the broad RenderingContext
+  // union (includes ImageBitmapRenderingContext) — narrow to the 2D contexts.
+  const cx = oc.getContext('2d') as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
   const center = diameter / (2 * dpr);
   cx.scale(dpr, dpr);
 

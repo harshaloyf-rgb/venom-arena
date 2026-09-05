@@ -277,6 +277,9 @@ interface RenderParticle {
 
 /** Per-snake live particle pool */
 const particlePools: Map<string, RenderParticle[]> = new Map();
+// Legendary snake ids seen in the last pruning window (see legendary block) —
+// lets us delete pools for snakes that no longer exist.
+const renderedLegendaryIds: Set<string> = new Set();
 
 /** Per-snake smoothed pupil state for lerp-based eye tracking */
 const pupilSmoothMap: Map<string, { shiftX: number; shiftY: number; prevAngle: number; angleReady: boolean; smoothAngle: number; prevSmoothAngle: number }> = new Map();
@@ -679,9 +682,23 @@ export function renderSnakeAtlas(
     const emitted = atlasManager.emitParticles(
       snake.path, snake.angle, time, LEGENDARY_EMITTER_CONFIG,
     );
-    pool.push(...emitted);
+    // HARDENING (2026-09-05): loop-push instead of spread — `pool.push(...emitted)`
+    // throws RangeError "Maximum call stack size exceeded" when `emitted` is large.
+    for (let e = 0; e < emitted.length; e++) pool.push(emitted[e]);
+    // HARD cap on live particles per snake (legendary config: 30/s, 0.8s life
+    // → steady state ≈ 24; 240 gives a 10x safety margin).
+    if (pool.length > 240) pool.splice(0, pool.length - 240);
     const updated = atlasManager.updateParticles(pool, 1 / 60);
     particlePools.set(snake.id, updated);
+    // Prune pools of snakes that are gone (map is keyed by snake id and never
+    // cleaned — a long session with many legendary snakes leaked entries).
+    if ((_frameCounter & 127) === 0 && particlePools.size > 0) {
+      for (const pid of particlePools.keys()) {
+        if (!renderedLegendaryIds.has(pid)) particlePools.delete(pid);
+      }
+      renderedLegendaryIds.clear();
+    }
+    renderedLegendaryIds.add(snake.id);
   }
 
   // ── Walk path at dynamic step (based on radius), capped to maxSegs ──
@@ -790,6 +807,13 @@ export function renderSnakeAtlas(
     const hsx = headSX;
     const hsy = headSY;
     const headDrawSize = segRadius * 2 * 1.05;
+    // Character-face sprites are baked at a reduced radius (ears/horns need
+    // room) — draw them proportionally larger so the VISIBLE head circle
+    // stays exactly headDrawSize. Shading/pointer/name below must keep using
+    // headDrawSize (the visible head), not headDrawSizeSprite.
+    const faceDrawScale = atlas.headStyleDrawScale ?? 1;
+    const headDrawSizeSprite = headDrawSize * faceDrawScale;
+    const hasCharFace = faceDrawScale !== 1;
 
     // Legendary glow underlay — only while boosting (was always-on)
     if (isLegendary && snake.boosting && Number.isFinite(hsx) && Number.isFinite(hsy) && headDrawSize > 0) {
@@ -864,7 +888,7 @@ export function renderSnakeAtlas(
     ctx.drawImage(
       atlas.canvas,
       atlas.head.x, atlas.head.y, atlas.head.width, atlas.head.height,
-      -headDrawSize / 2, -headDrawSize / 2, headDrawSize, headDrawSize,
+      -headDrawSizeSprite / 2, -headDrawSizeSprite / 2, headDrawSizeSprite, headDrawSizeSprite,
     );
 
     atlasManager.resetEpicEffect(ctx);
@@ -902,9 +926,6 @@ export function renderSnakeAtlas(
     // Skip if a custom eye cosmetic is equipped (it draws its own eyes).
     // Skip for character-face skins — the face is baked into the head sprite
     // (rotates with the head) and includes its own eyes.
-    // isPlayer guard (MAJOR fix): cosmetics are LOCAL to this device — without
-    // the guard every bot/remote snake also rendered the player's hat/eyes.
-    const hasCharFace = !!getCharacterFaceForSkin(snake.skinId);
     const equipped = getCachedEquipped();
     const hasCustomEyes = snake.isPlayer && equipped.eyes && equipped.eyes !== 'none';
     if (!hasCustomEyes && !hasCharFace) {
@@ -914,7 +935,9 @@ export function renderSnakeAtlas(
     }
 
     // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
-    if (snake.isPlayer) {
+    // PRODUCT RULE (2026-09-05): a character face is the whole head — nothing
+    // is ever drawn on top of it, not even the player's equipped cosmetics.
+    if (snake.isPlayer && !hasCharFace) {
       renderEquippedCosmetics(ctx, { hx: hsx, hy: hsy, hr: headDrawSize / 2, angle: headFacing, time, boosting: snake.boosting, mouseScreenX, mouseScreenY });
     }
 
@@ -1325,7 +1348,10 @@ export function renderSnakeFallback(
     const effectiveHeadColor = visProps ? (visProps.colors[0] ?? snake.headColor) : snake.headColor;
     // Flat head circle — much cheaper than drawImage for bots.
     // Gradient only for pattern/preset skins (rare for bots).
-    if (visProps) {
+    // Character-face skins: NO pre-fill — the face paints its own full head.
+    if (charFaceFb) {
+      drawCharacterFace(ctx, headSX, headSY, headRadius, headFacingFb, charFaceFb, now);
+    } else if (visProps) {
       const headCircle = getCachedGradientCircle(effectiveHeadColor, headRadius, _cachedDpr);
       ctx.drawImage(headCircle, headSX - headRadius, headSY - headRadius, headRadius * 2, headRadius * 2);
     } else {
@@ -1346,9 +1372,6 @@ export function renderSnakeFallback(
     // isPlayer guard (MAJOR fix): cosmetics are LOCAL to this device — without
     // the guard every bot/remote snake also rendered the player's hat/eyes.
     if (!isFar) {
-      if (charFaceFb) {
-        drawCharacterFace(ctx, headSX, headSY, headRadius, headFacingFb, charFaceFb, now);
-      }
       const eq2 = getCachedEquipped();
       const hasCustomEyes2 = snake.isPlayer && eq2.eyes && eq2.eyes !== 'none';
       if (!hasCustomEyes2 && !charFaceFb) {
@@ -1358,7 +1381,9 @@ export function renderSnakeFallback(
       }
 
       // Equipped face cosmetics (custom eyes draw here, others like hat/mouth always draw)
-      if (snake.isPlayer) {
+      // PRODUCT RULE (2026-09-05): a character face is the whole head — nothing
+      // is ever drawn on top of it, not even the player's equipped cosmetics.
+      if (snake.isPlayer && !charFaceFb) {
         renderEquippedCosmetics(ctx, { hx: headSX, hy: headSY, hr: headRadius, angle: headFacingFb, time: now, boosting: snake.boosting, mouseScreenX, mouseScreenY });
       }
     }

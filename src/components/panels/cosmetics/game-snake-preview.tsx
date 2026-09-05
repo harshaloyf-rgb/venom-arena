@@ -106,6 +106,7 @@ export function GameSnakePreview({
   glow,
   // Face cosmetics
   equippedCosmetics,
+  showCosmetics = false,
   // Premium character-face skin (explicit id wins; otherwise resolved from skinId)
   characterFace,
 }: {
@@ -127,6 +128,9 @@ export function GameSnakePreview({
   glow?: boolean;
   // Face cosmetics
   equippedCosmetics?: EquippedCosmetics | null;
+  /** ONLY the Face Cosmetics equip editor sets this — shows equipped cosmetics
+   *  on the preview snake. Every other preview stays pure (product rule). */
+  showCosmetics?: boolean;
   // Premium character-face skin
   characterFace?: string | null;
 }) {
@@ -355,16 +359,19 @@ export function GameSnakePreview({
       }
     }
 
-    // Cache equipped cosmetics once (avoid localStorage read every frame)
-    const cachedEquipped = readEquippedCosmetics();
-    const hasCustomEyesCached = cachedEquipped.eyes && cachedEquipped.eyes !== 'none';
+    // PRODUCT RULE (2026-09-05): NO equipped cosmetics in ANY snake preview by
+    // default — previews show the pure skin (default eyes unless a character
+    // face owns the head). ONLY the Face Cosmetics equip editor passes
+    // showCosmetics so users can see what they are equipping.
+    const cachedEquipped = showCosmetics ? readEquippedCosmetics() : null;
+    const hasCustomEyesCached = !!(cachedEquipped?.eyes && cachedEquipped.eyes !== 'none');
 
     // Pre-cache cosmetic draw functions (avoid getCosmeticById lookup every frame)
     const cosmeticSlots: Array<'wings'|'flag'|'ears'|'hat'|'goggles'|'mouth'|'nose'|'eyes'> =
       ['wings', 'flag', 'ears', 'hat', 'goggles', 'mouth', 'nose', 'eyes'];
     const cachedCosmetics: Array<{ draw: (ctx: CanvasRenderingContext2D, p: any) => void } | null> = [];
     for (const slot of cosmeticSlots) {
-      const id = cachedEquipped[slot as keyof EquippedCosmetics];
+      const id = cachedEquipped?.[slot as keyof EquippedCosmetics];
       if (!id || id === 'none') { cachedCosmetics.push(null); continue; }
       cachedCosmetics.push(getCosmeticById(id) ?? null);
     }
@@ -597,15 +604,18 @@ export function GameSnakePreview({
           }
         }
 
-        // Head — simple gradient, no shadow
-        const hg = ctx.createRadialGradient(headX - hr * 0.3, headY - hr * 0.3, hr * 0.05, headX, headY, hr);
-        hg.addColorStop(0, headLight);
-        hg.addColorStop(G.lightenStop, headCol);
-        hg.addColorStop(1, headDark);
-        ctx.fillStyle = hg;
-        ctx.beginPath(); ctx.arc(headX, headY, hr, 0, Math.PI * 2); ctx.fill();
+        // Head — simple gradient, no shadow.
+        // Character-face skins: NO fill — the face paints its own full head.
+        if (!curFace) {
+          const hg = ctx.createRadialGradient(headX - hr * 0.3, headY - hr * 0.3, hr * 0.05, headX, headY, hr);
+          hg.addColorStop(0, headLight);
+          hg.addColorStop(G.lightenStop, headCol);
+          hg.addColorStop(1, headDark);
+          ctx.fillStyle = hg;
+          ctx.beginPath(); ctx.arc(headX, headY, hr, 0, Math.PI * 2); ctx.fill();
+        }
 
-        // Premium character face replaces the default eyes
+        // Full character head (replaces fill + default eyes entirely)
         if (curFace) {
           drawCharacterFace(ctx, headX, headY, hr, angle, curFace, performance.now());
         }
@@ -705,6 +715,10 @@ export function GameSnakePreview({
         ctx.restore();
 
         // Head
+        // Character-face skins: no shadow/fill — the face paints its own head
+        if (curFace) {
+          drawCharacterFace(ctx, headX, headY, hr, angle, curFace, performance.now());
+        } else {
         ctx.save();
         if (curGlow) {
           ctx.shadowBlur = hr * 1.8;
@@ -721,15 +735,10 @@ export function GameSnakePreview({
         ctx.fillStyle = hg;
         ctx.beginPath(); ctx.arc(headX, headY, hr, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
-
-        // Premium character face replaces the default eyes (drawn before
-        // cosmetics so hats/ears overlay it, same layer order as the game)
-        if (curFace) {
-          drawCharacterFace(ctx, headX, headY, hr, angle, curFace, performance.now());
         }
 
-        // Eyes (use cached hasCustomEyes, no per-frame localStorage)
-        if (!hasCustomEyesCached && !curFace) {
+        // Eyes (previews always show default eyes — no equipped cosmetics)
+        if (!curFace) {
           const eyeOff = hr * G.eyeOff;
           const eyeR = hr * G.eyeR;
           const pupR = eyeR * G.pupR;
@@ -774,10 +783,13 @@ export function GameSnakePreview({
           }
         }
 
-        // Face cosmetics (pre-cached draw functions, no per-frame lookup)
-        const cosParams = { hx: headX, hy: headY, hr, angle, time: performance.now(), boosting: false };
-        for (let ci = 0; ci < cachedCosmetics.length; ci++) {
-          if (cachedCosmetics[ci]) cachedCosmetics[ci]!.draw(ctx, cosParams);
+        // Cosmetics — ONLY in the equip editor (showCosmetics); all other
+        // previews show the pure skin with nothing applied.
+        if (showCosmetics) {
+          const cosParams = { hx: headX, hy: headY, hr, angle, time: performance.now(), boosting: false };
+          for (let ci = 0; ci < cachedCosmetics.length; ci++) {
+            if (cachedCosmetics[ci]) cachedCosmetics[ci]!.draw(ctx, cosParams);
+          }
         }
       }
 
@@ -792,7 +804,7 @@ export function GameSnakePreview({
       c.removeEventListener('mousemove', onMove);
       c.removeEventListener('mouseleave', onLeave);
     };
-  }, [width, height, segments, speed, scale, resolvedHead, resolvedBody, resolvedFace, effectiveBodyStyle, effectiveTaper, effectiveGlow, isLabMode, effectiveColors, instanceSeed, economy]);
+  }, [width, height, segments, speed, scale, resolvedHead, resolvedBody, resolvedFace, effectiveBodyStyle, effectiveTaper, effectiveGlow, isLabMode, effectiveColors, instanceSeed, economy, showCosmetics]);
 
   // Get skin name for label
   let skinName = '';
