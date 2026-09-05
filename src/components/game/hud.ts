@@ -1,6 +1,12 @@
 import type { GameState, Camera, Viewport, FoodOrb } from '@/lib/snake/types';
 import type { MinimapDot } from '@/lib/game-socket';
-import { drawGrid, drawFood } from './renderer';
+import { drawFood } from './renderer';
+import {
+  getActiveBackgroundTheme,
+  drawBackgroundBase,
+  drawBackgroundPattern,
+  type BackgroundTheme,
+} from '@/lib/snake/backgrounds';
 import { cleanupSnakeParticles, clearSmoothedSegs } from './render-snake-atlas';
 import { InputHandler } from './input';
 import { getSafeInsets } from './safe-area';
@@ -89,18 +95,21 @@ export function renderBackground(
 ): void {
   const { width, height } = viewport;
 
-  // Clear
-  ctx.fillStyle = '#0a0a0f';
-  ctx.fillRect(0, 0, width, height);
+  // Equipped background theme (module-level; Classic Dark renders the
+  // original #0a0a0f + 6% white grid pixel-identically).
+  const theme = getActiveBackgroundTheme();
 
-  // Grid
-  drawGrid(ctx, camera, viewport);
+  // Base (solid or cached gradient)
+  drawBackgroundBase(ctx, theme, width, height);
+
+  // Pattern (grid / pinstripe / dunes / dots / hex / stars — world-locked)
+  drawBackgroundPattern(ctx, theme, camera, viewport);
 
   // Food
   drawFood(ctx, foodsOverride ?? state.foods, camera, viewport);
 
-  // Arena boundary wall — visible glowing red ring at map edge
-  drawArenaBoundary(ctx, state, camera, viewport);
+  // Arena boundary wall — glowing ring at map edge, tinted by theme
+  drawArenaBoundary(ctx, state, camera, viewport, theme);
 }
 
 // ============================================================================
@@ -287,10 +296,11 @@ function drawMinimapTopLeft(
   ctx.roundRect(mx, my, size, size, 6);
   ctx.clip();
 
-  // ── Boundary circle ──
+  // ── Boundary circle (theme-tinted accent; danger dots below stay red) ──
   const shrinkPct = 1 - boundaryR / mapHalf;
   const bAlpha = 0.15 + shrinkPct * 1.5;
-  ctx.strokeStyle = `rgba(239, 68, 68, ${Math.min(bAlpha, 0.8).toFixed(2)})`;
+  const mmTheme = getActiveBackgroundTheme();
+  ctx.strokeStyle = `rgba(${mmTheme.accentRgb}, ${Math.min(bAlpha, 0.8).toFixed(2)})`;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.arc(toMiniX(0), toMiniY(0), boundaryR * scale, 0, Math.PI * 2);
@@ -456,6 +466,7 @@ function drawArenaBoundary(
   state: GameState,
   camera: Camera,
   viewport: Viewport,
+  theme: BackgroundTheme,
 ): void {
   const mapRadius = state.boundaryRadius;
   const zoom = camera.zoom;
@@ -469,22 +480,22 @@ function drawArenaBoundary(
   if (sx + screenRadius < -50 || sx - screenRadius > cw + 50 ||
       sy + screenRadius < -50 || sy - screenRadius > ch + 50) return;
 
-  // Outer glow (thick, faint)
-  ctx.strokeStyle = 'rgba(239, 68, 68, 0.08)';
+  // Outer glow (thick, faint) — theme-tinted (Classic Dark keeps the red)
+  ctx.strokeStyle = theme.boundaryStrokes[0];
   ctx.lineWidth = 60 * zoom;
   ctx.beginPath();
   ctx.arc(sx, sy, screenRadius, 0, Math.PI * 2);
   ctx.stroke();
 
   // Mid glow
-  ctx.strokeStyle = 'rgba(239, 68, 68, 0.15)';
+  ctx.strokeStyle = theme.boundaryStrokes[1];
   ctx.lineWidth = 20 * zoom;
   ctx.beginPath();
   ctx.arc(sx, sy, screenRadius, 0, Math.PI * 2);
   ctx.stroke();
 
   // Core wall line (bright, thin)
-  ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
+  ctx.strokeStyle = theme.boundaryStrokes[2];
   ctx.lineWidth = 3 * zoom;
   ctx.beginPath();
   ctx.arc(sx, sy, screenRadius, 0, Math.PI * 2);

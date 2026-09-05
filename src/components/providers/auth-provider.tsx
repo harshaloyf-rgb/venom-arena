@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { PlayerProfile } from '@/lib/types';
 import { apiUrl } from '@/lib/api-base';
+import { setActiveBackgroundTheme } from '@/lib/snake/backgrounds';
 
 interface AuthCtx {
   player: PlayerProfile | null;
@@ -60,6 +61,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Push the equipped arena background into the render module whenever the
+  // profile loads/refreshes (covers every equip path: shop → refresh() → here).
+  useEffect(() => {
+    setActiveBackgroundTheme(player?.currentBackground);
+  }, [player?.currentBackground]);
 
   return (
     <Ctx.Provider value={{ player, loading, banned, refresh, setPlayer, logout }}>

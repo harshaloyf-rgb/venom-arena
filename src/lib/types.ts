@@ -38,6 +38,7 @@ export interface PlayerProfile {
   currentDeath: string;
   currentFlag: string | null;
   currentBanner: string | null;
+  currentBackground: string;
   customSkins: import('./player-helpers').CustomSkinEntry[];
 
   // Season Pass

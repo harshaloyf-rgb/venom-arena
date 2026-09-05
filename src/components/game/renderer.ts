@@ -3,58 +3,14 @@
 // ============================================================================
 
 import type { Camera, FoodOrb, Viewport } from '@/lib/snake/types';
-import { ARENA_GRID_SIZE, FOOD_COLORS, FOOD_GLOW_COLORS } from '@/lib/snake/config';
+import { FOOD_COLORS, FOOD_GLOW_COLORS } from '@/lib/snake/config';
 import { computeCamTransform, w2sX, w2sY } from '@/lib/snake/camera';
-
-// ==========================================================================
-// Grid
-// ==========================================================================
-
-const GRID_SIZE = ARENA_GRID_SIZE;
-const GRID_COLOR = 'rgba(255, 255, 255, 0.06)';
-
-export function drawGrid(ctx: CanvasRenderingContext2D, camera: Camera, viewport: Viewport): void {
-  const zoom = camera.zoom;
-  const dpr = window.devicePixelRatio || 1;
-
-  // Grid line width: always 1 physical pixel regardless of DPR.
-  // At DPR=2, lineWidth=0.5 CSS pixels × 2 = 1 physical pixel → crisp.
-  // At DPR=1, lineWidth=1 CSS pixel = 1 physical pixel → same crisp.
-  ctx.lineWidth = 1 / dpr;
-  ctx.strokeStyle = GRID_COLOR;
-
-  const zoomedGrid = GRID_SIZE * zoom;
-  if (zoomedGrid < 4) return;
-
-  // Compute initial offset — how far the first grid line is from screen edge.
-  // This scrolls smoothly with camera (no Math.round here to avoid 1px jumps).
-  let offsetX = (-camera.x * zoom + viewport.width / 2) % zoomedGrid;
-  let offsetY = (-camera.y * zoom + viewport.height / 2) % zoomedGrid;
-  if (offsetX < 0) offsetX += zoomedGrid;
-  if (offsetY < 0) offsetY += zoomedGrid;
-
-  // CRITICAL BLUR FIX: Snap EACH individual grid line to integer CSS pixel.
-  // Previously only the offset was rounded, so line N was at offset + N*zoomedGrid
-  // (floating-point). Sub-pixel line positions trigger canvas anti-aliasing → blurry
-  // grid lines. During boosting the camera moves fast, amplifying the shimmer.
-  // Now every line is drawn at the nearest integer pixel → always crisp.
-  ctx.beginPath();
-  for (let x = offsetX; x < viewport.width; x += zoomedGrid) {
-    const ix = (x + 0.5) | 0; // fast Math.round for positive numbers
-    ctx.moveTo(ix, 0);
-    ctx.lineTo(ix, viewport.height);
-  }
-  for (let y = offsetY; y < viewport.height; y += zoomedGrid) {
-    const iy = (y + 0.5) | 0;
-    ctx.moveTo(0, iy);
-    ctx.lineTo(viewport.width, iy);
-  }
-  ctx.stroke();
-}
 
 // ==========================================================================
 // Food
 // ==========================================================================
+// (Grid/background pattern painting moved to '@/lib/snake/backgrounds' —
+// it now serves the 8 themed arena backgrounds via hud.renderBackground.)
 
 // Pre-allocated food batching buffers (avoid per-frame array allocation)
 const _fBucketXs: number[][] = [[], [], []];

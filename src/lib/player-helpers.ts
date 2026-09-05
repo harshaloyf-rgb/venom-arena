@@ -120,6 +120,7 @@ export function toProfile(p: Player): PlayerProfile {
     currentDeath: p.currentDeath,
     currentFlag: p.currentFlag,
     currentBanner: p.currentBanner,
+    currentBackground: p.currentBackground,
     customSkins: parseCustomSkins(p.customSkins),
     hasElitePass: p.hasElitePass,
     passClaimedFree: safeParseArray(p.passClaimedFree),

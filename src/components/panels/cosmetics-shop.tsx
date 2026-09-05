@@ -12,6 +12,7 @@ import {
   Sliders,
   Trash2,
   Wand2,
+  Wallpaper,
   X,
 } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
@@ -52,6 +53,8 @@ import {
 } from './cosmetics/cosmetics-cards';
 import { GameSnakePreview } from './cosmetics/game-snake-preview';
 import { CosmeticsSection } from './cosmetics/cosmetics-section';
+import { BackgroundsSection } from './cosmetics/backgrounds-section';
+import { getBackgroundById } from '@/lib/snake/backgrounds';
 import type { CustomSkinEntry } from '@/lib/player-helpers';
 
 // ---------------------------------------------------------------------------
@@ -344,6 +347,27 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
     );
   }
 
+  // -- equip arena background -------------------------------------------------
+  async function handleEquipBackground(backgroundId: string) {
+    try {
+      const res = await fetch('/api/player/background', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backgroundId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        notify(data?.error || 'Failed to equip background.', 'error', onToast);
+        return;
+      }
+      await refresh();
+      const name = getBackgroundById(backgroundId)?.name ?? 'Arena background';
+      notify(`${name} equipped! Applied in Battle Arena.`, 'success', onToast);
+    } catch {
+      notify('Failed to equip background.', 'error', onToast);
+    }
+  }
+
   // -- save to inventory from lab -------------------------------------------
   async function handleSaveToInventory() {
     const name = saveName.trim();
@@ -467,6 +491,17 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
             }`}
           >
             <Backpack className="w-4 h-4 lg:w-3 lg:h-3" /> My Inventory
+          </button>
+          <button
+            type="button"
+            onClick={() => setShopView('backgrounds')}
+            className={`px-4 py-2 lg:px-2 lg:py-1 rounded-lg text-xs lg:text-[11px] font-sans font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              shopView === 'backgrounds'
+                ? 'bg-teal-600 text-white shadow'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Wallpaper className="w-4 h-4 lg:w-3 lg:h-3" /> Backgrounds
           </button>
           <button
             type="button"
@@ -701,6 +736,12 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
               })}
           </div>
         </div>
+      ) : shopView === 'backgrounds' ? (
+        /* ────────────── ARENA BACKGROUNDS ────────────── */
+        <BackgroundsSection
+          activeBackground={p.currentBackground}
+          onEquip={(id) => void handleEquipBackground(id)}
+        />
       ) : (
         /* GENETIC PATTERN LAB */
         <div className="animate-fade-in grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-1">

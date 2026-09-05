@@ -67,6 +67,7 @@ model Player {
   currentDeath    String   @default("death-default")
   currentFlag     String?
   currentBanner   String?
+  currentBackground String @default("bg-classic-dark") // arena background theme id
   customSkins     String   @default("[]") // JSON array of named custom skin configs (max 5)
 
   // Admin / moderation
