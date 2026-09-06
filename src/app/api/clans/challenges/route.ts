@@ -204,11 +204,12 @@ export async function POST(req: NextRequest) {
           data: { xp: { increment: bonusXp } },
         });
 
-        // 5. Check level-up
+        // 5. Check level-up (subtract the CURRENT level's requirement, same as
+        // the deposit route — subtracting after `level += 1` went negative)
         let { xp, level } = clan;
         if (xp >= level * 1000) {
-          level += 1;
           xp = xp - level * 1000;
+          level += 1;
           clan = await tx.clan.update({
             where: { tag },
             data: { level, xp },

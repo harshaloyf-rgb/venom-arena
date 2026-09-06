@@ -27,7 +27,7 @@ export function Section15_Syndicates() {
           <ul className="list-disc pl-4 space-y-0.5">
             <li>Members deposit chips from their personal bank into the Treasury</li>
             <li>Quick-deposit buttons: 10%, 25%, 50%, or MAX of your chips</li>
-            <li>Max 1,000,000c per transaction</li>
+            <li>Max 1,000,000c per deposit</li>
             <li><strong className="text-rose-300">Withdraw</strong> — You can withdraw chips you deposited (up to what you put in). Enter amount and click Withdraw. Leaving the clan forfeits unwithdrawn deposits.</li>
             <li><strong className="text-amber-300">Payout</strong> — Leader/Co-Leader can distribute chips from the treasury to any member. Uses the same input field as deposit/withdraw.</li>
             <li>Treasury grows via deposits and challenge reward claims</li>
@@ -70,7 +70,7 @@ export function Section15_Syndicates() {
           <ul className="list-disc pl-4 space-y-0.5">
             <li><strong>Member Expansion</strong> (15,000c) — +5 max member slots. Repeatable. Default is 30 members.</li>
             <li><strong>XP Windfall</strong> (8,000c) — Instantly grants Level × 500 XP. Repeatable.</li>
-            <li><strong>War Shield</strong> (5,000c) — 7-day peace mode. No other clan can declare war on you while active. One-time purchase.</li>
+            <li><strong>War Shield</strong> (5,000c) — 7-day peace mode. No other clan can declare war on you while active. Can be purchased again 7 days after purchase (once the shield expires).</li>
           </ul>
         </InfoCard>
         <InfoCard title="⚔️ Clan Wars — How It Works" accent="text-rose-300">
@@ -91,23 +91,23 @@ export function Section15_Syndicates() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
             <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-center">
               <div className="text-[10px] font-mono text-amber-400 font-bold">LVL 1</div>
-              <div className="text-[10px] text-slate-400">Base — Up to 30 members</div>
+              <div className="text-[10px] text-slate-400">Base — 30 member slots</div>
             </div>
             <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-center">
               <div className="text-[10px] font-mono text-slate-400 font-bold">LVL 2</div>
-              <div className="text-[10px] text-slate-500">Extended Roster</div>
+              <div className="text-[10px] text-slate-500">Treasury Target reward: 2,000c</div>
             </div>
             <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-center">
               <div className="text-[10px] font-mono text-slate-400 font-bold">LVL 3</div>
-              <div className="text-[10px] text-slate-500">Quick Deposit</div>
+              <div className="text-[10px] text-slate-500">Syndicate Comms: 30 messages</div>
             </div>
             <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-center">
               <div className="text-[10px] font-mono text-slate-400 font-bold">LVL 5</div>
-              <div className="text-[10px] text-slate-500">Elite Status</div>
+              <div className="text-[10px] text-slate-500">XP Windfall grants 2,500 XP</div>
             </div>
             <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-center">
               <div className="text-[10px] font-mono text-slate-400 font-bold">LVL 10</div>
-              <div className="text-[10px] text-slate-500">Legendary Syndicate</div>
+              <div className="text-[10px] text-slate-500">Treasury Target: 20,000c / 10,000c reward</div>
             </div>
           </div>
           <p className="mt-1.5 text-[10px] text-slate-500">Syndicates start with 30 member slots. The Leader can buy Member Expansion from the Clan Shop to add +5 slots per purchase. XP requirements increase per level (Level × 1,000 XP). Higher levels = harder challenges with bigger rewards.</p>

@@ -121,6 +121,7 @@ export const ACTIVITY_ICONS: Record<string, string> = {
   shop_purchase: '🛒',
   war_declare: '\u2694\ufe0f',
   war_end: '🏆',
+  settings: '⚙️',
 };
 
 export const CHALLENGE_ICONS: Record<string, LucideIcon> = {
@@ -142,10 +143,13 @@ export const RANK_BG: Record<string, string> = {
   Viper: 'text-slate-400 bg-slate-500/10 border-slate-500/30',
 };
 
+// Real, implemented level effects — every line is verifiable in code:
+// challenge targets/rewards scale with level (challenges route), XP Windfall
+// grants Level × 500 XP (shop route), recruitment target caps at 5 (min(L,5)).
 export const PERK_ROADMAP = [
-  { level: 1, title: 'Base', desc: 'Up to 10 members' },
-  { level: 2, title: 'Extended Roster', desc: 'Up to 15 members' },
-  { level: 3, title: 'Quick Deposit', desc: '10% XP bonus on deposits' },
-  { level: 5, title: 'Elite Status', desc: 'Up to 20 members, +20% challenge rewards' },
-  { level: 10, title: 'Legendary Syndicate', desc: 'Up to 30 members, custom emblem colors' },
+  { level: 1, title: 'Base', desc: '30 member slots · weekly challenges' },
+  { level: 2, title: 'Bigger Challenges', desc: 'Treasury Target reward: 2,000c' },
+  { level: 3, title: 'Higher Targets', desc: 'Syndicate Comms: 30 messages' },
+  { level: 5, title: 'Elite Windfall', desc: 'XP Windfall grants 2,500 XP' },
+  { level: 10, title: 'Legendary Syndicate', desc: 'Treasury Target: 20,000c / 10,000c reward' },
 ];

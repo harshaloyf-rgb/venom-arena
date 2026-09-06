@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     await db.clanActivity.create({
       data: {
         clanTag: tag,
-        type: 'promote',
+        type: 'settings',
         actorTag: me.userTag,
         actorName: me.name,
         detail: `updated clan settings`,

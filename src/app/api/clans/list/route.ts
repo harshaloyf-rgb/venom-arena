@@ -18,6 +18,7 @@ export async function GET() {
       xp: c.xp,
       totalDeposited: c.totalDeposited,
       bankedChips: c.bankedChips,
+      maxMembers: c.maxMembers,
       memberCount: c._count.members,
     })),
   });

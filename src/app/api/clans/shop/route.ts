@@ -38,12 +38,22 @@ export async function POST(req: NextRequest) {
       if (!clan) throw new Error('CLAN_NOT_FOUND');
       if (clan.bankedChips < item.cost) throw new Error('INSUFFICIENT_TREASURY');
 
-      // Non-repeatable check
+      // Non-repeatable check. War Shield is special: it protects for 7 days,
+      // so it may be bought again once the previous shield has EXPIRED — only
+      // an unexpired purchase blocks a re-buy. Truly one-time items block on
+      // any existing purchase.
       if (!item.repeatable) {
+        const shieldActive = itemId === 'war_shield';
         const existing = await tx.clanPurchase.findFirst({
-          where: { clanTag: tag, itemId },
+          where: {
+            clanTag: tag,
+            itemId,
+            ...(shieldActive
+              ? { createdAt: { gt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } }
+              : {}),
+          },
         });
-        if (existing) throw new Error('ALREADY_PURCHASED');
+        if (existing) throw new Error(shieldActive ? 'SHIELD_ACTIVE' : 'ALREADY_PURCHASED');
       }
 
       // Decrement treasury
@@ -134,6 +144,7 @@ export async function POST(req: NextRequest) {
       CLAN_NOT_FOUND: { error: 'Clan not found.', status: 404 },
       INSUFFICIENT_TREASURY: { error: 'Not enough chips in the clan treasury.', status: 400 },
       ALREADY_PURCHASED: { error: 'This item has already been purchased and is not repeatable.', status: 400 },
+      SHIELD_ACTIVE: { error: 'Your War Shield is still active — it can be bought again 7 days after purchase.', status: 400 },
     };
     if (msg in errorMap) {
       const { error, status } = errorMap[msg];

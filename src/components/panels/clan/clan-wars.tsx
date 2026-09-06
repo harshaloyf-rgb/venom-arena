@@ -28,7 +28,7 @@ export function ClanWars({
     <div className="space-y-4">
       <div className="p-4 lg:p-1.5 rounded-2xl border border-rose-500/20 bg-rose-500/5">
         <div className="flex items-center gap-2 mb-1 lg:mb-0"><Skull className="w-4 h-4 lg:w-3 lg:h-3 text-rose-400" /><h4 className="text-sm lg:text-[11px] font-bold text-white">Clan Wars</h4></div>
-        <p className="text-[11px] text-slate-400">Wager treasury chips against rival clans. First to 50 kills wins the pot. {isLeader ? 'You can declare war on other clans.' : 'Only the Leader can declare wars.'}</p>
+        <p className="text-[11px] text-slate-400">Wager treasury chips against rival clans. First to 50 real-player kills wins the pot (bot kills don&apos;t count). {isLeader ? 'You can declare war on other clans.' : 'Only the Leader can declare wars.'}</p>
       </div>
       {warLoading ? <PanelSkeleton count={2} height="h-48" /> : activeWar ? (
         <div className="p-4 lg:p-1.5 rounded-2xl border border-rose-500/40 bg-rose-500/5 space-y-4 lg:space-y-1">
@@ -74,7 +74,7 @@ export function ClanWars({
           </div>
           <div className="p-3 lg:p-1.5 rounded-xl border border-slate-800 bg-slate-950/60">
             <p className="text-[11px] text-slate-400 leading-relaxed">
-              <strong className="text-white">How it works:</strong> Play matches normally. Every kill by any clan member counts toward your side score. First clan to reach <strong className="text-amber-400">50 kills</strong> wins the entire pot. The war ends automatically.
+              <strong className="text-white">How it works:</strong> Play matches normally. Every <strong className="text-amber-300">real-player kill</strong> by any clan member counts toward your side score (bot eliminations don&apos;t count). First clan to reach <strong className="text-amber-400">50 kills</strong> wins the entire pot. The war ends automatically.
             </p>
           </div>
         </div>

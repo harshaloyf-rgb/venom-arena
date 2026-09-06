@@ -96,7 +96,7 @@ export function ClanOverview({
         const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
         return (
           <div className="p-4 lg:p-1.5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5">
-            <h4 className="text-sm lg:text-[11px] font-bold text-white flex items-center gap-2 mb-3 lg:mb-1"><Trophy className="w-4 h-4 lg:w-3 lg:h-3 text-emerald-400" /> Top Depositors</h4>
+            <h4 className="text-sm lg:text-[11px] font-bold text-white flex items-center gap-2 mb-3 lg:mb-1"><Trophy className="w-4 h-4 lg:w-3 lg:h-3 text-emerald-400" /> Top Richest Members</h4>
             <div className="space-y-2 lg:space-y-0.5">
               {top3.map((m, i) => (
                 <div key={m.userTag} className="flex items-center justify-between p-2 lg:p-1 rounded-lg bg-slate-950/60 border border-slate-800">
@@ -216,7 +216,8 @@ export function ClanOverview({
                     const canPromote = isLeader && m.clanRank === 'Viper';
                     const canDemote = isLeader && m.clanRank === 'Co-Leader';
                     const canTransfer = isLeader && m.clanRank === 'Co-Leader';
-                    const canKick = canManage && m.clanRank !== 'Leader' && m.userTag !== playerUserTag;
+                    // Co-Leaders can only kick Vipers (the API rejects the rest)
+                    const canKick = canManage && m.clanRank !== 'Leader' && (isLeader || m.clanRank === 'Viper') && m.userTag !== playerUserTag;
                     const online = isOnline(m.lastSeenAt);
                     const isSelf = m.userTag === playerUserTag;
                     const actionButtons = (
@@ -331,7 +332,7 @@ export function ClanOverview({
               )}
             </div>
             <div className="p-3 lg:p-1.5 border-t border-slate-800 flex items-center gap-2">
-              <input type="text" value={broadcast} onChange={(e) => onBroadcastChange(e.target.value)} placeholder="Type a message..." className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 lg:px-1.5 py-2 lg:py-0.5 text-xs lg:text-[11px] text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50" />
+              <input type="text" value={broadcast} onChange={(e) => onBroadcastChange(e.target.value)} maxLength={300} placeholder="Type a message..." className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 lg:px-1.5 py-2 lg:py-0.5 text-xs lg:text-[11px] text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50" />
               <button type="button" onClick={() => onBroadcast()} disabled={actionBusy === 'broadcast' || !broadcast.trim()} className="px-3 lg:px-1.5 py-2 lg:py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs lg:text-[11px] font-bold transition flex items-center gap-1.5 disabled:opacity-50">
                 {actionBusy === 'broadcast' ? <Loader2 className="w-3.5 h-3.5 lg:w-3 lg:h-3 animate-spin" /> : <Send className="w-3.5 h-3.5 lg:w-3 lg:h-3" />} Send
               </button>

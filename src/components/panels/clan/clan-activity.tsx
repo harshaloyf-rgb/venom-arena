@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { ScrollText, ChevronDown } from 'lucide-react';
+import { ScrollText } from 'lucide-react';
 import { PanelSkeleton } from '../_panel-primitives';
 import { timeAgo } from '@/lib/date-utils';
 import { ACTIVITY_ICONS } from './_types';
@@ -13,8 +12,6 @@ interface ClanActivityProps {
 }
 
 export function ClanActivity({ activities, activitiesLoading }: ClanActivityProps) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-
   return (
     <div className="space-y-4 lg:space-y-1">
       <div className="p-4 lg:p-1.5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5">
@@ -37,15 +34,10 @@ export function ClanActivity({ activities, activitiesLoading }: ClanActivityProp
               <ol className="divide-y divide-slate-900 max-h-[400px] lg:max-h-[200px] overflow-y-auto va-scroll">
                 {activities.map((a) => {
                   const icon = ACTIVITY_ICONS[a.type] || '\u2022';
-                  const isExpanded = expandedId === a.id;
                   return (
                     <li key={a.id}>
-                      {/* Mobile accordion row */}
-                      <button
-                        type="button"
-                        onClick={() => setExpandedId(isExpanded ? null : a.id)}
-                        className="lg:hidden w-full px-4 py-2.5 text-sm flex items-center gap-3 text-left"
-                      >
+                      {/* Mobile row — detail is shown inline, nothing hidden to expand */}
+                      <div className="lg:hidden w-full px-4 py-2.5 text-sm flex items-center gap-3 text-left">
                         <span className="text-base shrink-0" aria-hidden>{icon}</span>
                         <div className="min-w-0 flex-1">
                           <span className="text-xs text-white font-bold">{a.actorName}</span>
@@ -53,18 +45,10 @@ export function ClanActivity({ activities, activitiesLoading }: ClanActivityProp
                           {a.detail && <span className="text-xs text-slate-400"> {a.detail}</span>}
                         </div>
                         <span className="text-[10px] text-slate-500 font-mono shrink-0">{timeAgo(new Date(a.createdAt))}</span>
-                        <ChevronDown className={`w-3.5 h-3.5 text-slate-500 shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                      </button>
-
-                      {/* Mobile expanded detail */}
-                      {isExpanded && a.detail && (
-                        <div className="lg:hidden px-4 pb-2.5 text-xs text-slate-400 pl-12">
-                          {a.detail}
-                        </div>
-                      )}
+                      </div>
 
                       {/* Desktop grid row */}
-                      <div className="hidden lg:grid lg:grid-cols-12 lg:gap-1 lg:items-center lg:px-1.5 lg:py-1 lg:text-[11px] hover:bg-slate-900/40 transition-colors cursor-pointer">
+                      <div className="hidden lg:grid lg:grid-cols-12 lg:gap-1 lg:items-center lg:px-1.5 lg:py-1 lg:text-[11px] hover:bg-slate-900/40 transition-colors">
                         <span className="lg:col-span-1 lg:text-[11px]" aria-hidden>{icon}</span>
                         <span className="lg:col-span-1 text-white font-bold">{a.actorName}</span>
                         <span className="lg:col-span-2 font-mono text-slate-500">{a.actorTag}</span>

@@ -42,6 +42,11 @@ export function ClanBrowse({
                 <p className="text-xs text-slate-400 mt-2 mb-4">No syndicates yet. Be the first!</p>
                 <button type="button" onClick={() => onSetTab('form')} className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition">Form the First Syndicate</button>
               </div>
+            ) : filteredClans.length === 0 ? (
+              <div className="p-8 lg:p-3 rounded-2xl border border-slate-800 bg-slate-950/60 text-center max-w-md mx-auto">
+                <Search className="w-12 h-12 lg:w-5 lg:h-5 text-slate-600 mx-auto mb-3 lg:mb-0.5" /><h3 className="text-base font-bold text-white">No Matches</h3>
+                <p className="text-xs text-slate-400 mt-2 mb-4">No syndicate matches &quot;{search}&quot;. Try another name or tag.</p>
+              </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-1">
                 {filteredClans.map((clan) => {
@@ -60,7 +65,7 @@ export function ClanBrowse({
                       {clan.description && <p className="text-[11px] text-slate-400 italic">&quot;{clan.description}&quot;</p>}
                       <div className="grid grid-cols-3 gap-2 lg:gap-0.5 text-[10px] font-mono">
                         <div className="p-2 lg:p-1 bg-slate-900/60 rounded border border-slate-800 text-center"><MicroLabel>LEVEL</MicroLabel><div className="text-amber-400 mt-0.5">{clan.level}</div></div>
-                        <div className="p-2 lg:p-1 bg-slate-900/60 rounded border border-slate-800 text-center"><MicroLabel>MEMBERS</MicroLabel><div className="text-white mt-0.5">{clan.memberCount}/30</div></div>
+                        <div className="p-2 lg:p-1 bg-slate-900/60 rounded border border-slate-800 text-center"><MicroLabel>MEMBERS</MicroLabel><div className="text-white mt-0.5">{clan.memberCount}/{clan.maxMembers || 30}</div></div>
                         <div className="p-2 lg:p-1 bg-slate-900/60 rounded border border-slate-800 text-center"><MicroLabel>TREASURY</MicroLabel><div className="text-emerald-400 mt-0.5">{clan.bankedChips >= 1_000_000 ? `${(clan.bankedChips / 1_000_000).toFixed(1)}M` : clan.bankedChips.toLocaleString()}</div></div>
                       </div>
                       <button type="button" onClick={() => onJoinClan(clan.tag, clan.name)} disabled={isJoined || !!playerClanTag || actionBusy === 'join'} className={`w-full py-2 lg:py-1 rounded-lg text-xs lg:text-[11px] font-bold transition flex items-center justify-center gap-1.5 ${isJoined ? 'bg-slate-900 text-slate-500 border border-slate-800 cursor-default' : !!playerClanTag ? 'bg-slate-900 text-slate-500 border border-slate-800 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}>

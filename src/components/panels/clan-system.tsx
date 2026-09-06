@@ -479,7 +479,7 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
                 </div>
                 <div className="p-3 lg:p-1.5 rounded-xl border border-slate-800 bg-slate-950/60">
                   <MicroLabel>MEMBERS</MicroLabel>
-                  <div className="text-white mt-0.5 font-bold">{myClanInfo?.memberCount || '?'} / 30</div>
+                  <div className="text-white mt-0.5 font-bold">{myClanInfo?.memberCount || '?'} / {myClanInfo?.maxMembers || 30}</div>
                   {clanStats && clanStats.onlineCount > 0 && (
                     <div className="text-[9px] lg:text-[11px] text-emerald-400 mt-0.5 lg:mt-0 flex items-center gap-1"><Circle className="w-1.5 h-1.5 fill-emerald-400" /> {clanStats.onlineCount} online</div>
                   )}
