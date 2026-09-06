@@ -86,14 +86,14 @@ export function Section00_Accounts() {
       <InfoCard title="🎁 Daily Claims Hub — Free Chips Every Day" accent="text-emerald-300">
         <p className="mb-1.5">Open it from the <strong>Claims</strong> tab (mobile bottom bar) or the <strong>Daily Free Claims</strong> card on the Lobby HQ dashboard. Six tabs inside:</p>
         <ul className="list-disc pl-4 space-y-1">
-          <li><strong>Daily Streak:</strong> One claim per day on a repeating 7-day cycle — <strong>10 → 20 → 50 → 100 → 250 → 500 → 1,000 chips</strong>. Rewards scale with your level multiplier (×1.0 up to ×4.0) and double on special seasonal bonus days. Miss a calendar day and the streak resets to 0 (a Streak Freeze can protect exactly one missed day)</li>
+          <li><strong>Daily Streak:</strong> One claim per day on a repeating 7-day cycle — <strong>10 → 20 → 50 → 100 → 250 → 500 → 1,000 chips</strong>. Rewards scale with your level multiplier (×1.0 up to ×4.0) and get a bonus multiplier (×1.5–×2) on special seasonal bonus days. Miss a calendar day and the streak resets to 0 (a Streak Freeze can protect exactly one missed day)</li>
           <li><strong>Streak Milestones:</strong> Day 30 = <strong>5,000c</strong> (Iron Veteran 🛡️), Day 60 = <strong>15,000c</strong> (Steel Sentinel ⚔️), Day 90 = <strong>50,000c</strong> (Diamond Immortal 👑) — credited automatically when you hit the day</li>
           <li><strong>Streak Freeze:</strong> Buy for <strong>500c</strong> each, hold up to <strong>3</strong>. A freeze is consumed automatically if you miss exactly one day; longer gaps still reset the streak</li>
           <li><strong>Hourly:</strong> One micro-claim every hour — a random <strong>10–150 chips</strong> base, scaled by your level multiplier and seasonal bonuses</li>
-          <li><strong>Lucky Spin:</strong> <strong>1 free spin daily</strong>; extra spins cost <strong>200c</strong>. Prize wheel ranges from 5c up to a <strong>5,000c JACKPOT</strong> (rare)</li>
-          <li><strong>Calendar:</strong> A month-view calendar of your past daily claims</li>
+          <li><strong>Lucky Spin:</strong> <strong>1 free spin daily</strong>; extra spins cost <strong>200c</strong>. Prize wheel ranges from 5c up to a <strong>5,000c JACKPOT</strong> (rare). Spin rewards also get your level bonus (capped at ×2), and a paid spin never consumes your free daily spin</li>
+          <li><strong>Calendar:</strong> A month-view calendar of your past daily claims (UTC days — rewards reset at 00:00 UTC / 05:30 AM IST)</li>
           <li><strong>Bonus:</strong> Redeem <strong>Promo Codes</strong> (distributed via official channels only) and, in the mobile app, watch <strong>user-initiated reward ads</strong> — up to 12 per day × 50c each</li>
-          <li><strong>History:</strong> Every claim you have ever made, with amounts and timestamps</li>
+          <li><strong>History:</strong> All your claims from the last 7 days — daily, hourly, spins, streak milestones, promo codes, and video ads — with amounts and dates</li>
         </ul>
       </InfoCard>
       <InfoCard title="📈 Player Levels & XP" accent="text-sky-300">

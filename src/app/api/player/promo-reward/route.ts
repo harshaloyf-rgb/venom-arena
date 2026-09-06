@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   // Look up reward amount
   const reward = PROMO_CODES[code];
   if (!reward) {
-    return NextResponse.json({ error: `Invalid or expired promo code. Try "VENOM" or "CHAMPION".` }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid or expired promo code.' }, { status: 400 });
   }
 
   const playerId = session.playerId;

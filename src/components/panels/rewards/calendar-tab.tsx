@@ -27,12 +27,14 @@ export function CalendarTab({ player, onToast }: CalendarTabProps) {
   const [claimedDates, setClaimedDates] = useState<Set<string>>(new Set());
   const [calendarLoading, setCalendarLoading] = useState(true);
 
-  // Current month info
+  // FIX CLAIMS-CAL: the server records claim days as UTC dates (daily rewards
+  // reset at 00:00 UTC), so the grid must be built in UTC too. Using local
+  // time put IST evening claims (UTC+5:30) on the wrong calendar cell.
   const now = useMemo(() => new Date(), []);
-  const year = now.getFullYear();
-  const month = now.getMonth(); // 0-indexed
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const today = now.getDate();
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth(); // 0-indexed
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const today = now.getUTCDate();
 
   // Fetch real calendar data from API
   useEffect(() => {
@@ -73,7 +75,7 @@ export function CalendarTab({ player, onToast }: CalendarTabProps) {
     <div className="space-y-4 lg:space-y-1">
       <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 lg:p-1 text-[11px] text-slate-300 leading-relaxed">
         <strong>{MONTH_NAMES[month].toUpperCase()} {year} — CLAIM CALENDAR</strong><br />
-        This month's daily claims. Green = claimed, dark = missed, dimmed = upcoming.
+        This month's daily claims. Green = claimed, dark = missed, dimmed = upcoming. Days follow the UTC clock — daily rewards reset at <strong>00:00 UTC</strong> (05:30 AM IST).
       </div>
 
       {/* Stats row */}

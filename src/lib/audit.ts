@@ -25,7 +25,10 @@ export async function logAdminAction(
     await db.adminAuditLog.create({
       data: {
         adminId: session.playerId,
-        adminTag: session.userTag,
+        // `?? 'unknown'` — a session payload without userTag (e.g. a token
+        // minted before the claim existed) must still produce an audit row;
+        // a silent audit gap is worse than a placeholder tag.
+        adminTag: session.userTag ?? 'unknown',
         action,
         targetType: targetType ?? null,
         targetId: targetId ?? null,

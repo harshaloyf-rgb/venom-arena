@@ -34,8 +34,11 @@ export function DailyStreakTab({
       {/* 7-day grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-3 lg:gap-1">
         {DAILY_REWARDS.map((reward, idx) => {
-          const isClaimed = idx < claimedCount;
-          const isToday = idx === currentDayIndex && !isClaimed && !alreadyClaimed;
+          // FIX CLAIMS-GRID: when the streak wraps (day 7 → day 8 plays Day 1
+          // again), the incoming cycle cell must show as "Today" instead of a
+          // stale checkmark from the finished cycle.
+          const isToday = idx === currentDayIndex && !alreadyClaimed;
+          const isClaimed = idx < claimedCount && !isToday;
           const isFuture = idx > currentDayIndex;
           return (
             <div

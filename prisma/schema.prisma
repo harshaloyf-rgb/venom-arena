@@ -274,6 +274,7 @@ model LuckySpin {
   playerId  String
   reward    Int
   prizeTier String   // "common" | "rare" | "epic" | "legendary"
+  isFree    Boolean  @default(false) // true = the daily free spin (paid spins must NOT consume the free allowance)
   createdAt DateTime @default(now())
 
   @@index([playerId, createdAt])

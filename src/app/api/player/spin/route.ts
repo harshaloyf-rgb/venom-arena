@@ -31,10 +31,14 @@ export async function GET() {
     const todaySpins = await db.luckySpin.count({
       where: {
         playerId: session.playerId,
+        isFree: true,
         createdAt: { gte: todayStart, lte: todayEnd },
       },
     });
 
+    // FIX CLAIMS-SPIN: count only FREE spins toward the daily free allowance.
+    // Previously ALL spins (paid included) consumed it, so a player who paid
+    // 200c before using their free spin silently lost the promised free one.
     const freeSpinsToday = Math.max(0, SPIN_FREE_PER_DAY - todaySpins);
 
     return NextResponse.json({
@@ -75,14 +79,17 @@ export async function POST(request: Request) {
       const today = utcToday();
       const todayStart = new Date(today + 'T00:00:00.000Z');
       const todayEnd = new Date(today + 'T23:59:59.999Z');
-      const todaySpins = await tx.luckySpin.count({
+      // FIX CLAIMS-SPIN: only FREE spins consume the free allowance — a paid
+      // spin bought before the free one must not steal it.
+      const freeSpinsUsed = await tx.luckySpin.count({
         where: {
           playerId: player.id,
+          isFree: true,
           createdAt: { gte: todayStart, lte: todayEnd },
         },
       });
 
-      const freeRemaining = Math.max(0, SPIN_FREE_PER_DAY - todaySpins);
+      const freeRemaining = Math.max(0, SPIN_FREE_PER_DAY - freeSpinsUsed);
 
       if (useFree) {
         if (freeRemaining <= 0) {
@@ -131,6 +138,7 @@ export async function POST(request: Request) {
           playerId: player.id,
           reward,
           prizeTier: prize.tier,
+          isFree: useFree,
         },
       });
 

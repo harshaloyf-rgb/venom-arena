@@ -28,11 +28,18 @@ export async function POST() {
       }
 
       // Determine streak: if last claim was yesterday, increment.
+      // SEMANTICS (T58 fix): dailyStreak counts consecutive claim days INCLUDING
+      // today. First-ever claim and first claim after a break both start a
+      // streak of 1 (previously they stored 0, so the UI showed "Streak: 0
+      // days" right after claiming and the 7-day grid checked nothing).
+      // Back-compat: stored values from the old semantics are exactly one less
+      // per run, and the next claim (stored + 1) lands on the same number —
+      // no migration needed.
       // CRITICAL fix (was a placebo): a purchased Streak Freeze is now actually
       // CONSUMED — if exactly one day was missed (diffDays === 2) and the player
       // owns a freeze, the streak continues and one freeze is burned. Freezes
       // only protect a single missed day; longer gaps still reset the streak.
-      let newStreak = 0;
+      let newStreak = 1;
       let freezeUsed = false;
       if (player.lastDailyClaim) {
         const last = new Date(player.lastDailyClaim + 'T00:00:00Z');
@@ -42,11 +49,12 @@ export async function POST() {
         else if (diffDays === 2 && player.streakFreezes > 0) {
           newStreak = player.dailyStreak + 1;
           freezeUsed = true;
-        } else newStreak = 0; // missed a day (no freeze, or gap > 1 day)
+        } else newStreak = 1; // missed a day (no freeze, or gap > 1 day) — fresh streak starts today
       }
 
-      // Base reward from 7-day cycle
-      const cycleDay = newStreak % 7;
+      // Base reward from 7-day cycle (newStreak includes today, so the cycle
+      // index is newStreak - 1: day 1 → 10c … day 7 → 1,000c, then repeats)
+      const cycleDay = (newStreak - 1 + 7) % 7;
       const baseReward = DAILY_REWARDS[cycleDay];
 
       // Level-scaled multiplier

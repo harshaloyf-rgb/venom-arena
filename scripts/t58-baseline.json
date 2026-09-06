@@ -1,0 +1,20 @@
+{
+  "playerId": "cmtq39bu70001nypqk9hpp2pl",
+  "userTag": "VM-0oelp9",
+  "player": {
+    "bankedChips": 1000000000,
+    "totalEarned": 1000000720,
+    "dailyStreak": 0,
+    "lastDailyClaim": null,
+    "lastHourlyClaim": null,
+    "streakFreezes": 0
+  },
+  "counts": {
+    "dailyClaims": 0,
+    "hourlyClaims": 0,
+    "luckySpins": 0,
+    "streakMilestones": 0,
+    "promoRewards": 0
+  },
+  "takenAt": "2026-09-06T23:15:27.132Z"
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, Tickets, Crown, Wallet, AlertTriangle, Loader2, Search, X, Sparkles } from 'lucide-react';
+import { RefreshCw, Tickets, Crown, Wallet, AlertTriangle, Loader2, Search, X, Sparkles, Flame, Snowflake } from 'lucide-react';
 import { notify, type ToastFn } from '../_panel-primitives';
 import { getCosmeticById } from '@/lib/game-config';
 
@@ -11,7 +11,8 @@ import { getCosmeticById } from '@/lib/game-config';
 // Read surfaces: pass orders, ticket ledger, cosmetic purchase ledger,
 // per-player dossier (incl. Cyber Pass state), wallet reset status.
 // Write surfaces: grant/revoke pass, ±tickets, clear ad window, comp Elite
-// Pass, set Pass XP, unclaim a pass tier, guarded force wallet reset (server
+// Pass, set Pass XP, unclaim a pass tier, claims support (streak / last
+// claim day / freezes), guarded force wallet reset (server
 // additionally gated by ADMIN_FORCE_WALLET_RESET=1).
 
 interface PlanRow { sku: string; label: string; days: number; priceUsd: number; tickets: number }
@@ -41,6 +42,12 @@ interface CyberDossier {
   hasElitePass: boolean; passXp: number; passXpToday: number; passXpDate: string | null;
   isCappedToday: boolean; tier: number; claimedFree: number[]; claimedElite: number[];
 }
+interface ClaimsDossier {
+  dailyStreak: number; lastDailyClaim: string | null; lastHourlyClaim: string | null;
+  streakFreezes: number; bankedChips: number;
+  recentDaily: { id: string; day: string; reward: number; streak: number; createdAt: string }[];
+  recentSpins: { id: string; reward: number; prizeTier: string; isFree: boolean; createdAt: string }[];
+}
 interface PlayerDossier {
   player: {
     id: string; name: string; userTag: string;
@@ -48,6 +55,7 @@ interface PlayerDossier {
     passActive: boolean; windowActive: boolean;
   };
   cyber: CyberDossier;
+  claims?: ClaimsDossier;
   orders: unknown[];
   ledger: unknown[];
 }
@@ -112,6 +120,10 @@ export function EconomyTab({ onToast }: { onToast?: ToastFn }) {
   const [cyberXp, setCyberXp] = useState('');
   const [unclaimTrack, setUnclaimTrack] = useState<'free' | 'elite'>('free');
   const [unclaimTier, setUnclaimTier] = useState('1');
+  // Daily Claims support inputs
+  const [claimsStreak, setClaimsStreak] = useState('');
+  const [claimsDate, setClaimsDate] = useState('');
+  const [claimsFreezes, setClaimsFreezes] = useState('');
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -411,6 +423,72 @@ export function EconomyTab({ onToast }: { onToast?: ToastFn }) {
                 </button>
               </div>
             </div>
+
+            {/* ── Daily Claims support (same dossier lookup) ── */}
+            {dossier.claims && (
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/10 p-2.5 space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <Flame className="w-3.5 h-3.5 text-emerald-300" />
+                  <span className="text-xs font-bold text-emerald-200">Daily Claims support</span>
+                  <span className="text-[10px] text-emerald-200/50">(streak / claim day / freeze fixes — chips are NOT touched)</span>
+                </div>
+
+                {/* Readout */}
+                <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
+                  <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-emerald-300">Streak: {dossier.claims.dailyStreak}d</span>
+                  <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300">Last daily: {dossier.claims.lastDailyClaim ?? 'never'}</span>
+                  <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-sky-300">Freezes: {dossier.claims.streakFreezes}/3</span>
+                  <span className="px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-400">Hourly: {dossier.claims.lastHourlyClaim ? new Date(dossier.claims.lastHourlyClaim).toISOString().slice(0, 16).replace('T', ' ') + 'Z' : 'never'}</span>
+                </div>
+
+                {/* Recent activity */}
+                {(dossier.claims.recentDaily.length > 0 || dossier.claims.recentSpins.length > 0) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] font-mono">
+                    <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-1.5">
+                      <div className="text-slate-500 uppercase tracking-wider mb-1">Recent daily claims</div>
+                      {dossier.claims.recentDaily.length === 0 ? (
+                        <div className="text-slate-600">None recorded</div>
+                      ) : dossier.claims.recentDaily.slice(0, 5).map((r) => (
+                        <div key={r.id} className="text-slate-300 flex justify-between gap-2">
+                          <span>{r.day}</span><span className="text-slate-500">streak {r.streak}</span><span className="text-emerald-400">+{r.reward.toLocaleString('en-IN')}c</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="bg-slate-950/70 border border-slate-800 rounded-lg p-1.5">
+                      <div className="text-slate-500 uppercase tracking-wider mb-1">Recent spins</div>
+                      {dossier.claims.recentSpins.length === 0 ? (
+                        <div className="text-slate-600">None recorded</div>
+                      ) : dossier.claims.recentSpins.slice(0, 5).map((r) => (
+                        <div key={r.id} className="text-slate-300 flex justify-between gap-2">
+                          <span>{new Date(r.createdAt).toISOString().slice(0, 10)}</span>
+                          <span className={r.isFree ? 'text-amber-400' : 'text-slate-500'}>{r.isFree ? 'FREE' : 'PAID'}</span>
+                          <span className="text-emerald-400">+{r.reward.toLocaleString('en-IN')}c {r.prizeTier}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Snowflake className="w-3 h-3 text-sky-400 shrink-0" />
+                    <input value={claimsStreak} onChange={(e) => setClaimsStreak(e.target.value.replace(/[^0-9]/g, ''))} placeholder="streak 0-365" className="bg-slate-950 border border-emerald-500/30 rounded-lg px-2 py-1 text-xs text-slate-200 w-32 focus:outline-none focus:border-emerald-400 font-mono" />
+                    <button type="button" onClick={() => void cyberAction({ action: 'claims_set_streak', userTag: dossier.player.userTag, streak: Number(claimsStreak) })} disabled={dossierBusy || claimsStreak === ''} className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-[10px] font-bold uppercase tracking-wider transition">Set streak</button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Flame className="w-3 h-3 text-amber-400 shrink-0" />
+                    <input value={claimsDate} onChange={(e) => setClaimsDate(e.target.value)} placeholder="YYYY-MM-DD | today | clear" className="bg-slate-950 border border-emerald-500/30 rounded-lg px-2 py-1 text-xs text-slate-200 w-48 focus:outline-none focus:border-emerald-400 font-mono" />
+                    <button type="button" onClick={() => void cyberAction({ action: 'claims_set_last_daily', userTag: dossier.player.userTag, date: claimsDate.trim() })} disabled={dossierBusy || !claimsDate.trim()} className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-[10px] font-bold uppercase tracking-wider transition">Set claim day</button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Snowflake className="w-3 h-3 text-sky-400 shrink-0" />
+                    <input value={claimsFreezes} onChange={(e) => setClaimsFreezes(e.target.value.replace(/[^0-9]/g, ''))} placeholder="freezes 0-3" className="bg-slate-950 border border-emerald-500/30 rounded-lg px-2 py-1 text-xs text-slate-200 w-32 focus:outline-none focus:border-emerald-400 font-mono" />
+                    <button type="button" onClick={() => void cyberAction({ action: 'claims_set_freezes', userTag: dossier.player.userTag, count: Number(claimsFreezes) })} disabled={dossierBusy || claimsFreezes === ''} className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-[10px] font-bold uppercase tracking-wider transition">Set freezes</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

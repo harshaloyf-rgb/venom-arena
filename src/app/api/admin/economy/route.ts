@@ -27,6 +27,9 @@ import { PASS_TIER_XP } from '@/lib/game-config';
 // POST { action: 'cyber_grant_elite', userTag }       // comp the Elite Cyber Pass (no chip cost, audit-logged)
 // POST { action: 'cyber_set_xp',      userTag, xp }   // set absolute Pass XP (0..1,000,000, audit-logged)
 // POST { action: 'cyber_unclaim',     userTag, tier, track } // re-open a claimed tier (chips NOT clawed back)
+// POST { action: 'claims_set_streak', userTag, streak }  // set daily streak 0-365 (no chip effect)
+// POST { action: 'claims_set_last_daily', userTag, date } // 'YYYY-MM-DD' | 'today' | 'clear'
+// POST { action: 'claims_set_freezes', userTag, count }  // set streak freezes 0-3
 // POST { action: 'force_wallet_reset' }               // DANGEROUS: gated by ADMIN_FORCE_WALLET_RESET=1
 
 const RESET_ENABLED = process.env.ADMIN_FORCE_WALLET_RESET === '1';
@@ -55,12 +58,14 @@ export async function GET(req: NextRequest) {
         // Cyber Pass (Season Pass) dossier fields
         hasElitePass: true, passXp: true, passXpToday: true, passXpDate: true,
         passClaimedFree: true, passClaimedElite: true,
+        // Daily Claims dossier fields (streak / hourly / freezes)
+        dailyStreak: true, lastDailyClaim: true, lastHourlyClaim: true, streakFreezes: true, bankedChips: true,
       },
     });
     if (!player) return NextResponse.json({ error: 'Player not found' }, { status: 404 });
 
     const now = new Date();
-    const [orders, ledger] = await Promise.all([
+    const [orders, ledger, recentDaily, recentSpins] = await Promise.all([
       db.passOrder.findMany({
         where: { playerId: player.id },
         orderBy: { createdAt: 'desc' },
@@ -70,6 +75,19 @@ export async function GET(req: NextRequest) {
         where: { playerId: player.id },
         orderBy: { createdAt: 'desc' },
         take: 20,
+      }),
+      // Claims support: latest daily-claim rows + today's spin count
+      db.dailyClaim.findMany({
+        where: { playerId: player.id },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: { id: true, day: true, reward: true, streak: true, createdAt: true },
+      }),
+      db.luckySpin.findMany({
+        where: { playerId: player.id },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: { id: true, reward: true, prizeTier: true, isFree: true, createdAt: true },
       }),
     ]);
 
@@ -94,6 +112,16 @@ export async function GET(req: NextRequest) {
       claimedElite: parseTiers(player.passClaimedElite),
     };
 
+    const claims = {
+      dailyStreak: player.dailyStreak,
+      lastDailyClaim: player.lastDailyClaim,
+      lastHourlyClaim: player.lastHourlyClaim?.toISOString() ?? null,
+      streakFreezes: player.streakFreezes,
+      bankedChips: player.bankedChips,
+      recentDaily: recentDaily,
+      recentSpins: recentSpins,
+    };
+
     return NextResponse.json({
       player: {
         id: player.id,
@@ -106,6 +134,7 @@ export async function GET(req: NextRequest) {
         windowActive: !!player.adUnlockUntil && player.adUnlockUntil > now,
       },
       cyber,
+      claims,
       orders: orders.map((o) => ({ ...o, verifierNote: o.verifierNote ?? null })),
       ledger,
     });
@@ -420,6 +449,58 @@ export async function POST(req: NextRequest) {
     // re-opens the claim so the pass can re-award it.
     await logAdminAction(session, 'cyber_unclaim', 'player', userTag, { tier, track });
     return NextResponse.json({ ok: true, ...updated, note: 'Claim re-opened. Already-granted chips/cosmetics were NOT clawed back.' });
+  }
+
+  // ── Daily Claims support (streak / last-claim-day / freezes) ─────────────
+  // Support tools for the Claims hub (Daily Free Claims page): fix wrongly
+  // broken streaks, restore a lost claim day, or correct freeze counts.
+  // All three are audit-logged with the previous value.
+  if (action === 'claims_set_streak') {
+    const userTag = String(body.userTag || '').trim();
+    const streak = Math.trunc(Number(body.streak));
+    if (!userTag || !Number.isFinite(streak) || streak < 0 || streak > 365) {
+      return NextResponse.json({ error: 'userTag and a streak value between 0 and 365 are required.' }, { status: 400 });
+    }
+    const target = await db.player.findUnique({ where: { userTag }, select: { id: true, dailyStreak: true } });
+    if (!target) return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+
+    const updated = await db.player.update({ where: { id: target.id }, data: { dailyStreak: streak } });
+    await logAdminAction(session, 'claims_set_streak', 'player', userTag, { previousStreak: target.dailyStreak, newStreak: streak });
+    return NextResponse.json({ ok: true, userTag, previousStreak: target.dailyStreak, dailyStreak: updated.dailyStreak, note: `Streak set to ${streak}. Does not grant or remove chips.` });
+  }
+
+  if (action === 'claims_set_last_daily') {
+    const userTag = String(body.userTag || '').trim();
+    const raw = String(body.date || '').trim().toLowerCase(); // 'YYYY-MM-DD' | 'today' | 'clear'
+    if (!userTag || !raw) {
+      return NextResponse.json({ error: 'userTag and a date (YYYY-MM-DD, "today", or "clear") are required.' }, { status: 400 });
+    }
+    let date: string | null;
+    if (raw === 'clear') date = null;
+    else if (raw === 'today') date = new Date().toISOString().slice(0, 10);
+    else if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return NextResponse.json({ error: 'Date must be YYYY-MM-DD, "today", or "clear".' }, { status: 400 });
+    } else date = raw;
+    const target = await db.player.findUnique({ where: { userTag }, select: { id: true, lastDailyClaim: true } });
+    if (!target) return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+
+    const updated = await db.player.update({ where: { id: target.id }, data: { lastDailyClaim: date } });
+    await logAdminAction(session, 'claims_set_last_daily', 'player', userTag, { previousLastDailyClaim: target.lastDailyClaim, newLastDailyClaim: date });
+    return NextResponse.json({ ok: true, userTag, previousLastDailyClaim: target.lastDailyClaim, lastDailyClaim: updated.lastDailyClaim, note: date ? `Last claim day set to ${date}.` : 'Last claim day cleared (player can claim now).' });
+  }
+
+  if (action === 'claims_set_freezes') {
+    const userTag = String(body.userTag || '').trim();
+    const count = Math.trunc(Number(body.count));
+    if (!userTag || !Number.isFinite(count) || count < 0 || count > 3) {
+      return NextResponse.json({ error: 'userTag and a freeze count between 0 and 3 are required.' }, { status: 400 });
+    }
+    const target = await db.player.findUnique({ where: { userTag }, select: { id: true, streakFreezes: true } });
+    if (!target) return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+
+    const updated = await db.player.update({ where: { id: target.id }, data: { streakFreezes: count } });
+    await logAdminAction(session, 'claims_set_freezes', 'player', userTag, { previousFreezes: target.streakFreezes, newFreezes: count });
+    return NextResponse.json({ ok: true, userTag, previousFreezes: target.streakFreezes, streakFreezes: updated.streakFreezes, note: `Streak freezes set to ${count}.` });
   }
 
   return NextResponse.json({ error: 'Unknown action.' }, { status: 400 });
