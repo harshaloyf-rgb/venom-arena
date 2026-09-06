@@ -1,12 +1,12 @@
-/* Section 20 — FAQ */
+/* Section 21 — FAQ */
 'use client';
 
 import { AlertTriangle } from 'lucide-react';
 import { Section, FaqItem } from './_helpers';
 
-export function Section20_FAQ() {
+export function Section21_FAQ() {
   return (
-    <Section icon={<AlertTriangle className="w-4 h-4" />} title="20. FAQ" accent="text-purple-400">
+    <Section icon={<AlertTriangle className="w-4 h-4" />} title="21. FAQ" accent="text-purple-400">
       <div className="flex flex-col gap-2.5">
         <FaqItem q="Do I lose my banked chips if I crash?" a="No! Your banked chips are 100% safe. You only lose the buy-in chips carried in that specific match." />
         <FaqItem q="How does the referral program work?" a="Every player gets a referral code (VIPER-XXXX format) — find it in Profile → Tag & Referral. Share it with a friend; they enter it in the Referral Code field while registering (it can only be entered during registration). Once your friend completes 5 matches, you BOTH automatically receive 2,500 chips. Track your referred friends and their progress in Profile → Referrals." />
@@ -88,7 +88,7 @@ export function Section20_FAQ() {
         <FaqItem q="Do Cyber Pass rewards carry over between seasons?" a="Currently there is only one season (Genesis). Claimed cosmetics are permanently added to your inventory and will not be removed, even if future seasons are introduced. Elite status is also permanent." />
         <FaqItem q="Can I claim pass rewards retroactively if I already have the Pass XP?" a="Yes! Pass tiers are based on your total Pass XP, and progress never expires mid-season. If your Pass XP already meets a tier&apos;s requirement, it&apos;s already unlocked — just go to the Pass tab and click Claim (or Claim All). The server validates your Pass XP, so every tier up to your current progress is claimable right now." />
         <FaqItem q="Is the Elite Cyber Pass worth it?" a="The Elite track contains 20 premium-exclusive skins (with bigger chip bonuses) that are NEVER sold in the Shop — they are only available through the pass. At 100,000c, it&apos;s a one-time purchase (no subscription). If you play regularly and plan to climb into the higher pass tiers, the elite skins alone are worth far more than the cosmetic shop prices." />
-        <FaqItem q="Where do claimed pass cosmetics go?" a="Claimed cosmetics are added to your `unlockedSkins` inventory (server-persisted). To equip them, go to the Shop &amp; Lab tab in Lobby Station. They appear alongside shop-purchased cosmetics and can be equipped as your active snake skin." />
+        <FaqItem q="Where do claimed pass cosmetics go?" a="Claimed cosmetics are added to your `unlockedSkins` inventory (server-persisted). To equip them, go to the Shop &amp; Lab tab in Lobby Station (see Section 17). They appear alongside shop-purchased cosmetics and can be equipped as your active snake skin." />
         <FaqItem q="Will other players see my custom Genetic Lab skin?" a="Only if you SAVE it to your inventory (max 5 slots). Saved designs are stored on your account and broadcast to everyone in online arenas — and they work on any device you sign in from. A design you only DEPLOY (without saving) lives in this browser only: you see it, but other players see a default skin, and it won&apos;t appear if you sign in elsewhere." />
         <FaqItem q="Do skins, backgrounds or face cosmetics affect gameplay?" a="No — every cosmetic in Venom Arena is purely visual. Your hitbox, speed, boost and score are identical no matter what skin, segment shape or background you equip. Arena backgrounds are fully static images with zero performance cost. Cosmetics change how you look, never how you play." />
         <FaqItem q="Are all face cosmetics free?" a="Yes — all 43 face cosmetics (Eyes, Mouth, Headgear, Wings, Nose, Hats, Goggles) cost nothing: click to equip, click again to unequip. They are stored on your device and rendered on your own snake in online and offline play. The only things that cost chips in the Shop &amp; Lab are the 12 Premium character-face skins (2,000–4,500 chips)." />

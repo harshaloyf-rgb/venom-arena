@@ -1,12 +1,12 @@
-/* Section 19 — Highlights (Clips & Match Cards) */
+/* Section 20 — Highlights (Clips & Match Cards) */
 'use client';
 
 import { Flame } from 'lucide-react';
 import { Section, InfoCard } from './_helpers';
 
-export function Section19_Highlights() {
+export function Section20_Highlights() {
   return (
-    <Section icon={<Flame className="w-4 h-4" />} title="19. HIGHLIGHTS (CLIPS &amp; MATCH CARDS)" accent="text-orange-400">
+    <Section icon={<Flame className="w-4 h-4" />} title="20. HIGHLIGHTS (CLIPS &amp; MATCH CARDS)" accent="text-orange-400">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <InfoCard title="🔥 What Are Highlights?" accent="text-orange-300">
           <p className="mb-1.5">The <strong>Highlights</strong> tab is the community showcase where great matches and player-submitted clips live. Two types of content appear:</p>

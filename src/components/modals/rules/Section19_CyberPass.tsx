@@ -1,12 +1,12 @@
-/* Section 18 — Cyber Pass (Season Pass) */
+/* Section 19 — Cyber Pass (Season Pass) */
 'use client';
 
 import { Award } from 'lucide-react';
 import { Section, InfoCard } from './_helpers';
 
-export function Section18_CyberPass() {
+export function Section19_CyberPass() {
   return (
-    <Section icon={<Award className="w-4 h-4" />} title="18. CYBER PASS (SEASON PASS)" accent="text-purple-400">
+    <Section icon={<Award className="w-4 h-4" />} title="19. CYBER PASS (SEASON PASS)" accent="text-purple-400">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <InfoCard title="🏆 What Is the Cyber Pass?" accent="text-purple-300">
           <p className="mb-1.5">The <strong>Cyber Pass</strong> is a progression-based reward track with <strong>20 tiers</strong> of rewards. You earn <strong>Pass XP</strong> by playing online matches (50% of match XP, up to 1,500 Pass XP per day) and new tiers unlock automatically as Pass XP accumulates.</p>

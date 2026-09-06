@@ -25,10 +25,11 @@ import { Section13_Championships } from './rules/Section13_Championships';
 import { Section14_HOF } from './rules/Section14_HOF';
 import { Section15_Syndicates } from './rules/Section15_Syndicates';
 import { Section16_Profile } from './rules/Section16_Profile';
-import { Section17_Social } from './rules/Section17_Social';
-import { Section18_CyberPass } from './rules/Section18_CyberPass';
-import { Section19_Highlights } from './rules/Section19_Highlights';
-import { Section20_FAQ } from './rules/Section20_FAQ';
+import { Section17_ShopLab } from './rules/Section17_ShopLab';
+import { Section18_Social } from './rules/Section18_Social';
+import { Section19_CyberPass } from './rules/Section19_CyberPass';
+import { Section20_Highlights } from './rules/Section20_Highlights';
+import { Section21_FAQ } from './rules/Section21_FAQ';
 
 interface GameRulesModalProps {
   isOpen: boolean;
@@ -49,7 +50,7 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
                 VENOM ARENA — OFFICIAL GUIDE &amp; RULES
               </DialogTitle>
               <DialogDescription className="text-xs text-slate-400">
-                Accounts, controls, modes, arena tiers, HUD, extraction, challenges, death, replay, leaderboards, championships, hall of fame, syndicates, social/friends, highlights &amp; FAQ
+                Accounts, controls, modes, arena tiers, HUD, extraction, challenges, death, leaderboards, championships, hall of fame, syndicates, profile, shop &amp; lab, social, cyber pass, highlights &amp; FAQ
               </DialogDescription>
             </div>
           </div>
@@ -91,10 +92,11 @@ export function GameRulesModal({ isOpen, onClose }: GameRulesModalProps) {
           <Section14_HOF />
           <Section15_Syndicates />
           <Section16_Profile />
-          <Section17_Social />
-          <Section18_CyberPass />
-          <Section19_Highlights />
-          <Section20_FAQ />
+          <Section17_ShopLab />
+          <Section18_Social />
+          <Section19_CyberPass />
+          <Section20_Highlights />
+          <Section21_FAQ />
 
           {/* FOOTER */}
           <div className="text-center text-[10px] font-mono text-slate-500 uppercase tracking-widest pt-2 border-t border-slate-800/60">

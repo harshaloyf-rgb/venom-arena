@@ -1,12 +1,12 @@
-/* Section 17 — Friends, Search & Social */
+/* Section 18 — Friends, Search & Social */
 'use client';
 
 import { MessageSquare } from 'lucide-react';
 import { Section, InfoCard } from './_helpers';
 
-export function Section17_Social() {
+export function Section18_Social() {
   return (
-    <Section icon={<MessageSquare className="w-4 h-4" />} title="17. FRIENDS, SEARCH &amp; SOCIAL" accent="text-violet-400">
+    <Section icon={<MessageSquare className="w-4 h-4" />} title="18. FRIENDS, SEARCH &amp; SOCIAL" accent="text-violet-400">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <InfoCard title="🤝 Overview — 6 Sub-Tabs" accent="text-violet-300">
           <p className="mb-1.5">The Social panel is your hub for connecting with other players. It contains <strong>6 sub-tabs</strong>:</p>
