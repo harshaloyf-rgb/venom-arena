@@ -276,3 +276,18 @@ Work Log:
 
 Stage Summary:
 - Answer to user: Rules & Guide now fully matches the Season Pass page and real config (one real page bug found: cumulative-vs-remaining "XP to next tier"; three doc gaps closed: practice 0-XP, auto-equip, mobile nav path). Admin panel needs nothing for this page — toolkit already complete and live-tested. Commit edf235e + this worklog commit.
+
+---
+Task ID: T55
+Agent: Main
+Task: "yes build" — Clan Wars in-game explainer (was believed queued; found already shipped by T52/a3b117a). Verified every surface live, added persistence polish
+
+Work Log:
+- Found the explainer stack already complete from T52 (commit a3b117a): (1) clanless view + Browse top: "How Syndicates Work" 4-step onboarding, step 4 = Clan Wars ("Leader wagers Treasury chips… first clan to 50 real-player kills takes the whole pot"); (2) My Clan overview: rose war teaser strip with "How wars work →" jump button (all ranks); (3) Wars tab: "Clan Wars" intro card + 3-step lifecycle strip (Declare & Escrow / Fight in Normal Matches / First to 50 Wins) + collapsible "Wars in plain words — with an example" (definition, VTX vs VTZ 1,000c→2,000c worked example, 6-question FAQ: no special match / can't refuse / Leader-only / no timer + disband refunds both wagers / winnings→Treasury / bots don't count); (4) Rules S15 full war card + S21 FAQ synced.
+- Cross-checked server ground truth (match/result ~448-471): kills increment side score, first side ≥50 ends war, winner treasury += wager×2, declarer favored on exact tie (unreachable in practice — only one side updates per match). In-game text matches server behavior on every claim.
+- Polish (committed): explainer collapse state now persists in localStorage key `va-war-explainer` (useState true → useEffect reads stored 'closed'; toggle writes 'open'/'closed' with try/catch). Regulars who hide it no longer see it re-open every visit; new players still get it open by default. No SSR/hydration risk (initial state server-safe).
+- Live browser E2E (desktop 1440×900 + mobile 375×812): login → clanless onboarding (onboarding + war step + pot copy all found) → created clan WT55 → overview teaser strip rendered → "How wars work →" jumps to Wars tab → all 10 explainer strings found in DOM (lifecycle 1-3, title, VTX vs VTZ, 2,000c pot, War Shield, no timer, disband refund, Leader-only) → collapse → localStorage 'closed' → full reload + re-navigation → explainer STILL collapsed (persistence proven) → re-open → 'open' → mobile 375px zero horizontal overflow → disbanded WT55 via API ({"ok":true,"warsCancelled":0}) → re-login verified clean clanless onboarding restored.
+- tsc --noEmit clean. Screenshots: verify-screens/t55-clanless-onboarding.png, t55-overview-teaser.png, t55-wars-explainer.png, t55-mobile-wars.png, t55-final-clanless.png. Note: browser profile cookie loss on agent-browser restart required re-login mid-test (app behavior correct — remember-me cookie unaffected).
+
+Stage Summary:
+- The in-game war explanation is fully delivered across 4 surfaces (clanless onboarding, overview teaser, Wars tab strip + plain-words explainer, Rules S15/S21) — no user needs Rules to understand wars. New: collapse state persists per device. Commit 9d8d7f6 pushed; main synced.
