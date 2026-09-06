@@ -33,16 +33,19 @@ export function SectionEconomyOverview() {
       <SubHeading>Season Pass (Cyber Pass)</SubHeading>
       <ul className="space-y-1.5 ml-1">
         <Bullet>
-          <strong className="text-slate-200">Fully server-enforced.</strong> DB fields: <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">hasElitePass</code>, <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">passClaimedFree</code>, <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">passClaimedElite</code>.
+          <strong className="text-slate-200">Fully server-enforced.</strong> DB fields: <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">hasElitePass</code>, <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">passXp</code>, <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">passXpToday</code>/<code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">passXpDate</code> (daily cap), <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">passClaimedFree</code>, <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">passClaimedElite</code>.
         </Bullet>
         <Bullet>
-          <strong className="text-emerald-400">20 tiers</strong> tied to player levels (Lv 2 → 38). Each tier unlocks a free + elite cosmetic reward.
+          <strong className="text-emerald-400">20 tiers tied to Pass XP</strong> (NOT player levels) — Tier 1 = 0, Tier 20 = 55,000 total Pass XP. Pass XP = 50% of match XP, capped at 1,500/day (UTC); daily challenge claims add +25 (same cap). Every tier unlocks a free + elite skin; 7 tiers per track also pay a chip bonus.
         </Bullet>
         <Bullet>
           <strong className="text-amber-400">Elite unlock:</strong> <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">POST /api/season-pass/unlock-elite</code> — deducts 100K chips atomically.
         </Bullet>
         <Bullet>
-          <strong className="text-cyan-400">Claim:</strong> <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">POST /api/season-pass/claim</code> — validates level, track, prevents double-claim, adds cosmetic to <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">unlockedSkins</code>.
+          <strong className="text-cyan-400">Claim:</strong> <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">POST /api/season-pass/claim</code> — validates Pass XP, track, prevents double-claim, adds cosmetic to <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">unlockedSkins</code>.
+        </Bullet>
+        <Bullet>
+          <strong className="text-violet-400">Cyber Pass support tools (Economy tab):</strong> search a player tag to load their pass dossier (elite status, tier, Pass XP, daily cap, claimed tiers). Actions — <strong className="text-amber-300">Comp Elite Pass</strong> (<code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">cyber_grant_elite</code>, no chip cost), <strong className="text-slate-200">Set Pass XP</strong> (<code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">cyber_set_xp</code>, absolute 0–1,000,000), <strong className="text-rose-300">Unclaim tier</strong> (<code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">cyber_unclaim</code>, re-opens a claim; already-granted chips/cosmetics are NOT clawed back). All three are audit-logged.
         </Bullet>
         <Bullet>
           <strong className="text-purple-400">40 pass-exclusive cosmetics</strong> (20 free + 20 elite) defined in <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">game-config.ts</code> — never available in the regular Shop.

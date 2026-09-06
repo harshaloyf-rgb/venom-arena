@@ -1,16 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, Tickets, Crown, Wallet, AlertTriangle, Loader2, Search, X } from 'lucide-react';
+import { RefreshCw, Tickets, Crown, Wallet, AlertTriangle, Loader2, Search, X, Sparkles } from 'lucide-react';
 import { notify, type ToastFn } from '../_panel-primitives';
 import { getCosmeticById } from '@/lib/game-config';
 
 // Admin Economy tab — Time Pass / Ticket control room (locked spec 2026-09-04,
-// tooling added 2026-09-05, cosmetic purchase ledger added 2026-09-06).
+// tooling added 2026-09-05, cosmetic purchase ledger added 2026-09-06, Cyber
+// Pass (Season Pass) dossier + support actions added 2026-09-06).
 // Read surfaces: pass orders, ticket ledger, cosmetic purchase ledger,
-// wallet reset status. Write surfaces: grant/revoke pass, ±tickets, clear ad
-// window, guarded force wallet reset (server additionally gated by
-// ADMIN_FORCE_WALLET_RESET=1).
+// per-player dossier (incl. Cyber Pass state), wallet reset status.
+// Write surfaces: grant/revoke pass, ±tickets, clear ad window, comp Elite
+// Pass, set Pass XP, unclaim a pass tier, guarded force wallet reset (server
+// additionally gated by ADMIN_FORCE_WALLET_RESET=1).
 
 interface PlanRow { sku: string; label: string; days: number; priceUsd: number; tickets: number }
 interface StatusData {
@@ -34,6 +36,21 @@ interface CosRow {
   itemId: string; itemType: string; amountChips: number;
 }
 interface CosByType { itemType: string; count: number; chips: number }
+// Cyber Pass (Season Pass) dossier — view=player
+interface CyberDossier {
+  hasElitePass: boolean; passXp: number; passXpToday: number; passXpDate: string | null;
+  isCappedToday: boolean; tier: number; claimedFree: number[]; claimedElite: number[];
+}
+interface PlayerDossier {
+  player: {
+    id: string; name: string; userTag: string;
+    adFreeUntil: string | null; adUnlockUntil: string | null; tickets: number;
+    passActive: boolean; windowActive: boolean;
+  };
+  cyber: CyberDossier;
+  orders: unknown[];
+  ledger: unknown[];
+}
 
 const PAGE_SIZE = 50;
 const STORES = ['', 'admin', 'play', 'appstore'];
@@ -88,6 +105,14 @@ export function EconomyTab({ onToast }: { onToast?: ToastFn }) {
   const [resetConfirmText, setResetConfirmText] = useState('');
   const [resetBusy, setResetBusy] = useState(false);
 
+  // Cyber Pass (Season Pass) dossier + support actions
+  const [dossierTag, setDossierTag] = useState('');
+  const [dossier, setDossier] = useState<PlayerDossier | null>(null);
+  const [dossierBusy, setDossierBusy] = useState(false);
+  const [cyberXp, setCyberXp] = useState('');
+  const [unclaimTrack, setUnclaimTrack] = useState<'free' | 'elite'>('free');
+  const [unclaimTier, setUnclaimTier] = useState('1');
+
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/economy');
@@ -123,6 +148,48 @@ export function EconomyTab({ onToast }: { onToast?: ToastFn }) {
 
   useEffect(() => { void fetchStatus(); }, [fetchStatus]);
   useEffect(() => { void fetchRows(); }, [fetchRows]);
+
+  async function loadDossier(tagOverride?: string) {
+    const tag = (tagOverride ?? dossierTag).trim();
+    if (!tag) return;
+    setDossierBusy(true);
+    try {
+      const res = await fetch(`/api/admin/economy?view=player&userTag=${encodeURIComponent(tag)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        notify(data.error || 'Player lookup failed.', 'error', onToast);
+        setDossier(null);
+        return;
+      }
+      setDossier(data as PlayerDossier);
+      setDossierTag((data as PlayerDossier).player.userTag);
+    } catch {
+      notify('Network error during player lookup.', 'error', onToast);
+    } finally {
+      setDossierBusy(false);
+    }
+  }
+
+  async function cyberAction(payload: Record<string, unknown>) {
+    setDossierBusy(true);
+    try {
+      const res = await fetch('/api/admin/economy', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        notify(data.note || 'Cyber Pass updated.', 'success', onToast);
+        await loadDossier(dossier?.player.userTag);
+      } else {
+        notify(data.error || `Action failed (HTTP ${res.status}).`, 'error', onToast);
+      }
+    } catch {
+      notify('Network error during Cyber Pass action.', 'error', onToast);
+    } finally {
+      setDossierBusy(false);
+    }
+  }
 
   async function runWalletReset() {
     setResetBusy(true);
@@ -240,6 +307,109 @@ export function EconomyTab({ onToast }: { onToast?: ToastFn }) {
               >
                 {resetBusy && <Loader2 className="w-3 h-3 animate-spin" />} Execute
               </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Cyber Pass (Season Pass) dossier + support actions */}
+      <div className="rounded-xl border border-violet-500/20 bg-violet-950/10 p-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <h4 className="text-xs font-bold text-violet-200 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-violet-300" /> Cyber Pass support
+          </h4>
+          <span className="text-[10px] text-violet-200/50">(Season Pass dossier — separate from the ad-free Time Pass above)</span>
+          <div className="ml-auto flex gap-1.5">
+            <input
+              value={dossierTag}
+              onChange={(e) => setDossierTag(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void loadDossier(); }}
+              placeholder="player tag e.g. VM-xxxxxx"
+              className="bg-slate-950 border border-violet-500/30 rounded-lg px-2 py-1 text-xs text-slate-200 w-44 focus:outline-none focus:border-violet-400 font-mono"
+            />
+            <button
+              type="button"
+              onClick={() => void loadDossier()}
+              disabled={dossierBusy || !dossierTag.trim()}
+              className="px-3 py-1 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-[10px] font-bold uppercase tracking-wider transition flex items-center gap-1"
+            >
+              {dossierBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />} Load
+            </button>
+          </div>
+        </div>
+
+        {dossier && (
+          <div className="space-y-2">
+            {/* Dossier readout */}
+            <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
+              <span className="text-emerald-300 font-bold">{dossier.player.userTag}</span>
+              <span className="text-slate-500">{dossier.player.name}</span>
+              <span className={`px-2 py-0.5 rounded-full font-bold uppercase border ${dossier.cyber.hasElitePass ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' : 'bg-slate-800/60 text-slate-400 border-slate-700'}`}>
+                {dossier.cyber.hasElitePass ? '👑 Elite' : 'Free pass'}
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-slate-800/60 text-slate-300 border border-slate-700">Tier {dossier.cyber.tier}/20</span>
+              <span className="px-2 py-0.5 rounded-full bg-slate-800/60 text-slate-300 border border-slate-700">{dossier.cyber.passXp.toLocaleString('en-IN')} Pass XP</span>
+              {(() => {
+                // Mirror the player page: passXpToday only counts for its stored
+                // UTC day — a stale day means 0 earned today (shown in the day badge).
+                const effToday = dossier.cyber.passXpDate === new Date().toISOString().slice(0, 10) ? dossier.cyber.passXpToday : 0;
+                return (
+                  <span className={`px-2 py-0.5 rounded-full border ${dossier.cyber.isCappedToday ? 'bg-rose-500/10 text-rose-300 border-rose-500/30' : 'bg-slate-800/60 text-slate-400 border-slate-700'}`}>
+                    Today {effToday.toLocaleString('en-IN')}/1,500 · day {dossier.cyber.passXpDate ?? '—'}
+                  </span>
+                );
+              })()}
+              <span className="px-2 py-0.5 rounded-full bg-slate-800/60 text-slate-400 border border-slate-700">
+                claimed F:{dossier.cyber.claimedFree.length ? dossier.cyber.claimedFree.join(',') : '—'} / E:{dossier.cyber.claimedElite.length ? dossier.cyber.claimedElite.join(',') : '—'}
+              </span>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-wrap items-center gap-2 text-[10px]">
+              {!dossier.cyber.hasElitePass && (
+                <button
+                  type="button"
+                  onClick={() => void cyberAction({ action: 'cyber_grant_elite', userTag: dossier.player.userTag })}
+                  disabled={dossierBusy}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500/90 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold uppercase tracking-wider transition flex items-center gap-1"
+                >
+                  <Crown className="w-3 h-3" /> Comp Elite Pass
+                </button>
+              )}
+              <div className="flex items-center gap-1">
+                <input
+                  value={cyberXp}
+                  onChange={(e) => setCyberXp(e.target.value.replace(/[^0-9]/g, ''))}
+                  placeholder="Set Pass XP"
+                  className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200 w-28 focus:outline-none focus:border-violet-400 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => { if (cyberXp !== '') void cyberAction({ action: 'cyber_set_xp', userTag: dossier.player.userTag, xp: Number(cyberXp) }); }}
+                  disabled={dossierBusy || cyberXp === ''}
+                  className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white font-bold uppercase tracking-wider transition"
+                >
+                  Set XP
+                </button>
+              </div>
+              <div className="flex items-center gap-1">
+                <select value={unclaimTrack} onChange={(e) => setUnclaimTrack(e.target.value as 'free' | 'elite')} className="bg-slate-950 border border-slate-700 rounded-lg px-1.5 py-1.5 text-xs text-slate-200">
+                  <option value="free">free</option>
+                  <option value="elite">elite</option>
+                </select>
+                <select value={unclaimTier} onChange={(e) => setUnclaimTier(e.target.value)} className="bg-slate-950 border border-slate-700 rounded-lg px-1.5 py-1.5 text-xs text-slate-200">
+                  {Array.from({ length: 20 }, (_, i) => <option key={i + 1} value={String(i + 1)}>T{i + 1}</option>)}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => void cyberAction({ action: 'cyber_unclaim', userTag: dossier.player.userTag, tier: Number(unclaimTier), track: unclaimTrack })}
+                  disabled={dossierBusy}
+                  className="px-3 py-1.5 rounded-lg bg-rose-600/80 hover:bg-rose-500 disabled:opacity-50 text-white font-bold uppercase tracking-wider transition"
+                  title="Re-open a claimed tier. Already-granted chips/cosmetics are NOT clawed back."
+                >
+                  Unclaim tier
+                </button>
+              </div>
             </div>
           </div>
         )}

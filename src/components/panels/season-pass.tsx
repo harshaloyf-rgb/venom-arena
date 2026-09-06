@@ -9,6 +9,7 @@ import {
   PASS_FREE_CHIP_REWARDS,
   PASS_ELITE_CHIP_REWARDS,
   PASS_SEASON_NAME,
+  PASS_SEASON_NUMBER,
   PASS_DAILY_XP_CAP,
   ELITE_PASS_COST,
 } from '@/lib/game-config';
@@ -42,8 +43,14 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
 
   const hasElite = player?.hasElitePass ?? false;
   const passXp = player?.passXp ?? 0;
-  const passXpToday = player?.passXpToday ?? 0;
   const bankedChips = player?.bankedChips ?? 0;
+
+  // Daily cap is stored per UTC day (passXpDate). If the stored day is NOT
+  // today, the counter is stale — the player hasn't earned Pass XP today, so
+  // treat it as 0 instead of showing a false "Daily Cap Reached" until their
+  // next match resets the field server-side.
+  const utcTodayStr = new Date().toISOString().slice(0, 10);
+  const passXpToday = player?.passXpDate === utcTodayStr ? (player?.passXpToday ?? 0) : 0;
 
   // Current pass tier from passXp
   const currentTier = useMemo(() => {
@@ -126,8 +133,8 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
       const chips = data.chipReward ?? 0;
       const parts: string[] = [];
       if (cosmetic) parts.push(`${cosmetic.emoji ?? ''} ${cosmetic.name}`);
-      if (chips > 0) parts.push(`${chips.toLocaleString()}c`);
-      notify(`Claimed: ${parts.join(' + ')} — ${chips > 0 ? 'chips banked!' : 'now in your Shop!'}`, 'success', onToast);
+      if (chips > 0) parts.push(`+${chips.toLocaleString()}c`);
+      notify(`Claimed: ${parts.join(' + ')} — ${cosmetic ? 'equip it in Shop & Lab!' : 'chips banked!'}`, 'success', onToast);
       void refresh();
     } catch {
       notify('Network error. Try again.', 'error', onToast);
@@ -174,7 +181,7 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
         <div className="space-y-2 min-w-0 lg:flex lg:flex-row lg:items-center lg:gap-2 lg:space-y-0 lg:leading-tight">
           <div className="flex items-center gap-2 flex-wrap lg:gap-0.5">
             <span className="bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[11px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-widest lg:text-[11px]">
-              Season {PASS_SEASON_NAME}
+              Season {PASS_SEASON_NUMBER} · {PASS_SEASON_NAME}
             </span>
             <span className="text-[11px] text-emerald-400 font-mono font-bold flex items-center gap-1">
               <Trophy className="w-3 h-3 lg:w-3 lg:h-3" /> {currentTier}/20 Tiers
@@ -203,15 +210,22 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
             </span>
           </div>
           {!hasElite && (
-            <button
-              type="button"
-              onClick={handleUnlockElite}
-              disabled={unlocking || bankedChips < ELITE_PASS_COST}
-              className="w-full py-2 bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-110 text-slate-950 font-black text-xs rounded-lg transition shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed lg:py-0.5"
-            >
-              {unlocking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Crown className="w-3.5 h-3.5" />}
-              {unlocking ? 'Unlocking...' : `Unlock Elite (${ELITE_PASS_COST.toLocaleString('en-IN')}c)`}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={handleUnlockElite}
+                disabled={unlocking || bankedChips < ELITE_PASS_COST}
+                className="w-full py-2 bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-110 text-slate-950 font-black text-xs rounded-lg transition shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed lg:py-0.5"
+              >
+                {unlocking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Crown className="w-3.5 h-3.5" />}
+                {unlocking ? 'Unlocking...' : `Unlock Elite (${ELITE_PASS_COST.toLocaleString('en-IN')}c)`}
+              </button>
+              {bankedChips < ELITE_PASS_COST && (
+                <div className="text-[10px] text-rose-400 font-mono text-center">
+                  Need {(ELITE_PASS_COST - bankedChips).toLocaleString('en-IN')} more banked chips
+                </div>
+              )}
+            </>
           )}
           {hasElite && (
             <div className="text-[11px] text-emerald-400 font-mono text-center pt-1">
@@ -330,9 +344,11 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
                   </div>
                   <div className="text-xs font-bold text-white flex items-center gap-1.5 lg:text-[11px] lg:leading-tight">
                     <span aria-hidden>{freeCosmetic?.emoji ?? '💰'}</span>
-                    <span>{freeChips > 0 ? `${freeChips.toLocaleString()} Chips` : freeCosmetic?.name ?? '—'}</span>
+                    <span>{freeCosmetic?.name ?? (freeChips > 0 ? `${freeChips.toLocaleString()} Chips` : '—')}</span>
                   </div>
-                  <div className="text-[11px] font-mono text-slate-500 lg:inline lg:text-[11px]">{freeChips > 0 ? 'chips' : freeCosmetic?.type ?? ''}</div>
+                  <div className="text-[11px] font-mono text-slate-500 lg:inline lg:text-[11px]">
+                    {freeCosmetic && freeChips > 0 ? `skin + ${freeChips.toLocaleString()}c bonus` : freeChips > 0 ? 'chips' : freeCosmetic?.type ?? ''}
+                  </div>
                   <button
                     type="button"
                     onClick={() => handleClaim(tier, 'free')}
@@ -357,9 +373,11 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
                   </div>
                   <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5 lg:text-[11px] lg:leading-tight">
                     <span aria-hidden>{eliteCosmetic?.emoji ?? '💰'}</span>
-                    <span>{eliteChips > 0 ? `${eliteChips.toLocaleString()} Chips` : eliteCosmetic?.name ?? '—'}</span>
+                    <span>{eliteCosmetic?.name ?? (eliteChips > 0 ? `${eliteChips.toLocaleString()} Chips` : '—')}</span>
                   </div>
-                  <div className="text-[11px] font-mono text-slate-500 lg:inline lg:text-[11px]">{eliteChips > 0 ? 'chips' : eliteCosmetic?.type ?? ''}</div>
+                  <div className="text-[11px] font-mono text-slate-500 lg:inline lg:text-[11px]">
+                    {eliteCosmetic && eliteChips > 0 ? `skin + ${eliteChips.toLocaleString()}c bonus` : eliteChips > 0 ? 'chips' : eliteCosmetic?.type ?? ''}
+                  </div>
                   <button
                     type="button"
                     onClick={() => handleClaim(tier, 'elite')}
@@ -383,8 +401,10 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
 
       {/* FOOTER INFO */}
       <div className="text-center text-[11px] text-slate-500 space-y-1 pt-2 border-t border-slate-800/60 lg:pt-0 lg:space-y-0 lg:leading-tight">
-        <p>Play matches to earn Pass XP (50% of match XP, max {PASS_DAILY_XP_CAP.toLocaleString()}/day). Unlock tiers and claim cosmetics + chip rewards.</p>
-        <p>Claimed cosmetics are added to your inventory and can be equipped in <strong className="text-slate-400">Shop &amp; Lab</strong>.</p>
+        <p className="font-mono uppercase tracking-widest text-[10px] text-slate-600">How Pass XP works</p>
+        <p>Match XP = (score × 5 + kills × 50) × arena reward multiplier — you earn it whether you extract or die.</p>
+        <p>50% of match XP becomes Pass XP (max {PASS_DAILY_XP_CAP.toLocaleString()}/day, resets at midnight UTC). Daily challenge claims add +25 Pass XP each (same daily cap).</p>
+        <p>Unlock tiers and claim cosmetics + chip rewards. Claimed cosmetics are added to your inventory and can be equipped in <strong className="text-slate-400">Shop &amp; Lab</strong>.</p>
       </div>
     </div>
   );

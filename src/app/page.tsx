@@ -18,6 +18,7 @@ import {
 
 import { useAuth } from '@/components/providers/auth-provider';
 import { PASS_TIER_XP } from '@/lib/game-config';
+// (Season Pass dashboard card — unclaimed counter below counts BOTH tracks)
 import AuthGate from '@/components/auth/auth-gate';
 import SnakeGame from '@/components/game/SnakeGame';
 import OnlineSnakeGame from '@/components/game/OnlineSnakeGame';
@@ -328,10 +329,11 @@ export default function Home() {
           const claimData = await res.json();
           setMissions((prev) => prev.map((m) => (m.id === mission.id ? { ...m, claimed: true } : m)));
           const xpPart = claimData.xpGained ? ` +${claimData.xpGained} XP` : '';
+          const passPart = claimData.passXpGained ? ` +${claimData.passXpGained} Pass XP` : '';
           if (claimData.bonusReward > 0) {
-            toast.success(`Challenge claimed: +${claimData.reward}c${xpPart} (includes ${claimData.bonusReward}c streak bonus ×${claimData.streakMultiplier})!`);
+            toast.success(`Challenge claimed: +${claimData.reward}c${xpPart}${passPart} (includes ${claimData.bonusReward}c streak bonus ×${claimData.streakMultiplier})!`);
           } else {
-            toast.success(`Challenge claimed: +${claimData.reward}c${xpPart}!`);
+            toast.success(`Challenge claimed: +${claimData.reward}c${xpPart}${passPart}!`);
           }
           void refresh();
           void fetchChallenges();
@@ -662,7 +664,7 @@ export default function Home() {
                         <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center" title={`${pendingClanInviteCount} pending syndicate invite or join request${pendingClanInviteCount === 1 ? '' : 's'}`}>{pendingClanInviteCount}</span>
                       )}
                     </div>
-                    <BentoGate onClick={() => setActiveTab('seasonpass')} icon={Sparkles} accent="pink" badge="Pass XP" title="Season Pass" desc="Earn Pass XP from matches (50% of match XP, daily cap). Unlock cosmetics and chip rewards across 20 tiers." footLeft={player ? (() => { const tiers = PASS_TIER_XP.filter(x => (player.passXp ?? 0) >= x).length; const unclaimed = PASS_TIER_XP.filter((x, i) => (player.passXp ?? 0) >= x && !(player.passClaimedFree ?? []).includes(i + 1)).length; return unclaimed > 0 ? `Tier ${tiers}/20 · ${unclaimed} to claim!` : `Tier ${tiers}/20`; })() : 'EARN XP'}
+                    <BentoGate onClick={() => setActiveTab('seasonpass')} icon={Sparkles} accent="pink" badge="Pass XP" title="Season Pass" desc="Earn Pass XP from matches (50% of match XP, daily cap). Unlock cosmetics and chip rewards across 20 tiers." footLeft={player ? (() => { const px = player.passXp ?? 0; const tiers = PASS_TIER_XP.filter(x => px >= x).length; const freeU = PASS_TIER_XP.filter((x, i) => px >= x && !(player.passClaimedFree ?? []).includes(i + 1)).length; const eliteU = player.hasElitePass ? PASS_TIER_XP.filter((x, i) => px >= x && !(player.passClaimedElite ?? []).includes(i + 1)).length : 0; const unclaimed = freeU + eliteU; return unclaimed > 0 ? `Tier ${tiers}/20 · ${unclaimed} to claim!` : `Tier ${tiers}/20`; })() : 'EARN XP'}
                     footRight="View Pass" />
                     <BentoGate onClick={() => setActiveTab('clips')} icon={Film} accent="red" badge="Clips" title="Highlights" desc="Watch and share your greatest moments. Auto-generated Match Cards, community video clips, upvotes, and the daily Top Play spotlight." footLeft="MATCH HIGHLIGHTS" footRight="Watch" />
                     <div className="relative">

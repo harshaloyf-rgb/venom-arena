@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { utcLastMonday, utcToday, utcYesterday, utcMonday } from '@/lib/date-utils';
-import { levelFromXp } from '@/lib/game-config';
+import { levelFromXp, PASS_DAILY_XP_CAP } from '@/lib/game-config';
 
 
 
@@ -494,23 +494,43 @@ export async function POST(req: NextRequest) {
       const bonusReward = Math.floor(baseReward * (multiplier - 1));
       const totalReward = baseReward + bonusReward;
 
-      // XP bonus: 25 XP per challenge claim (helps progress Season Pass)
+      // XP bonus: 25 XP per challenge claim — counts toward BOTH the player
+      // level AND Season Pass progress (Rules S10/S19/S21). The Pass share is
+      // routed through the same 1,500/day cap as match XP so there is one
+      // consistent daily earning limit across all Pass XP sources.
       const xpBonus = 25;
 
       // Calculate new level from XP bonus
-      const p = await tx.player.findUnique({ where: { id: playerId }, select: { xp: true, level: true } });
+      const p = await tx.player.findUnique({
+        where: { id: playerId },
+        select: { xp: true, level: true, passXpToday: true, passXpDate: true },
+      });
       if (!p) throw new Error('player_missing');
       const newXp = p.xp + xpBonus;
       const newLevel = Math.max(p.level, levelFromXp(newXp));
 
+      // Pass XP share (respects the daily cap; UTC day matches match/result)
+      const claimDay = utcToday();
+      const sameDay = p.passXpDate === claimDay;
+      const xpToday = sameDay ? (p.passXpToday ?? 0) : 0;
+      const passRemaining = PASS_DAILY_XP_CAP - xpToday;
+      const passXpGained = passRemaining > 0 ? Math.min(xpBonus, passRemaining) : 0;
+
+      const updateData: Record<string, unknown> = {
+        bankedChips: { increment: totalReward },
+        totalEarned: { increment: totalReward },
+        xp: { increment: xpBonus },
+        level: newLevel,
+      };
+      if (passXpGained > 0) {
+        updateData.passXp = { increment: passXpGained };
+        updateData.passXpToday = sameDay ? xpToday + passXpGained : passXpGained;
+        updateData.passXpDate = claimDay;
+      }
+
       const updated = await tx.player.update({
         where: { id: playerId },
-        data: {
-          bankedChips: { increment: totalReward },
-          totalEarned: { increment: totalReward },
-          xp: { increment: xpBonus },
-          level: newLevel,
-        },
+        data: updateData,
       });
 
       await tx.challenge.update({
@@ -518,7 +538,7 @@ export async function POST(req: NextRequest) {
         data: { claimed: true },
       });
 
-      return { totalReward, baseReward, bonusReward, newBankedChips: updated.bankedChips, xpGained: xpBonus, newLevel };
+      return { totalReward, baseReward, bonusReward, newBankedChips: updated.bankedChips, xpGained: xpBonus, passXpGained, newLevel };
     });
 
     return NextResponse.json({
@@ -528,6 +548,7 @@ export async function POST(req: NextRequest) {
       bonusReward: result.bonusReward,
       streakMultiplier: multiplier,
       xpGained: result.xpGained,
+      passXpGained: result.passXpGained,
       newLevel: result.newLevel,
     });
   } catch (e: unknown) {

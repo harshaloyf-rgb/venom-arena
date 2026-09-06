@@ -917,6 +917,9 @@ export const PASS_ELITE_CHIP_REWARDS: number[] = [
 
 export const PASS_SEASON_NAME = 'Genesis';
 
+/** Season index — shown as "Season 1 · Genesis" in the Pass banner (matches Rules S19). */
+export const PASS_SEASON_NUMBER = 1;
+
 /** Real equippable cosmetics for the Free track (20 tiers). */
 export const PASS_FREE_COSMETICS: Skin[] = [
   // Tiers 1-5 — Skins

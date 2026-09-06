@@ -5,13 +5,16 @@ import { logAdminAction } from '@/lib/audit';
 import { passPlanById, PASS_PLANS } from '@/lib/pass-catalog';
 import { creditPassPurchase } from '@/lib/pass-order';
 import { walletResetStatus, forceWalletReset } from '@/lib/year-rollover';
+import { PASS_TIER_XP } from '@/lib/game-config';
 
 // Admin economy controls for the Time Pass / Ticket system (locked spec
 // 2026-09-04, extended 2026-09-05 with inspect/revoke tooling so the admin
 // can both CHECK and FIX pass/ticket issues without touching the DB by hand).
+// Extended 2026-09-06 with Cyber Pass (Season Pass) support tools — the
+// cyber_* actions at the bottom.
 // Mirrors the modify-chips route's session+audit pattern.
 //
-// GET ?view=player  &userTag=                          -> one player's pass state + history
+// GET ?view=player  &userTag=                          -> one player's pass state + history (incl. Cyber Pass dossier)
 // GET ?view=orders  [&userTag=][&store=][&sku=][&limit=][&offset=] -> PassOrder table
 // GET ?view=ledger  [&userTag=][&reason=][&limit=][&offset=]       -> TicketLedger table
 // GET ?view=cosmetics [&userTag=][&itemType=][&limit=][&offset=]   -> Purchase table (cosmetic ledger)
@@ -21,6 +24,9 @@ import { walletResetStatus, forceWalletReset } from '@/lib/year-rollover';
 // POST { action: 'revoke_pass',     userTag }         // clears adFreeUntil immediately
 // POST { action: 'clear_ad_unlock', userTag }         // clears a stuck 10-min ad window
 // POST { action: 'set_tickets',     userTag, delta }  // +grant / -revoke (ledgered)
+// POST { action: 'cyber_grant_elite', userTag }       // comp the Elite Cyber Pass (no chip cost, audit-logged)
+// POST { action: 'cyber_set_xp',      userTag, xp }   // set absolute Pass XP (0..1,000,000, audit-logged)
+// POST { action: 'cyber_unclaim',     userTag, tier, track } // re-open a claimed tier (chips NOT clawed back)
 // POST { action: 'force_wallet_reset' }               // DANGEROUS: gated by ADMIN_FORCE_WALLET_RESET=1
 
 const RESET_ENABLED = process.env.ADMIN_FORCE_WALLET_RESET === '1';
@@ -44,7 +50,12 @@ export async function GET(req: NextRequest) {
     if (!userTag) return NextResponse.json({ error: 'userTag is required.' }, { status: 400 });
     const player = await db.player.findUnique({
       where: { userTag },
-      select: { id: true, name: true, userTag: true, adFreeUntil: true, adUnlockUntil: true, tickets: true },
+      select: {
+        id: true, name: true, userTag: true, adFreeUntil: true, adUnlockUntil: true, tickets: true,
+        // Cyber Pass (Season Pass) dossier fields
+        hasElitePass: true, passXp: true, passXpToday: true, passXpDate: true,
+        passClaimedFree: true, passClaimedElite: true,
+      },
     });
     if (!player) return NextResponse.json({ error: 'Player not found' }, { status: 404 });
 
@@ -62,12 +73,39 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
+    // Cyber Pass derived state
+    const parseTiers = (raw: string | null): number[] => {
+      try { const a = JSON.parse(raw || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
+    };
+    const cyberTier = (() => {
+      for (let i = PASS_TIER_XP.length - 1; i >= 0; i--) {
+        if (player.passXp >= PASS_TIER_XP[i]) return i + 1;
+      }
+      return 0;
+    })();
+    const cyber = {
+      hasElitePass: player.hasElitePass,
+      passXp: player.passXp,
+      passXpToday: player.passXpToday,
+      passXpDate: player.passXpDate ?? null,
+      isCappedToday: player.passXpDate === now.toISOString().slice(0, 10) && player.passXpToday >= 1500,
+      tier: cyberTier,
+      claimedFree: parseTiers(player.passClaimedFree),
+      claimedElite: parseTiers(player.passClaimedElite),
+    };
+
     return NextResponse.json({
       player: {
-        ...player,
+        id: player.id,
+        name: player.name,
+        userTag: player.userTag,
+        adFreeUntil: player.adFreeUntil,
+        adUnlockUntil: player.adUnlockUntil,
+        tickets: player.tickets,
         passActive: !!player.adFreeUntil && player.adFreeUntil > now,
         windowActive: !!player.adUnlockUntil && player.adUnlockUntil > now,
       },
+      cyber,
       orders: orders.map((o) => ({ ...o, verifierNote: o.verifierNote ?? null })),
       ledger,
     });
@@ -324,6 +362,64 @@ export async function POST(req: NextRequest) {
     const count = await forceWalletReset();
     await logAdminAction(session, 'force_wallet_reset', 'system', 'all-players', { playersReset: count });
     return NextResponse.json({ ok: true, playersReset: count });
+  }
+
+  // ── Cyber Pass (Season Pass) support tools ────────────────────────────────
+  if (action === 'cyber_grant_elite') {
+    const userTag = String(body.userTag || '').trim();
+    if (!userTag) return NextResponse.json({ error: 'userTag is required.' }, { status: 400 });
+    const target = await db.player.findUnique({ where: { userTag }, select: { id: true, hasElitePass: true } });
+    if (!target) return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+    if (target.hasElitePass) return NextResponse.json({ error: 'Player already has the Elite Pass.' }, { status: 400 });
+
+    const updated = await db.player.update({ where: { id: target.id }, data: { hasElitePass: true } });
+    // Comp: no chip deduction (real purchases keep their own Purchase row via
+    // /api/season-pass/unlock-elite). Audit log is the only trail, matching
+    // the revoke_pass policy.
+    await logAdminAction(session, 'cyber_grant_elite', 'player', userTag, { previousHasElitePass: target.hasElitePass });
+    return NextResponse.json({ ok: true, userTag, hasElitePass: updated.hasElitePass });
+  }
+
+  if (action === 'cyber_set_xp') {
+    const userTag = String(body.userTag || '').trim();
+    const rawXp = Math.trunc(Number(body.xp));
+    if (!userTag || !Number.isFinite(rawXp) || rawXp < 0 || rawXp > 1_000_000) {
+      return NextResponse.json({ error: 'userTag and an xp value between 0 and 1,000,000 are required.' }, { status: 400 });
+    }
+    const target = await db.player.findUnique({ where: { userTag }, select: { id: true, passXp: true } });
+    if (!target) return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+
+    const updated = await db.player.update({ where: { id: target.id }, data: { passXp: rawXp } });
+    await logAdminAction(session, 'cyber_set_xp', 'player', userTag, { previousPassXp: target.passXp, newPassXp: rawXp });
+    return NextResponse.json({ ok: true, userTag, previousPassXp: target.passXp, passXp: updated.passXp });
+  }
+
+  if (action === 'cyber_unclaim') {
+    const userTag = String(body.userTag || '').trim();
+    const tier = Math.trunc(Number(body.tier));
+    const track = String(body.track || '');
+    if (!userTag || !['free', 'elite'].includes(track) || tier < 1 || tier > 20) {
+      return NextResponse.json({ error: 'userTag, track (free|elite) and tier (1-20) are required.' }, { status: 400 });
+    }
+    const field = track === 'free' ? 'passClaimedFree' : 'passClaimedElite';
+    const updated = await db.$transaction(async (tx) => {
+      const target = await tx.player.findUnique({ where: { userTag } });
+      if (!target) return null;
+      let claimed: number[] = [];
+      try { claimed = JSON.parse(target[field] || '[]'); if (!Array.isArray(claimed)) claimed = []; } catch { claimed = []; }
+      if (!claimed.includes(tier)) return { userTag, tier, track, removed: false, claimed };
+      const next = claimed.filter((t) => t !== tier);
+      const p = await tx.player.update({ where: { id: target.id }, data: { [field]: JSON.stringify(next) } });
+      return { userTag, tier, track, removed: true, claimed: JSON.parse(p[field] || '[]') as number[] };
+    });
+    if (!updated) return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+    if (!updated.removed) {
+      return NextResponse.json({ error: `Tier ${tier} (${track}) was not claimed by this player.` }, { status: 400 });
+    }
+    // NOTE: chips/cosmetic already granted stay with the player — this only
+    // re-opens the claim so the pass can re-award it.
+    await logAdminAction(session, 'cyber_unclaim', 'player', userTag, { tier, track });
+    return NextResponse.json({ ok: true, ...updated, note: 'Claim re-opened. Already-granted chips/cosmetics were NOT clawed back.' });
   }
 
   return NextResponse.json({ error: 'Unknown action.' }, { status: 400 });

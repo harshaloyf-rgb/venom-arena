@@ -21,7 +21,7 @@ export function Section19_CyberPass() {
           <ul className="list-disc pl-4 space-y-0.5">
             <li><strong>Extract safely</strong> = XP earned (amount scales with chips extracted + kills)</li>
             <li><strong>Die / collide</strong> = XP still earned based on score and kills before death</li>
-            <li>Complete <strong>daily challenges</strong> for bonus XP (+25 per challenge)</li>
+            <li>Complete <strong>daily challenges</strong> for bonus XP (+25 per challenge — counts toward your level AND your Pass XP, sharing the daily Pass cap)</li>
             <li>Your Pass XP increases with every online match (50% of match XP, capped at 1,500/day)</li>
           </ul>
         </InfoCard>
@@ -71,8 +71,8 @@ export function Section19_CyberPass() {
           <p className="mb-1.5">Season 1 — <strong>Genesis</strong>:</p>
           <ul className="list-disc pl-4 space-y-0.5">
             <li>20 tiers on a Pass-XP ladder — Tier 1 is free (0 Pass XP), Tier 20 needs <strong>55,000 Pass XP</strong> total</li>
-            <li>20 free rewards (exclusive skin + chip bonus at every tier)</li>
-            <li>20 elite-exclusive premium skins (bigger chip bonuses)</li>
+            <li>Free track: an <strong>exclusive skin at every tier</strong> + chip bonuses at 7 tiers (200c at Tier 3 up to 3,000c at Tier 20)</li>
+            <li>Elite track: a premium skin at every tier + bigger chip bonuses (500c up to 10,000c)</li>
             <li>Elite cost: <strong>100,000 chips</strong> (one-time)</li>
             <li>All rewards are <strong>pass-exclusive</strong> — not available anywhere else</li>
           </ul>
@@ -83,7 +83,7 @@ export function Section19_CyberPass() {
             <li>Higher arena tiers give more chips per extraction = more XP</li>
             <li>Complete <strong>daily challenges</strong> for bonus XP</li>
             <li>Free track rewards are still valuable — don&apos;t skip them!</li>
-            <li>Elite is best value if you play regularly and are above Level 5</li>
+            <li>Elite is best value if you play regularly — there is <strong>no level requirement</strong>, just the 100,000c price</li>
           </ul>
         </InfoCard>
       </div>

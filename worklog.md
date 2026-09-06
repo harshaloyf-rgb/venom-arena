@@ -235,3 +235,23 @@ Stage Summary:
 - Up to 5 custom skins can be saved from the Genetic Lab with user-given names
 - All skins (pass, premium, preset, custom) can be equipped and render in both online and offline modes
 - Custom skin data is synced through the game server so other online players can see custom skins
+
+---
+Task ID: T53
+Agent: Main
+Task: Season Pass page — full audit vs Rules & Guide + game config, fix everything wrong/misleading, add admin Cyber Pass support tooling
+
+Work Log:
+- Audited every component/number on the Season Pass page against code: season-pass.tsx, game-config.ts (PASS_*), season-pass/{claim,claim-all,unlock-elite}, match/result pass-XP block, player/challenges, rules S10/S19/S21, admin economy (route+tab+guide), cosmetics-shop, dashboard bento.
+- BUG 1 (live-confirmed): Rules S10/S19/S21 + the in-code comment all say challenge claims give "+25 XP toward Season Pass progress" — but player/challenges POST only incremented account xp, never passXp. FIXED: claims now also award +25 Pass XP through the same 1,500/day cap as matches (passXp/passXpToday/passXpDate updated atomically; response carries passXpGained; dashboard toast shows "+25 Pass XP"). Live test: toast "Challenge claimed: +20c +25 XP +25 Pass XP!", DB passXp 0→25.
+- BUG 2 (live-confirmed): false "Daily Cap Reached" — UI read raw passXpToday without checking passXpDate, so a player capped YESTERDAY saw capped/red all morning until their next match. FIXED: panel + admin dossier compare passXpDate to the UTC day and treat stale days as 0. Live test: DB stale state (1500/day 2026-09-05) now renders "1,475 XP left today / Today: 25/1,500".
+- UI fix: chip tiers hid the exclusive skin (Tier 3 showed "🌿 200 Chips" — the skin's emoji with a chips-only label). Every tier now shows skin name + "skin + Nc bonus" on both tracks (7 chip tiers each).
+- UI improvements: banner badge "Season 1 · Genesis" (was "Season Genesis"; matches Rules "Season 1 — Genesis", new PASS_SEASON_NUMBER const); disabled Elite button now explains "Need N more banked chips"; claim toast says "equip it in Shop & Lab!"; footer upgraded to "How Pass XP works" (XP formula, 50% → Pass XP, 1,500/day cap + midnight UTC reset, challenge +25, Shop & Lab pointer); dashboard Season Pass bento "N to claim!" now counts BOTH tracks (was free-only, under-counted for elite holders).
+- Rules fixes: S19 "20 free rewards (exclusive skin + chip bonus at every tier)" → skin every tier + chip bonuses at 7 tiers (200c–3,000c); S19 tip "above Level 5" (no level requirement exists) → "no level requirement, just the 100,000c price"; S19/S21 challenge +25 wording now states it counts toward Pass XP and shares the daily cap; S21 FAQ "Every tier contains an exclusive snake skin plus a chip bonus on the free track" → corrected to both tracks/7 tiers; S21 adds midnight-UTC reset note.
+- Admin guide fix: "20 tiers tied to player levels (Lv 2 → 38)" (wrong — tiers are Pass-XP based) → corrected; "validates level" → "validates Pass XP".
+- ADMIN TOOLS (genuinely needed — no way to inspect/fix pass state without DB access): admin Economy tab gains a "Cyber Pass support" card. view=player dossier now returns elite status/tier/Pass XP/daily-cap day/claimed tiers (effective-today semantics). New audit-logged actions: cyber_grant_elite (comp, no chip cost), cyber_set_xp (absolute 0–1,000,000), cyber_unclaim (re-open a claimed tier; already-granted chips/cosmetics NOT clawed back — stated in UI + response). All three live-tested via the UI (dossier badges update, comp flips 👑 ELITE ACTIVE, unclaim re-opens Claim); AdminAuditLog rows verified for all three.
+- Verified pass-only-cosmetics claim: pass skins enter shop inventory only via unlockedSkins (never purchasable) — Rules S19/S21 "never sold in Shop" holds.
+- Verify: tsc --noEmit clean; live browser tests desktop 1440×900 + mobile 390×844 (before/after screenshots in verify-screens/t53-*.png); claim + claim-all + challenge-claim flows exercised end-to-end; console clean. Test data fully reverted (pass fields, unlockedSkins, purchase rows, challenge claim, chips/xp back to snapshot).
+
+Stage Summary:
+- Season Pass page is now truthful vs Rules & config on every number; both real bugs (challenge Pass-XP, false daily cap) fixed and live-verified; elite paywall messaging clearer; admin can support Cyber Pass disputes without DB access. Scripts/t53-* kept for reproducibility (no credentials).
