@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { COUNTRIES } from '@/lib/game-config';
-import { Check, Globe, Lock, Shield, Timer, Trash2, Upload, AlertTriangle, ShieldCheck, Loader2, RefreshCw, X } from 'lucide-react';
+import { Check, Globe, Lock, Shield, Timer, Trash2, AlertTriangle, ShieldCheck, Loader2, RefreshCw, X } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // FACTION_COUNTRIES
@@ -316,10 +316,6 @@ interface IdentityEditorProps {
   setSelectedCountry: (v: string) => void;
   selectedAvatar: string;
   setSelectedAvatar: (v: string) => void;
-  isDragging: boolean;
-  setIsDragging: (v: boolean) => void;
-  onDrop: (e: React.DragEvent) => void;
-  onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onCancel: () => void;
   onSave: () => void;
   saving: boolean;
@@ -343,10 +339,6 @@ export function IdentityEditor(props: IdentityEditorProps) {
     setSelectedCountry,
     selectedAvatar,
     setSelectedAvatar,
-    isDragging,
-    setIsDragging,
-    onDrop,
-    onFileChange,
     onCancel,
     onSave,
     saving,
@@ -437,41 +429,10 @@ export function IdentityEditor(props: IdentityEditorProps) {
           </label>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-2 items-start">
-            {/* Left: drag-drop */}
+            {/* Left: current-selection preview (drag-drop upload removed —
+                Task 36 audit: API caps avatar at 8 chars, uploads never saved) */}
             <div className="lg:col-span-4 flex flex-col gap-3 lg:gap-1">
-              <div
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setIsDragging(true);
-                }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={onDrop}
-                onClick={() =>
-                  document.getElementById('avatar-file-input')?.click()
-                }
-                className={`border-2 border-dashed rounded-2xl p-5 lg:p-2 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 relative group h-44 lg:h-20 ${
-                  isDragging
-                    ? 'border-indigo-500 bg-indigo-500/5'
-                    : 'border-slate-800 bg-slate-900/40 hover:border-indigo-500/40 hover:bg-slate-900/60'
-                }`}
-              >
-                <input
-                  id="avatar-file-input"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={onFileChange}
-                />
-
-                {selectedAvatar && isImageAvatar ? (
-                  <div className="absolute inset-0 p-1.5 flex flex-col items-center justify-center bg-slate-950/80 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                    <Upload className="w-6 h-6 text-indigo-400 mb-1" />
-                    <span className="text-[11px] text-white font-sans font-bold">
-                      CHANGE IMAGE
-                    </span>
-                  </div>
-                ) : null}
-
+              <div className="border-2 border-dashed rounded-2xl p-5 lg:p-2 flex flex-col items-center justify-center text-center relative h-44 lg:h-20 border-slate-800 bg-slate-900/40">
                 {selectedAvatar ? (
                   isImageAvatar ? (
                     <div className="w-24 h-24 lg:w-12 lg:h-12 rounded-2xl border border-indigo-500/20 overflow-hidden relative shadow-lg">
@@ -494,14 +455,14 @@ export function IdentityEditor(props: IdentityEditorProps) {
                   )
                 ) : (
                   <div className="flex flex-col items-center justify-center">
-                    <div className="w-12 h-12 lg:w-8 lg:h-8 rounded-xl bg-slate-950 flex items-center justify-center border border-slate-800 text-slate-400 group-hover:text-indigo-400 transition-colors mb-2.5 lg:mb-0.5">
-                      <Upload className="w-5 h-5 lg:w-3.5 lg:h-3.5" />
+                    <div className="w-12 h-12 lg:w-8 lg:h-8 rounded-xl bg-slate-950 flex items-center justify-center border border-slate-800 text-xl lg:text-base mb-2.5 lg:mb-0.5">
+                      🐍
                     </div>
                     <span className="text-xs lg:text-[11px] font-bold text-white font-sans">
-                      Upload Custom Photo
+                      Skin Default
                     </span>
                     <span className="text-[11px] text-slate-500 mt-1">
-                      Click to browse (max 1.5MB)
+                      Pick a preset emblem →
                     </span>
                   </div>
                 )}

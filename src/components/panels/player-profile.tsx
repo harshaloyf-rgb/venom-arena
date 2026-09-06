@@ -288,10 +288,12 @@ function ProfileContent({
   // Fetch real global rank
   useEffect(() => {
     if (!player) return;
+    let cancelled = false;
     fetch('/api/leaderboard/my-rank?type=chips')
       .then(r => r.json())
-      .then(d => { if (d.globalRank != null) setGlobalRank(`#${d.globalRank}`); })
+      .then(d => { if (!cancelled && d.globalRank != null) setGlobalRank(`#${d.globalRank}`); })
       .catch(() => {});
+    return () => { cancelled = true; };
   }, [player?.userTag]);
 
   const [activeTab, setActiveTab] = useState<ProfileTab>('stats');
@@ -309,7 +311,6 @@ function ProfileContent({
   const [instagramVerified, setInstagramVerified] = useState(player.instagramVerified);
   const [youtubeVerified, setYoutubeVerified] = useState(player.youtubeVerified);
   const [twitchVerified, setTwitchVerified] = useState(player.twitchVerified);
-  const [isDragging, setIsDragging] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -508,10 +509,15 @@ function ProfileContent({
   }, [activeTab, matchFilter, fetchDbMatches]);
 
   // -- derived values
-  // FIX U8: use xpForLevel (same as header/dashboard) — the old local formula
-  // `level * 200` showed a different XP % than the header for the same player.
-  const xpNeeded = xpForLevel(player.level + 1);
-  const xpPercent = Math.min(100, Math.floor((player.xp / Math.max(1, xpNeeded)) * 100));
+  // XP progress — MUST mirror src/app/page.tsx (within-level semantics).
+  // xpForLevel(N) = CUMULATIVE XP to reach level N; player.xp is cumulative too.
+  // NOTE: the earlier "FIX U8" (xp / xpForLevel(level+1)) was a no-op — that
+  // equals the old `level * 200` denominator and showed a different % than the
+  // header for the same player (e.g. Lvl 2 @ 300 XP: header 50%, panel 75%).
+  const xpThisLevel = xpForLevel(player.level);
+  const xpNeeded = Math.max(1, xpForLevel(player.level + 1) - xpThisLevel);
+  const xpIntoLevel = Math.max(0, player.xp - xpThisLevel);
+  const xpPercent = Math.min(100, Math.floor((xpIntoLevel / xpNeeded) * 100));
   const deathsCount = player.lifetimeDeaths || 0;
   const killsCount = player.lifetimeKills || 0;
   const kdRatio = deathsCount > 0
@@ -549,47 +555,11 @@ function ProfileContent({
   const nameCooldownText = cooldownRemainingText(player.nameChangedAt, 30);
   const countryCooldownText = cooldownRemainingText(player.countryChangedAt, 7);
 
-  // -- avatar drag & drop handlers
-  function processAvatarFile(file: File) {
-    if (!file.type.startsWith('image/')) {
-      notify('Please select a valid image file.', 'error', onToast);
-      return;
-    }
-    if (file.size > 1.5 * 1024 * 1024) {
-      notify(
-        'Image size exceeds 1.5MB. Please choose a smaller file.',
-        'error',
-        onToast,
-      );
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (event.target?.result) {
-        setSelectedAvatar(event.target.result as string);
-        notify(
-          'Custom avatar selected! Save your handshake to lock it in.',
-          'success',
-          onToast,
-        );
-      }
-    };
-    reader.readAsDataURL(file);
-  }
-
-  function handleDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setIsDragging(false);
-    const files = e.dataTransfer.files;
-    if (files && files.length > 0) processAvatarFile(files[0]);
-  }
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files;
-    if (files && files.length > 0) processAvatarFile(files[0]);
-  }
-
   // -- copy to clipboard helper
+  // NOTE: the old drag & drop / file-picker custom avatar handlers were removed
+  // (Task 36 audit): the API persists avatar only when length <= 8, so uploaded
+  // photos were silently dropped on save. Long avatars come exclusively from
+  // OAuth (Google picture URL). Preset emoji avatars are chosen in the editor.
   async function copyToClipboard(text: string, setCopied: (v: boolean) => void) {
     try {
       await navigator.clipboard.writeText(text);
@@ -637,10 +607,10 @@ function ProfileContent({
         body: JSON.stringify({
           name: trimmed,
           country: selectedCountry,
-          avatar:
-            selectedAvatar && selectedAvatar.length <= 8
-              ? selectedAvatar
-              : undefined,
+          // '' clears the avatar (falls back to equipped skin emoji), a preset
+          // emoji persists, and an unchanged long OAuth URL sends undefined
+          // (= no change). Server caps avatar strings at 8 chars.
+          avatar: selectedAvatar.length <= 8 ? selectedAvatar : undefined,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -1049,7 +1019,7 @@ function ProfileContent({
                 Level Progress
               </span>
               <span className="font-mono text-white font-bold">
-                {player.xp} / {xpNeeded} XP
+                {xpIntoLevel.toLocaleString()} / {xpNeeded.toLocaleString()} XP
               </span>
             </div>
             <div className="w-full h-2.5 lg:h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800 p-0.5">
@@ -1161,10 +1131,6 @@ function ProfileContent({
               youtubeVerified={youtubeVerified}
               twitch={twitch}
               twitchVerified={twitchVerified}
-              isDragging={isDragging}
-              setIsDragging={setIsDragging}
-              onDrop={handleDrop}
-              onFileChange={handleFileChange}
               onCancel={() => setIsEditing(false)}
               onSave={handleSaveProfile}
               saving={saving}
@@ -1227,8 +1193,6 @@ function ProfileContent({
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <div className="w-3 h-3 rounded-full border border-slate-700" style={{ backgroundColor: activeSkin?.color || '#22c55e' }} />
                   <span className="text-[11px] text-slate-500 font-mono">{activeSkin?.pattern || 'solid'}</span>
-                  <span className="text-[11px] text-slate-600">•</span>
-
                 </div>
               </div>
               <span className="text-[11px] text-indigo-400 ml-auto shrink-0 hidden sm:inline">Live Demo →</span>
