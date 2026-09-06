@@ -4,15 +4,16 @@ import { db } from '@/lib/db';
 // GET /api/hof/stats
 // Returns aggregate HOF statistics for the public display.
 export async function GET() {
-  const [totalInductees, byType, milestoneFirsts, milestoneCounts, championshipYears] = await Promise.all([
+  const [totalInductees, byTypePlayer, milestoneFirsts, milestoneCounts, championshipYears] = await Promise.all([
     // Total unique players inducted
     db.hallOfFameEntry.groupBy({
       by: ['playerId'],
       _count: true,
     }),
-    // Count by induction type
+    // Unique players per induction type (a player with 3 milestone tiers is
+    // ONE milestone inductee — matches the "Inductees" labels on the panel)
     db.hallOfFameEntry.groupBy({
-      by: ['inductionType'],
+      by: ['inductionType', 'playerId'],
       _count: true,
     }),
     // First inductee per milestone tier (earliest inductedAt)
@@ -57,10 +58,16 @@ export async function GET() {
     }
   }
 
+  // Unique player count per type: { milestone: 12, championship: 5 }
+  const byType: Record<string, number> = {};
+  for (const g of byTypePlayer) {
+    byType[g.inductionType] = (byType[g.inductionType] ?? 0) + 1;
+  }
+
   return NextResponse.json({
     totalInductedPlayers: totalInductees.length,
     totalEntries: totalInductees.reduce((sum, g) => sum + g._count, 0),
-    byType: Object.fromEntries(byType.map((g) => [g.inductionType, g._count])),
+    byType,
     milestoneFirstAchievers: firstAchieverMap,
     milestoneCounts: milestoneCountMap,
     championshipYears: championshipYears.map((g) => ({

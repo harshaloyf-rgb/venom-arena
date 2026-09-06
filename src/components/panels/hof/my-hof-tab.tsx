@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { Check, Loader2, Sparkles, Trophy, Award, Target, ChevronDown } from 'lucide-react';
+import { Check, Loader2, Sparkles, Trophy, Award, Target } from 'lucide-react';
 import { HALL_OF_FAME_TIERS, fmtChips, fmtDate, badgeIcon } from './_types';
 import { MicroLabel } from '../_panel-primitives';
 import type { MyEntry, NextMilestone } from './_types';
@@ -27,8 +26,6 @@ export function MyHofTab({
   championshipEntries,
   nextMilestone,
 }: MyHofTabProps) {
-  const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16 lg:py-3">
@@ -87,18 +84,13 @@ export function MyHofTab({
           <div className="space-y-2 lg:space-y-0.5 max-h-48 lg:max-h-32 overflow-y-auto va-scroll">
             {milestoneEntries.map((e) => {
               const tier = HALL_OF_FAME_TIERS.find((t) => t.id === e.milestoneTierId);
-              const isExpanded = expandedEntry === `m-${e.id}`;
               return (
                 <div
                   key={e.id}
                   className="rounded-xl border border-slate-800 bg-slate-950/80"
                 >
-                  {/* Mobile card */}
-                  <button
-                    type="button"
-                    onClick={() => setExpandedEntry(isExpanded ? null : `m-${e.id}`)}
-                    className="w-full flex items-center gap-3 p-3 text-left lg:hidden"
-                  >
+                  {/* Mobile card — all details are already visible, so it's static */}
+                  <div className="w-full flex items-center gap-3 p-3 text-left lg:hidden">
                     <span className="text-xl shrink-0" aria-hidden>{tier?.badge.split(' ')[0] || '🏅'}</span>
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-bold text-white">{e.title || tier?.name || 'Milestone'}</div>
@@ -109,8 +101,7 @@ export function MyHofTab({
                     <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/30 shrink-0">
                       <Check className="w-3 h-3 inline" /> Inducted
                     </span>
-                    <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform shrink-0 lg:hidden ${isExpanded ? 'rotate-180' : ''}`} />
-                  </button>
+                  </div>
                   {/* Desktop row */}
                   <div className="hidden lg:flex lg:contents">
                     <div className="lg:flex lg:items-center lg:gap-1 lg:p-1.5 lg:w-full">
@@ -141,18 +132,13 @@ export function MyHofTab({
           </h3>
           <div className="space-y-2 lg:space-y-0.5 max-h-48 lg:max-h-32 overflow-y-auto va-scroll">
             {championshipEntries.map((e) => {
-              const isExpanded = expandedEntry === `c-${e.id}`;
               return (
                 <div
                   key={e.id}
                   className="rounded-xl border border-slate-800 bg-slate-950/80"
                 >
-                  {/* Mobile card */}
-                  <button
-                    type="button"
-                    onClick={() => setExpandedEntry(isExpanded ? null : `c-${e.id}`)}
-                    className="w-full flex items-center gap-3 p-3 text-left lg:hidden"
-                  >
+                  {/* Mobile card — all details are already visible, so it's static */}
+                  <div className="w-full flex items-center gap-3 p-3 text-left lg:hidden">
                     <span className="text-xl shrink-0" aria-hidden>{badgeIcon(e.hofBadge)}</span>
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-bold text-white">{e.title || `Championship ${e.championshipYear || ''}`}</div>
@@ -163,8 +149,7 @@ export function MyHofTab({
                     <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/30 shrink-0">
                       <Check className="w-3 h-3 inline" /> Inducted
                     </span>
-                    <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform shrink-0 lg:hidden ${isExpanded ? 'rotate-180' : ''}`} />
-                  </button>
+                  </div>
                   {/* Desktop row */}
                   <div className="hidden lg:flex lg:contents">
                     <div className="lg:flex lg:items-center lg:gap-1 lg:p-1.5 lg:w-full">

@@ -14,6 +14,8 @@ interface MilestonesTabProps {
   tierFilter: string;
   search: string;
   entries: InducteeEntry[];
+  total: number;
+  tierCounts: Record<string, number>;
   firstAchievers: Record<string, { playerName: string; userTag: string; country: string; inductedAt: string } | null>;
   listRef: React.RefObject<HTMLOListElement | null>;
   myPlayerTag: string | null;
@@ -28,6 +30,8 @@ export function MilestonesTab({
   tierFilter,
   search,
   entries,
+  total,
+  tierCounts,
   firstAchievers,
   listRef,
   myPlayerTag,
@@ -69,7 +73,7 @@ export function MilestonesTab({
         </div>
         <button
           type="button"
-          onClick={() => {
+          onClick={async () => {
             const myRow = listRef.current?.querySelector('[data-is-me="true"]');
             if (myRow) {
               myRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -77,7 +81,19 @@ export function MilestonesTab({
               setTimeout(() => myRow.classList.remove('ring-2', 'ring-yellow-400/60'), 2000);
               notify('Found you in the milestones list!', 'success', onToast);
             } else {
-              notify('You are not yet inducted into any milestone. Keep banking chips!', 'info', onToast);
+              // The list shows the earliest 100 inductees — before claiming the
+              // player isn't inducted, check their actual HOF record.
+              try {
+                const res = await fetch('/api/hof/my-entries');
+                const data = res.ok ? await res.json() : null;
+                if (data && (data.totalEntries ?? 0) > 0) {
+                  notify('You are inducted! This list shows the earliest 100 — see all your entries in the My HOF Profile tab.', 'info', onToast);
+                } else {
+                  notify('You are not yet inducted into any milestone. Keep banking chips!', 'info', onToast);
+                }
+              } catch {
+                notify('You are not yet inducted into any milestone. Keep banking chips!', 'info', onToast);
+              }
             }
           }}
           className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition border bg-yellow-500/15 border-yellow-500/40 text-yellow-300 hover:bg-yellow-500/25 shrink-0"
@@ -108,7 +124,7 @@ export function MilestonesTab({
               onClick={() => onTierFilterChange(t.id)}
               className={`px-2.5 lg:px-1.5 py-1 rounded-full text-[11px] font-bold font-mono transition border whitespace-nowrap ${tierFilter === t.id ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
             >
-              {t.badge.split(' ')[0]} {shortLabel}
+              {t.badge.split(' ')[0]} {shortLabel}{tierCounts[t.id] ? ` (${tierCounts[t.id]})` : ''}
             </button>
           );
         })}
@@ -120,6 +136,13 @@ export function MilestonesTab({
           <Loader2 className="w-5 h-5 lg:w-3 lg:h-3 text-yellow-400 animate-spin" />
           <span className="ml-2 text-xs lg:text-[11px] text-slate-400">Loading milestones…</span>
         </div>
+      )}
+
+      {/* Truncation hint (list is capped at 100 rows per fetch) */}
+      {!loading && total > entries.length && (
+        <p className="text-[11px] font-mono text-slate-600 text-center">
+          Showing first {entries.length} of {total} inductees — earliest first
+        </p>
       )}
 
       {/* Real data */}

@@ -27,12 +27,30 @@ export async function GET(req: Request) {
   if (milestoneTier) where.milestoneTierId = milestoneTier;
   if (badge) where.hofBadge = badge;
 
-  // Search on player name or tag
+  // Search on player name, tag, or clan tag (SQLite LIKE is ASCII case-insensitive)
   if (playerTag) {
     where.player = { userTag: playerTag };
   } else if (search) {
-    where.player = { name: { contains: search } };
+    where.player = {
+      OR: [
+        { name: { contains: search } },
+        { userTag: { contains: search } },
+        { clanTag: { contains: search } },
+      ],
+    };
   }
+
+  // Ordering matches how each wing presents rows:
+  // - Milestones Wing: induction order (earliest first) — "#1 is the first to
+  //   achieve that tier", matching the on-page claim and the First! pill.
+  // - Champions Wing: latest year first, then by stored championship rank so
+  //   each year reads #1, #2, #3… instead of arbitrary induction timestamps.
+  const orderBy: Array<Record<string, string>> =
+    type === 'milestone'
+      ? [{ inductedAt: 'asc' }, { id: 'asc' }]
+      : type === 'championship'
+        ? [{ championshipYear: 'desc' }, { championshipRank: 'asc' }, { inductedAt: 'asc' }]
+        : [{ inductedAt: 'desc' }];
 
   const [entries, total] = await Promise.all([
     db.hallOfFameEntry.findMany({
@@ -44,7 +62,7 @@ export async function GET(req: Request) {
           },
         },
       },
-      orderBy: { inductedAt: 'desc' },
+      orderBy,
       take: limit,
       skip: offset,
     }),

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, Eye } from 'lucide-react';
 import { HALL_OF_FAME_TIERS, countryFlag, fmtChips, fmtDate } from './_types';
 import type { InducteeEntry } from './_types';
 import type { InspectedPlayer } from '@/lib/game-config';
@@ -98,10 +98,10 @@ export function MilestonesFlatTable({ entries, tierFilter, search, firstAchiever
               data-is-me={isMe ? 'true' : undefined}
               className={`${isMe && !isExpanded ? 'bg-yellow-500/10' : ''}`}
             >
-              {/* Mobile card */}
+              {/* Mobile card — tap expands; profile opens via the View Profile button */}
               <button
                 type="button"
-                onClick={() => { setExpanded(isExpanded ? null : entry.id); handleInspect(); }}
+                onClick={() => setExpanded(isExpanded ? null : entry.id)}
                 className={`w-full flex items-center gap-2 p-3 text-left transition-colors lg:hidden ${isExpanded ? 'bg-slate-900/60' : 'hover:bg-slate-900/40'}`}
               >
                 <span className="font-mono text-slate-400 font-bold w-8 shrink-0">
@@ -130,6 +130,9 @@ export function MilestonesFlatTable({ entries, tierFilter, search, firstAchiever
                     </div>
                     <div className="text-slate-300">{tier.badge.split(' ')[0]} {tier.name}</div>
                     <div className="text-slate-500">{fmtChips(tier.chips)}c threshold</div>
+                    <button type="button" onClick={handleInspect} title="View profile" className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-600/15 border border-violet-500/30 text-violet-300 hover:bg-violet-600 hover:text-white transition">
+                      <Eye className="w-2.5 h-2.5" /> View Profile
+                    </button>
                   </div>
                 </div>
               )}

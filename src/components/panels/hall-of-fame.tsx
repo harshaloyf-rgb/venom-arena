@@ -55,6 +55,7 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
   const [champLoading, setChampLoading] = useState(false);
   const [champYear, setChampYear] = useState<number | null>(null);
   const [champSearch, setChampSearch] = useState('');
+  const [debouncedChampSearch, setDebouncedChampSearch] = useState('');
   const [champEntries, setChampEntries] = useState<InducteeEntry[]>([]);
   const [champTotal, setChampTotal] = useState(0);
 
@@ -179,12 +180,18 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
     }
   }, [tab, player, fetchMyEntries]);
 
+  // Debounce the champions search so typing doesn't fire a request per keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedChampSearch(champSearch), 300);
+    return () => clearTimeout(t);
+  }, [champSearch]);
+
   // Fetch champions when tab changes or filters change
   useEffect(() => {
     if (tab === 'champions') {
-      fetchChampions(champYear, champSearch);
+      fetchChampions(champYear, debouncedChampSearch);
     }
-  }, [tab, champYear, champSearch, fetchChampions]);
+  }, [tab, champYear, debouncedChampSearch, fetchChampions]);
 
   // Fetch milestones when tab changes or filter changes
   useEffect(() => {
@@ -241,7 +248,7 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
             Venom Arena Hall of Fame &amp; Esports Shrine
           </h2>
           <p className="text-xs lg:text-[11px] text-slate-400 mt-1 lg:mt-0 max-w-3xl">
-            Permanent shrine for milestone achievers and championship legends. DB-backed, immutable, and forever.
+            Permanent shrine for milestone achievers and championship legends. Every record is immutable and here forever.
           </p>
         </div>
       </div>
@@ -296,6 +303,7 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
           years={champYears}
           search={champSearch}
           entries={champEntries}
+          total={champTotal}
           onYearChange={setChampYear}
           onSearchChange={setChampSearch}
           onInspectEntry={inspectEntry}
@@ -309,6 +317,8 @@ export function HallOfFame({ onToast, onInspectPlayer }: HallOfFameProps) {
           tierFilter={mileTierFilter}
           search={mileSearch}
           entries={mileEntries}
+          total={mileTotal}
+          tierCounts={stats?.milestoneCounts ?? {}}
           firstAchievers={mileFirstAchievers}
           listRef={mileListRef}
           myPlayerTag={player?.userTag ?? null}

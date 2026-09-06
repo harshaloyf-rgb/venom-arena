@@ -36,6 +36,8 @@ interface PlayerInspectorModalProps {
 
 interface PublicProfile {
   avatar?: string | null;
+  bankedChips?: number;
+  level?: number;
   friendsCount: number;
   followersCount: number;
   followingCount: number;
@@ -79,6 +81,14 @@ function relativeTime(dateStr: string): string {
   const months = Math.floor(days / 30);
   return `${months}mo ago`;
 }
+
+// Championship hofBadge ids → pretty labels (fallback when an entry has no title)
+const HOF_BADGE_LABELS: Record<string, string> = {
+  crown: '👑 Crown',
+  silver: '🥈 Silver',
+  bronze: '🥉 Bronze',
+  contender: '🛡️ Contender',
+};
 
 export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspectorModalProps) {
   const [friendRequested, setFriendRequested] = useState(false);
@@ -162,6 +172,11 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
   const p = {
     ...player,
     ...(profile ? {
+      // Current live values win over caller-passed snapshots (e.g. opening the
+      // inspector from Hall of Fame passes chips-at-induction, not the
+      // player's present bank) — the public profile has the real numbers.
+      bankedChips: profile.bankedChips ?? player.bankedChips,
+      level: profile.level ?? player.level,
       lifetimeKills: profile.lifetimeKills ?? player.lifetimeKills,
       lifetimeDeaths: profile.lifetimeDeaths ?? player.lifetimeDeaths,
       lifetimeExtracts: profile.lifetimeExtracts ?? player.lifetimeExtracts,
@@ -529,10 +544,18 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
               </div>
               {realHofEntries.slice(0, 2).map((e) => (
                 <div key={e.id} className="flex justify-between text-[10px] mt-0.5">
-                  <span className="text-yellow-200 font-bold truncate">{e.hofBadge || e.title || 'HOF Inductee'}</span>
+                  <span className="text-yellow-200 font-bold truncate">
+                    {/* Championship badges are raw ids ('crown'…); their title is the pretty form. Milestone badges already carry the emoji. */}
+                    {e.inductionType === 'championship'
+                      ? (e.title || HOF_BADGE_LABELS[e.hofBadge || ''] || 'HOF Inductee')
+                      : (e.hofBadge || e.title || 'HOF Inductee')}
+                  </span>
                   <span className="text-emerald-400 font-mono shrink-0 ml-2">{e.chipsAtInduction.toLocaleString('en-IN')}c</span>
                 </div>
               ))}
+              {realHofEntries.length > 2 && (
+                <div className="text-[9px] text-yellow-500/80 mt-0.5">+ {realHofEntries.length - 2} more induction{realHofEntries.length - 2 !== 1 ? 's' : ''}</div>
+              )}
             </div>
           )}
         </div>

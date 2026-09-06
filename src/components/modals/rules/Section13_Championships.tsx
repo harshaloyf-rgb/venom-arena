@@ -18,7 +18,7 @@ export function Section13_Championships() {
           </ul>
         </InfoCard>
 
-        <InfoCard title="📋 DB-Backed Registration" accent="text-cyan-300">
+        <InfoCard title="📋 Tracked Server-Side" accent="text-cyan-300">
           <p className="mb-1">Championship registration is handled entirely through the database — one click, free entry:</p>
           <ul className="list-disc pl-4 space-y-0.5">
             <li><strong>Free registration:</strong> Click <strong>Register</strong> on the Championships tab — everyone can enter (guests and registered players alike)</li>

@@ -106,7 +106,7 @@ export function Section16_Profile() {
           <li>If you change your name or country, <strong>all leaderboards update immediately</strong> to show the new identity</li>
           <li>Your <strong>VM-XXXXXX tag is always shown alongside your name</strong> — this is your permanent, unchangeable identity that links all your entries across time</li>
           <li>The <strong>cooldowns (30 days for name, 7 days for country)</strong> limit how often identity can change, keeping leaderboards stable during ranking periods</li>
-          <li>Historical records like Hall of Fame entries snapshot your name and tag at the time of induction — those never change</li>
+          <li>Hall of Fame entries also display your <strong>current</strong> name — your permanent VM-tag keeps each record linked to you, and the chips you had at induction stay frozen forever</li>
         </ul>
       </InfoCard>
     </Section>
