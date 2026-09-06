@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
   // Validate milestone if provided
   let milestoneMin = 0;
   let milestoneMax = Infinity;
+  let hasBand = false;
   if (milestone) {
     const tier = MILESTONE_TIERS.find(t => t.id === milestone);
     if (!tier || tier.id === 'all') {
@@ -50,11 +51,16 @@ export async function GET(req: NextRequest) {
       }
     } else {
       milestoneMin = tier.minChips;
+      // Ascending sort — the nextHigher tier is the SMALLEST threshold above
+      // this tier. (Sorting descending made .find() always return Omega's
+      // 10M as the ceiling, so every tier board was secretly "X up to 10M"
+      // instead of the exact badge band.)
       const sortedTiers = MILESTONE_TIERS
         .filter(t => t.id !== 'all')
-        .sort((a, b) => b.minChips - a.minChips);
+        .sort((a, b) => a.minChips - b.minChips);
       const nextHigher = sortedTiers.find(t => t.minChips > milestoneMin);
       milestoneMax = nextHigher ? nextHigher.minChips : Infinity;
+      hasBand = true;
     }
   }
 
@@ -127,11 +133,19 @@ export async function GET(req: NextRequest) {
       where.country = { in: regionCountries };
     }
 
-    const fetchLimit = milestone ? Math.max(limit * 5, 500) : limit;
-    const rawPlayers = await db.player.findMany({
+    // Milestone bands filter DB-side. A band is [tierMin, nextTierMin) —
+    // a player holds exactly one badge, so tier boards never overlap.
+    // (Fetching top-N then filtering in JS broke at scale: the top-chip
+    // window rarely contains low-chip tiers like Rookie once the player
+    // count exceeds the fetch window.)
+    if (hasBand) {
+      where.bankedChips = { gte: milestoneMin, ...(milestoneMax < Infinity ? { lt: milestoneMax } : {}) };
+    }
+
+    players = await db.player.findMany({
       where,
       orderBy: tieBreakOrder,
-      take: fetchLimit,
+      take: limit,
       select: {
         userTag: true,
         name: true,
@@ -142,12 +156,6 @@ export async function GET(req: NextRequest) {
         createdAt: true,
       },
     });
-
-    if (milestone) {
-      players = rawPlayers.filter(p => p.bankedChips >= milestoneMin && p.bankedChips < milestoneMax).slice(0, limit);
-    } else {
-      players = rawPlayers.slice(0, limit);
-    }
   }
 
   // Fetch HOF player IDs for badge display (S5)

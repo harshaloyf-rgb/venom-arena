@@ -56,11 +56,14 @@ const RANK_MEDALS: Record<number, string> = { 1: '\u{1F947}', 2: '\u{1F948}', 3:
 // ── Region utilities (regionOf, REGIONS) imported from game-config ──
 
 // ── Championship prize tier for a given rank ───────────────────────
-function championshipPrizeForRank(rank: number) {
-  if (rank === 1) return { label: '\u{1F451} World Champion', color: '#fbbf24' };
-  if (rank <= 10) return { label: '\u{1F948} Elite 10', color: '#cbd5e1' };
-  if (rank <= 50) return { label: '\u{1F949} Masters 50', color: '#b45309' };
-  if (rank <= 100) return { label: '\u{1F6E1}\u{FE0F} Qualifier 100', color: '#64748b' };
+// Names mirror the Annual Championship prize tiers (Rules Section 13).
+// `short` is the compact desktop Status pill; the full label is always in
+// the title tooltip and in the mobile expanded row.
+function championshipPrizeForRank(rank: number): { label: string; short: string; color: string } | null {
+  if (rank === 1) return { label: '\u{1F451} World Champion', short: '\u{1F451} Champion', color: '#fbbf24' };
+  if (rank <= 10) return { label: '\u{1F948} Elite 10', short: '\u{1F948} Elite 10', color: '#cbd5e1' };
+  if (rank <= 50) return { label: '\u{1F949} Masters 50', short: '\u{1F949} Masters 50', color: '#b45309' };
+  if (rank <= 100) return { label: '\u{1F6E1}\u{FE0F} Qualifier 100', short: '\u{1F6E1}\u{FE0F} Qualifier 100', color: '#64748b' };
   return null;
 }
 
@@ -74,13 +77,13 @@ const ALL_MILESTONE_TIERS = [
 const TAB_DESCRIPTIONS: Record<TopTab, { title: string; desc: string; scope: string }> = {
   summit: {
     title: 'World Cup Summit',
-    desc: 'Only the #1 ranked player from each country competes here. Think of it as the Olympics \u2014 one champion per nation, battling for the World Championship title.',
+    desc: 'Only the #1 ranked player from each country appears here. Think of it as the Olympics \u2014 one champion per nation, ranked by banked chips.',
     scope: '1 player per country \u2192 top 100 ranked by banked chips',
   },
   global: {
     title: 'Global Rankings',
     desc: 'Every single player in the world, ranked #1 to N by total banked chips. This is the main leaderboard \u2014 all players, one unified ranking.',
-    scope: 'All players worldwide \u2192 ranked #1 to N by banked chips',
+    scope: 'All players worldwide \u2192 ranked #1 to N (fetches the top 1000)',
   },
   national: {
     title: 'National Rankings',
@@ -94,8 +97,8 @@ const TAB_DESCRIPTIONS: Record<TopTab, { title: string; desc: string; scope: str
   },
   tiers: {
     title: 'Milestone Tiers',
-    desc: 'Players who reached specific chip milestones. Select a tier to see who achieved it. Think of it as a "hall of achievers" grouped by how much they have banked.',
-    scope: 'Filtered by chip milestone threshold \u2192 top 100',
+    desc: 'Players whose current Milestone Badge matches the selected tier. Badges are exclusive \u2014 a player holds exactly one \u2014 so each board never overlaps another (e.g. Gold holds players from 1M up to 2.5M banked chips).',
+    scope: 'Players currently holding the selected badge \u2192 top 100',
   },
 };
 
@@ -108,11 +111,10 @@ const TIE_BREAK_EXPLANATION = 'Tie-break: Most chips wins. If tied: higher level
 interface EnrichedEntry extends LeaderboardEntry {
   clanTag?: string | null;
   isHOF?: boolean;
-  championshipPrize?: { label: string; color: string } | null;
+  championshipPrize?: { label: string; short: string; color: string } | null;
   rankChange?: number;
   milestoneBadge?: string;
   milestoneColor?: string;
-  isDemo?: boolean;
   // Tie-breaking: set when this entry has the same chips as the entry above
   tieBreakReason?: 'level' | 'joinDate';
 }
@@ -232,7 +234,6 @@ function GlobalPodium({ entries, onInspect }: { entries: EnrichedEntry[]; onInsp
           {p.clanTag && (
             <span className="text-[9px] lg:text-[11px] font-mono text-slate-500 bg-slate-900 px-1.5 py-0.5 lg:px-1 lg:py-0 rounded mt-1 lg:mt-0">[{p.clanTag}]</span>
           )}
-          {/* isDemo badge hidden from podium — podium only shown for real data */}
         </button>
       ))}
     </div>
@@ -267,24 +268,25 @@ function LiveTicker({ messages }: { messages: { id: string; ts: string; text: st
 }
 
 // Find Me rank card
-function FindMeCard({ myRank, activeTab, selectedCountry, selectedRegion, onClose }: {
+function FindMeCard({ myRank, activeTab, onClose }: {
   myRank: MyRankData;
   activeTab: TopTab;
-  selectedCountry: string;
-  selectedRegion: string;
   onClose: () => void;
 }) {
   const contextualRank = (() => {
     switch (activeTab) {
       case 'summit': return { label: 'National (your country)', rank: myRank.nationalRank, total: myRank.totalNational, color: 'text-amber-400' };
       case 'global': return { label: 'Global', rank: myRank.globalRank, total: myRank.totalGlobal, color: 'text-amber-400' };
-      case 'national': return { label: `National (${selectedCountry})`, rank: myRank.nationalRank, total: myRank.totalNational, color: 'text-violet-400' };
+      // Always the player's OWN country — viewing a foreign national board
+      // must not label your home-country rank with the viewed country name.
+      case 'national': return { label: `National (${myRank.country ? countryName(myRank.country) : 'your country'})`, rank: myRank.nationalRank, total: myRank.totalNational, color: 'text-violet-400' };
       case 'regional': return { label: `Regional (${myRank.regionName})`, rank: myRank.regionalRank, total: myRank.totalRegional, color: 'text-pink-400' };
-      case 'tiers': return { label: 'Global (by tier)', rank: myRank.globalRank, total: myRank.totalGlobal, color: 'text-yellow-400' };
+      case 'tiers': return { label: 'Global (tier boards keep global order)', rank: myRank.globalRank, total: myRank.totalGlobal, color: 'text-yellow-400' };
     }
   })();
 
   const cr = contextualRank;
+  const currentTier = milestoneTierForChips(myRank.bankedChips);
   const fmtDate = (iso: string) => {
     const d = new Date(iso);
     return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) + ', ' +
@@ -324,6 +326,8 @@ function FindMeCard({ myRank, activeTab, selectedCountry, selectedRegion, onClos
         <span>Chips: <span className="text-emerald-400 font-bold">{myRank.bankedChips.toLocaleString()}c</span></span>
         <span>&middot;</span>
         <span>Level: <span className="text-white font-bold">{myRank.level}</span></span>
+        <span>&middot;</span>
+        <span>Badge: <span className="font-bold" style={{ color: currentTier.color }}>{myRank.tier}</span></span>
         {myRank.clanTag && <><span>&middot;</span><span>Clan: <span className="text-cyan-300 font-bold">[{myRank.clanTag}]</span></span></>}
       </div>
 
@@ -369,7 +373,6 @@ function TabDescription({ tab }: { tab: TopTab }) {
 
 export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
   const { player } = useAuth();
-  const isAdmin = player?.role === 'admin';
   const [activeTab, setActiveTab] = useState<TopTab>('summit');
   const [selectedCountry, setSelectedCountry] = useState<string>(player?.country || 'IN');
   const [selectedRegion, setSelectedRegion] = useState<string>('APAC');
@@ -386,8 +389,12 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
   const [milestonesLoading, setMilestonesLoading] = useState(true);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const listRef = useRef<HTMLOListElement>(null);
-  // userTag -> rank from the previous successful fetch (for Move deltas)
+  // userTag -> rank from the previous successful fetch of the SAME board
+  // (for Move deltas). boardSignatureRef guards against cross-tab bleed:
+  // without it, switching tabs produced meaningless movement (global #5 ->
+  // national #1 would show as a false +4 gain).
   const prevRanksRef = useRef<Map<string, number>>(new Map());
+  const boardSignatureRef = useRef<string>('');
 
   const playerTag = player?.userTag;
 
@@ -431,23 +438,26 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
           userTag: string; name: string; country: string; bankedChips: number;
           level: number; rank: number; isPlayer?: boolean; clanTag?: string | null;
           region?: string; milestoneBadge?: string; milestoneColor?: string;
-          createdAt?: string;
+          isHOF?: boolean; createdAt?: string;
         }>; error?: string;
       };
 
       if (res.ok && data.entries && data.entries.length > 0) {
-        // Real rank movement (MAJOR fix: the Move column previously always
-        // rendered 0/dash while the rules claimed it showed movement).
-        // Deltas are computed against the PREVIOUS fetch of the same tab.
-        const prevRanks = prevRanksRef.current;
+        // Real rank movement: deltas are computed against the PREVIOUS fetch
+        // of the SAME board (tab + country/region/tier). The API's real
+        // isHOF flag drives the golden HOF icon (previously hardcoded false,
+        // so the documented Hall-of-Fame icon never rendered).
+        const signature = `${activeTab}:${selectedCountry}:${selectedRegion}:${selectedTierId}`;
+        const sameBoard = boardSignatureRef.current === signature;
+        boardSignatureRef.current = signature;
+        const prevRanks = sameBoard ? prevRanksRef.current : null;
         const enriched: EnrichedEntry[] = data.entries.map((e) => ({
           ...e,
           isPlayer: e.userTag === playerTag,
-          isHOF: false,
+          isHOF: !!e.isHOF,
           championshipPrize: championshipPrizeForRank(e.rank),
-          rankChange: prevRanks.has(e.userTag) ? (prevRanks.get(e.userTag)! - e.rank) : 0,
+          rankChange: prevRanks?.has(e.userTag) ? (prevRanks.get(e.userTag)! - e.rank) : 0,
           region: e.region || regionOf(e.country || ''),
-          isDemo: false,
         }));
         const currentRanks = new Map<string, number>();
         for (const e of data.entries) currentRanks.set(e.userTag, e.rank);
@@ -555,6 +565,12 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
     if (player?.country) setSelectedCountry(player.country);
   }, [player?.country]);
 
+  // Regional tab opens on the player's own world region (same pattern as
+  // the country sync above; APAC default only before the profile loads)
+  useEffect(() => {
+    if (player?.country) setSelectedRegion(regionOf(player.country));
+  }, [player?.country]);
+
   // Silent rank fetch (no toast, no scroll) — used on mount
   const handleFindMeSilent = useCallback(async () => {
     try {
@@ -592,9 +608,14 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
       name: e.name, userTag: e.userTag, country: e.country,
       flag: countryFlag(e.country), bankedChips: e.bankedChips, level: e.level,
       clanTag: e.clanTag || '\u2014', clanName: 'Clan ' + (e.clanTag || '\u2014'),
-      // Only REAL rank data is passed (MAJOR fix — the dossier previously
-      // fabricated country/regional/global ranks with invented divisors).
-      globalRank: e.rank,
+      // Pass the rank matching the clicked view — the inspector labels its
+      // chips Global / flag National / Regional. Summit and tier-band
+      // positions have no matching dossier chip, so nothing is passed rather
+      // than mislabeling them as a global rank.
+      ...(activeTab === 'global' ? { globalRank: e.rank } : {}),
+      ...(activeTab === 'national' ? { countryRank: e.rank } : {}),
+      ...(activeTab === 'regional' ? { regionalRank: e.rank } : {}),
+      ...(activeTab === 'tiers' && selectedTierId === 'all' ? { globalRank: e.rank } : {}),
     });
   }
 
@@ -632,6 +653,20 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
     }
   }
 
+  // Honest count labels: every board except Global is capped at 100 rows
+  // (Global at 1000). When a board sits at its cap, say "Top N" instead of
+  // implying the count is exhaustive.
+  const activeRegionName = REGIONS.find((r) => r.code === selectedRegion)?.name || selectedRegion;
+  const cap100 = entries.length >= 100;
+  const cap1000 = entries.length >= 1000;
+  const activeTier = ALL_MILESTONE_TIERS.find((t) => t.id === selectedTierId);
+  const tierBadge = activeTier?.badge ?? '';
+  const tiersCountLabel = !isRealData
+    ? 'No players in this tier yet'
+    : selectedTierId === 'all'
+      ? (cap100 ? 'Top 100 players (all tiers)' : `${filteredEntries.length} players (all tiers)`)
+      : (cap100 ? `Top 100 ${tierBadge} holders` : `${filteredEntries.length} ${tierBadge} holders`);
+
   const tabs: { id: TopTab; icon: typeof Crown; label: string; color: string }[] = [
     { id: 'summit', icon: Crown, label: 'Summit', color: '#f59e0b' },
     { id: 'global', icon: Globe, label: 'Global', color: '#06b6d4' },
@@ -646,7 +681,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
       <div className="flex items-center justify-between flex-wrap gap-2 lg:gap-1">
         <span className="text-[10px] lg:text-[11px] font-mono text-slate-500">{countLabel}</span>
         <div className="flex items-center gap-2 lg:gap-1">
-          <span className="text-[9px] lg:text-[11px] font-mono text-slate-600 hidden sm:inline" title={TIE_BREAK_EXPLANATION}>
+          <span className="text-[9px] lg:text-[11px] font-mono text-slate-600" title={TIE_BREAK_EXPLANATION}>
             Tie-break: chips &rarr; level &rarr; join date
           </span>
           <button
@@ -677,7 +712,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
         <div>
           <div className="flex items-center gap-2 lg:gap-1 flex-wrap">
             <span className="bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[9px] lg:text-[11px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-widest">
-              2026 CONCURRENT TOURNAMENT
+              2026 CHAMPIONSHIP SEASON
             </span>
             <span className="inline-flex items-center gap-1 text-[9px] lg:text-[11px] font-mono text-amber-400 font-bold px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 rounded">
               <Zap className="w-3 h-3" /> LIVE &middot; 30min updates
@@ -688,11 +723,11 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
             Official World Tournament Leaderboards
           </h2>
           <p className="text-xs lg:text-[11px] lg:mt-0 text-slate-400 mt-1 max-w-3xl lg:hidden">
-            Real-time player standings. Tap any tab to see its description.
+            Live standings, refreshed every 30 minutes. Tap any tab to see its description.
           </p>
           {lastUpdated && (
             <MicroLabel className="mt-1.5 lg:mt-0 inline-block !text-[11px]">
-              Last sync: {lastUpdated.toLocaleTimeString('en-US', { hour12: false })} UTC
+              Last sync: {lastUpdated.toLocaleTimeString('en-US', { hour12: false, timeZone: 'UTC' })} UTC
             </MicroLabel>
           )}
         </div>
@@ -712,8 +747,9 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
       {/* Live Ticker */}
       {tickerMessages.length > 0 && <LiveTicker messages={tickerMessages} />}
 
-      {/* Find Me Card — always visible once data is loaded (includes milestones) */}
-      {myRankData && <FindMeCard myRank={myRankData} activeTab={activeTab} selectedCountry={selectedCountry} selectedRegion={selectedRegion} onClose={() => setShowFindMe(false)} />}
+      {/* Find Me Card — visible until dismissed; switching tabs hides it,
+          pressing Find Me brings it back (includes milestones) */}
+      {myRankData && showFindMe && <FindMeCard myRank={myRankData} activeTab={activeTab} onClose={() => setShowFindMe(false)} />}
 
       {/* Tab Description */}
       <TabDescription tab={activeTab} />
@@ -741,7 +777,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
       {activeTab === 'summit' && (
         <div className="space-y-4 lg:space-y-1">
           <TabToolbar
-            countLabel={isRealData ? `${filteredEntries.length} Country Champions` : 'No country champions yet. Be the first!'}
+            countLabel={isRealData ? (cap100 ? 'Top 100 Country Champions' : `${filteredEntries.length} Country Champions`) : 'No country champions yet. Be the first!'}
             tabColor="#f59e0b"
           />
           <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden lg:overflow-visible">
@@ -772,11 +808,12 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                       <div className="lg:hidden px-3 py-2" onClick={() => setExpandedRow(expandedRow === c.userTag ? null : c.userTag)}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5 min-w-0">
-                            {RANK_MEDALS[i + 1] ? <span className="text-base shrink-0">{RANK_MEDALS[i + 1]}</span> : <span className="text-slate-400 font-bold shrink-0">#{i + 1}</span>}
-                            {c.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
+                            {/* c.rank = true Summit position (stable while searching) */}
+                            {RANK_MEDALS[c.rank] ? <span className="text-base shrink-0">{RANK_MEDALS[c.rank]}</span> : <span className="text-slate-400 font-bold shrink-0">#{c.rank}</span>}
+                            {c.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" aria-label="Hall of Fame inductee" />}
                             <span className="font-bold text-white min-w-0">{c.name}</span>
                             {isMe && <span className="text-[11px] bg-amber-500 text-black px-1 rounded font-bold shrink-0">YOU</span>}
-                            {c.isDemo && isAdmin && <span className="text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic shrink-0">DEMO</span>}
+                            
                           </div>
                           <div className="font-mono font-bold text-emerald-400 shrink-0 ml-2">{c.bankedChips.toLocaleString()}c</div>
                         </div>
@@ -798,16 +835,16 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                       {/* Desktop grid layout (hidden on mobile) */}
                       <div className="hidden lg:grid lg:grid-cols-12 lg:gap-0.5 lg:items-center lg:px-1.5 lg:py-1 lg:text-[11px]" onClick={() => inspectPlayer(c)}>
                         <div className="lg:col-span-1 font-mono">
-                          {RANK_MEDALS[i + 1] ? <span className="text-lg lg:text-[11px]">{RANK_MEDALS[i + 1]}</span> : <span className="text-slate-400 font-bold">#{i + 1}</span>}
+                          {RANK_MEDALS[c.rank] ? <span className="text-lg lg:text-[11px]">{RANK_MEDALS[c.rank]}</span> : <span className="text-slate-400 font-bold">#{c.rank}</span>}
                           {c.tieBreakReason && <TieBreakBadge reason={c.tieBreakReason} />}
                         </div>
                         <div className="lg:col-span-1"><RankChangeIndicator change={c.rankChange || 0} /></div>
                         <div className="lg:col-span-3 min-w-0">
                           <div className="font-bold text-white flex items-center gap-1.5">
-                            {c.isHOF && <Award className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-yellow-400 shrink-0" />}
+                            {c.isHOF && <Award className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-yellow-400 shrink-0" aria-label="Hall of Fame inductee" />}
                             {c.name}
                             {isMe && <span className="text-[9px] lg:text-[11px] bg-amber-500 text-black px-1 rounded font-bold">YOU</span>}
-                            {c.isDemo && isAdmin && <span className="text-[9px] lg:text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                            
                           </div>
                           <div className="text-[10px] lg:text-[11px] font-mono text-slate-500">{c.userTag}</div>
                         </div>
@@ -819,7 +856,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                         </div>
                         <div className="lg:col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">{c.bankedChips.toLocaleString()}c</div>
                         <div className="lg:col-span-1 text-right">
-                          {c.championshipPrize && <span className="text-[8px] lg:text-[11px] font-mono font-bold px-1 py-0.5 rounded" style={{ color: c.championshipPrize.color, backgroundColor: c.championshipPrize.color + '15' }}>{c.championshipPrize.label.split(' ').slice(0, 2).join(' ')}</span>}
+                          {c.championshipPrize && <span title={c.championshipPrize.label} className="text-[8px] lg:text-[11px] font-mono font-bold px-1 py-0.5 rounded" style={{ color: c.championshipPrize.color, backgroundColor: c.championshipPrize.color + '15' }}>{c.championshipPrize.short}</span>}
                         </div>
                       </div>
                     </li>
@@ -835,7 +872,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
       {activeTab === 'global' && (
         <div className="space-y-4 lg:space-y-1">
           <TabToolbar
-            countLabel={isRealData ? `Total Players: ${filteredEntries.length}` : 'No players ranked yet. Play matches to appear here!'}
+            countLabel={isRealData ? (cap1000 ? 'Top 1000 players worldwide' : `Total Players: ${filteredEntries.length}`) : 'No players ranked yet. Play matches to appear here!'}
             tabColor="#06b6d4"
           />
 
@@ -852,7 +889,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
               <div className="col-span-2 text-right">Chips</div>
               <div className="col-span-1 text-right">Status</div>
             </div>
-            <ol ref={listRef} className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll lg:max-h-[60vh] lg:overflow-y-auto va-scroll">
+            <ol ref={listRef} className="divide-y divide-slate-900 max-h-[55vh] overflow-y-auto va-scroll lg:max-h-[60vh] lg:overflow-y-auto">
               {loading ? (
                 <li className="p-4 lg:p-2 text-center text-slate-500 text-xs lg:text-[11px] flex items-center justify-center gap-2">
                   <Loader2 className="w-4 h-4 lg:w-3 lg:h-3 animate-spin text-amber-400" /> Loading global ranks&hellip;
@@ -875,10 +912,10 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                           <div className="flex items-center gap-1.5 min-w-0">
                             {RANK_MEDALS[e.rank] ? <span className="text-base shrink-0">{RANK_MEDALS[e.rank]}</span> : <span className="text-slate-400 font-bold shrink-0">#{e.rank}</span>}
                             <span aria-hidden className="shrink-0">{countryFlag(e.country)}</span>
-                            {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
+                            {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" aria-label="Hall of Fame inductee" />}
                             <span className="font-bold text-white min-w-0">{e.name}</span>
                             {isMe && <span className="text-[11px] bg-amber-500 text-black px-1 rounded font-bold shrink-0">YOU</span>}
-                            {e.isDemo && isAdmin && <span className="text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic shrink-0">DEMO</span>}
+                            
                           </div>
                           <div className="font-mono font-bold text-emerald-400 shrink-0 ml-2">{e.bankedChips.toLocaleString()}c</div>
                         </div>
@@ -909,10 +946,10 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                         <div className="lg:col-span-3 min-w-0">
                           <div className="font-bold text-white flex items-center gap-1.5">
                             <span aria-hidden>{countryFlag(e.country)}</span>
-                            {e.isHOF && <Award className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-yellow-400 shrink-0" />}
+                            {e.isHOF && <Award className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-yellow-400 shrink-0" aria-label="Hall of Fame inductee" />}
                             {e.name}
                             {isMe && <span className="text-[9px] lg:text-[11px] bg-amber-500 text-black px-1 rounded font-bold">YOU</span>}
-                            {e.isDemo && isAdmin && <span className="text-[9px] lg:text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                            
                           </div>
                           <div className="text-[10px] lg:text-[11px] font-mono text-slate-500">{e.userTag}</div>
                         </div>
@@ -924,7 +961,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                         </div>
                         <div className="lg:col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">{e.bankedChips.toLocaleString()}c</div>
                         <div className="lg:col-span-1 text-right">
-                          {e.championshipPrize && <span className="text-[8px] lg:text-[11px] font-mono font-bold px-1 py-0.5 rounded" style={{ color: e.championshipPrize.color, backgroundColor: e.championshipPrize.color + '15' }}>{e.championshipPrize.label.split(' ').slice(0, 2).join(' ')}</span>}
+                          {e.championshipPrize && <span title={e.championshipPrize.label} className="text-[8px] lg:text-[11px] font-mono font-bold px-1 py-0.5 rounded" style={{ color: e.championshipPrize.color, backgroundColor: e.championshipPrize.color + '15' }}>{e.championshipPrize.short}</span>}
                         </div>
                       </div>
                     </li>
@@ -948,7 +985,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
               </select>
             </div>
             <TabToolbar
-              countLabel={isRealData ? `${filteredEntries.length} players from ${countryName(selectedCountry)}` : `No players ranked in ${countryName(selectedCountry)} yet`}
+              countLabel={isRealData ? (cap100 ? `Top 100 players from ${countryName(selectedCountry)}` : `${filteredEntries.length} players from ${countryName(selectedCountry)}`) : `No players ranked in ${countryName(selectedCountry)} yet`}
               tabColor="#8b5cf6"
             />
           </div>
@@ -982,10 +1019,10 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5 min-w-0">
                             {RANK_MEDALS[e.rank] ? <span className="text-base shrink-0">{RANK_MEDALS[e.rank]}</span> : <span className="text-slate-400 font-bold shrink-0">#{e.rank}</span>}
-                            {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
+                            {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" aria-label="Hall of Fame inductee" />}
                             <span className="font-bold text-white min-w-0">{e.name}</span>
                             {isMe && <span className="text-[11px] bg-violet-500 text-black px-1 rounded font-bold shrink-0">YOU</span>}
-                            {e.isDemo && isAdmin && <span className="text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic shrink-0">DEMO</span>}
+                            
                           </div>
                           <div className="font-mono font-bold text-emerald-400 shrink-0 ml-2">{e.bankedChips.toLocaleString()}c</div>
                         </div>
@@ -1014,10 +1051,10 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                         <div className="lg:col-span-1"><RankChangeIndicator change={e.rankChange || 0} /></div>
                         <div className="lg:col-span-3 min-w-0">
                           <div className="font-bold text-white flex items-center gap-1.5">
-                            {e.isHOF && <Award className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-yellow-400 shrink-0" />}
+                            {e.isHOF && <Award className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-yellow-400 shrink-0" aria-label="Hall of Fame inductee" />}
                             {e.name}
                             {isMe && <span className="text-[9px] lg:text-[11px] bg-violet-500 text-black px-1 rounded font-bold">YOU</span>}
-                            {e.isDemo && isAdmin && <span className="text-[9px] lg:text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                            
                           </div>
                           <div className="text-[10px] lg:text-[11px] font-mono text-slate-500">{e.userTag}</div>
                         </div>
@@ -1027,7 +1064,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                         <div className="lg:col-span-1 text-right text-xs lg:text-[11px] text-amber-400 font-mono">{e.level}</div>
                         <div className="lg:col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">{e.bankedChips.toLocaleString()}c</div>
                         <div className="lg:col-span-2 text-right">
-                          {e.championshipPrize && <span className="text-[8px] lg:text-[11px] font-mono font-bold px-1 py-0.5 rounded" style={{ color: e.championshipPrize.color, backgroundColor: e.championshipPrize.color + '15' }}>{e.championshipPrize.label.split(' ').slice(0, 2).join(' ')}</span>}
+                          {e.championshipPrize && <span title={e.championshipPrize.label} className="text-[8px] lg:text-[11px] font-mono font-bold px-1 py-0.5 rounded" style={{ color: e.championshipPrize.color, backgroundColor: e.championshipPrize.color + '15' }}>{e.championshipPrize.short}</span>}
                         </div>
                       </div>
                     </li>
@@ -1051,13 +1088,12 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                 className={`px-3 py-1.5 lg:px-1.5 lg:py-0.5 rounded-lg text-xs lg:text-[11px] font-bold flex items-center gap-1.5 lg:gap-1 transition border ${selectedRegion === r.code ? 'bg-pink-500/15 border-pink-500/40 text-pink-300' : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'}`}
               >
                 <span>{r.flag}</span> {r.name}
-                <span className="text-[9px] lg:text-[11px] font-mono opacity-70">({filteredEntries.length})</span>
               </button>
             ))}
           </div>
 
           <TabToolbar
-            countLabel={isRealData ? undefined : undefined}
+            countLabel={isRealData ? (cap100 ? `Top 100 players in ${activeRegionName}` : `${filteredEntries.length} players in ${activeRegionName}`) : `No players in ${activeRegionName} yet`}
             tabColor="#ec4899"
           />
 
@@ -1090,10 +1126,10 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5 min-w-0">
                             {RANK_MEDALS[e.rank] ? <span className="text-base shrink-0">{RANK_MEDALS[e.rank]}</span> : <span className="text-slate-400 font-bold shrink-0">#{e.rank}</span>}
-                            {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
+                            {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" aria-label="Hall of Fame inductee" />}
                             <span className="font-bold text-white min-w-0">{e.name}</span>
                             {isMe && <span className="text-[11px] bg-pink-500 text-black px-1 rounded font-bold shrink-0">YOU</span>}
-                            {e.isDemo && isAdmin && <span className="text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic shrink-0">DEMO</span>}
+                            
                           </div>
                           <div className="font-mono font-bold text-emerald-400 shrink-0 ml-2">{e.bankedChips.toLocaleString()}c</div>
                         </div>
@@ -1122,10 +1158,10 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                         <div className="lg:col-span-1"><RankChangeIndicator change={e.rankChange || 0} /></div>
                         <div className="lg:col-span-3 min-w-0">
                           <div className="font-bold text-white flex items-center gap-1.5">
-                            {e.isHOF && <Award className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-yellow-400 shrink-0" />}
+                            {e.isHOF && <Award className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-yellow-400 shrink-0" aria-label="Hall of Fame inductee" />}
                             {e.name}
                             {isMe && <span className="text-[9px] lg:text-[11px] bg-pink-500 text-black px-1 rounded font-bold">YOU</span>}
-                            {e.isDemo && isAdmin && <span className="text-[9px] lg:text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                            
                           </div>
                           <div className="text-[10px] lg:text-[11px] font-mono text-slate-500">{e.userTag}</div>
                         </div>
@@ -1137,7 +1173,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                         </div>
                         <div className="lg:col-span-2 text-right font-mono font-bold text-emerald-400 tabular-nums">{e.bankedChips.toLocaleString()}c</div>
                         <div className="lg:col-span-1 text-right">
-                          {e.championshipPrize && <span className="text-[8px] lg:text-[11px] font-mono font-bold px-1 py-0.5 rounded" style={{ color: e.championshipPrize.color, backgroundColor: e.championshipPrize.color + '15' }}>{e.championshipPrize.label.split(' ').slice(0, 2).join(' ')}</span>}
+                          {e.championshipPrize && <span title={e.championshipPrize.label} className="text-[8px] lg:text-[11px] font-mono font-bold px-1 py-0.5 rounded" style={{ color: e.championshipPrize.color, backgroundColor: e.championshipPrize.color + '15' }}>{e.championshipPrize.short}</span>}
                         </div>
                       </div>
                     </li>
@@ -1168,10 +1204,7 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
           </div>
 
           <TabToolbar
-            countLabel={selectedTierId !== 'all' && selectedTierId !== 'rookie'
-              ? `Threshold: ${(MILESTONE_TIERS.find((t) => t.id === selectedTierId)?.minChips || 0).toLocaleString('en-IN')}c \u00b7 ${filteredEntries.length} players`
-              : `${filteredEntries.length} players`
-            }
+            countLabel={tiersCountLabel}
             tabColor="#eab308"
           />
 
@@ -1204,10 +1237,10 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                           <div className="flex items-center gap-1.5 min-w-0">
                             {RANK_MEDALS[e.rank] ? <span className="text-base shrink-0">{RANK_MEDALS[e.rank]}</span> : <span className="text-slate-400 font-bold shrink-0">#{e.rank}</span>}
                             {e.rank === 1 && selectedTierId !== 'all' && selectedTierId !== 'rookie' && <span className="text-[11px] text-yellow-400 font-bold shrink-0">{'\u{1F451}'} FIRST</span>}
-                            {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" />}
+                            {e.isHOF && <Award className="w-3 h-3 text-yellow-400 shrink-0" aria-label="Hall of Fame inductee" />}
                             <span className="font-bold text-white min-w-0">{e.name}</span>
                             {isMe && <span className="text-[11px] bg-yellow-500 text-black px-1 rounded font-bold shrink-0">YOU</span>}
-                            {e.isDemo && isAdmin && <span className="text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic shrink-0">DEMO</span>}
+                            
                           </div>
                           <div className="font-mono font-bold text-emerald-400 shrink-0 ml-2">{e.bankedChips.toLocaleString()}c</div>
                         </div>
@@ -1236,10 +1269,10 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                         <div className="lg:col-span-1"><RankChangeIndicator change={e.rankChange || 0} /></div>
                         <div className="lg:col-span-3 min-w-0">
                           <div className="font-bold text-white flex items-center gap-1.5">
-                            {e.isHOF && <Award className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-yellow-400 shrink-0" />}
+                            {e.isHOF && <Award className="w-3 h-3 lg:w-2.5 lg:h-2.5 text-yellow-400 shrink-0" aria-label="Hall of Fame inductee" />}
                             {e.name}
                             {isMe && <span className="text-[9px] lg:text-[11px] bg-yellow-500 text-black px-1 rounded font-bold">YOU</span>}
-                            {e.isDemo && isAdmin && <span className="text-[9px] lg:text-[11px] bg-slate-700 text-slate-400 px-1 rounded font-normal italic">DEMO</span>}
+                            
                           </div>
                           <div className="text-[10px] lg:text-[11px] font-mono text-slate-500">{e.userTag}</div>
                         </div>

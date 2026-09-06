@@ -9,13 +9,13 @@ export function Section12_Leaderboards() {
     <Section icon={<Crown className="w-4 h-4" />} title="12. LOBBY LEADERBOARDS" accent="text-amber-400">
       <div className="flex flex-col gap-2.5">
         <InfoCard title="What is the Lobby Leaderboard?" accent="text-amber-300">
-          <p>The lobby houses <strong>5 tabs</strong> of official tournament leaderboards, all <strong>database-backed and real-time</strong>. Your rank reflects your lifetime <strong>banked chips</strong> across all matches. Each tab has a description box explaining what it shows.</p>
+          <p>The lobby houses <strong>5 tabs</strong> of official tournament leaderboards, all <strong>database-backed and live</strong> — they auto-refresh every 30 minutes, or update instantly via the Refresh button. Your rank reflects your lifetime <strong>banked chips</strong> across all matches. Each tab has a description box explaining what it shows.</p>
           <ul className="list-disc pl-4 space-y-0.5 mt-1.5">
             <li><strong>World Summit</strong> — #1 player per country (top 100)</li>
             <li><strong>Global Rankings</strong> — All players worldwide, 1-to-N</li>
             <li><strong>National Rankings</strong> — Players from one country (top 100)</li>
             <li><strong>Regional Rankings</strong> — Players from one of 8 world regions (top 100)</li>
-            <li><strong>Milestone Tiers</strong> — Players grouped by chip milestone (top 100 per tier)</li>
+            <li><strong>Milestone Tiers</strong> — Players holding each Milestone Badge (top 100 per tier)</li>
           </ul>
         </InfoCard>
 
@@ -23,7 +23,7 @@ export function Section12_Leaderboards() {
           <p>Each tab has its own <strong>Find Me</strong> button (color-matched to the tab). Click it to see your rank in that specific view:</p>
           <ul className="list-disc pl-4 space-y-0.5 mt-1.5">
             <li><strong>If you&apos;re visible</strong> on the current list: the page auto-scrolls to your &quot;YOU&quot; row and highlights it with a glow.</li>
-            <li><strong>If you&apos;re not visible</strong> (e.g., wrong country/region/tier): a <strong>Rank Summary Card</strong> appears showing your Global Rank, National Rank, Regional Rank, chips, level, clan, and milestone history.</li>
+            <li><strong>If you&apos;re not visible</strong> (e.g., wrong country/region/tier): a <strong>Rank Summary Card</strong> appears showing your Global Rank, National Rank, Regional Rank, chips, level, current milestone badge, clan, and milestone history. Press the <strong>✕</strong> to hide it; switching tabs hides it too, and Find Me brings it back.</li>
           </ul>
         </InfoCard>
 
@@ -43,7 +43,7 @@ export function Section12_Leaderboards() {
             <li>Columns: Rank, Move, Country Champion (name + tag), Clan Tag, Nation (flag + name), Chips, Status</li>
             <li><strong>Move column:</strong> Shows rank movement (up/down/unchanged) compared to the previous refresh</li>
             <li><strong>HOF badge (🏆):</strong> Players in the Hall of Fame get a gold Award icon next to their name</li>
-            <li><strong>Status column:</strong> Championship prize tier (e.g. &quot;👑 World Champion&quot; for #1, &quot;🥈 Elite 10&quot; for #2-10)</li>
+            <li><strong>Status column:</strong> Championship prize tier (e.g. &quot;👑 World Champion&quot; for #1, &quot;🥈 Elite 10&quot; for #2-10). Shown as a compact pill on desktop — hover it for the full title; the mobile expanded row shows the full text.</li>
             <li>Tie-break applies: if two country champions have equal chips, higher level wins, then earlier join date.</li>
             <li>Shows <strong>top 100</strong> country champions.</li>
           </ul>
@@ -79,7 +79,7 @@ export function Section12_Leaderboards() {
           <ul className="list-disc pl-4 space-y-0.5">
             <li>🌏 <strong>APAC</strong> — East &amp; Southeast Asia (China, Japan, Korea, Taiwan, Singapore, Thailand, Vietnam, Philippines, Indonesia, Malaysia, and more)</li>
             <li>🇮🇳 <strong>South Asia</strong> — India, Pakistan, Bangladesh, Sri Lanka, Nepal, Bhutan, Maldives, Afghanistan</li>
-            <li>🌍 <strong>Middle East &amp; Africa</strong> — All Arab states, Israel, Iran, Turkey &amp; the entire African continent (67 countries)</li>
+            <li>🌍 <strong>Middle East &amp; Africa</strong> — All Arab states, Israel, Iran, Turkey &amp; the entire African continent (71 countries)</li>
             <li>🌎 <strong>North America</strong> — United States, Canada, Mexico, Central America &amp; Caribbean</li>
             <li>🌎 <strong>South America</strong> — Brazil, Argentina, Colombia, Chile, Peru, and more</li>
             <li>🌍 <strong>Europe</strong> — UK, Germany, France, Italy, Spain, and 40+ more European nations</li>
@@ -110,7 +110,7 @@ export function Section12_Leaderboards() {
               <tbody className="text-slate-300">
                 <tr className="border-b border-slate-900">
                   <td className="py-1 pr-2 font-bold" style={{ color: '#64748b' }}>🛡️ Rookie</td>
-                  <td className="py-1 pr-2" style={{ color: '#64748b' }}>Challenger</td>
+                  <td className="py-1 pr-2" style={{ color: '#64748b' }}>Rookie</td>
                   <td className="py-1 pr-2 text-slate-400">0 — 99,999</td>
                   <td className="py-1 text-slate-400">Starting tier for all new players. Just getting started!</td>
                 </tr>
@@ -156,18 +156,18 @@ export function Section12_Leaderboards() {
         </InfoCard>
 
         <InfoCard title="🏅 Milestone Tier Ranks — Filter by Achievement Level" accent="text-yellow-300">
-          <p>Filter by milestone tier using the badge buttons:</p>
+          <p>Filter by milestone tier using the badge buttons. Each board lists players whose <strong>current badge</strong> is that tier — badges are exclusive (a player holds exactly one), so boards never overlap:</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>⭐ <strong>All Tiers</strong> — Every ranked player</li>
-            <li>🛡️ <strong>Rookie / Challenger</strong> — Players below 100K banked chips</li>
-            <li>🥉 <strong>Bronze Elite</strong> — 100K+ banked chips</li>
-            <li>🥈 <strong>Silver Commander</strong> — 5 Lakh (500K+) banked chips</li>
-            <li>🥇 <strong>Gold Apex Vanguard</strong> — 10 Lakh (1M+) banked chips</li>
-            <li>💎 <strong>Platinum Sovereign</strong> — 25 Lakh (2.5M+) banked chips</li>
-            <li>🔮 <strong>Diamond Warlord</strong> — 50 Lakh (5M+) banked chips</li>
-            <li>👑 <strong>Omega Legend</strong> — 1 Crore (10M+) banked chips</li>
+            <li>⭐ <strong>All Tiers</strong> — Every ranked player (top 100)</li>
+            <li>🛡️ <strong>Rookie</strong> — Badge holders below 100K banked chips</li>
+            <li>🥉 <strong>Bronze Elite</strong> — Badge holders from 100K up to 500K</li>
+            <li>🥈 <strong>Silver Commander</strong> — Badge holders from 500K up to 1M</li>
+            <li>🥇 <strong>Gold Apex Vanguard</strong> — Badge holders from 1M up to 2.5M</li>
+            <li>💎 <strong>Platinum Sovereign</strong> — Badge holders from 2.5M up to 5M</li>
+            <li>🔮 <strong>Diamond Warlord</strong> — Badge holders from 5M up to 10M</li>
+            <li>👑 <strong>Omega Legend</strong> — Badge holders at 10M and beyond</li>
           </ul>
-          <p className="mt-1">Columns: Rank, Move, Player (name + tag), Clan Tag, Country (flag + name), Chips. <strong>No Status column</strong> on this tab. <strong>HOF badge (🏆)</strong> appears next to Hall of Fame players&apos; names. The first player in each non-Rookie tier gets a &quot;👑 FIRST&quot; badge. Shows top 100 per tier.</p>
+          <p className="mt-1">Columns: Rank, Move, Player (name + tag), Clan Tag, Country (flag + name), Chips. <strong>No Status column</strong> on this tab. <strong>HOF badge (🏆)</strong> appears next to Hall of Fame players&apos; names. The #1 player in each non-Rookie tier board gets a &quot;👑 FIRST&quot; badge. Shows top 100 per tier.</p>
         </InfoCard>
 
         <InfoCard title="📊 Milestone History — Your Achievement Timeline" accent="text-amber-300">
@@ -187,12 +187,12 @@ export function Section12_Leaderboards() {
             <li><strong>Rank #11-50</strong> — &quot;🥉 Masters 50&quot; (bronze)</li>
             <li><strong>Rank #51-100</strong> — &quot;🛡️ Qualifier 100&quot; (slate)</li>
           </ul>
-          <p className="mt-1">These badges connect the Leaderboard system to the Championship system — top-ranked players qualify for tournament events. The <strong>Tiers tab does not show</strong> Status badges.</p>
+          <p className="mt-1">These badges <strong>mirror the Annual Championship prize tiers</strong> (see Section 13) so you can see at a glance which prize bracket a rank falls in. The championship itself is open to <strong>everyone</strong> — registration is free and never automatic — and the real prizes (5M / 2.5M / 1M / 250K chips) go to the top 100 of the <strong>registered</strong> championship standings at the Jan 1 close, not to these lobby-board badges. The <strong>Tiers tab does not show</strong> Status badges.</p>
         </InfoCard>
 
         <InfoCard title="🔍 Search &amp; Player Inspector" accent="text-indigo-300">
           <p><strong>Search:</strong> A search box at the top lets you filter the visible list in real-time. Type a player name, VM tag (VM-XXXXXX), or clan tag to find specific players.</p>
-          <p className="mt-1.5"><strong>Player Inspector:</strong> Click any player row to open their profile inspector showing name, country, chips, level, clan, milestone badge, and their rank from the leaderboard.</p>
+          <p className="mt-1.5"><strong>Player Inspector:</strong> On desktop, click any row to open the full profile inspector — name, country, chips, level, clan, milestone badge, and their rank in the view you clicked from (global, national, or regional chip). On mobile, tap a row to expand a quick detail strip (country, clan, level, prize tier); tap again to collapse.</p>
         </InfoCard>
 
         <InfoCard title="Empty Boards" accent="text-slate-300">
@@ -204,10 +204,10 @@ export function Section12_Leaderboards() {
         </InfoCard>
 
         <InfoCard title="📺 Live Ticker Bar" accent="text-rose-300">
-          <p>At the <strong>very top</strong> of the Leaderboard panel, a small scrolling <strong>Live Ticker</strong> bar shows <strong>real platform activity</strong> — live aggregate stats and events straight from the server (matches, extractions, records).</p>
+          <p>Just under the Leaderboard header, a small <strong>Live Ticker</strong> bar shows <strong>real platform activity</strong> — live aggregate stats straight from the server, refreshed every 30 seconds: matches played today, extractions, chips banked, eliminations, and total registered agents.</p>
           <ul className="list-disc pl-4 space-y-0.5 mt-1.5">
             <li>Messages come from the live stats endpoint — they reflect <strong>actual platform activity</strong>, not fabricated hype</li>
-            <li>Only visible when real player data exists (hidden on a fresh/empty server)</li>
+            <li>Only visible when real activity data exists (hidden on a fresh/empty server)</li>
           </ul>
         </InfoCard>
       </div>
