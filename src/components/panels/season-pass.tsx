@@ -252,7 +252,7 @@ export function SeasonPass({ onToast }: SeasonPassProps) {
           />
         </div>
         <div className="flex justify-between text-[11px] font-mono text-slate-500 lg:text-[11px] lg:leading-tight">
-          <span>{currentTier >= 20 ? 'All tiers unlocked!' : `${PASS_TIER_XP[currentTier].toLocaleString()} XP to next tier`}</span>
+          <span>{currentTier >= 20 ? 'All tiers unlocked!' : `${Math.max(0, nextTierXp - passXp).toLocaleString()} XP to next tier`}</span>
           <span className={isCapped ? 'text-red-400' : 'text-slate-500'}>
             Today: {passXpToday.toLocaleString()}/{PASS_DAILY_XP_CAP.toLocaleString()}{isCapped ? ' (capped)' : ''}
           </span>

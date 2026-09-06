@@ -61,7 +61,7 @@ export function Section02_Modes() {
                 <li><strong>Best Ever</strong> card above it — your all-time practice high score for that arena (saved per arena on this device)</li>
                 <li><strong>Rank X / Y</strong> below the minimap compares your score with every alive snake</li>
                 <li><strong>Score</strong> (body length) shown bottom-center; <strong>Kills</strong> bottom-right</li>
-                <li>No chips, stars or country flags in practice</li>
+                <li>No chips, XP (or Pass XP), stars or country flags in practice</li>
               </ul>
             </div>
           </div>

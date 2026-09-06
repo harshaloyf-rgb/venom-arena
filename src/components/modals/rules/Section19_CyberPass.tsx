@@ -21,6 +21,7 @@ export function Section19_CyberPass() {
           <ul className="list-disc pl-4 space-y-0.5">
             <li><strong>Extract safely</strong> = XP earned (amount scales with chips extracted + kills)</li>
             <li><strong>Die / collide</strong> = XP still earned based on score and kills before death</li>
+            <li><strong>Offline Practice</strong> earns nothing — practice matches award 0 chips and 0 XP, so no Pass XP either. Only online arenas award Pass XP.</li>
             <li>Complete <strong>daily challenges</strong> for bonus XP (+25 per challenge — counts toward your level AND your Pass XP, sharing the daily Pass cap)</li>
             <li>Your Pass XP increases with every online match (50% of match XP, capped at 1,500/day)</li>
           </ul>
@@ -42,6 +43,7 @@ export function Section19_CyberPass() {
             <li>Once your <strong>Pass XP</strong> meets a tier&apos;s requirement, the <strong>Claim</strong> button activates</li>
             <li>Claiming adds the cosmetic to your <strong>inventory</strong> (unlockedSkins — server-persisted)</li>
             <li>After claiming, equip it in <strong>Shop &amp; Lab</strong> like any other cosmetic</li>
+            <li>If you are still wearing the default starter skin, your first claimed pass skin is <strong>auto-equipped</strong> instantly</li>
             <li>Each reward can only be claimed <strong>once</strong> (server-enforced, no double-claim)</li>
             <li><strong>Claim All</strong> buttons let you batch-claim all unclaimed rewards at once</li>
           </ul>
@@ -49,7 +51,7 @@ export function Section19_CyberPass() {
         <InfoCard title="👑 Unlocking Elite" accent="text-yellow-300">
           <p className="mb-1.5">To unlock the Elite track:</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>Go to the <strong>Pass tab</strong> in Lobby Station</li>
+            <li>Open the <strong>Season Pass tab</strong> — from the Lobby Stations grid or the desktop tab strip (labelled &quot;Pass&quot;), or <strong>All Stations</strong> on mobile</li>
             <li>Click <strong>&quot;Unlock Elite (1,00,000c)&quot;</strong></li>
             <li>100,000 chips are deducted <strong>server-side</strong></li>
             <li>Elite is permanent for the season — no subscription</li>
