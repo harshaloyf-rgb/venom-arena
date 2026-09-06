@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Skull, Swords, Search, Lock, Loader2, X, Info, ChevronDown, ChevronUp } from 'lucide-react';
 import { timeAgo } from '@/lib/date-utils';
 import { PanelSkeleton } from '../_panel-primitives';
@@ -28,7 +28,19 @@ export function ClanWars({
   // T52: launch feedback — users still found wars confusing even with the
   // 3-step strip, so a plain-words explainer with a worked example + FAQ is
   // shown right here. Open by default; collapsible so regulars can hide it.
+  // T55: the collapsed choice persists in localStorage — regulars who hid it
+  // don't see it re-open on every visit (new players still get it open).
   const [explainerOpen, setExplainerOpen] = useState(true);
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem('va-war-explainer') === 'closed') setExplainerOpen(false);
+    } catch { /* private mode etc. — default open */ }
+  }, []);
+  const toggleExplainer = () => setExplainerOpen((v) => {
+    const next = !v;
+    try { window.localStorage.setItem('va-war-explainer', next ? 'open' : 'closed'); } catch { /* ignore */ }
+    return next;
+  });
   const FAQ: { q: string; a: React.ReactNode }[] = [
     { q: 'Do I need to join a special war match?', a: <>No. Play <strong className="text-slate-200">any match as usual</strong> — while the war is on, your real-player kills count automatically.</> },
     { q: 'Can the other clan say no?', a: <>No. The war starts the moment our Leader declares. The only protection is a <strong className="text-slate-200">War Shield</strong> (Clan Shop — blocks declarations for 7 days).</> },
@@ -60,7 +72,7 @@ export function ClanWars({
       </div>
       {/* T52: plain-words explainer — worked example + FAQ, open by default */}
       <div className="rounded-2xl border border-rose-500/20 bg-slate-950/60 overflow-hidden">
-        <button type="button" onClick={() => setExplainerOpen((v) => !v)} className="w-full p-4 lg:p-1.5 flex items-center justify-between gap-2 text-left hover:bg-rose-500/5 transition">
+        <button type="button" onClick={toggleExplainer} className="w-full p-4 lg:p-1.5 flex items-center justify-between gap-2 text-left hover:bg-rose-500/5 transition">
           <span className="flex items-center gap-2">
             <Info className="w-4 h-4 lg:w-3 lg:h-3 text-rose-400 shrink-0" />
             <span className="text-sm lg:text-[11px] font-bold text-white">Wars in plain words — with an example</span>
