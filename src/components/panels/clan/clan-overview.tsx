@@ -3,9 +3,9 @@
 import {
   Trophy, Coins, Users, MessageSquare, Send, Loader2,
   Star, Lock, Swords, Target, ShoppingCart, LogOut, Check,
-  Crown, ChevronUp, ChevronDown, UserMinus, UserPlus, X,
+  Crown, ChevronUp, ChevronDown, UserMinus, UserPlus, X, Search,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { countryFlag } from '@/lib/game-config';
 import { isOnline } from '@/lib/date-utils';
 import { PanelSkeleton } from '../_panel-primitives';
@@ -64,12 +64,55 @@ export function ClanOverview({
 }: ClanOverviewProps) {
   const [showInviteInput, setShowInviteInput] = useState(false);
   const [inviteTag, setInviteTag] = useState('');
+  // T50: invite by NAME search (suggested players) or by pasting a VM tag.
+  // Previously the box only accepted a typed VM tag — useless when you don't
+  // know someone's tag. Powered by the existing /api/players/search endpoint.
+  const [inviteResults, setInviteResults] = useState<{ userTag: string; name: string; country: string; level: number; clanTag: string | null }[]>([]);
+  const [inviteSearching, setInviteSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const searchSeq = useRef(0);
+
+  const inviteQueryLooksLikeTag = /^vm-[a-z0-9]{3,10}$/i.test(inviteTag.trim());
+
+  // Debounced live search while typing a name (skipped when it's already a tag)
+  useEffect(() => {
+    const q = inviteTag.trim();
+    if (q.length < 2 || /^vm-/i.test(q)) {
+      setInviteResults([]);
+      setInviteSearching(false);
+      return;
+    }
+    const seq = ++searchSeq.current;
+    setInviteSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/players/search?query=${encodeURIComponent(q)}&limit=6`, { cache: 'no-store' });
+        const data = (await res.json().catch(() => ({}))) as { players?: { userTag: string; name: string; country: string; level: number; clanTag: string | null }[] };
+        if (seq === searchSeq.current) {
+          setInviteResults(data.players || []);
+          setShowResults(true);
+        }
+      } catch {
+        if (seq === searchSeq.current) setInviteResults([]);
+      } finally {
+        if (seq === searchSeq.current) setInviteSearching(false);
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [inviteTag]);
+
+  function pickInvitePlayer(p: { userTag: string; name: string }) {
+    setInviteTag(p.userTag);
+    setShowResults(false);
+    setInviteResults([]);
+  }
 
   async function submitInvite() {
     const tag = inviteTag.trim();
     if (!tag) return;
+    if (!inviteQueryLooksLikeTag) return; // must be a full VM tag (typed or picked)
     const ok = await onInvite(tag);
-    if (ok) { setInviteTag(''); setShowInviteInput(false); }
+    if (ok) { setInviteTag(''); setShowInviteInput(false); setShowResults(false); setInviteResults([]); }
   }
 
   const RANK_COLORS: Record<string, string> = {
@@ -246,23 +289,65 @@ export function ClanOverview({
             )}
           </div>
         </div>
+        {/* T50: roles legend — ranks were a common source of confusion */}
+        <p className="text-[9px] lg:text-[11px] text-slate-500 mb-2 lg:mb-0.5 -mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+          <span><strong className="text-amber-300">Leader</strong> — full control</span>
+          <span><strong className="text-purple-300">Co-Leader</strong> — kicks Vipers &amp; claims rewards (max 2)</span>
+          <span><strong className="text-indigo-300">Viper</strong> — member: deposit, chat, invite</span>
+        </p>
         {showInviteInput && (
-          <div className="mb-2 lg:mb-1 flex items-center gap-2 p-2 lg:p-1 rounded-xl border border-indigo-500/20 bg-indigo-500/5">
-            <input
-              type="text"
-              value={inviteTag}
-              onChange={(e) => setInviteTag(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') void submitInvite(); }}
-              placeholder="Player VM tag (e.g. VM-ABC123)"
-              maxLength={12}
-              className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 lg:px-1.5 py-2 lg:py-0.5 text-xs lg:text-[11px] text-white placeholder:text-slate-600 font-mono focus:outline-none focus:border-indigo-500/50"
-            />
-            <button type="button" onClick={() => void submitInvite()} disabled={actionBusy === 'invite' || !inviteTag.trim()} className="px-3 lg:px-1.5 py-2 lg:py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs lg:text-[11px] font-bold transition flex items-center gap-1.5 disabled:opacity-50">
-              {actionBusy === 'invite' ? <Loader2 className="w-3 h-3 lg:w-2.5 lg:h-2.5 animate-spin" /> : <Send className="w-3 h-3 lg:w-2.5 lg:h-2.5" />} Send Invite
-            </button>
-            <button type="button" onClick={() => { setShowInviteInput(false); setInviteTag(''); }} className="p-1.5 lg:p-0.5 rounded text-slate-500 hover:text-white transition" aria-label="Cancel invite">
-              <X className="w-3.5 h-3.5 lg:w-2.5 lg:h-2.5" />
-            </button>
+          <div className="mb-2 lg:mb-1 p-2 lg:p-1 rounded-xl border border-indigo-500/20 bg-indigo-500/5">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-slate-500 absolute left-3 lg:left-1.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={inviteTag}
+                  onChange={(e) => { setInviteTag(e.target.value); setShowResults(true); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && inviteQueryLooksLikeTag) void submitInvite(); if (e.key === 'Escape') { setShowResults(false); } }}
+                  placeholder="Search player name, or paste a VM tag…"
+                  maxLength={20}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 lg:pl-7 pr-3 lg:pr-1.5 py-2 lg:py-0.5 text-xs lg:text-[11px] text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50"
+                />
+              </div>
+              <button type="button" onClick={() => void submitInvite()} disabled={actionBusy === 'invite' || !inviteQueryLooksLikeTag} title={inviteQueryLooksLikeTag ? 'Send invite' : 'Pick a search result or type a full VM tag (VM-…)'} className="px-3 lg:px-1.5 py-2 lg:py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs lg:text-[11px] font-bold transition flex items-center gap-1.5 disabled:opacity-50">
+                {actionBusy === 'invite' ? <Loader2 className="w-3 h-3 lg:w-2.5 lg:h-2.5 animate-spin" /> : <Send className="w-3 h-3 lg:w-2.5 lg:h-2.5" />} Send Invite
+              </button>
+              <button type="button" onClick={() => { setShowInviteInput(false); setInviteTag(''); setShowResults(false); setInviteResults([]); }} className="p-1.5 lg:p-0.5 rounded text-slate-500 hover:text-white transition" aria-label="Cancel invite">
+                <X className="w-3.5 h-3.5 lg:w-2.5 lg:h-2.5" />
+              </button>
+            </div>
+            {/* Live name-search results */}
+            {showResults && inviteTag.trim().length >= 2 && !inviteQueryLooksLikeTag && (
+              <div className="mt-1.5 rounded-lg border border-slate-800 bg-slate-950/90 overflow-hidden">
+                {inviteSearching && inviteResults.length === 0 ? (
+                  <div className="px-3 py-2 text-[11px] text-slate-500 flex items-center gap-1.5"><Loader2 className="w-3 h-3 animate-spin" /> Searching players…</div>
+                ) : inviteResults.length === 0 ? (
+                  <div className="px-3 py-2 text-[11px] text-slate-500">No players found — check the spelling, or paste their VM tag.</div>
+                ) : (
+                  inviteResults.map((p) => {
+                    const inClan = members.some((m) => m.userTag === p.userTag);
+                    return (
+                      <button
+                        key={p.userTag}
+                        type="button"
+                        disabled={inClan}
+                        onClick={() => pickInvitePlayer(p)}
+                        className={`w-full px-3 lg:px-1.5 py-2 lg:py-0.5 flex items-center justify-between gap-2 text-left transition border-b border-slate-900 last:border-0 ${inClan ? 'opacity-40 cursor-not-allowed' : 'hover:bg-indigo-500/10'}`}
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span aria-hidden>{countryFlag(p.country)}</span>
+                          <span className="text-xs lg:text-[11px] font-bold text-white truncate">{p.name}</span>
+                          <span className="text-[10px] font-mono text-slate-500">#{p.userTag}</span>
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-500 shrink-0">{inClan ? 'Already here' : `Lvl ${p.level}${p.clanTag ? ` · [${p.clanTag}]` : ''}`}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
+            <p className="text-[9px] lg:text-[11px] text-slate-500 mt-1.5 lg:mt-0.5 px-0.5">Start typing a <strong className="text-slate-400">name</strong> and tap a result, or paste a full <strong className="text-slate-400">VM tag</strong> for manual entry.</p>
           </div>
         )}
         {membersLoading ? <PanelSkeleton count={3} height="h-12" /> : (

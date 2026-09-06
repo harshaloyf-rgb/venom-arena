@@ -135,6 +135,7 @@ export function Section15_Syndicates() {
         <InfoCard title="📨 Invitations" accent="text-violet-300">
           <ul className="list-disc pl-4 space-y-0.5">
             <li><strong>Every member</strong> can invite — Leaders, Co-Leaders, and regular Vipers alike — by opening the Member Roster on the Overview tab and clicking <strong>Invite Player</strong></li>
+            <li><strong>Two ways to find a player:</strong> start typing their <strong>name</strong> and tap a live search result, or paste their <strong>VM tag</strong> (e.g. VM-abc123) if you know it — both work in the same invite box</li>
             <li>Invited players get a rose badge on the dashboard <strong>Syndicates</strong> tile; invites appear at the top of <strong>My Clan</strong> with <strong>Accept</strong> / <strong>Decline</strong> buttons</li>
             <li>Accepting an invite joins instantly (you must be clanless and the syndicate must have space); invite joins count toward <strong>Recruitment Drive</strong> like normal joins</li>
             <li>Invites are free — one pending invite per clan per player, max 30 pending per clan</li>
@@ -144,7 +145,7 @@ export function Section15_Syndicates() {
           <ul className="list-disc pl-4 space-y-0.5">
             <li>Joining through <strong>Browse Clans</strong> sends a <strong>join request</strong> — membership is <strong>not</strong> instant; the clan's <strong>Leader or Co-Leader</strong> must accept or reject it</li>
             <li>Leaders see pending requests in the <strong>Join Requests</strong> card on the Overview tab (with Accept / Reject) plus a rose badge on the dashboard Syndicates tile and a pulsing dot on the Overview sub-tab</li>
-            <li>Approved players join as <strong>Vipers</strong> and count toward <strong>Recruitment Drive</strong>; requests auto-cancel if the clan fills up before approval</li>
+            <li>Approved players join as <strong>Vipers</strong> and count toward <strong>Recruitment Drive</strong>; if the clan fills up before you approve, the accept fails with <strong>“Your syndicate is now full”</strong> — decline stale requests or expand slots via the Clan Shop</li>
             <li>You can <strong>cancel your own request</strong> anytime from Browse Clans (tap the <strong>Requested</strong> button); joining any clan another way automatically declines your other pending requests and invites</li>
             <li>Requests are free — one pending request per clan per player, max 30 pending per clan</li>
           </ul>

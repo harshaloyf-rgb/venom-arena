@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { logAdminAction } from '@/lib/audit';
+import { refundWarsOnDisband } from '@/lib/clan-weekly';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
 //   setTotalDep { tag, totalDeposited }                          → set total deposited
 //   members     { tag }                                          → list all members with ranks
 //   kick        { tag, targetTag }                               → remove member from clan
-//   promote     { tag, targetTag, rank: 'Co-Leader' | 'Member' }→ change member rank
+//   promote     { tag, targetTag, rank: 'Co-Leader' | 'Viper' }  → change member rank
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -91,7 +92,18 @@ export async function POST(req: NextRequest) {
         const clan = await db.clan.findUnique({ where: { tag } });
         if (!clan) return NextResponse.json({ error: 'Clan not found.' }, { status: 404 });
 
+        // T50 (BUG 3): same escrow-refund fix as the user disband route —
+        // refund active-war wagers before the cascade delete, opponent gets
+        // their treasury share, the clan's own share goes to its Leader.
+        let warsCancelled = 0;
+
         await db.$transaction(async (tx) => {
+          const leader = await tx.player.findFirst({
+            where: { clanTag: tag, clanRank: 'Leader' },
+            select: { id: true },
+          });
+          warsCancelled = await refundWarsOnDisband(tx, tag, leader?.id);
+
           await tx.clanActivity.deleteMany({ where: { clanTag: tag } });
           await tx.clanChallenge.deleteMany({ where: { clanTag: tag } });
           await tx.clanMessage.deleteMany({ where: { clanTag: tag } });
@@ -100,9 +112,9 @@ export async function POST(req: NextRequest) {
         });
 
         // X11: audit trail
-        await logAdminAction(session!, 'clan_disband', 'clan', tag, { clanName: clan.name });
+        await logAdminAction(session!, 'clan_disband', 'clan', tag, { clanName: clan.name, warsCancelled });
 
-        return NextResponse.json({ ok: true, message: `Clan [${tag}] has been disbanded.` });
+        return NextResponse.json({ ok: true, warsCancelled, message: `Clan [${tag}] has been disbanded.${warsCancelled > 0 ? ` ${warsCancelled} active war${warsCancelled > 1 ? 's' : ''} cancelled — escrowed wagers refunded.` : ''}` });
       }
 
       // ── EDIT ──────────────────────────────────────────────────
@@ -268,10 +280,15 @@ export async function POST(req: NextRequest) {
       // ── PROMOTE / DEMOTE ───────────────────────────────────────────
       case 'promote': {
         const targetTag = String(body.targetTag || '').trim();
-        const newRank = String(body.rank || '').trim();
+        // T50: game vocabulary is 'Viper' for regular members (see clan routes +
+        // roster UI). The old UI sent 'Member', which was stored verbatim and left
+        // the player stuck: the in-game promote gate only recognizes 'Viper'.
+        // Accept the legacy 'Member' spelling and normalize it to 'Viper'.
+        const rawRank = String(body.rank || '').trim();
+        const newRank = rawRank === 'Member' ? 'Viper' : rawRank;
         if (!targetTag) return NextResponse.json({ error: 'Missing targetTag.' }, { status: 400 });
-        if (!['Leader', 'Co-Leader', 'Member'].includes(newRank)) {
-          return NextResponse.json({ error: 'Rank must be Leader, Co-Leader, or Member.' }, { status: 400 });
+        if (!['Leader', 'Co-Leader', 'Viper'].includes(newRank)) {
+          return NextResponse.json({ error: 'Rank must be Leader, Co-Leader, or Viper.' }, { status: 400 });
         }
 
         const clan = await db.clan.findUnique({ where: { tag } });

@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     }
     // Unique constraint violation (duplicate from race condition)
     if (msg.includes('Unique')) {
-      return NextResponse.json({ error: 'Request already pending.', status: 400 });
+      return NextResponse.json({ error: 'Request already pending.' }, { status: 400 });
     }
     console.error('[friends/request] error', e);
     return NextResponse.json({ error: 'Failed to send request.' }, { status: 500 });

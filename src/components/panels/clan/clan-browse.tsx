@@ -4,6 +4,7 @@ import { Shield, Search, Plus, Award, Loader2, Check } from 'lucide-react';
 import { MicroLabel, PanelSkeleton } from '../_panel-primitives';
 import type { ClanInfo, Tab } from './_types';
 import { EMBLEM_OPTIONS } from './_types';
+import { HowSyndicatesWork } from './clan-how-it-works';
 
 interface ClanBrowseProps {
   tab: Tab;
@@ -32,6 +33,8 @@ export function ClanBrowse({
   if (tab === 'browse') {
     return (
       <div className="space-y-4">
+        {/* T50: explain the join flow before users tap anything */}
+        <HowSyndicatesWork />
         <div className="relative">
           <Search className="w-3.5 h-3.5 lg:w-3 lg:h-3 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input type="text" value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search clans by name or tag..." className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 lg:pl-8 pr-3 lg:pr-1.5 py-2 lg:py-1 text-xs lg:text-[11px] text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50" />

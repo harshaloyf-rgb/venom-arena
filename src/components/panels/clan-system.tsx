@@ -22,6 +22,7 @@ import { ClanChallenges } from './clan/clan-challenges';
 import { ClanStatsView } from './clan/clan-stats';
 import { ClanActivity } from './clan/clan-activity';
 import { ClanBrowse } from './clan/clan-browse';
+import { HowSyndicatesWork } from './clan/clan-how-it-works';
 
 // Types & constants
 import {
@@ -425,9 +426,14 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
     setActionBusy('disband');
     try {
       const res = await fetch('/api/clans/disband', { method: 'POST' });
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; warsCancelled?: number };
       if (!res.ok) { notify(data?.error || 'Failed to disband.', 'error', onToast); return; }
-      notify(`Syndicate [${playerClanTag}] has been disbanded.`, 'info', onToast);
+      notify(
+        (data?.warsCancelled || 0) > 0
+          ? `Syndicate [${playerClanTag}] disbanded — ${data.warsCancelled} active war cancelled, your escrowed wager was refunded to your bank.`
+          : `Syndicate [${playerClanTag}] has been disbanded.`,
+        'info', onToast,
+      );
       setShowSettings(false);
       await refresh(); void fetchClans(); setChatMessages([]); setMembers([]); setActivities([]); setChallenges([]); setClanStats(null);
     } catch { notify('Network error.', 'error', onToast); } finally { setActionBusy(''); }
@@ -526,6 +532,10 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
         <div>
           {!playerClanTag ? (
             <div>
+              {/* T50: launch feedback — clans were confusing, so explain the loop up front */}
+              <div className="mb-4">
+                <HowSyndicatesWork />
+              </div>
               {/* Pending syndicate invites */}
               {invitesLoading ? (
                 <PanelSkeleton count={1} height="h-16" />

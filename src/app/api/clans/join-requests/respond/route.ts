@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { utcMonday } from '@/lib/date-utils';
+import { ensureWeeklyChallenges } from '@/lib/clan-weekly';
 
 // POST /api/clans/join-requests/respond  body: { requestId, action: 'accept' | 'decline' }
 // Leader/Co-Leader accepts or declines a player's request to join their clan.
@@ -95,6 +96,8 @@ export async function POST(req: NextRequest) {
 
       // Approving counts toward the Recruitment Drive challenge (same as other join paths)
       const weekStart = utcMonday();
+      // T50 (BUG 2): ensure the weekly rows exist so pre-GET joins count.
+      await ensureWeeklyChallenges(tx, clan.tag, weekStart);
       await tx.clanChallenge.updateMany({
         where: { clanTag: clan.tag, type: 'recruitment_drive', weekStart, claimed: false },
         data: { progress: { increment: 1 } },

@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { utcMonday } from '@/lib/date-utils';
 import { playerActionLimit } from '@/lib/api-helpers';
+import { ensureWeeklyChallenges } from '@/lib/clan-weekly';
 
 // POST /api/clans/deposit  body: { tag, amount }
 export async function POST(req: NextRequest) {
@@ -67,6 +68,11 @@ export async function POST(req: NextRequest) {
 
       // Update treasury challenge progress for current week
       const weekStart = utcMonday();
+
+      // T50 (BUG 2): challenges are created lazily on first weekly GET — without
+      // this, deposits made BEFORE the first GET incremented 0 rows and the
+      // progress was lost. Idempotent (skipDuplicates + unique index).
+      await ensureWeeklyChallenges(tx, tag, weekStart);
 
       await tx.clanChallenge.updateMany({
         where: { clanTag: tag, type: 'treasury_target', weekStart, claimed: false },

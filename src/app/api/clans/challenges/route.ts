@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { utcMonday } from '@/lib/date-utils';
+import { ensureWeeklyChallenges } from '@/lib/clan-weekly';
 
 // ─── GET /api/clans/challenges?tag=APEX ────────────────────────────────────
 export async function GET(req: NextRequest) {
@@ -30,105 +31,22 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'asc' },
     });
 
-    // Auto-create challenges for the week if none exist yet
-    if (challenges.length === 0) {
+    // Auto-create challenges for the week if any of the 4 are missing.
+    // T50: template logic now lives in lib/clan-weekly.ts (shared with the
+    // increment sites, so progress made BEFORE the first GET of the week is
+    // retained). This also covers the old 3-challenge backfill case, since
+    // ensureWeeklyChallenges creates any missing type idempotently.
+    if (challenges.length < 4) {
       const clan = await db.clan.findUnique({ where: { tag } });
       if (!clan) {
         return NextResponse.json({ error: 'Clan not found.' }, { status: 404 });
       }
 
-      const TEMPLATES = [
-        {
-          type: 'treasury_target',
-          title: 'Treasury Target',
-          description: 'Deposit a total of {target} chips into the clan treasury this week',
-          target: 5000,
-          reward: 2500,
-        },
-        {
-          type: 'recruitment_drive',
-          title: 'Recruitment Drive',
-          description: 'Have {target} new members join the clan this week',
-          target: 3,
-          reward: 3000,
-        },
-        {
-          type: 'chat_activity',
-          title: 'Syndicate Comms',
-          description: 'Send {target} messages in clan chat this week',
-          target: 20,
-          reward: 1500,
-        },
-        {
-          type: 'deposit_streak',
-          title: 'Deposit Streak',
-          description: 'Make {target} total deposits into the treasury this week (any member, any amount)',
-          target: 10,
-          reward: 2000,
-        },
-      ];
-
-      const dynamicTemplates = TEMPLATES.map((t) => {
-        let resolvedTarget: number;
-        let resolvedReward: number;
-        let resolvedDescription: string;
-
-        if (t.type === 'treasury_target') {
-          resolvedTarget = clan.level * 2000;
-          resolvedReward = clan.level * 1000;
-        } else if (t.type === 'recruitment_drive') {
-          resolvedTarget = Math.min(clan.level, 5);
-          resolvedReward = t.reward;
-        } else if (t.type === 'deposit_streak') {
-          resolvedTarget = clan.level * 2 + 8;
-          resolvedReward = clan.level * 500 + t.reward;
-        } else {
-          // chat_activity
-          resolvedTarget = clan.level * 5 + 15;
-          resolvedReward = t.reward;
-        }
-
-        resolvedDescription = t.description.replace('{target}', String(resolvedTarget));
-
-        return {
-          clanTag: tag,
-          type: t.type,
-          title: t.title,
-          description: resolvedDescription,
-          target: resolvedTarget,
-          reward: resolvedReward,
-          weekStart,
-        };
-      });
-
-      await db.clanChallenge.createMany({ data: dynamicTemplates });
+      await ensureWeeklyChallenges(db, tag, weekStart);
       challenges = await db.clanChallenge.findMany({
         where: { clanTag: tag, weekStart },
         orderBy: { createdAt: 'asc' },
       });
-    } else if (!challenges.some(c => c.type === 'deposit_streak')) {
-      // Backfill: clan had 3 challenges before deposit_streak was added — create the 4th
-      const clan = await db.clan.findUnique({ where: { tag } });
-      if (clan) {
-        const resolvedTarget = clan.level * 2 + 8;
-        const resolvedReward = clan.level * 500 + 2000;
-        const resolvedDescription = `Make ${resolvedTarget} total deposits into the treasury this week (any member, any amount)`;
-        await db.clanChallenge.create({
-          data: {
-            clanTag: tag,
-            type: 'deposit_streak',
-            title: 'Deposit Streak',
-            description: resolvedDescription,
-            target: resolvedTarget,
-            reward: resolvedReward,
-            weekStart,
-          },
-        });
-        challenges = await db.clanChallenge.findMany({
-          where: { clanTag: tag, weekStart },
-          orderBy: { createdAt: 'asc' },
-        });
-      }
     }
 
     return NextResponse.json({ challenges });

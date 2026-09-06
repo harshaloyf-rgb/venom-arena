@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     const me = await db.player.findUnique({ where: { id: session.playerId } });
     if (!me || !me.clanTag) return NextResponse.json({ error: 'Not in a clan.' }, { status: 400 });
     if (me.clanTag !== tag) return NextResponse.json({ error: 'Not your clan.' }, { status: 403 });
-    if (me.clanRank !== 'Leader') return NextResponse.json({ error: 'Only the Leader can edit clan settings.', status: 403 });
+    if (me.clanRank !== 'Leader') return NextResponse.json({ error: 'Only the Leader can edit clan settings.' }, { status: 403 });
 
     if (name !== undefined && name.length < 3) {
       return NextResponse.json({ error: 'Name must be at least 3 characters.' }, { status: 400 });

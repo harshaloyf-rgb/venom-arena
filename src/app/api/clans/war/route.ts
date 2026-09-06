@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { getSession } from '@/lib/auth';
 
 // GET /api/clans/war?tag=XXX
 // Returns the active war for a clan, or null if none.
+// T50: requires a signed-in session — this was the only clan read reachable
+// without auth (every other clan endpoint returns 401 when signed out).
 export async function GET(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const { searchParams } = new URL(req.url);
   const tag = String(searchParams.get('tag') || '').toUpperCase().trim();
 

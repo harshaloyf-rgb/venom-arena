@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { refundWarsOnDisband } from '@/lib/clan-weekly';
 
 // POST /api/clans/disband  (Leader only)
 export async function POST() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  let warsCancelled = 0;
 
   try {
     await db.$transaction(async (tx) => {
@@ -18,6 +21,13 @@ export async function POST() {
       // Verify clan exists
       const clan = await tx.clan.findUnique({ where: { tag: clanTag } });
       if (!clan) throw new Error('CLAN_NOT_FOUND');
+
+      // T50 (BUG 3): refund escrowed war wagers BEFORE the cascade delete.
+      // Declaring war deducts the wager from BOTH treasuries; without this,
+      // disbanding mid-war permanently destroyed the surviving clan's escrow
+      // (chip leak). The disbanding clan's own wager goes back to the Leader's
+      // personal bank; the opponent's wager goes back to their treasury.
+      warsCancelled = await refundWarsOnDisband(tx, clanTag, me.id);
 
       // Delete all ClanActivity for the clan
       await tx.clanActivity.deleteMany({ where: { clanTag } });
@@ -49,5 +59,5 @@ export async function POST() {
     return NextResponse.json({ error: 'Failed to disband clan.' }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, warsCancelled });
 }

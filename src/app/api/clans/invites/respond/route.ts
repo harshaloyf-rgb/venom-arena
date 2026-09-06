@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { utcMonday } from '@/lib/date-utils';
+import { ensureWeeklyChallenges } from '@/lib/clan-weekly';
 
 // POST /api/clans/invites/respond  body: { inviteId, action: 'accept' | 'decline' }
 export async function POST(req: NextRequest) {
@@ -82,6 +83,8 @@ export async function POST(req: NextRequest) {
 
       // Joining counts toward the Recruitment Drive challenge (same as open join)
       const weekStart = utcMonday();
+      // T50 (BUG 2): ensure the weekly rows exist so pre-GET joins count.
+      await ensureWeeklyChallenges(tx, clan.tag, weekStart);
       await tx.clanChallenge.updateMany({
         where: { clanTag: clan.tag, type: 'recruitment_drive', weekStart, claimed: false },
         data: { progress: { increment: 1 } },

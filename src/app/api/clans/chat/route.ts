@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { utcMonday } from '@/lib/date-utils';
+import { ensureWeeklyChallenges } from '@/lib/clan-weekly';
 
 // Simple in-memory cooldown per player for clan chat
 const chatCooldowns = new Map<string, number>();
@@ -64,6 +65,9 @@ export async function POST(req: NextRequest) {
 
     // Update chat_activity challenge progress for current week
     const weekStart = utcMonday();
+
+    // T50 (BUG 2): ensure the weekly rows exist so pre-GET chat activity counts.
+    await ensureWeeklyChallenges(db, tag, weekStart);
 
     await db.clanChallenge.updateMany({
       where: { clanTag: tag, type: 'chat_activity', weekStart, claimed: false },

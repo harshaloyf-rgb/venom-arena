@@ -503,10 +503,10 @@ export default function ClansTab({ onToast }: { onToast?: ToastFn }) {
                             <div className="flex items-center gap-1 shrink-0">
                               {m.clanRank !== 'Leader' && (
                                 <button
-                                  onClick={() => handlePromoteMember(m.userTag, m.clanRank === 'Co-Leader' ? 'Member' : 'Co-Leader')}
+                                  onClick={() => handlePromoteMember(m.userTag, m.clanRank === 'Co-Leader' ? 'Viper' : 'Co-Leader')}
                                   disabled={actionLoading}
                                   className="p-1.5 lg:p-1 rounded-lg bg-slate-900 hover:bg-amber-500/10 border border-slate-800 hover:border-amber-500/30 text-slate-400 hover:text-amber-400 transition-all cursor-pointer disabled:opacity-50"
-                                  title={m.clanRank === 'Co-Leader' ? 'Demote to Member' : 'Promote to Co-Leader'}
+                                  title={m.clanRank === 'Co-Leader' ? 'Demote to Viper' : 'Promote to Co-Leader'}
                                 >
                                   <ArrowUpDown className="h-3 w-3" />
                                 </button>

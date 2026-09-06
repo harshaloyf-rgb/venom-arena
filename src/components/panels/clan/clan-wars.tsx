@@ -28,7 +28,22 @@ export function ClanWars({
     <div className="space-y-4">
       <div className="p-4 lg:p-1.5 rounded-2xl border border-rose-500/20 bg-rose-500/5">
         <div className="flex items-center gap-2 mb-1 lg:mb-0"><Skull className="w-4 h-4 lg:w-3 lg:h-3 text-rose-400" /><h4 className="text-sm lg:text-[11px] font-bold text-white">Clan Wars</h4></div>
-        <p className="text-[11px] text-slate-400">Wager treasury chips against rival clans. First to 50 real-player kills wins the pot (bot kills don&apos;t count). {isLeader ? 'You can declare war on other clans.' : 'Only the Leader can declare wars.'}</p>
+        <p className="text-[11px] text-slate-400">Wager treasury chips against rival clans. First to 50 real-player kills wins the pot (bot kills don&apos;t count). Declaring is <strong className="text-rose-300">instant</strong> — the target clan does not get to accept or refuse. {isLeader ? 'You can declare war on other clans.' : 'Only the Leader can declare wars.'}</p>
+      </div>
+      {/* T50: war lifecycle strip — escrow confused players most */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className="p-2.5 lg:p-1 rounded-xl border border-rose-500/20 bg-slate-950/60">
+          <p className="text-[10px] lg:text-[11px] font-bold text-rose-300 mb-0.5">1 · Declare &amp; Escrow</p>
+          <p className="text-[10px] lg:text-[11px] text-slate-400 leading-relaxed">Leader picks a rival and a wager (min 1,000c). Both treasuries pay in immediately — winner takes the whole pot.</p>
+        </div>
+        <div className="p-2.5 lg:p-1 rounded-xl border border-rose-500/20 bg-slate-950/60">
+          <p className="text-[10px] lg:text-[11px] font-bold text-rose-300 mb-0.5">2 · Fight in Normal Matches</p>
+          <p className="text-[10px] lg:text-[11px] text-slate-400 leading-relaxed">No special lobby. Every <strong className="text-slate-200">real-player kill</strong> by any member of either clan scores 1 point (bots don&apos;t count).</p>
+        </div>
+        <div className="p-2.5 lg:p-1 rounded-xl border border-rose-500/20 bg-slate-950/60">
+          <p className="text-[10px] lg:text-[11px] font-bold text-rose-300 mb-0.5">3 · First to 50 Wins</p>
+          <p className="text-[10px] lg:text-[11px] text-slate-400 leading-relaxed">The war ends automatically and the winning clan&apos;s treasury receives the entire pot (wager × 2). Buy a <strong className="text-slate-200">War Shield</strong> to block declarations for 7 days.</p>
+        </div>
       </div>
       {warLoading ? <PanelSkeleton count={2} height="h-48" /> : activeWar ? (
         <div className="p-4 lg:p-1.5 rounded-2xl border border-rose-500/40 bg-rose-500/5 space-y-4 lg:space-y-1">
