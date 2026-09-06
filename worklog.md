@@ -255,3 +255,24 @@ Work Log:
 
 Stage Summary:
 - Season Pass page is now truthful vs Rules & config on every number; both real bugs (challenge Pass-XP, false daily cap) fixed and live-verified; elite paywall messaging clearer; admin can support Cyber Pass disputes without DB access. Scripts/t53-* kept for reproducibility (no credentials).
+
+---
+Task ID: T54
+Agent: Main
+Task: Season Pass audit pass 2 — user asked "is everything correctly updated in rules and guide?" + "do we need to add anything in admin panel?" — verify T53 result end-to-end, fix the remainder
+
+Work Log:
+- Re-audited every page element against Rules & Guide (S10/S16/S17/S19/S21) and real config (game-config PASS_*, server routes): season badge, 20-tier ladder (0→55,000), daily cap 1,500/UTC, 50% conversion, XP formula (matches match/result line 232), +25 challenge Pass XP (matches player/challenges line 501), chip bonus tables (free 7 tiers 200–3,000c, elite 7 tiers 500–10,000c), Elite 100,000c en-IN format, claim/claim-all/unlock-elite server enforcement, elite shop exclusivity (no pass- ids in shop catalog), NotSignedIn + insufficient-chips states, button disabled states, bento badge math, admin dossier/actions/admin-guide docs. All consistent.
+- BUG fixed (misleading number): XP bar said "X XP to next tier" using the NEXT tier's cumulative requirement (PASS_TIER_XP[currentTier]) — at 300 XP tier 1 it claimed "500 XP to next tier" when only 200 remained. Now shows remaining XP (nextTierXp - passXp). Live-verified: with passXp=1200 (tier 3) the page reads "800 XP to next tier" (2,000−1,200); old code would have shown "2,000".
+- Rules S19 "How Do I Earn XP?": added "Offline Practice earns nothing — 0 chips and 0 XP, so no Pass XP either" (server: rewardMultiplier=0 → xpGained 0; was undocumented).
+- Rules S19 "Claiming Rewards": documented the existing auto-equip behavior (first claimed pass skin auto-equips while wearing the default starter skin — claim route line 85).
+- Rules S19 "Unlocking Elite": navigation bullet rewritten — Season Pass tab is reachable via Lobby Stations grid + desktop tab strip (label "Pass") + All Stations menu on mobile (was "Go to the Pass tab in Lobby Station", mobile path missing).
+- Rules S2 (Offline Practice): score list card now reads "No chips, XP (or Pass XP), stars or country flags in practice".
+- Admin panel verdict: NO additions needed — Economy tab already ships the full "Cyber Pass support" toolkit (dossier with tier/XP/cap/claims, cyber_grant_elite, cyber_set_xp, cyber_unclaim — all audit-logged) plus a documented admin guide section and a purchase ledger covering elite unlocks and pass claims. Verified live by loading dossier VM-0oelp9 and setting Pass XP through the UI.
+- E2E browser test (desktop 1440×900 + mobile 375×812): login → dashboard bento "Tier 1/20 · 1 to claim!" → Pass tab → Unlock Elite ("👑 ELITE ACTIVE") → single claim T1 free ("Claimed: 🔥 Ember Worm") → Claim All Free ("2 rewards (+200c)") → Claim All Elite ("3 rewards (+500c)") → 6× OWNED, zero remaining Claim buttons, unclaimed banner cleared, chip math exactly matches config. Mobile: All Stations → Season Pass header, zero horizontal overflow (375/375).
+- Rules S19 verified rendering in the live modal (all 4 new/changed strings found).
+- tsc --noEmit clean; browser console clean; screenshots in /home/z/my-project/verify-screens/t51-*.png.
+- QA mutations fully reverted via scripts/t54-revert-qa.mjs (pass fields → 0/[], hasElitePass false, unlockedSkins → original 3, wallet → exactly 1,000,000,000, 9 test purchase rows deleted).
+
+Stage Summary:
+- Answer to user: Rules & Guide now fully matches the Season Pass page and real config (one real page bug found: cumulative-vs-remaining "XP to next tier"; three doc gaps closed: practice 0-XP, auto-equip, mobile nav path). Admin panel needs nothing for this page — toolkit already complete and live-tested. Commit edf235e + this worklog commit.
