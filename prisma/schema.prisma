@@ -84,6 +84,7 @@ model Player {
   clanRank        String?  // Leader | Co-Leader | Viper
   clanDeposited   Int      @default(0)  // tracks how much this player has deposited into their current clan
   clanInvites     ClanInvite[] @relation("clanInvitee")
+  clanJoinRequests ClanJoinRequest[] @relation("clanJoinRequester")
 
   // Identity change cooldowns (leaderboard integrity — prevents name/country abuse)
   nameChangedAt     DateTime?
@@ -152,6 +153,7 @@ model Clan {
   activities      ClanActivity[]
   challenges      ClanChallenge[]
   invites         ClanInvite[]
+  joinRequests    ClanJoinRequest[]
   purchases       ClanPurchase[]
   warsDeclared    ClanWar[] @relation("warDeclaringClan")
   warsReceived    ClanWar[] @relation("warTargetClan")
@@ -215,6 +217,21 @@ model ClanInvite {
   respondedAt   DateTime?
 
   @@index([inviteeId, status])
+  @@index([clanTag, status])
+}
+
+model ClanJoinRequest {
+  id          String    @id @default(cuid())
+  clanTag     String
+  clan        Clan      @relation(fields: [clanTag], references: [tag], onDelete: Cascade)
+  playerId    String
+  player      Player    @relation("clanJoinRequester", fields: [playerId], references: [id], onDelete: Cascade)
+  status      String    @default("pending") // "pending" | "accepted" | "declined"
+  respondedBy String?   // Leader/Co-Leader userTag who handled it
+  createdAt   DateTime  @default(now())
+  respondedAt DateTime?
+
+  @@index([playerId, status])
   @@index([clanTag, status])
 }
 

@@ -11,7 +11,7 @@ export function Section15_Syndicates() {
         <InfoCard title="🛡️ What Are Syndicates?" accent="text-amber-300">
           <p className="mb-1.5">Syndicates (clans) are player-formed teams. Team up with allies, pool chips into a shared Treasury, complete weekly challenges together, and climb the clan level system.</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>Create your own syndicate, browse and join existing ones, or get invited directly by a Leader</li>
+            <li>Create your own syndicate, browse and send a <strong>join request</strong> to existing ones, or get invited directly by a member</li>
             <li>Each syndicate has a unique <strong>3-5 character tag</strong> (uppercase letters/numbers, e.g. VNM, APEX)</li>
             <li>Clan level unlocks powerful perks for all members</li>
           </ul>
@@ -134,11 +134,19 @@ export function Section15_Syndicates() {
         </InfoCard>
         <InfoCard title="📨 Invitations" accent="text-violet-300">
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong>Leaders and Co-Leaders</strong> can invite any player by VM tag — open the Member Roster on the Overview tab and click <strong>Invite Player</strong></li>
+            <li><strong>Every member</strong> can invite — Leaders, Co-Leaders, and regular Vipers alike — by opening the Member Roster on the Overview tab and clicking <strong>Invite Player</strong></li>
             <li>Invited players get a rose badge on the dashboard <strong>Syndicates</strong> tile; invites appear at the top of <strong>My Clan</strong> with <strong>Accept</strong> / <strong>Decline</strong> buttons</li>
-            <li>Accepting joins instantly (you must be clanless and the syndicate must have space); invite joins count toward <strong>Recruitment Drive</strong> like normal joins</li>
-            <li>Accepting an invite or joining any other way automatically declines your other pending invites</li>
+            <li>Accepting an invite joins instantly (you must be clanless and the syndicate must have space); invite joins count toward <strong>Recruitment Drive</strong> like normal joins</li>
             <li>Invites are free — one pending invite per clan per player, max 30 pending per clan</li>
+          </ul>
+        </InfoCard>
+        <InfoCard title="📨 Join Requests (Leader Approval)" accent="text-rose-300">
+          <ul className="list-disc pl-4 space-y-0.5">
+            <li>Joining through <strong>Browse Clans</strong> sends a <strong>join request</strong> — membership is <strong>not</strong> instant; the clan's <strong>Leader or Co-Leader</strong> must accept or reject it</li>
+            <li>Leaders see pending requests in the <strong>Join Requests</strong> card on the Overview tab (with Accept / Reject) plus a rose badge on the dashboard Syndicates tile and a pulsing dot on the Overview sub-tab</li>
+            <li>Approved players join as <strong>Vipers</strong> and count toward <strong>Recruitment Drive</strong>; requests auto-cancel if the clan fills up before approval</li>
+            <li>You can <strong>cancel your own request</strong> anytime from Browse Clans (tap the <strong>Requested</strong> button); joining any clan another way automatically declines your other pending requests and invites</li>
+            <li>Requests are free — one pending request per clan per player, max 30 pending per clan</li>
           </ul>
         </InfoCard>
       </div>

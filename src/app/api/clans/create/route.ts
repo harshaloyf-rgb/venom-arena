@@ -32,9 +32,13 @@ export async function POST(req: NextRequest) {
     await db.$transaction([
       db.clan.create({ data: { tag, name, emblem, description } }),
       db.player.update({ where: { id: me.id }, data: { clanTag: tag, clanRank: 'Leader' } }),
-      // Founding a clan makes any pending invites to this player moot
+      // Founding a clan makes any pending invites AND join requests to this player moot
       db.clanInvite.updateMany({
         where: { inviteeId: me.id, status: 'pending' },
+        data: { status: 'declined', respondedAt: new Date() },
+      }),
+      db.clanJoinRequest.updateMany({
+        where: { playerId: me.id, status: 'pending' },
         data: { status: 'declined', respondedAt: new Date() },
       }),
       db.clanActivity.create({

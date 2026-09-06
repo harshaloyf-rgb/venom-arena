@@ -196,11 +196,18 @@ export default function Home() {
 
   const fetchPendingClanInvites = useCallback(async () => {
     try {
-      const res = await fetch('/api/clans/invites');
-      if (res.ok) {
-        const data = await res.json();
-        setPendingClanInviteCount(data.count ?? 0);
+      // Badge = my pending invites + (for Leaders/Co-Leaders) pending join requests to my clan
+      const [invRes, reqRes] = await Promise.all([fetch('/api/clans/invites'), fetch('/api/clans/join-requests')]);
+      let count = 0;
+      if (invRes.ok) {
+        const data = await invRes.json();
+        count += data.count ?? 0;
       }
+      if (reqRes.ok) {
+        const data = await reqRes.json();
+        count += (data.incoming ?? []).length;
+      }
+      setPendingClanInviteCount(count);
     } catch { /* non-critical */ }
   }, []);
 
@@ -652,7 +659,7 @@ export default function Home() {
                     <div className="relative">
                       <BentoGate onClick={() => setActiveTab('clans')} icon={Shield} accent="violet" badge="Team Ops" title="Syndicates" desc="Create or join a syndicate. Team up with allies, pool resources, and dominate arenas together." footLeft="CLAN WARFARE" footRight="Assemble" />
                       {pendingClanInviteCount > 0 && (
-                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center" title={`${pendingClanInviteCount} pending syndicate invite${pendingClanInviteCount === 1 ? '' : 's'}`}>{pendingClanInviteCount}</span>
+                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center" title={`${pendingClanInviteCount} pending syndicate invite or join request${pendingClanInviteCount === 1 ? '' : 's'}`}>{pendingClanInviteCount}</span>
                       )}
                     </div>
                     <BentoGate onClick={() => setActiveTab('seasonpass')} icon={Sparkles} accent="pink" badge="Pass XP" title="Season Pass" desc="Earn Pass XP from matches (50% of match XP, daily cap). Unlock cosmetics and chip rewards across 20 tiers." footLeft={player ? (() => { const tiers = PASS_TIER_XP.filter(x => (player.passXp ?? 0) >= x).length; const unclaimed = PASS_TIER_XP.filter((x, i) => (player.passXp ?? 0) >= x && !(player.passClaimedFree ?? []).includes(i + 1)).length; return unclaimed > 0 ? `Tier ${tiers}/20 · ${unclaimed} to claim!` : `Tier ${tiers}/20`; })() : 'EARN XP'}

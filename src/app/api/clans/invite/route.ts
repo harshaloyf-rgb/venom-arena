@@ -5,7 +5,7 @@ import { findPlayerByTag } from '@/lib/player-lookup';
 
 const MAX_PENDING_INVITES = 30;
 
-// POST /api/clans/invite  body: { userTag }  — Leader/Co-Leader invites a player to their clan
+// POST /api/clans/invite  body: { userTag }  — any clan member invites a player to their clan
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -24,7 +24,6 @@ export async function POST(req: NextRequest) {
       const me = await tx.player.findUnique({ where: { id: session.playerId } });
       if (!me) throw new Error('PLAYER_NOT_FOUND');
       if (!me.clanTag) throw new Error('NOT_IN_CLAN');
-      if (me.clanRank !== 'Leader' && me.clanRank !== 'Co-Leader') throw new Error('NOT_LEADER');
       const clanTag = me.clanTag;
 
       const clan = await tx.clan.findUnique({
@@ -76,7 +75,6 @@ export async function POST(req: NextRequest) {
     const errorMap: Record<string, { error: string; status: number }> = {
       PLAYER_NOT_FOUND: { error: 'Not found.', status: 404 },
       NOT_IN_CLAN: { error: 'Join a syndicate first.', status: 400 },
-      NOT_LEADER: { error: 'Only the Leader or Co-Leader can invite players.', status: 403 },
       CLAN_NOT_FOUND: { error: 'Clan not found.', status: 404 },
       CLAN_FULL: { error: 'Syndicate is full — no space to invite.', status: 400 },
       ALREADY_MEMBER: { error: 'That player is already in your syndicate.', status: 400 },

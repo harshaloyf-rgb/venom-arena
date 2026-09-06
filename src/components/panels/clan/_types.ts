@@ -97,6 +97,24 @@ export interface ClanInviteRow {
   createdAt: string;
 }
 
+export interface JoinRequestIncomingRow {
+  id: string;
+  clanTag: string;
+  userTag: string;
+  name: string;
+  country: string;
+  level: number;
+  bankedChips: number;
+  createdAt: string;
+}
+
+export interface JoinRequestOutgoingRow {
+  id: string;
+  clanTag: string;
+  clanName: string;
+  createdAt: string;
+}
+
 export interface WarInfo {
   id: string;
   declarerTag: string;
@@ -137,6 +155,7 @@ export const ACTIVITY_ICONS: Record<string, string> = {
   war_end: '🏆',
   settings: '⚙️',
   invite: '\ud83d\udce8',
+  request: '\ud83d\udce9',
 };
 
 export const CHALLENGE_ICONS: Record<string, LucideIcon> = {

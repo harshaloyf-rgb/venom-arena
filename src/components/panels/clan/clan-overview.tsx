@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { countryFlag } from '@/lib/game-config';
 import { isOnline } from '@/lib/date-utils';
 import { PanelSkeleton } from '../_panel-primitives';
-import type { ClanMember, ChatMessage, ClanChallenge, ClanStats, MineSubTab } from './_types';
+import type { ClanMember, ChatMessage, ClanChallenge, ClanStats, MineSubTab, JoinRequestIncomingRow } from './_types';
 import { CHALLENGE_ICONS, RANK_BG, PERK_ROADMAP } from './_types';
 
 interface ClanOverviewProps {
@@ -42,6 +42,8 @@ interface ClanOverviewProps {
   onTransfer: (userTag: string, name: string) => void;
   onPayout: (userTag: string) => void;
   onInvite: (userTag: string) => Promise<boolean>;
+  joinRequests: JoinRequestIncomingRow[];
+  onRespondJoinRequest: (requestId: string, action: 'accept' | 'decline', requesterName: string) => void;
   onInspect: (m: ClanMember) => void;
   onOpenSettings: () => void;
   onLeave: () => void;
@@ -57,7 +59,7 @@ export function ClanOverview({
   challenges, depositAmount, broadcast, quickDeposits, actionBusy,
   onDepositAmountChange, onBroadcastChange, onDeposit, onWithdraw, onBroadcast,
   onShopPurchase, onPromote, onDemote, onKick, onTransfer, onPayout, onInvite,
-  onInspect, onOpenSettings, onLeave, onSetMineSub,
+  joinRequests = [], onRespondJoinRequest, onInspect, onOpenSettings, onLeave, onSetMineSub,
   playerUserTag, playerClanRank, playerBankedChips,
 }: ClanOverviewProps) {
   const [showInviteInput, setShowInviteInput] = useState(false);
@@ -78,6 +80,36 @@ export function ClanOverview({
 
   return (
     <div className="space-y-4">
+      {/* Join Requests (Leader/Co-Leader approval) */}
+      {canManage && joinRequests.length > 0 && (
+        <div className="p-4 lg:p-1.5 rounded-2xl border border-rose-500/30 bg-rose-500/5">
+          <h4 className="text-sm lg:text-[11px] font-bold text-white flex items-center gap-2 mb-3 lg:mb-1"><UserPlus className="w-4 h-4 lg:w-3 lg:h-3 text-rose-400" /> Join Requests ({joinRequests.length}) <span className="text-[10px] lg:text-[11px] font-normal text-slate-500">— players waiting for your approval</span></h4>
+          <div className="space-y-2 lg:space-y-0.5">
+            {joinRequests.map((r) => (
+              <div key={r.id} className="flex items-center justify-between gap-3 p-2 lg:p-1 rounded-lg bg-slate-950/60 border border-slate-800 flex-wrap">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-base lg:text-[11px] shrink-0" aria-hidden>{countryFlag(r.country)}</span>
+                  <div className="min-w-0">
+                    <div className="text-xs lg:text-[11px] font-bold text-white flex items-center gap-1.5 flex-wrap">
+                      {r.name} <span className="text-[9px] lg:text-[11px] font-mono text-slate-500">{r.userTag}</span>
+                    </div>
+                    <div className="text-[10px] lg:text-[11px] font-mono text-slate-500">Lvl {r.level} · {r.bankedChips.toLocaleString()}c</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button type="button" onClick={() => onRespondJoinRequest(r.id, 'accept', r.name)} disabled={actionBusy === `joinreq-${r.id}`} className="px-2.5 lg:px-1 py-1 lg:py-0.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] lg:text-[11px] font-bold transition flex items-center gap-1 disabled:opacity-50">
+                    {actionBusy === `joinreq-${r.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Accept
+                  </button>
+                  <button type="button" onClick={() => onRespondJoinRequest(r.id, 'decline', r.name)} disabled={actionBusy === `joinreq-${r.id}`} className="px-2.5 lg:px-1 py-1 lg:py-0.5 rounded-lg bg-slate-950 border border-slate-800 hover:border-rose-500/40 text-slate-400 hover:text-rose-400 text-[10px] lg:text-[11px] font-bold transition disabled:opacity-50">
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Perks Roadmap */}
       <div className="p-4 lg:p-1.5 rounded-2xl border border-amber-500/20 bg-amber-500/5">
         <h4 className="text-sm lg:text-[11px] font-bold text-white flex items-center gap-2 mb-3 lg:mb-1"><Star className="w-4 h-4 lg:w-3 lg:h-3 text-amber-400" /> Perks Roadmap</h4>
@@ -207,14 +239,14 @@ export function ClanOverview({
           <h4 className="text-sm lg:text-[11px] font-bold text-white flex items-center gap-2"><Users className="w-4 h-4 lg:w-3 lg:h-3 text-indigo-400" /> Member Roster ({myClanInfo?.memberCount || 0})</h4>
           <div className="flex items-center gap-2">
             <span className="text-[10px] lg:text-[11px] font-mono text-slate-500">Max: {myClanInfo?.maxMembers || 30}</span>
-            {canManage && (myClanInfo?.memberCount || 0) < (myClanInfo?.maxMembers || 30) && (
+            {(myClanInfo?.memberCount || 0) < (myClanInfo?.maxMembers || 30) && (
               <button type="button" onClick={() => setShowInviteInput((v) => !v)} className="px-2 lg:px-1 py-1 lg:py-0.5 rounded text-[10px] lg:text-[11px] font-bold bg-slate-900 hover:bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 hover:border-indigo-500/40 transition flex items-center gap-1">
                 <UserPlus className="w-3 h-3 lg:w-2.5 lg:h-2.5" /> Invite Player
               </button>
             )}
           </div>
         </div>
-        {canManage && showInviteInput && (
+        {showInviteInput && (
           <div className="mb-2 lg:mb-1 flex items-center gap-2 p-2 lg:p-1 rounded-xl border border-indigo-500/20 bg-indigo-500/5">
             <input
               type="text"

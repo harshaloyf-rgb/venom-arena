@@ -66,7 +66,7 @@ export function MoreMenu({ isOpen, onClose, onSelectTab, isAdmin, clanInviteCoun
               {tabId === 'clans' && clanInviteCount > 0 && (
                 <span
                   className="absolute top-1 right-1 w-4 h-4 bg-rose-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center"
-                  title={`${clanInviteCount} pending syndicate invite${clanInviteCount === 1 ? '' : 's'}`}
+                  title={`${clanInviteCount} pending syndicate invite or join request${clanInviteCount === 1 ? '' : 's'}`}
                 >
                   {clanInviteCount}
                 </span>

@@ -60,9 +60,13 @@ export async function POST(req: NextRequest) {
         where: { id: invite.id },
         data: { status: 'accepted', respondedAt: new Date() },
       });
-      // You joined a clan — every other pending invite is now moot
+      // You joined a clan — every other pending invite AND join request is now moot
       await tx.clanInvite.updateMany({
         where: { inviteeId: me.id, status: 'pending', id: { not: invite.id } },
+        data: { status: 'declined', respondedAt: new Date() },
+      });
+      await tx.clanJoinRequest.updateMany({
+        where: { playerId: me.id, status: 'pending' },
         data: { status: 'declined', respondedAt: new Date() },
       });
 

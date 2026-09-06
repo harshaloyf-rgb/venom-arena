@@ -1,6 +1,6 @@
 'use client';
 
-import { Shield, Search, Plus, Award, Loader2 } from 'lucide-react';
+import { Shield, Search, Plus, Award, Loader2, Check } from 'lucide-react';
 import { MicroLabel, PanelSkeleton } from '../_panel-primitives';
 import type { ClanInfo, Tab } from './_types';
 import { EMBLEM_OPTIONS } from './_types';
@@ -12,20 +12,22 @@ interface ClanBrowseProps {
   filteredClans: ClanInfo[];
   search: string;
   playerClanTag: string | null;
+  myJoinRequestTags: string[];
   actionBusy: string;
   formState: { name: string; tag: string; motto: string; emblem: string; description: string };
   formBusy: boolean;
   onSearchChange: (v: string) => void;
   onSetTab: (tab: Tab) => void;
   onJoinClan: (tag: string, name: string) => void;
+  onCancelJoinRequest: (clanTag: string, clanName: string) => void;
   onFormStateChange: (updater: (f: { name: string; tag: string; motto: string; emblem: string; description: string }) => { name: string; tag: string; motto: string; emblem: string; description: string }) => void;
   onFormSubmit: () => void;
 }
 
 export function ClanBrowse({
   tab, clans, clansLoading, filteredClans, search,
-  playerClanTag, actionBusy, formState, formBusy,
-  onSearchChange, onSetTab, onJoinClan, onFormStateChange, onFormSubmit,
+  playerClanTag, myJoinRequestTags, actionBusy, formState, formBusy,
+  onSearchChange, onSetTab, onJoinClan, onCancelJoinRequest, onFormStateChange, onFormSubmit,
 }: ClanBrowseProps) {
   if (tab === 'browse') {
     return (
@@ -51,8 +53,11 @@ export function ClanBrowse({
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-1">
                 {filteredClans.map((clan) => {
                   const isJoined = playerClanTag === clan.tag;
+                  const isFull = clan.memberCount >= (clan.maxMembers || 30);
+                  const isRequested = myJoinRequestTags.includes(clan.tag);
+                  const joinDisabled = isJoined || isFull || (!!playerClanTag && !isJoined) || actionBusy === `join-${clan.tag}`;
                   return (
-                    <div key={clan.tag} className="p-4 lg:p-1.5 rounded-2xl border border-slate-800 bg-slate-950/70 shadow-md flex flex-col gap-3 lg:gap-1">
+                    <div key={clan.tag} className={`p-4 lg:p-1.5 rounded-2xl border bg-slate-950/70 shadow-md flex flex-col gap-3 lg:gap-1 ${isRequested ? 'border-amber-500/40' : 'border-slate-800'}`}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2.5 lg:gap-1 min-w-0">
                           <span className="text-3xl lg:text-[11px]" aria-hidden>{clan.emblem}</span>
@@ -61,6 +66,7 @@ export function ClanBrowse({
                             <span className="text-[10px] lg:text-[11px] font-mono text-indigo-300 bg-indigo-500/10 border border-indigo-500/30 px-1.5 lg:px-1 py-0.5 rounded">[{clan.tag}]</span>
                           </div>
                         </div>
+                        {isRequested && <span className="text-[9px] lg:text-[11px] font-bold px-1.5 py-0.5 rounded-full border bg-amber-500/10 border-amber-500/40 text-amber-300 shrink-0">REQUESTED</span>}
                       </div>
                       {clan.description && <p className="text-[11px] text-slate-400 italic">&quot;{clan.description}&quot;</p>}
                       <div className="grid grid-cols-3 gap-2 lg:gap-0.5 text-[10px] font-mono">
@@ -68,9 +74,23 @@ export function ClanBrowse({
                         <div className="p-2 lg:p-1 bg-slate-900/60 rounded border border-slate-800 text-center"><MicroLabel>MEMBERS</MicroLabel><div className="text-white mt-0.5">{clan.memberCount}/{clan.maxMembers || 30}</div></div>
                         <div className="p-2 lg:p-1 bg-slate-900/60 rounded border border-slate-800 text-center"><MicroLabel>TREASURY</MicroLabel><div className="text-emerald-400 mt-0.5">{clan.bankedChips >= 1_000_000 ? `${(clan.bankedChips / 1_000_000).toFixed(1)}M` : clan.bankedChips.toLocaleString()}</div></div>
                       </div>
-                      <button type="button" onClick={() => onJoinClan(clan.tag, clan.name)} disabled={isJoined || !!playerClanTag || actionBusy === 'join'} className={`w-full py-2 lg:py-1 rounded-lg text-xs lg:text-[11px] font-bold transition flex items-center justify-center gap-1.5 ${isJoined ? 'bg-slate-900 text-slate-500 border border-slate-800 cursor-default' : !!playerClanTag ? 'bg-slate-900 text-slate-500 border border-slate-800 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}>
-                        {actionBusy === 'join' ? <Loader2 className="w-3.5 h-3.5 lg:w-3 lg:h-3 animate-spin" /> : null}{isJoined ? 'Already a Member' : 'Join Syndicate'}
-                      </button>
+                      {isJoined ? (
+                        <button type="button" disabled className="w-full py-2 lg:py-1 rounded-lg text-xs lg:text-[11px] font-bold bg-slate-900 text-slate-500 border border-slate-800 cursor-default flex items-center justify-center gap-1.5">
+                          Already a Member
+                        </button>
+                      ) : isFull && !isRequested ? (
+                        <button type="button" disabled className="w-full py-2 lg:py-1 rounded-lg text-xs lg:text-[11px] font-bold bg-slate-900 text-slate-500 border border-slate-800 cursor-not-allowed flex items-center justify-center gap-1.5">
+                          Clan Full
+                        </button>
+                      ) : isRequested ? (
+                        <button type="button" title="Click to cancel your join request" onClick={() => onCancelJoinRequest(clan.tag, clan.name)} disabled={actionBusy === `join-${clan.tag}`} className="w-full py-2 lg:py-1 rounded-lg text-xs lg:text-[11px] font-bold transition flex items-center justify-center gap-1.5 bg-amber-500/10 hover:bg-rose-500/10 text-amber-300 hover:text-rose-300 border border-amber-500/40 hover:border-rose-500/40 disabled:opacity-50">
+                          {actionBusy === `join-${clan.tag}` ? <Loader2 className="w-3.5 h-3.5 lg:w-3 lg:h-3 animate-spin" /> : <Check className="w-3.5 h-3.5 lg:w-3 lg:h-3" />} Requested — Tap to Cancel
+                        </button>
+                      ) : (
+                        <button type="button" title="The Leader or Co-Leader must approve your request" onClick={() => onJoinClan(clan.tag, clan.name)} disabled={joinDisabled} className={`w-full py-2 lg:py-1 rounded-lg text-xs lg:text-[11px] font-bold transition flex items-center justify-center gap-1.5 ${joinDisabled ? 'bg-slate-900 text-slate-500 border border-slate-800 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}>
+                          {actionBusy === `join-${clan.tag}` ? <Loader2 className="w-3.5 h-3.5 lg:w-3 lg:h-3 animate-spin" /> : null}Request to Join
+                        </button>
+                      )}
                     </div>
                   );
                 })}

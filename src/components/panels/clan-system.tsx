@@ -29,6 +29,7 @@ import {
   type Tab, type MineSubTab, type ClanSystemProps,
   type ClanInfo, type ClanMember, type ChatMessage, type ActivityEntry,
   type ClanChallenge, type ClanStats, type WarInfo, type ClanInviteRow,
+  type JoinRequestIncomingRow, type JoinRequestOutgoingRow,
 } from './clan/_types';
 
 export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
@@ -68,6 +69,8 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [invites, setInvites] = useState<ClanInviteRow[]>([]);
   const [invitesLoading, setInvitesLoading] = useState(false);
+  const [joinIncoming, setJoinIncoming] = useState<JoinRequestIncomingRow[]>([]);
+  const [joinOutgoing, setJoinOutgoing] = useState<JoinRequestOutgoingRow[]>([]);
 
   const playerClanTag = player?.clanTag || null;
   const isLeader = player?.clanRank === 'Leader';
@@ -158,6 +161,15 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
     } catch { setInvites([]); } finally { setInvitesLoading(false); }
   }, []);
 
+  const fetchJoinRequests = useCallback(async () => {
+    try {
+      const res = await fetch('/api/clans/join-requests', { cache: 'no-store' });
+      const data = (await res.json().catch(() => ({}))) as { incoming?: JoinRequestIncomingRow[]; outgoing?: JoinRequestOutgoingRow[] };
+      setJoinIncoming(data.incoming || []);
+      setJoinOutgoing(data.outgoing || []);
+    } catch { setJoinIncoming([]); setJoinOutgoing([]); }
+  }, []);
+
   useEffect(() => {
     if (tab === 'browse') void fetchClans();
   }, [tab, fetchClans]);
@@ -174,12 +186,14 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
 
   useEffect(() => { void fetchClans(); }, [fetchClans]);
 
-  // Pending syndicate invites matter while clanless — clear once you join one
+  // Pending syndicate invites matter while clanless — clear once you join one.
+  // Join requests: outgoing matter while clanless, incoming matter for Leader/Co-Leader.
   useEffect(() => {
     if (!player) return;
     if (!playerClanTag) void fetchInvites();
     else setInvites([]);
-  }, [player, playerClanTag, fetchInvites]);
+    void fetchJoinRequests();
+  }, [player, playerClanTag, fetchInvites, fetchJoinRequests]);
 
   const myClanInfo = clans.find((c) => c.tag === playerClanTag);
   const xpNeeded = (myClanInfo?.level || 1) * 1000;
@@ -207,13 +221,44 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
 
   async function handleJoinClan(tag: string, clanName: string) {
     if (playerClanTag) { notify('Already in a clan!', 'error', onToast); return; }
-    setActionBusy('join');
+    setActionBusy(`join-${tag}`);
     try {
       const res = await fetch('/api/clans/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag }) });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-      if (!res.ok) { notify(data?.error || 'Failed to join.', 'error', onToast); return; }
-      notify(`Welcome to ${clanName} [${tag}]!`, 'success', onToast);
-      await refresh(); void fetchClans();
+      if (!res.ok) { notify(data?.error || 'Failed to send request.', 'error', onToast); return; }
+      notify(`Request sent to ${clanName} [${tag}]! The Leader or Co-Leader will review it.`, 'success', onToast);
+      void fetchJoinRequests();
+    } catch { notify('Network error.', 'error', onToast); } finally { setActionBusy(''); }
+  }
+
+  async function handleCancelJoinRequest(clanTag: string, clanName: string) {
+    const req = joinOutgoing.find((r) => r.clanTag === clanTag);
+    if (!req) return;
+    setActionBusy(`join-${clanTag}`);
+    try {
+      const res = await fetch('/api/clans/join-requests', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId: req.id }) });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok) { notify(data?.error || 'Failed to cancel.', 'error', onToast); return; }
+      notify(`Join request to ${clanName} cancelled.`, 'info', onToast);
+      void fetchJoinRequests();
+    } catch { notify('Network error.', 'error', onToast); } finally { setActionBusy(''); }
+  }
+
+  async function handleRespondJoinRequest(requestId: string, action: 'accept' | 'decline', requesterName: string) {
+    if (!playerClanTag) return;
+    setActionBusy(`joinreq-${requestId}`);
+    try {
+      const res = await fetch('/api/clans/join-requests/respond', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId, action }) });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok) { notify(data?.error || 'Failed to respond.', 'error', onToast); void fetchJoinRequests(); return; }
+      if (action === 'accept') {
+        notify(`${requesterName} joined the syndicate!`, 'success', onToast);
+        void fetchMembers(playerClanTag); void fetchClans(); void fetchActivities(playerClanTag); void fetchStats(playerClanTag);
+      } else {
+        notify(`Rejected ${requesterName}'s join request.`, 'info', onToast);
+        void fetchActivities(playerClanTag);
+      }
+      void fetchJoinRequests();
     } catch { notify('Network error.', 'error', onToast); } finally { setActionBusy(''); }
   }
 
@@ -518,7 +563,7 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
               <div className="p-8 lg:p-3 rounded-2xl border border-slate-800 bg-slate-950/60 text-center max-w-md mx-auto">
                 <Shield className="w-12 h-12 lg:w-5 lg:h-5 text-slate-600 mx-auto mb-3 lg:mb-0.5" />
                 <h3 className="text-base lg:text-[11px] font-bold text-white">You are not in a Viper Clan</h3>
-                <p className="text-xs lg:text-[11px] text-slate-400 mt-2 lg:mt-0 mb-4 lg:mb-1">Join an existing clan or form your own syndicate — Leader invites will appear here!</p>
+                <p className="text-xs lg:text-[11px] text-slate-400 mt-2 lg:mt-0 mb-4 lg:mb-1">Join an existing clan or form your own syndicate — invite requests from clans will appear here!</p>
                 <div className="flex items-center justify-center gap-2">
                   <button type="button" onClick={() => setTab('browse')} className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition">Browse Clans</button>
                   <button type="button" onClick={() => setTab('form')} className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 hover:border-indigo-500/40 text-slate-300 hover:text-white text-xs font-bold transition">Form Syndicate</button>
@@ -591,7 +636,7 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
               <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800/60 overflow-x-auto">
                 {(
                   [
-                    { key: 'overview' as const, Icon: Shield, label: 'Overview' },
+                    {key: 'overview' as const, Icon: Shield, label: 'Overview' },
                     { key: 'challenges' as const, Icon: Swords, label: 'Challenges' },
                     { key: 'wars' as const, Icon: Skull, label: 'Wars' },
                     { key: 'stats' as const, Icon: TrendingUp, label: 'Stats' },
@@ -613,6 +658,9 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
                     <Icon className="w-3 h-3" /> {label}
                     {key === 'challenges' && challenges.some((c) => c.progress >= c.target && !c.claimed) && (
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                    )}
+                    {key === 'overview' && canManage && joinIncoming.length > 0 && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" title={`${joinIncoming.length} pending join request${joinIncoming.length === 1 ? '' : 's'}`} />
                     )}
                   </button>
                 ))}
@@ -651,6 +699,8 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
                   onPayout={handlePayout}
                   onInspect={inspectMember}
                   onInvite={handleInvitePlayer}
+                  joinRequests={joinIncoming}
+                  onRespondJoinRequest={(id, action, name) => void handleRespondJoinRequest(id, action, name)}
                   onOpenSettings={openSettings}
                   onLeave={handleLeaveClan}
                   onSetMineSub={setMineSub}
@@ -713,12 +763,14 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
           filteredClans={filteredClans}
           search={search}
           playerClanTag={playerClanTag}
+          myJoinRequestTags={joinOutgoing.map((r) => r.clanTag)}
           actionBusy={actionBusy}
           formState={formState}
           formBusy={formBusy}
           onSearchChange={setSearch}
           onSetTab={setTab}
           onJoinClan={handleJoinClan}
+          onCancelJoinRequest={(tag, name) => void handleCancelJoinRequest(tag, name)}
           onFormStateChange={setFormState}
           onFormSubmit={handleFormSubmit}
         />
