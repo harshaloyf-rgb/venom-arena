@@ -946,10 +946,13 @@ export const PASS_FREE_COSMETICS: Skin[] = [
 ];
 
 /** Real equippable cosmetics for the Elite track (20 tiers). Elite pass exclusive. */
+// NOTE: e2 keeps its historical id 'pass-e2-phantom-wraith' (claim/unlock data
+// references it) but is display-named 'Wraith Sovereign' — its old name
+// duplicated the free track's pass-f8 'Phantom Wraith'.
 export const PASS_ELITE_COSMETICS: Skin[] = [
   // Tiers 1-5 — Premium Skins
   { id: 'pass-e1-cyber-serpent', name: 'Cyber Serpent God',  cost: 0, type: 'skin',  color: '#a855f7', secondaryColor: '#fbbf24', description: 'Royal purple with gold cyber-circuit overlay.', emoji: '👑', pattern: 'cyber' },
-  { id: 'pass-e2-phantom-wraith', name: 'Phantom Wraith',    cost: 0, type: 'skin',  color: '#1e293b', secondaryColor: '#6366f1', description: 'Ghostly translucent dark scales with indigo glow.', emoji: '👻', pattern: 'glow' },
+  { id: 'pass-e2-phantom-wraith', name: 'Wraith Sovereign',    cost: 0, type: 'skin',  color: '#1e293b', secondaryColor: '#6366f1', description: 'Ghostly translucent dark scales with indigo glow.', emoji: '👻', pattern: 'glow' },
   { id: 'pass-e3-magma-titan',  name: 'Magma Titan',          cost: 0, type: 'skin',  color: '#f97316', secondaryColor: '#dc2626', description: 'Volcanic lava flow between obsidian plates.', emoji: '🌋', pattern: 'pulse' },
   { id: 'pass-e4-arctic-king',  name: 'Arctic King',          cost: 0, type: 'skin',  color: '#e0f2fe', secondaryColor: '#0ea5e9', description: 'Frost king crown with icy crystalline body.', emoji: '🧊', pattern: 'neon' },
   { id: 'pass-e5-biohazard',    name: 'Biohazard Prime',      cost: 0, type: 'skin',  color: '#22c55e', secondaryColor: '#fbbf24', description: 'Radioactive green with hazard stripe accents.', emoji: '☢️', pattern: 'camo' },

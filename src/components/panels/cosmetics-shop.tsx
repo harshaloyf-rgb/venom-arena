@@ -471,7 +471,7 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
         <div>
           <h2 className="text-xl lg:text-[11px] font-bold font-sans tracking-tight text-white flex items-center gap-2">
             <ShoppingBag className="w-5 h-5 lg:w-3 lg:h-3 text-indigo-400" /> Identity Workshop
-            &amp; Skin Gallery
+            &amp; Shop
           </h2>
           <p className="text-xs lg:text-[11px] text-slate-400 font-sans mt-1 lg:mt-0 lg:leading-tight">
             Browse and equip real-time wiggling skins or customize your own
@@ -806,6 +806,14 @@ export function CosmeticsShop({ onToast }: CosmeticsShopProps) {
                   )}
                 </button>
               </div>
+
+              {/* Deploy vs Save distinction — deploy is device-local, save is account-wide */}
+              <p className="text-[10px] text-slate-500 leading-snug mt-2 lg:mt-0.5">
+                <span className="text-slate-400 font-semibold">Deploy</span> equips it instantly
+                (design stays on this device).{' '}
+                <span className="text-emerald-400 font-semibold">Save to Inventory</span> keeps it
+                on your account — usable on any device and shown to other players in online arenas.
+              </p>
 
               {/* Save to Inventory button */}
               <button

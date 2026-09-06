@@ -153,7 +153,7 @@ export function PresetCard({
             : 'bg-slate-900 text-slate-300 group-hover:bg-indigo-600 group-hover:text-white'
         }`}
       >
-        {active ? 'Equipped' : 'Launch Me'}
+        {active ? 'Equipped' : 'Equip Skin'}
       </button>
     </div>
   );
