@@ -83,6 +83,7 @@ model Player {
   clan            Clan?    @relation(fields: [clanTag], references: [tag], onDelete: SetNull)
   clanRank        String?  // Leader | Co-Leader | Viper
   clanDeposited   Int      @default(0)  // tracks how much this player has deposited into their current clan
+  clanInvites     ClanInvite[] @relation("clanInvitee")
 
   // Identity change cooldowns (leaderboard integrity — prevents name/country abuse)
   nameChangedAt     DateTime?
@@ -150,6 +151,7 @@ model Clan {
   messages        ClanMessage[]
   activities      ClanActivity[]
   challenges      ClanChallenge[]
+  invites         ClanInvite[]
   purchases       ClanPurchase[]
   warsDeclared    ClanWar[] @relation("warDeclaringClan")
   warsReceived    ClanWar[] @relation("warTargetClan")
@@ -198,6 +200,22 @@ model ClanMessage {
   createdAt DateTime @default(now())
 
   @@index([clanTag, createdAt])
+}
+
+model ClanInvite {
+  id            String    @id @default(cuid())
+  clanTag       String
+  clan          Clan      @relation(fields: [clanTag], references: [tag], onDelete: Cascade)
+  inviteeId     String
+  invitee       Player    @relation("clanInvitee", fields: [inviteeId], references: [id], onDelete: Cascade)
+  invitedByTag  String
+  invitedByName String
+  status        String    @default("pending") // "pending" | "accepted" | "declined"
+  createdAt     DateTime  @default(now())
+  respondedAt   DateTime?
+
+  @@index([inviteeId, status])
+  @@index([clanTag, status])
 }
 
 model DailyClaim {

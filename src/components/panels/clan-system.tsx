@@ -7,11 +7,12 @@ import {
   GlowBlob,
   MicroLabel,
   NotSignedIn,
+  PanelSkeleton,
   notify,
   type ToastFn,
 } from './_panel-primitives';
 import {
-  Shield, Search, Plus, Trophy, LogOut, Loader2, Swords, ScrollText, Skull, TrendingUp, Circle, Settings, X, Check, AlertTriangle,
+  Shield, Search, Plus, Trophy, LogOut, Loader2, Swords, ScrollText, Skull, TrendingUp, Circle, Settings, X, Check, AlertTriangle, Mail, UserPlus,
 } from 'lucide-react';
 
 // Sub-view components
@@ -27,7 +28,7 @@ import {
   EMBLEM_OPTIONS, RANK_BG,
   type Tab, type MineSubTab, type ClanSystemProps,
   type ClanInfo, type ClanMember, type ChatMessage, type ActivityEntry,
-  type ClanChallenge, type ClanStats, type WarInfo,
+  type ClanChallenge, type ClanStats, type WarInfo, type ClanInviteRow,
 } from './clan/_types';
 
 export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
@@ -65,6 +66,8 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [settingsForm, setSettingsForm] = useState({ name: '', description: '', emblem: '' });
   const [settingsBusy, setSettingsBusy] = useState(false);
+  const [invites, setInvites] = useState<ClanInviteRow[]>([]);
+  const [invitesLoading, setInvitesLoading] = useState(false);
 
   const playerClanTag = player?.clanTag || null;
   const isLeader = player?.clanRank === 'Leader';
@@ -146,6 +149,15 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
     } catch { setActiveWar(null); } finally { setWarLoading(false); }
   }, []);
 
+  const fetchInvites = useCallback(async () => {
+    setInvitesLoading(true);
+    try {
+      const res = await fetch('/api/clans/invites', { cache: 'no-store' });
+      const data = (await res.json().catch(() => ({}))) as { invites?: ClanInviteRow[] };
+      setInvites(data.invites || []);
+    } catch { setInvites([]); } finally { setInvitesLoading(false); }
+  }, []);
+
   useEffect(() => {
     if (tab === 'browse') void fetchClans();
   }, [tab, fetchClans]);
@@ -161,6 +173,13 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
   }, [playerClanTag, fetchChat, fetchMembers, fetchActivities, fetchChallenges, fetchStats, fetchWar]);
 
   useEffect(() => { void fetchClans(); }, [fetchClans]);
+
+  // Pending syndicate invites matter while clanless — clear once you join one
+  useEffect(() => {
+    if (!player) return;
+    if (!playerClanTag) void fetchInvites();
+    else setInvites([]);
+  }, [player, playerClanTag, fetchInvites]);
 
   const myClanInfo = clans.find((c) => c.tag === playerClanTag);
   const xpNeeded = (myClanInfo?.level || 1) * 1000;
@@ -398,6 +417,36 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
     } catch {} finally { setSettingsBusy(false); }
   }
 
+  async function handleInvitePlayer(userTag: string): Promise<boolean> {
+    if (!playerClanTag) return false;
+    setActionBusy('invite');
+    try {
+      const res = await fetch('/api/clans/invite', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userTag }) });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; inviteeName?: string };
+      if (!res.ok) { notify(data?.error || 'Failed to send invite.', 'error', onToast); return false; }
+      notify(`Invite sent to ${data.inviteeName || userTag}!`, 'success', onToast);
+      void fetchActivities(playerClanTag);
+      return true;
+    } catch { notify('Network error.', 'error', onToast); return false; } finally { setActionBusy(''); }
+  }
+
+  async function handleRespondInvite(invite: ClanInviteRow, action: 'accept' | 'decline') {
+    setActionBusy(`invite-${invite.id}`);
+    try {
+      const res = await fetch('/api/clans/invites/respond', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inviteId: invite.id, action }) });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; clanName?: string };
+      if (!res.ok) { notify(data?.error || 'Failed to respond.', 'error', onToast); void fetchInvites(); return; }
+      if (action === 'accept') {
+        notify(`Welcome to ${data.clanName || invite.clanName} [${invite.clanTag}]!`, 'success', onToast);
+        await refresh(); // player.clanTag updates → clan data effect takes over
+        void fetchClans(); // refresh cached clan list (member count / treasury in header)
+      } else {
+        notify(`Declined the invite from ${invite.clanName}.`, 'info', onToast);
+        void fetchInvites();
+      }
+    } catch { notify('Network error.', 'error', onToast); } finally { setActionBusy(''); }
+  }
+
   function inspectMember(m: ClanMember) {
     if (!onInspectPlayer) return;
     onInspectPlayer({ name: m.name, userTag: m.userTag, country: m.country, flag: countryFlag(m.country), bankedChips: m.bankedChips, level: m.level, clanTag: playerClanTag || undefined, clanName: myClanInfo?.name || undefined });
@@ -431,13 +480,49 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
       {tab === 'mine' && (
         <div>
           {!playerClanTag ? (
-            <div className="p-8 lg:p-3 rounded-2xl border border-slate-800 bg-slate-950/60 text-center max-w-md mx-auto">
-              <Shield className="w-12 h-12 lg:w-5 lg:h-5 text-slate-600 mx-auto mb-3 lg:mb-0.5" />
-              <h3 className="text-base lg:text-[11px] font-bold text-white">You are not in a Viper Clan</h3>
-              <p className="text-xs lg:text-[11px] text-slate-400 mt-2 lg:mt-0 mb-4 lg:mb-1">Join an existing clan or form your own syndicate!</p>
-              <div className="flex items-center justify-center gap-2">
-                <button type="button" onClick={() => setTab('browse')} className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition">Browse Clans</button>
-                <button type="button" onClick={() => setTab('form')} className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 hover:border-indigo-500/40 text-slate-300 hover:text-white text-xs font-bold transition">Form Syndicate</button>
+            <div>
+              {/* Pending syndicate invites */}
+              {invitesLoading ? (
+                <PanelSkeleton count={1} height="h-16" />
+              ) : invites.length > 0 ? (
+                <div className="max-w-md mx-auto mb-4 p-4 rounded-2xl border border-violet-500/30 bg-violet-500/5 space-y-2">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-violet-400" /> Syndicate Invites ({invites.length})
+                  </h3>
+                  {invites.map((inv) => (
+                    <div key={inv.id} className="p-3 rounded-xl border border-slate-800 bg-slate-950/70 flex items-center justify-between gap-3 flex-wrap">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="text-xl shrink-0" aria-hidden>{inv.clanEmblem}</span>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-white flex items-center gap-1.5 flex-wrap">
+                            {inv.clanName}
+                            <span className="text-[10px] font-mono text-indigo-300 bg-indigo-500/10 border border-indigo-500/30 px-1.5 py-0.5 rounded">[{inv.clanTag}]</span>
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                            Lvl {inv.clanLevel} · {inv.memberCount}/{inv.maxMembers} members · invited by {inv.invitedByName}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button type="button" onClick={() => void handleRespondInvite(inv, 'accept')} disabled={actionBusy !== ''} className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition flex items-center gap-1 disabled:opacity-50">
+                          {actionBusy === `invite-${inv.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Accept
+                        </button>
+                        <button type="button" onClick={() => void handleRespondInvite(inv, 'decline')} disabled={actionBusy !== ''} className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 hover:border-rose-500/40 text-slate-400 hover:text-rose-400 text-[11px] font-bold transition disabled:opacity-50">
+                          Decline
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <div className="p-8 lg:p-3 rounded-2xl border border-slate-800 bg-slate-950/60 text-center max-w-md mx-auto">
+                <Shield className="w-12 h-12 lg:w-5 lg:h-5 text-slate-600 mx-auto mb-3 lg:mb-0.5" />
+                <h3 className="text-base lg:text-[11px] font-bold text-white">You are not in a Viper Clan</h3>
+                <p className="text-xs lg:text-[11px] text-slate-400 mt-2 lg:mt-0 mb-4 lg:mb-1">Join an existing clan or form your own syndicate — Leader invites will appear here!</p>
+                <div className="flex items-center justify-center gap-2">
+                  <button type="button" onClick={() => setTab('browse')} className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition">Browse Clans</button>
+                  <button type="button" onClick={() => setTab('form')} className="px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 hover:border-indigo-500/40 text-slate-300 hover:text-white text-xs font-bold transition">Form Syndicate</button>
+                </div>
               </div>
             </div>
           ) : (
@@ -565,6 +650,7 @@ export function ClanSystem({ onToast, onInspectPlayer }: ClanSystemProps) {
                   onTransfer={handleTransferLeadership}
                   onPayout={handlePayout}
                   onInspect={inspectMember}
+                  onInvite={handleInvitePlayer}
                   onOpenSettings={openSettings}
                   onLeave={handleLeaveClan}
                   onSetMineSub={setMineSub}

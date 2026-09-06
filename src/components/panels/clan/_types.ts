@@ -83,6 +83,20 @@ export interface ClanStats {
   kdRatio: string;
 }
 
+export interface ClanInviteRow {
+  id: string;
+  clanTag: string;
+  clanName: string;
+  clanEmblem: string;
+  clanDescription: string;
+  clanLevel: number;
+  memberCount: number;
+  maxMembers: number;
+  invitedByTag: string;
+  invitedByName: string;
+  createdAt: string;
+}
+
 export interface WarInfo {
   id: string;
   declarerTag: string;
@@ -122,6 +136,7 @@ export const ACTIVITY_ICONS: Record<string, string> = {
   war_declare: '\u2694\ufe0f',
   war_end: '🏆',
   settings: '⚙️',
+  invite: '\ud83d\udce8',
 };
 
 export const CHALLENGE_ICONS: Record<string, LucideIcon> = {

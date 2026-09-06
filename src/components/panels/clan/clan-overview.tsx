@@ -3,8 +3,9 @@
 import {
   Trophy, Coins, Users, MessageSquare, Send, Loader2,
   Star, Lock, Swords, Target, ShoppingCart, LogOut, Check,
-  Crown, ChevronUp, ChevronDown, UserMinus,
+  Crown, ChevronUp, ChevronDown, UserMinus, UserPlus, X,
 } from 'lucide-react';
+import { useState } from 'react';
 import { countryFlag } from '@/lib/game-config';
 import { isOnline } from '@/lib/date-utils';
 import { PanelSkeleton } from '../_panel-primitives';
@@ -40,6 +41,7 @@ interface ClanOverviewProps {
   onKick: (userTag: string, name: string) => void;
   onTransfer: (userTag: string, name: string) => void;
   onPayout: (userTag: string) => void;
+  onInvite: (userTag: string) => Promise<boolean>;
   onInspect: (m: ClanMember) => void;
   onOpenSettings: () => void;
   onLeave: () => void;
@@ -54,10 +56,20 @@ export function ClanOverview({
   xpProgress, xpNeeded, members, membersLoading, chatMessages, chatLoading,
   challenges, depositAmount, broadcast, quickDeposits, actionBusy,
   onDepositAmountChange, onBroadcastChange, onDeposit, onWithdraw, onBroadcast,
-  onShopPurchase, onPromote, onDemote, onKick, onTransfer, onPayout,
+  onShopPurchase, onPromote, onDemote, onKick, onTransfer, onPayout, onInvite,
   onInspect, onOpenSettings, onLeave, onSetMineSub,
   playerUserTag, playerClanRank, playerBankedChips,
 }: ClanOverviewProps) {
+  const [showInviteInput, setShowInviteInput] = useState(false);
+  const [inviteTag, setInviteTag] = useState('');
+
+  async function submitInvite() {
+    const tag = inviteTag.trim();
+    if (!tag) return;
+    const ok = await onInvite(tag);
+    if (ok) { setInviteTag(''); setShowInviteInput(false); }
+  }
+
   const RANK_COLORS: Record<string, string> = {
     Leader: 'text-amber-300',
     'Co-Leader': 'text-purple-300',
@@ -191,10 +203,36 @@ export function ClanOverview({
 
       {/* Members */}
       <div>
-        <div className="flex items-center justify-between mb-2 lg:mb-0.5">
+        <div className="flex items-center justify-between mb-2 lg:mb-0.5 gap-2 flex-wrap">
           <h4 className="text-sm lg:text-[11px] font-bold text-white flex items-center gap-2"><Users className="w-4 h-4 lg:w-3 lg:h-3 text-indigo-400" /> Member Roster ({myClanInfo?.memberCount || 0})</h4>
-          <span className="text-[10px] lg:text-[11px] font-mono text-slate-500">Max: {myClanInfo?.maxMembers || 30}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] lg:text-[11px] font-mono text-slate-500">Max: {myClanInfo?.maxMembers || 30}</span>
+            {canManage && (myClanInfo?.memberCount || 0) < (myClanInfo?.maxMembers || 30) && (
+              <button type="button" onClick={() => setShowInviteInput((v) => !v)} className="px-2 lg:px-1 py-1 lg:py-0.5 rounded text-[10px] lg:text-[11px] font-bold bg-slate-900 hover:bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 hover:border-indigo-500/40 transition flex items-center gap-1">
+                <UserPlus className="w-3 h-3 lg:w-2.5 lg:h-2.5" /> Invite Player
+              </button>
+            )}
+          </div>
         </div>
+        {canManage && showInviteInput && (
+          <div className="mb-2 lg:mb-1 flex items-center gap-2 p-2 lg:p-1 rounded-xl border border-indigo-500/20 bg-indigo-500/5">
+            <input
+              type="text"
+              value={inviteTag}
+              onChange={(e) => setInviteTag(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void submitInvite(); }}
+              placeholder="Player VM tag (e.g. VM-ABC123)"
+              maxLength={12}
+              className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 lg:px-1.5 py-2 lg:py-0.5 text-xs lg:text-[11px] text-white placeholder:text-slate-600 font-mono focus:outline-none focus:border-indigo-500/50"
+            />
+            <button type="button" onClick={() => void submitInvite()} disabled={actionBusy === 'invite' || !inviteTag.trim()} className="px-3 lg:px-1.5 py-2 lg:py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs lg:text-[11px] font-bold transition flex items-center gap-1.5 disabled:opacity-50">
+              {actionBusy === 'invite' ? <Loader2 className="w-3 h-3 lg:w-2.5 lg:h-2.5 animate-spin" /> : <Send className="w-3 h-3 lg:w-2.5 lg:h-2.5" />} Send Invite
+            </button>
+            <button type="button" onClick={() => { setShowInviteInput(false); setInviteTag(''); }} className="p-1.5 lg:p-0.5 rounded text-slate-500 hover:text-white transition" aria-label="Cancel invite">
+              <X className="w-3.5 h-3.5 lg:w-2.5 lg:h-2.5" />
+            </button>
+          </div>
+        )}
         {membersLoading ? <PanelSkeleton count={3} height="h-12" /> : (
           <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 overflow-hidden">
             {members.length === 0 ? (

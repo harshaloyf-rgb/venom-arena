@@ -24,6 +24,12 @@ export async function POST(req: NextRequest) {
 
       await tx.player.update({ where: { id: me.id }, data: { clanTag: tag, clanRank: 'Viper', clanDeposited: 0 } });
 
+      // Joining any clan makes all pending invites to this player moot
+      await tx.clanInvite.updateMany({
+        where: { inviteeId: me.id, status: 'pending' },
+        data: { status: 'declined', respondedAt: new Date() },
+      });
+
       // Log activity
       await tx.clanActivity.create({
         data: {

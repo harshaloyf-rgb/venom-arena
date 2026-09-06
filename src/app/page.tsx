@@ -150,6 +150,7 @@ export default function Home() {
   const [lastResult, setLastResult] = useState<MatchResult | undefined>(undefined);
   const [inspectedPlayer, setInspectedPlayer] = useState<InspectedPlayer | null>(null);
   const [pendingFriendCount, setPendingFriendCount] = useState(0);
+  const [pendingClanInviteCount, setPendingClanInviteCount] = useState(0);
   // Real global standing for the dashboard bento (was hardcoded "LEADERBOARD RANK: Tier 1")
   const [myRank, setMyRank] = useState<{ globalRank: number; totalGlobal: number } | null>(null);
   const [toastFn] = useState<(msg: string, type?: 'success' | 'error' | 'info') => void>(() => (msg: string, type?: 'success' | 'error' | 'info') => {
@@ -193,6 +194,16 @@ export default function Home() {
     } catch { /* non-critical */ }
   }, []);
 
+  const fetchPendingClanInvites = useCallback(async () => {
+    try {
+      const res = await fetch('/api/clans/invites');
+      if (res.ok) {
+        const data = await res.json();
+        setPendingClanInviteCount(data.count ?? 0);
+      }
+    } catch { /* non-critical */ }
+  }, []);
+
   const fetchMyRank = useCallback(async () => {
     try {
       const res = await fetch('/api/leaderboard/my-rank', { cache: 'no-store' });
@@ -205,6 +216,7 @@ export default function Home() {
 
   useEffect(() => { if (player) void fetchChallenges(); }, [player, fetchChallenges]);
   useEffect(() => { if (player) void fetchPendingFriends(); }, [player, fetchPendingFriends]);
+  useEffect(() => { if (player) void fetchPendingClanInvites(); }, [player, fetchPendingClanInvites]);
   useEffect(() => { if (player) void fetchMyRank(); }, [player, fetchMyRank]);
 
   // VA-SETTINGS boot: apply the saved orientation (default portrait) and
@@ -637,7 +649,12 @@ export default function Home() {
                     <BentoGate onClick={() => setActiveTab('store')} icon={ShieldCheck} accent="cyan" badge="No Ads" title="Ad-Free Pass & Tickets" desc="Remove every ad with a one-time Time Pass — every pass bundles free Jade Corridor entry tickets. Ads never interrupt gameplay." footLeft={`WALLET: ${player.bankedChips.toLocaleString()} c`} footRight="Go Ad-Free" />
                     <BentoGate onClick={() => setActiveTab('championships')} icon={Crown} accent="rose" badge="The Main Event" title="Championships" desc="Finish the year with the highest banked chips to win the Global Championship — virtual chip prizes and permanent recognition in the Hall of Fame." footLeft="JAN 1 — DEC 31" footRight="Compete" />
                     <BentoGate onClick={() => setActiveTab('halloffame')} icon={Award} accent="yellow" badge="Legends" title="Hall of Fame" desc="Permanent recognition for the greatest operators of all time — champions, record extracts, legendary runs." footLeft="LEGENDARY RANKINGS" footRight="View Legends" />
-                    <BentoGate onClick={() => setActiveTab('clans')} icon={Shield} accent="violet" badge="Team Ops" title="Syndicates" desc="Create or join a syndicate. Team up with allies, pool resources, and dominate arenas together." footLeft="CLAN WARFARE" footRight="Assemble" />
+                    <div className="relative">
+                      <BentoGate onClick={() => setActiveTab('clans')} icon={Shield} accent="violet" badge="Team Ops" title="Syndicates" desc="Create or join a syndicate. Team up with allies, pool resources, and dominate arenas together." footLeft="CLAN WARFARE" footRight="Assemble" />
+                      {pendingClanInviteCount > 0 && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center" title={`${pendingClanInviteCount} pending syndicate invite${pendingClanInviteCount === 1 ? '' : 's'}`}>{pendingClanInviteCount}</span>
+                      )}
+                    </div>
                     <BentoGate onClick={() => setActiveTab('seasonpass')} icon={Sparkles} accent="pink" badge="Pass XP" title="Season Pass" desc="Earn Pass XP from matches (50% of match XP, daily cap). Unlock cosmetics and chip rewards across 20 tiers." footLeft={player ? (() => { const tiers = PASS_TIER_XP.filter(x => (player.passXp ?? 0) >= x).length; const unclaimed = PASS_TIER_XP.filter((x, i) => (player.passXp ?? 0) >= x && !(player.passClaimedFree ?? []).includes(i + 1)).length; return unclaimed > 0 ? `Tier ${tiers}/20 · ${unclaimed} to claim!` : `Tier ${tiers}/20`; })() : 'EARN XP'}
                     footRight="View Pass" />
                     <BentoGate onClick={() => setActiveTab('clips')} icon={Film} accent="red" badge="Clips" title="Highlights" desc="Watch and share your greatest moments. Auto-generated Match Cards, community video clips, upvotes, and the daily Top Play spotlight." footLeft="MATCH HIGHLIGHTS" footRight="Watch" />
@@ -738,6 +755,7 @@ export default function Home() {
         onClose={() => setMoreMenuOpen(false)}
         onSelectTab={(tab) => { setActiveTab(tab as TabId); setMoreMenuOpen(false); }}
         isAdmin={player.role === 'admin'}
+        clanInviteCount={pendingClanInviteCount}
       />
 
       {/* ===================== MODALS ===================== */}

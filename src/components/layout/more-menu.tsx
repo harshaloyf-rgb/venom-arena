@@ -7,6 +7,7 @@ interface MoreMenuProps {
   onClose: () => void;
   onSelectTab: (tabId: string) => void;
   isAdmin: boolean;
+  clanInviteCount?: number;
 }
 
 interface MenuItem {
@@ -30,7 +31,7 @@ const ITEMS: MenuItem[] = [
   { tabId: 'admin', Icon: Shield, label: 'Admin', color: 'text-red-400 bg-red-500/10 border-red-500/20 hover:bg-red-500/20', adminOnly: true },
 ];
 
-export function MoreMenu({ isOpen, onClose, onSelectTab, isAdmin }: MoreMenuProps) {
+export function MoreMenu({ isOpen, onClose, onSelectTab, isAdmin, clanInviteCount = 0 }: MoreMenuProps) {
   if (!isOpen) return null;
 
   // Filter out admin-only items for non-admins
@@ -58,10 +59,18 @@ export function MoreMenu({ isOpen, onClose, onSelectTab, isAdmin }: MoreMenuProp
             <button
               key={tabId}
               onClick={() => onSelectTab(tabId)}
-              className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all cursor-pointer active:scale-95 ${color}`}
+              className={`relative flex flex-col items-center gap-2 p-3 rounded-xl border transition-all cursor-pointer active:scale-95 ${color}`}
             >
               <Icon className="w-5 h-5" />
               <span className="text-[10px] font-bold leading-tight text-center">{label}</span>
+              {tabId === 'clans' && clanInviteCount > 0 && (
+                <span
+                  className="absolute top-1 right-1 w-4 h-4 bg-rose-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center"
+                  title={`${clanInviteCount} pending syndicate invite${clanInviteCount === 1 ? '' : 's'}`}
+                >
+                  {clanInviteCount}
+                </span>
+              )}
             </button>
           ))}
         </div>
