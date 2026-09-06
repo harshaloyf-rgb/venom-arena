@@ -20,6 +20,7 @@ import {
   ChevronDown,
   ChevronUp,
   Award,
+  Eye,
 } from 'lucide-react';
 
 // ── Types ──
@@ -52,6 +53,8 @@ export interface ClanEntry {
   topChips: number;
   topName: string;
   topCountry: string;
+  topTag: string;
+  topLevel: number;
   avgChips: number;
 }
 
@@ -143,7 +146,7 @@ export function ScopeTab({ active, onClick, icon: Icon, label }: ScopeTabProps) 
 
 // ── Top 3 Podium ──
 
-export function ChampionshipPodium({ entries }: { entries: ApiEntry[] }) {
+export function ChampionshipPodium({ entries, onInspect }: { entries: ApiEntry[]; onInspect?: (e: ApiEntry) => void }) {
   const top3 = entries.slice(0, 3);
   if (top3.length < 3) return null;
   const order = [top3[1], top3[0], top3[2]];
@@ -155,7 +158,13 @@ export function ChampionshipPodium({ entries }: { entries: ApiEntry[] }) {
   return (
     <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:gap-1 mb-5 lg:mb-2">
       {order.map((c, i) => (
-        <div key={c.userTag} className={`relative rounded-2xl border ${styles[i].border} bg-gradient-to-b ${styles[i].bg} p-3 sm:p-4 lg:p-1.5 ${i === 1 ? 'sm:-mt-2 sm:pb-6' : ''} overflow-hidden transition hover:brightness-110`}>
+        <div
+          key={c.userTag}
+          role={onInspect ? 'button' : undefined}
+          title={onInspect ? 'View profile' : undefined}
+          onClick={onInspect ? () => onInspect(c) : undefined}
+          className={`relative rounded-2xl border ${styles[i].border} bg-gradient-to-b ${styles[i].bg} p-3 sm:p-4 lg:p-1.5 ${i === 1 ? 'sm:-mt-2 sm:pb-6' : ''} overflow-hidden transition hover:brightness-110 ${onInspect ? 'cursor-pointer' : ''}`}
+        >
           <div className={`absolute top-0 right-0 w-24 h-24 lg:w-12 lg:h-12 ${styles[i].glow} rounded-full blur-2xl pointer-events-none`} aria-hidden />
           <div className="relative text-center">
             <div className="text-3xl sm:text-4xl mb-1 lg:text-lg lg:mb-0">{styles[i].medal}</div>
@@ -229,7 +238,7 @@ export function PastChampionships({ archives }: { archives: ArchiveEntry[] }) {
 
 // ── Clan Rankings Table (P3-3) ──
 
-export function ClanRankingsTable({ clans, hasRealData, isAdmin }: { clans: ClanEntry[]; hasRealData: boolean; isAdmin: boolean }) {
+export function ClanRankingsTable({ clans, hasRealData, isAdmin, onInspectTopMember }: { clans: ClanEntry[]; hasRealData: boolean; isAdmin: boolean; onInspectTopMember?: (c: ClanEntry) => void }) {
   const [expandedClan, setExpandedClan] = useState<string | null>(null);
   if (!hasRealData && !isAdmin) {
     return (
@@ -279,8 +288,13 @@ export function ClanRankingsTable({ clans, hasRealData, isAdmin }: { clans: Clan
                           <span>Members: <span className="font-mono text-slate-300">{c.count}</span></span>
                           <span>Avg: <span className="font-mono text-cyan-400">{fmtINR(c.avgChips)}c</span></span>
                         </div>
-                        <div>
-                          Top: {countryFlag(c.topCountry)} {c.topName} · <span className="font-mono text-emerald-400">{fmtINR(c.topChips)}c</span>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="min-w-0 truncate">Top: {countryFlag(c.topCountry)} {c.topName} · <span className="font-mono text-emerald-400">{fmtINR(c.topChips)}c</span></span>
+                          {onInspectTopMember && c.topTag && (
+                            <button type="button" onClick={() => onInspectTopMember(c)} title="View top member profile" className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-600/15 border border-violet-500/30 text-violet-300 hover:bg-violet-600 hover:text-white transition">
+                              <Eye className="w-2.5 h-2.5" /> Profile
+                            </button>
+                          )}
                         </div>
                       </div>
                     )}
@@ -299,6 +313,11 @@ export function ClanRankingsTable({ clans, hasRealData, isAdmin }: { clans: Clan
                     <div className="lg:col-span-2 text-right lg:min-w-0">
                       <div className="text-white lg:truncate">{countryFlag(c.topCountry)} {c.topName}</div>
                       <div className="font-mono text-slate-500">{fmtINR(c.topChips)}c</div>
+                      {onInspectTopMember && c.topTag && (
+                        <button type="button" onClick={() => onInspectTopMember(c)} title="View top member profile" className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-600/15 border border-violet-500/30 text-violet-300 hover:bg-violet-600 hover:text-white transition">
+                          <Eye className="w-2.5 h-2.5" /> Profile
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -334,6 +353,10 @@ interface StandingsTableProps {
   listRef: RefObject<HTMLOListElement | null>;
   onFindMe: () => void;
   onClearFindMeResult: () => void;
+  /** Open a contender's profile (player inspector). Omitted → rows not clickable. */
+  onInspect?: (e: ApiEntry) => void;
+  /** Inspect a clan's top member from the CLAN view. */
+  onInspectClanTop?: (c: ClanEntry) => void;
 }
 
 export function StandingsTable({
@@ -341,6 +364,7 @@ export function StandingsTable({
   onScopeChange, onRegionChange, onCountryChange, onRankFilterChange, onSearchChange,
   entries, clanEntries, hasRealData, isAdmin, loading,
   findMeHighlight, findMeResult, listRef, onFindMe, onClearFindMeResult,
+  onInspect, onInspectClanTop,
 }: StandingsTableProps) {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const filteredEntries = entries;
@@ -406,7 +430,7 @@ export function StandingsTable({
       )}
 
       {/* Top 3 Podium (Global, no filters, no search) */}
-      {scope === 'GLOBAL' && rankFilter === 'all' && !search.trim() && top3.length >= 3 && <ChampionshipPodium entries={top3} />}
+      {scope === 'GLOBAL' && rankFilter === 'all' && !search.trim() && top3.length >= 3 && <ChampionshipPodium entries={top3} onInspect={onInspect} />}
 
       {/* ═══ STANDINGS ═══ */}
       {scope === 'CLAN' ? (
@@ -416,7 +440,7 @@ export function StandingsTable({
             <h3 className="text-sm lg:text-[11px] font-bold text-white flex items-center gap-2"><Users className="w-4 h-4 lg:w-3 lg:h-3 text-cyan-400" /> Clan Championship Rankings</h3>
             <span className="text-[11px] font-mono text-slate-500">{clanEntries.length} clan{clanEntries.length !== 1 ? 's' : ''}</span>
           </div>
-          <ClanRankingsTable clans={clanEntries} hasRealData={hasRealData} isAdmin={isAdmin} />
+          <ClanRankingsTable clans={clanEntries} hasRealData={hasRealData} isAdmin={isAdmin} onInspectTopMember={onInspectClanTop} />
         </div>
       ) : (
         <div>
@@ -475,16 +499,25 @@ export function StandingsTable({
                                   <span>Games: <span className="font-mono text-slate-300">{c.gamesPlayed.toLocaleString()}</span></span>
                                   <span>c/game: <span className="font-mono text-cyan-400">{c.efficiency > 0 ? fmtINR(c.efficiency) : '—'}</span></span>
                                 </div>
-                                <div>
+                                <div className="flex items-center justify-between gap-2">
                                   {prize ? (
                                     <span className={`font-mono font-bold ${prizeColorForRank(c.rank)}`}>+{fmtINR(prize.chipsReward)}c · {prize.crownTitle}</span>
                                   ) : <span className="font-mono text-slate-500">— Outside Top 100</span>}
+                                  {onInspect && !isMe && (
+                                    <button type="button" onClick={() => onInspect(c)} title="View profile" className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-600/15 border border-violet-500/30 text-violet-300 hover:bg-violet-600 hover:text-white transition">
+                                      <Eye className="w-2.5 h-2.5" /> Profile
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             )}
                           </div>
                           {/* Desktop: grid columns */}
-                          <div className={`hidden lg:grid lg:grid-cols-12 lg:gap-1 lg:items-center lg:px-1.5 lg:py-1 lg:text-[11px] transition-all duration-500 ${isMe && findMeHighlight ? 'border-l-2 border-amber-400' : isMe ? 'border-l-2 border-amber-500' : 'hover:bg-slate-900/40'}`}>
+                          <div
+                            onClick={onInspect ? () => onInspect(c) : undefined}
+                            title={onInspect ? 'View profile' : undefined}
+                            className={`hidden lg:grid lg:grid-cols-12 lg:gap-1 lg:items-center lg:px-1.5 lg:py-1 lg:text-[11px] transition-all duration-500 ${isMe && findMeHighlight ? 'border-l-2 border-amber-400' : isMe ? 'border-l-2 border-amber-500' : 'hover:bg-slate-900/40'} ${onInspect ? 'lg:cursor-pointer' : ''}`}
+                          >
                             {/* Rank */}
                             <div className="lg:col-span-1 font-mono flex items-center gap-0.5">
                               {c.rank === 1 ? <span className="text-[11px]">🥇</span> : c.rank === 2 ? <span className="text-[11px]">🥈</span> : c.rank === 3 ? <span className="text-[11px]">🥉</span> : <span className="text-slate-400 font-bold">#{c.rank}</span>}

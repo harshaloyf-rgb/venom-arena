@@ -111,10 +111,16 @@ export function PlayerInspectorModal({ player, onClose, onToast }: PlayerInspect
             (b: { userTag: string }) => b.userTag === player.userTag,
           );
           if (isBlk) setBlocked(true);
+          // Accepted friend OR already-sent pending request → show the
+          // disabled "Sent" state instead of letting the player click Friend
+          // again and hit "Already friends." / "Request already pending."
           const isFrnd = (data.friends ?? []).some(
             (f: { userTag: string }) => f.userTag === player.userTag,
           );
-          if (isFrnd) setFriendRequested(true);
+          const isPendingSent = (data.pendingSent ?? []).some(
+            (f: { userTag: string }) => f.userTag === player.userTag,
+          );
+          if (isFrnd || isPendingSent) setFriendRequested(true);
         })
         .catch(() => { /* ignore */ });
       fetch(`/api/player/follow?tag=${encodeURIComponent(player.userTag)}`)

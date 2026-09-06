@@ -104,6 +104,7 @@ export function Section13_Championships() {
             <li><strong>CLAN</strong> — Clan leaderboard: sums the <strong>banked chips of all registered clan members</strong> into a clan total and ranks clans. Shows each clan&apos;s member count, average chips per member, and top member</li>
           </ul>
           <p className="mt-1">Rank filters (#1, 2–10, 11–50, 51–100) slice the list by global prize bracket. Ties are broken by higher level, then earlier join date.</p>
+          <p className="mt-1"><strong>View any contender&apos;s profile:</strong> on desktop, click a standings row or a podium card to open that player&apos;s profile; on mobile, expand a row and tap <strong>Profile</strong>. In the CLAN view, each clan&apos;s top member has a <strong>Profile</strong> button too. From the profile you can add friends, follow, or set rivals without leaving the championship.</p>
         </InfoCard>
 
         <InfoCard title="🔍 Find Me in Championship" accent="text-violet-300">

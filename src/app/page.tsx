@@ -700,7 +700,7 @@ export default function Home() {
               {activeTab === 'shop' && <CosmeticsShop />}
               {activeTab === 'profile' && <PlayerProfilePanel />}
               {activeTab === 'leaderboard' && <Leaderboards onInspectPlayer={handleInspectPlayer} onToast={toastFn} />}
-              {activeTab === 'championships' && <Championships onToast={toastFn} />}
+              {activeTab === 'championships' && <Championships onToast={toastFn} onInspectPlayer={handleInspectPlayer} />}
               {activeTab === 'halloffame' && <HallOfFame onInspectPlayer={handleInspectPlayer} onToast={toastFn} />}
               {activeTab === 'clans' && <ClanSystem onInspectPlayer={handleInspectPlayer} onToast={toastFn} />}
               {activeTab === 'seasonpass' && <SeasonPass onToast={toastFn} />}

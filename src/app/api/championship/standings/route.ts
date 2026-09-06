@@ -75,16 +75,16 @@ export async function GET(req: NextRequest) {
 
   /* ── Clan aggregated view ─────────────────────────────────── */
   if (clanV) {
-    const map = new Map<string, { tag:string; totalChips:number; count:number; topChips:number; topName:string; topCountry:string }>();
+    const map = new Map<string, { tag:string; totalChips:number; count:number; topChips:number; topName:string; topCountry:string; topTag:string; topLevel:number }>();
     for (const c of sorted) {
       if (!c.clanTag) continue;
       const e = map.get(c.clanTag);
       if (e) {
         e.totalChips += c.bankedChips;
         e.count++;
-        if (c.bankedChips > e.topChips) { e.topChips = c.bankedChips; e.topName = c.name; e.topCountry = c.country; }
+        if (c.bankedChips > e.topChips) { e.topChips = c.bankedChips; e.topName = c.name; e.topCountry = c.country; e.topTag = c.userTag; e.topLevel = c.level; }
       } else {
-        map.set(c.clanTag, { tag: c.clanTag, totalChips: c.bankedChips, count: 1, topChips: c.bankedChips, topName: c.name, topCountry: c.country });
+        map.set(c.clanTag, { tag: c.clanTag, totalChips: c.bankedChips, count: 1, topChips: c.bankedChips, topName: c.name, topCountry: c.country, topTag: c.userTag, topLevel: c.level });
       }
     }
     const clans = Array.from(map.values())

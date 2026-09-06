@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { findPlayerByTag } from '@/lib/player-lookup';
 
 // POST /api/friends/remove  body: { userTag: string }
 export async function POST(req: NextRequest) {
@@ -8,8 +9,8 @@ export async function POST(req: NextRequest) {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const body = await req.json().catch(() => ({}));
-    const otherTag = String(body.userTag || '').toUpperCase().trim();
-    const other = await db.player.findUnique({ where: { userTag: otherTag } });
+    const otherTag = String(body.userTag || '').trim();
+    const other = await findPlayerByTag(otherTag);
     if (!other) return NextResponse.json({ error: 'Player not found.' }, { status: 404 });
 
     await db.friendship.deleteMany({

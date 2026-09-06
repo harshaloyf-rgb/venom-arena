@@ -354,7 +354,9 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
   /* ================================================================ */
 
   async function handleAddFriend() {
-    const tag = addFriendInput.trim().toUpperCase();
+    // Send the tag as typed — the API resolves it case-insensitively
+    // (tags are generated lowercase, players often type VM-XXXXXX).
+    const tag = addFriendInput.trim();
     if (!tag) { notify('Please enter a player tag or name.', 'error', onToast); return; }
     setAddFriendLoading(true);
     try {
@@ -563,7 +565,7 @@ export function SocialPanel({ onToast, onInspectPlayer }: SocialPanelProps) {
 
       {/* Sub-tabs */}
       <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800/60 mb-5">
-        <PanelTabBtn active={sub === 'friends'} onClick={() => setSub('friends')} icon={Users} label={`My Friends (${friends.length})`} color="violet" />
+        <PanelTabBtn active={sub === 'friends'} onClick={() => setSub('friends')} icon={Users} label={`My Friends (${friends.length})`} color="violet" badge={pendingReceived.length} />
         <PanelTabBtn active={sub === 'followers'} onClick={() => setSub('followers')} icon={UserCheck} label={`Followers (${followers.length})`} color="violet" />
         <PanelTabBtn active={sub === 'following'} onClick={() => setSub('following')} icon={UserMinus} label={`Following (${following.length})`} color="violet" />
         <PanelTabBtn active={sub === 'rivals'} onClick={() => setSub('rivals')} icon={Crosshair} label="Rivals" color="violet" />

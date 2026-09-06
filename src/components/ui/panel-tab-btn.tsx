@@ -9,6 +9,8 @@ interface PanelTabBtnProps {
   label: string;
   /** Tailwind color name without slash — e.g. 'violet', 'amber', 'emerald', 'indigo', 'yellow'. Default: 'indigo' */
   color?: string;
+  /** Optional counter badge (rose pill) — e.g. pending friend requests. Hidden when 0/undefined. */
+  badge?: number;
 }
 
 // Tailwind color palette: {color}-300 for text, {color}-500 for bg/border
@@ -42,6 +44,7 @@ export function PanelTabBtn({
   icon: Icon,
   label,
   color = 'indigo',
+  badge,
 }: PanelTabBtnProps) {
   const c = COLOR_MAP[color] ?? COLOR_MAP.indigo;
 
@@ -68,6 +71,11 @@ export function PanelTabBtn({
     >
       <Icon className="w-3.5 h-3.5" />
       {label}
+      {typeof badge === 'number' && badge > 0 && (
+        <span className="min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center" title={`${badge} pending`}>
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
     </button>
   );
 }

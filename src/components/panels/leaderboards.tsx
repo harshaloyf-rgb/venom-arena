@@ -42,6 +42,7 @@ import {
   X,
   Clock,
   Swords,
+  Eye,
 } from 'lucide-react';
 
 interface LeaderboardsProps {
@@ -829,6 +830,9 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                               {c.clanTag && <span className="font-mono text-cyan-400">[{c.clanTag}]</span>}
                               {c.championshipPrize && <span className="font-mono font-bold" style={{ color: c.championshipPrize.color }}>{c.championshipPrize.label}</span>}
                             </div>
+                            <button type="button" onClick={() => inspectPlayer(c)} title="View profile" className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-600/15 border border-violet-500/30 text-violet-300 hover:bg-violet-600 hover:text-white transition">
+                              <Eye className="w-2.5 h-2.5" /> View Profile
+                            </button>
                           </div>
                         )}
                       </div>
@@ -933,6 +937,9 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                               <span>Level: <span className="font-bold text-white">{e.level}</span></span>
                               {e.championshipPrize && <span className="font-mono font-bold" style={{ color: e.championshipPrize.color }}>{e.championshipPrize.label}</span>}
                             </div>
+                            <button type="button" onClick={() => inspectPlayer(e)} title="View profile" className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-600/15 border border-violet-500/30 text-violet-300 hover:bg-violet-600 hover:text-white transition">
+                              <Eye className="w-2.5 h-2.5" /> View Profile
+                            </button>
                           </div>
                         )}
                       </div>
@@ -1039,6 +1046,9 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                               <span>Level: <span className="font-bold text-white">{e.level}</span></span>
                               {e.championshipPrize && <span className="font-mono font-bold" style={{ color: e.championshipPrize.color }}>{e.championshipPrize.label}</span>}
                             </div>
+                            <button type="button" onClick={() => inspectPlayer(e)} title="View profile" className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-600/15 border border-violet-500/30 text-violet-300 hover:bg-violet-600 hover:text-white transition">
+                              <Eye className="w-2.5 h-2.5" /> View Profile
+                            </button>
                           </div>
                         )}
                       </div>
@@ -1146,6 +1156,9 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                               <span>Level: <span className="font-bold text-white">{e.level}</span></span>
                               {e.championshipPrize && <span className="font-mono font-bold" style={{ color: e.championshipPrize.color }}>{e.championshipPrize.label}</span>}
                             </div>
+                            <button type="button" onClick={() => inspectPlayer(e)} title="View profile" className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-600/15 border border-violet-500/30 text-violet-300 hover:bg-violet-600 hover:text-white transition">
+                              <Eye className="w-2.5 h-2.5" /> View Profile
+                            </button>
                           </div>
                         )}
                       </div>
@@ -1256,6 +1269,9 @@ export function Leaderboards({ onToast, onInspectPlayer }: LeaderboardsProps) {
                               {e.clanTag && <span className="font-mono text-cyan-400">[{e.clanTag}]</span>}
                               <span>Level: <span className="font-bold text-white">{e.level}</span></span>
                             </div>
+                            <button type="button" onClick={() => inspectPlayer(e)} title="View profile" className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-600/15 border border-violet-500/30 text-violet-300 hover:bg-violet-600 hover:text-white transition">
+                              <Eye className="w-2.5 h-2.5" /> View Profile
+                            </button>
                           </div>
                         )}
                       </div>

@@ -23,7 +23,8 @@ export function Section18_Social() {
 
         <InfoCard title="👥 My Friends Tab" accent="text-emerald-300">
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong>Incoming Requests:</strong> Shown at top with Accept / Decline buttons and player details (name, tag, level)</li>
+            <li><strong>Incoming Requests:</strong> Shown at top with Accept / Decline buttons and player details (name, tag, level) — this is where you approve or reject a friend request</li>
+            <li><strong>Request badge:</strong> The <strong>My Friends</strong> tab shows a red counter whenever requests are waiting, and the <strong>Friends &amp; Global Player Search</strong> tile on the dashboard shows the same red badge so you never miss one</li>
             <li><strong>Outgoing Requests:</strong> Listed below with a &quot;Pending&quot; badge</li>
             <li><strong>Friend Cards:</strong> Each card shows name (clickable to inspect), VENOM tag, clan tag, online/offline status, level, and two action buttons:</li>
           </ul>

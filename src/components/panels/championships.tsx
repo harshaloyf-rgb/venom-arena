@@ -23,6 +23,7 @@ import {
   type ClanEntry,
   type ArchiveEntry,
 } from './championships/standings-table';
+import { countryFlag, type InspectedPlayer } from '@/lib/game-config';
 
 // ============================================================================
 // Types
@@ -30,6 +31,8 @@ import {
 
 interface ChampionshipsProps {
   onToast?: ToastFn;
+  /** Open a player's profile (inspector modal) from the standings/podium/clan view. */
+  onInspectPlayer?: (p: InspectedPlayer) => void;
 }
 
 // ============================================================================
@@ -60,7 +63,7 @@ function useCountdown(target: Date) {
 // Main Component
 // ============================================================================
 
-export function Championships({ onToast }: ChampionshipsProps) {
+export function Championships({ onToast, onInspectPlayer }: ChampionshipsProps) {
   const { player, refresh } = useAuth();
   const isAdmin = player?.role === 'admin';
   const listRef = useRef<HTMLOListElement>(null);
@@ -81,6 +84,28 @@ export function Championships({ onToast }: ChampionshipsProps) {
   }, [search]);
   const [findMeHighlight, setFindMeHighlight] = useState(false);
   const [findMeResult, setFindMeResult] = useState<ApiEntry | null>(null);
+
+  // Profile inspection — championship rank IS the global ladder rank (standings
+  // sort by lifetime banked chips), so it is passed as globalRank for the
+  // inspector's rank chip.
+  function inspectEntry(e: ApiEntry) {
+    onInspectPlayer?.({
+      name: e.name, userTag: e.userTag, country: e.country,
+      flag: countryFlag(e.country), bankedChips: e.bankedChips, level: e.level,
+      clanTag: e.clanTag || undefined,
+      clanName: e.clanTag ? 'Clan ' + e.clanTag : undefined,
+      globalRank: e.rank,
+    });
+  }
+
+  function inspectClanTop(c: ClanEntry) {
+    if (!c.topTag) return;
+    onInspectPlayer?.({
+      name: c.topName, userTag: c.topTag, country: c.topCountry,
+      flag: countryFlag(c.topCountry), bankedChips: c.topChips, level: c.topLevel,
+      clanTag: c.tag, clanName: 'Clan ' + c.tag,
+    });
+  }
 
   // P3: API-driven state
   const [registered, setRegistered] = useState(false);
@@ -354,6 +379,8 @@ export function Championships({ onToast }: ChampionshipsProps) {
         listRef={listRef}
         onFindMe={handleFindMe}
         onClearFindMeResult={() => setFindMeResult(null)}
+        onInspect={inspectEntry}
+        onInspectClanTop={inspectClanTop}
       />
     </div>
   );

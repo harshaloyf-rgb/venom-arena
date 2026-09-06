@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { findPlayerByTag } from '@/lib/player-lookup';
 
 // POST /api/clans/payout  body: { tag, targetUserTag, amount }
 export async function POST(req: NextRequest) {
@@ -8,12 +9,19 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const tag = String(body.tag || '').toUpperCase().trim();
-  const targetUserTag = String(body.targetUserTag || '').toUpperCase().trim();
+  const tag = String(body.tag || '').toUpperCase().trim(); // clan tags are stored uppercase
+  const targetUserTag = String(body.targetUserTag || '').trim(); // player tags are lowercase (VM-xxxxxx)
   const amount = Math.floor(Number(body.amount) || 0);
 
   if (!tag || !targetUserTag || amount <= 0) {
     return NextResponse.json({ error: 'Invalid tag, target, or amount.' }, { status: 400 });
+  }
+
+  // Resolve the target player by tag (case-insensitive fallback) BEFORE the
+  // transaction — the tx client can't use the shared helper.
+  const resolvedTarget = await findPlayerByTag(targetUserTag);
+  if (!resolvedTarget) {
+    return NextResponse.json({ error: 'Target player not found.' }, { status: 404 });
   }
 
   try {
@@ -28,7 +36,7 @@ export async function POST(req: NextRequest) {
       if (clan.bankedChips < amount) throw new Error('INSUFFICIENT_TREASURY');
 
       // Find target player — must be a member of the same clan
-      const target = await tx.player.findUnique({ where: { userTag: targetUserTag } });
+      const target = await tx.player.findUnique({ where: { id: resolvedTarget.id } });
       if (!target) throw new Error('TARGET_NOT_FOUND');
       if (target.clanTag !== tag) throw new Error('TARGET_NOT_MEMBER');
       if (target.id === me.id) throw new Error('SELF_PAYOUT');
