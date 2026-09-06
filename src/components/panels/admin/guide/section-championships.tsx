@@ -1,7 +1,7 @@
 'use client';
 
 import { Target } from 'lucide-react';
-import { SubHeading, Bullet, Note } from './_helpers';
+import { SubHeading, Bullet } from './_helpers';
 
 export function SectionChampionships() {
   return (
@@ -19,16 +19,25 @@ export function SectionChampionships() {
         </Bullet>
       </ul>
 
-      <SubHeading>Finalization</SubHeading>
+      <SubHeading>Finalization (Jan 1 close)</SubHeading>
       <ul className="space-y-1.5 ml-1">
         <Bullet>
-          Admins finalize past championship years via the API endpoint <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">POST /api/admin/championship/finalize</code>.
+          Run <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">POST /api/admin/championship/finalize</code> with body <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">{`{ "year": 2026 }`}</code> (defaults to the last completed calendar year; admin session required).
         </Bullet>
         <Bullet>
-          This is <strong className="text-slate-200">not yet available in the UI</strong> — must be called directly.
+          One transaction does everything: pays top-100 chip prizes (5M / 2.5M / 1M / 250K), inducts the top 100 into the Hall of Fame (badges crown / silver / bronze / contender), and writes the archive row (winner, top clan, participants, payoutsProcessed).
         </Bullet>
         <Bullet>
-          Finalization locks in the leaderboard and triggers Hall of Fame induction.
+          <strong className="text-amber-400">Idempotency:</strong> once the archive row says payoutsProcessed, the route refuses with 409 — prizes can never be paid twice. Finalizing the current (unfinished) calendar year requires <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">{`{ "force": true }`}</code> (testing only).
+        </Bullet>
+        <Bullet>
+          <strong className="text-red-400">Order matters:</strong> run finalization BEFORE the Jan 1 wallet reset — the reset zeroes bankedChips, which is the source of truth for final standings. Check the reset status in the Economy tab first.
+        </Bullet>
+        <Bullet>
+          Banned players are excluded automatically (same filter as the standings API), so banned accounts can never occupy a prize spot.
+        </Bullet>
+        <Bullet>
+          Manual fallback (e.g. correcting a single player): <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">POST /api/admin/modify-chips</code> for prizes and <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">POST /api/hof/induct</code> with <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">{`{ inductionType: "championship", championshipYear, championshipRank }`}</code> for induction — both are audit-logged.
         </Bullet>
       </ul>
 
@@ -42,13 +51,9 @@ export function SectionChampionships() {
           The <strong className="text-amber-400">Top 100 players</strong> by chip count are inducted into the Hall of Fame upon finalization.
         </Bullet>
         <Bullet>
-          Hall of Fame entries are permanent records displayed in the championships UI.
+          Hall of Fame entries are permanent records displayed in the championships UI and archived years remain viewable in the player-facing Past Championship Archives section.
         </Bullet>
       </ul>
-
-      <Note>
-        <strong>Bug fix this session:</strong> Championship finalization was broken due to referencing the wrong field when computing rankings. This has been corrected and the endpoint now works as intended.
-      </Note>
     </div>
   );
 }

@@ -67,7 +67,9 @@ const PRIZE_SPOTS: Record<string, string> = {
 function fmtINR(n: number) { return n.toLocaleString('en-IN'); }
 
 function matchCapWarning(played: number) {
-  const remaining = MAX_GAMES - played;
+  // Clamp at 0 — the server stops incrementing at the 10,000 cap, but never
+  // let a stale/over-cap value render a negative count.
+  const remaining = Math.max(0, MAX_GAMES - played);
   if (played >= 9900) return { level: 'critical' as const, color: 'text-red-400', bg: 'bg-red-500/10 border border-red-500/30', label: `CRITICAL — Only ${remaining} match${remaining !== 1 ? 'es' : ''} left!`, barColor: 'from-red-600 to-red-400' };
   if (played >= 9500) return { level: 'danger' as const, color: 'text-orange-400', bg: 'bg-orange-500/10 border border-orange-500/30', label: `DANGER — ${remaining} matches remaining`, barColor: 'from-orange-500 to-amber-500' };
   if (played >= 9000) return { level: 'warning' as const, color: 'text-yellow-400', bg: 'bg-yellow-500/10 border border-yellow-500/30', label: `CAUTION — ${remaining} matches remaining`, barColor: 'from-yellow-500 to-amber-400' };

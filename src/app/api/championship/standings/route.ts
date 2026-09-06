@@ -41,16 +41,19 @@ export async function GET(req: NextRequest) {
   const search = u.searchParams.get('search') || '';
   const clanV  = u.searchParams.get('clanView') === 'true';
 
-  /* ── Fetch registered players ─────────────────────────────── */
+  /* ── Fetch registered players (banned players excluded — same policy as
+     the lobby leaderboard /api/leaderboard, which filters banned=false) ── */
   const regs = await db.championshipRegistration.findMany({
     where: { year: CURRENT_YEAR, isActive: true },
     include: { player: { select: {
       userTag: true, name: true, country: true, bankedChips: true,
-      level: true, clanTag: true, createdAt: true,
+      level: true, clanTag: true, createdAt: true, banned: true,
     }}},
   });
 
-  const sorted = regs
+  const eligible = regs.filter(r => !r.player.banned);
+
+  const sorted = eligible
     .map(r => ({
       userTag: r.player.userTag,
       name: r.player.name,
@@ -87,14 +90,17 @@ export async function GET(req: NextRequest) {
     const clans = Array.from(map.values())
       .sort((a, b) => b.totalChips - a.totalChips)
       .map((c, i) => ({ ...c, rank: i + 1, avgChips: Math.round(c.totalChips / c.count) }));
-    return NextResponse.json({ view: 'clan', entries: clans, total: clans.length, hasRealData: regs.length > 0 });
+    return NextResponse.json({ view: 'clan', entries: clans, total: clans.length, hasRealData: eligible.length > 0 });
   }
 
   /* ── Player view ──────────────────────────────────────────── */
   let filtered = sorted;
   if (scope === 'regional' && region) filtered = filtered.filter(c => c.region === region);
   else if (scope === 'national' && country) filtered = filtered.filter(c => c.country === country);
-  if (rf !== 'all') filtered = filtered.filter(c => rankCat(c.rank) === rf);
+  if (rf !== 'all') {
+    filtered = filtered.filter(c =>
+      rf === 'rank51_100' ? (c.rank >= 51 && c.rank <= 100) : rankCat(c.rank) === rf);
+  }
   if (search.trim()) {
     const q = search.toLowerCase().trim();
     filtered = filtered.filter(c =>
@@ -142,5 +148,5 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ view: scope, entries, total: entries.length, hasRealData: regs.length > 0, playerStatus });
+  return NextResponse.json({ view: scope, entries, total: entries.length, hasRealData: eligible.length > 0, playerStatus });
 }

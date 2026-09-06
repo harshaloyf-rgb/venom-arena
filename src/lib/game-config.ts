@@ -792,7 +792,7 @@ export const CHAMPIONSHIP_PRIZE_TIERS: ChampionshipPrize[] = [
   {
     category: 'RANK_1',
     title: '👑 RANK 1: GRAND CHAMPION',
-    badge: '🥇 1st Place (World / Region / Country)',
+    badge: '🥇 Global 1st Place',
     chipsReward: 5_000_000,
     crownTitle: '👑 2026 WORLD VENOM CHAMPION',
     itemReward: 'Mythic Golden Dragon Skin & World Crown',

@@ -394,10 +394,13 @@ export async function POST(req: NextRequest) {
     });
 
     // --- Increment ChampionshipRegistration.gamesPlayed for online matches ---
+    // The 10,000-match annual cap (MAX_GAMES in register route + UI progress
+    // bar) is enforced HERE: updateMany's where clause stops incrementing once
+    // gamesPlayed reaches the cap — no race, no extra roundtrip.
     if (arena.rewardMultiplier > 0) {
       const currentYear = new Date().getFullYear();
       await tx.championshipRegistration.updateMany({
-        where: { playerId: player.id, year: currentYear },
+        where: { playerId: player.id, year: currentYear, gamesPlayed: { lt: 10000 } },
         data: { gamesPlayed: { increment: 1 } },
       });
     }

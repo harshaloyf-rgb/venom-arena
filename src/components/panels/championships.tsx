@@ -72,6 +72,13 @@ export function Championships({ onToast }: ChampionshipsProps) {
   const [country, setCountry] = useState('ALL');
   const [rankFilter, setRankFilter] = useState<RankFilter>('all');
   const [search, setSearch] = useState('');
+  // Debounced search — the standings API is server-side; without this we fire
+  // one request per keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(id);
+  }, [search]);
   const [findMeHighlight, setFindMeHighlight] = useState(false);
   const [findMeResult, setFindMeResult] = useState<ApiEntry | null>(null);
 
@@ -93,7 +100,7 @@ export function Championships({ onToast }: ChampionshipsProps) {
       if (scope === 'REGIONAL' && region !== 'ALL') params.set('region', region);
       if (scope === 'NATIONAL' && country !== 'ALL') params.set('country', country);
       if (rankFilter !== 'all') params.set('rankFilter', rankFilter);
-      if (search.trim()) params.set('search', search);
+      if (debouncedSearch.trim()) params.set('search', debouncedSearch);
       const res = await fetch(`/api/championship/standings?${params}`);
       if (res.ok) {
         const data = await res.json();
@@ -103,7 +110,7 @@ export function Championships({ onToast }: ChampionshipsProps) {
       }
     } catch { /* silent */ }
     if (!silent) setLoading(false);
-  }, [scope, region, country, rankFilter, search]);
+  }, [scope, region, country, rankFilter, debouncedSearch]);
 
   const fetchClans = useCallback(async () => {
     try {
@@ -153,7 +160,7 @@ export function Championships({ onToast }: ChampionshipsProps) {
     if (scope === 'REGIONAL' && region !== 'ALL') params.set('region', region);
     if (scope === 'NATIONAL' && country !== 'ALL') params.set('country', country);
     if (rankFilter !== 'all') params.set('rankFilter', rankFilter);
-    if (search.trim()) params.set('search', search);
+    if (debouncedSearch.trim()) params.set('search', debouncedSearch);
     queueMicrotask(() => setLoading(true));
     fetch(`/api/championship/standings?${params}`)
       .then(r => r.json())
@@ -161,7 +168,7 @@ export function Championships({ onToast }: ChampionshipsProps) {
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [scope, region, country, rankFilter, search]);
+  }, [scope, region, country, rankFilter, debouncedSearch]);
 
   // ── Display entries: use real data or empty ─────────────────────────────
   const displayEntries = useMemo<ApiEntry[]>(() => {
@@ -199,6 +206,10 @@ export function Championships({ onToast }: ChampionshipsProps) {
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   async function handleRegister() {
+    if (registered) {
+      notify('You are already registered for the 2026 Championship — play games to climb ranks!', 'info', onToast);
+      return;
+    }
     try {
       const res = await fetch('/api/championship/register', { method: 'POST' });
       // Safe parse: a 500 from a mis-deployed server may be HTML — never let
@@ -208,7 +219,7 @@ export function Championships({ onToast }: ChampionshipsProps) {
       if (res.ok && data) {
         setRegistered(true);
         setGamesPlayed(data.gamesPlayed ?? 0);
-        notify('🏆 REGISTERED FOR 2026 ANNUAL VENOM WORLD CHAMPIONSHIP! You have 10,000 matches limit. Good luck!', 'success', onToast);
+        notify('🏆 REGISTERED FOR THE 2026 ANNUAL VENOM WORLD CHAMPIONSHIP! Match limit: 10,000 — good luck!', 'success', onToast);
         fetchStandings(true); fetchClans();
       } else {
         notify(data?.error || `Registration failed (server error ${res.status}).`, 'error', onToast);
@@ -220,6 +231,10 @@ export function Championships({ onToast }: ChampionshipsProps) {
 
   function handleFindMe() {
     setFindMeResult(null);
+    if (scope === 'CLAN') {
+      notify('Find Me tracks your personal rank — switch to Global, Regional, or National tabs.', 'info', onToast);
+      return;
+    }
     if (!registered || !player) { notify('Register for the championship first!', 'error', onToast); return; }
     const myRow = listRef.current?.querySelector<HTMLElement>('[data-champ-me="true"]');
     if (myRow) {
@@ -228,9 +243,33 @@ export function Championships({ onToast }: ChampionshipsProps) {
       setTimeout(() => setFindMeHighlight(false), 3000);
       notify('Found you in the standings!', 'success', onToast);
     } else if (mySummary) {
+      // Standings list is capped at the top 100 — registered players outside
+      // it still get their real rank from the server's playerStatus.
       const me = displayEntries.find(c => c.isPlayer);
-      if (me) { setFindMeResult(me); notify(`You're ranked #${me.rank} globally — not visible in current filter.`, 'info', onToast); }
-      else { notify('Could not find your championship entry.', 'error', onToast); }
+      if (me) {
+        setFindMeResult(me);
+        notify(`You're ranked #${me.rank} globally — not visible in the current view.`, 'info', onToast);
+      } else {
+        setFindMeResult({
+          rank: mySummary.rank,
+          userTag: player.userTag,
+          name: player.name,
+          country: player.country ?? '',
+          region: '',
+          bankedChips: mySummary.bankedChips,
+          level: player.level,
+          clanTag: player.clanTag ?? '',
+          gamesPlayed: mySummary.gamesPlayed,
+          createdAt: '',
+          isPlayer: true,
+          prize: mySummary.prize,
+          efficiency: mySummary.efficiency,
+          flag: '',
+        });
+        notify(`You're ranked #${mySummary.rank} globally — your row isn't in the current view.`, 'info', onToast);
+      }
+    } else {
+      notify('Could not find your championship entry.', 'error', onToast);
     }
   }
 
@@ -263,7 +302,7 @@ export function Championships({ onToast }: ChampionshipsProps) {
         </div>
         <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight lg:text-sm">2026 ANNUAL VENOM WORLD CHAMPIONSHIP</h1>
         <p className="text-xs sm:text-sm text-slate-300 mt-2 lg:text-[11px] max-w-3xl leading-relaxed">
-          Join anytime during the year! Play up to 10,000 games. When the year ends, players with the maximum wallet chips across Global, Regional, and Country leaderboards will be awarded massive chip prizes and permanently inducted into the Hall of Fame on January 1st!
+          Join anytime during the year! Play up to 10,000 ranked games. When the year ends, the <strong className="text-amber-300">top 100 registered players with the most banked chips</strong> share a massive chip prize pool and are permanently inducted into the Hall of Fame on January 1st — track your position across Global, Regional, National, and Clan standings!
         </p>
         <div className="mt-5 p-4 rounded-xl bg-slate-950/70 border border-amber-500/30 lg:mt-1 lg:p-1.5">
           <div className="flex items-center justify-between mb-2 flex-wrap gap-2 lg:mb-0.5 lg:gap-1">

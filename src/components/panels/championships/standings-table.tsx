@@ -91,6 +91,20 @@ function prizeColorForRank(rank: number): string {
   return 'text-slate-600';
 }
 
+// Heading suffix for Regional/National scopes — display names, not raw codes
+function scopeHeadingSuffix(scope: Scope, region: string, country: string): string {
+  if (scope === 'REGIONAL' && region !== 'ALL') {
+    const r = REGIONS.find((x) => x.code === region);
+    const name = (r?.name ?? region).replace(/\s*\([A-Z_]+\)$/, '');
+    return ` · ${name}`;
+  }
+  if (scope === 'NATIONAL' && country !== 'ALL') {
+    const c = COUNTRIES.find((x) => x.code === country);
+    return ` · ${c ? c.name : country}`;
+  }
+  return '';
+}
+
 // ── Constants ──
 
 export const REGIONS = [
@@ -149,7 +163,7 @@ export function ChampionshipPodium({ entries }: { entries: ApiEntry[] }) {
             <div className="flex items-center justify-center gap-1.5 mt-1">
               <div className="text-xs sm:text-sm font-bold text-white lg:text-[11px] lg:truncate">{c.flag} {c.name}</div>
             </div>
-            <div className="text-[11px] font-mono text-slate-500 mt-0.5">{c.userTag} · [{c.clanTag}]</div>
+            <div className="text-[11px] font-mono text-slate-500 mt-0.5">{c.userTag}{c.clanTag ? ` · [${c.clanTag}]` : ''}</div>
             <div className="text-sm sm:text-base font-black font-mono text-emerald-400 mt-2 lg:text-[11px]">{fmtINR(c.bankedChips)}c</div>
             <div className="text-[11px] text-slate-500 mt-0.5">{c.gamesPlayed.toLocaleString()} games · {c.efficiency > 0 ? fmtINR(c.efficiency) : '—'} c/game</div>
             <div className="mt-2 inline-flex items-center gap-0.5 text-[11px] font-mono text-yellow-300/80 bg-yellow-500/10 px-1.5 py-0.5 rounded-full border border-yellow-500/20">
@@ -344,10 +358,12 @@ export function StandingsTable({
         <div className="ml-auto flex items-center gap-1.5">
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500" />
-            <input type="text" value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search..." className="bg-slate-900 border border-slate-800 rounded-lg pl-7 pr-7 py-1.5 text-[11px] text-white font-mono w-28 sm:w-40 focus:outline-none focus:border-amber-500/50 placeholder:text-slate-600" />
+            <input type="text" value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search player/tag/clan" title="Search by player name, VM tag, or clan tag" className="bg-slate-900 border border-slate-800 rounded-lg pl-7 pr-7 py-1.5 text-[11px] text-white font-mono w-28 sm:w-40 focus:outline-none focus:border-amber-500/50 placeholder:text-slate-600" />
             {search && <button type="button" onClick={() => onSearchChange('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white" aria-label="Clear search"><X className="w-3 h-3" /></button>}
           </div>
-          <button type="button" onClick={onFindMe} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition border border-amber-500/30 text-amber-300 bg-amber-500/10 hover:bg-amber-500/20"><Crosshair className="w-3 h-3" /> Find Me</button>
+          {scope !== 'CLAN' && (
+            <button type="button" onClick={onFindMe} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition border border-amber-500/30 text-amber-300 bg-amber-500/10 hover:bg-amber-500/20"><Crosshair className="w-3 h-3" /> Find Me</button>
+          )}
         </div>
       </div>
 
@@ -383,7 +399,7 @@ export function StandingsTable({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 lg:gap-1">
             <div><MicroLabel className="text-[11px]">GLOBAL RANK</MicroLabel><div className="text-sm lg:text-[11px] font-bold text-white font-mono">#{findMeResult.rank}</div></div>
             <div><MicroLabel className="text-[11px]">WALLET CHIPS</MicroLabel><div className="text-sm lg:text-[11px] font-bold text-emerald-400 font-mono">{fmtINR(findMeResult.bankedChips)}c</div></div>
-            <div><MicroLabel className="text-[11px]">PROJECTED PRIZE</MicroLabel><div className={`text-xs lg:text-[11px] font-bold mt-0.5 ${prizeColorForRank(findMeResult.rank)}`}>{findMeResult.prize ? `+{fmtINR(findMeResult.prize.chipsReward)}c` : '— Outside Top 100'}</div></div>
+            <div><MicroLabel className="text-[11px]">PROJECTED PRIZE</MicroLabel><div className={`text-xs lg:text-[11px] font-bold mt-0.5 ${prizeColorForRank(findMeResult.rank)}`}>{findMeResult.prize ? `+${fmtINR(findMeResult.prize.chipsReward)}c` : '— Outside Top 100'}</div></div>
             <div><MicroLabel className="text-[11px]">GAMES PLAYED</MicroLabel><div className="text-sm lg:text-[11px] font-bold text-slate-300 font-mono">{findMeResult.gamesPlayed.toLocaleString()}</div></div>
           </div>
         </div>
@@ -406,9 +422,7 @@ export function StandingsTable({
         <div>
           <div className="flex items-center justify-between mb-3 lg:mb-0.5 flex-wrap gap-2">
             <h3 className="text-sm lg:text-[11px] font-bold text-white">
-              2026 Championship Standings
-              {scope === 'REGIONAL' && region !== 'ALL' && ` · ${region}`}
-              {scope === 'NATIONAL' && country !== 'ALL' && ` · ${country}`}
+              2026 Championship Standings{scopeHeadingSuffix(scope, region, country)}
             </h3>
             <span className="text-[11px] font-mono text-slate-500">{filteredEntries.length} contender{filteredEntries.length !== 1 ? 's' : ''}</span>
           </div>
@@ -454,7 +468,7 @@ export function StandingsTable({
                             {expandedRow === c.userTag && (
                               <div className="mt-1.5 pt-1.5 border-t border-slate-800/50 space-y-1 text-[11px]">
                                 <div className="flex justify-between">
-                                  <span className="font-mono text-slate-500">{c.userTag} · [{c.clanTag}]</span>
+                                  <span className="font-mono text-slate-500">{c.userTag}{c.clanTag ? ` · [${c.clanTag}]` : ''}</span>
                                   <span className="font-mono text-slate-500">{c.region}</span>
                                 </div>
                                 <div className="flex justify-between">
@@ -482,7 +496,7 @@ export function StandingsTable({
                                 <span aria-hidden className="shrink-0">{c.flag}</span>
                                 <span className="lg:truncate">{c.name}</span>
                               </div>
-                              <div className="text-[11px] font-mono text-slate-500 lg:truncate">[{c.clanTag}] · {c.region}</div>
+                              <div className="text-[11px] font-mono text-slate-500 lg:truncate">{c.clanTag ? `[${c.clanTag}] · ` : ''}{c.region}</div>
                             </div>
                             {/* Tag */}
                             <div className="lg:col-span-2 font-mono text-slate-500 lg:truncate">{c.userTag}</div>
