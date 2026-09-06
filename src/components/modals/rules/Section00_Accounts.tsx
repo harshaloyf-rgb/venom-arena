@@ -123,6 +123,17 @@ export function Section00_Accounts() {
           <li>Guest accounts cannot set a PIN (they have no password to recover)</li>
         </ul>
       </InfoCard>
+      <InfoCard title="⚙️ Settings Button (Lobby Header)" accent="text-slate-300">
+        <p className="mb-1.5">The <strong>Settings</strong> button sits in the Welcome page top bar, right next to <strong>Rules &amp; Guide</strong> (inside the 3-dot menu on phones). It covers:</p>
+        <ul className="list-disc pl-4 space-y-0.5">
+          <li><strong>Help &amp; Support:</strong> report an issue by email — the report auto-attaches your app version and device info; one tap copies the support address</li>
+          <li><strong>Audio:</strong> music and sound-effect toggles</li>
+          <li><strong>Mobile:</strong> orientation lock (portrait/landscape), performance mode (lower render resolution — smoother on low-end phones, saves battery), vibration (if the device supports haptics)</li>
+          <li><strong>Legal &amp; Data:</strong> privacy policy, data access/removal requests, and delete-account guidance (self-service deletion lives in Profile → Delete Account)</li>
+          <li><strong>About:</strong> app version, operator entity, season reset date</li>
+          <li>Settings are <strong>saved on this device</strong> (not synced to your account); the audio engine starts after your first tap per browser autoplay rules</li>
+        </ul>
+      </InfoCard>
       <InfoCard title="🛡️ Identity Change Policy (Leaderboard Integrity)" accent="text-amber-300">
         <p className="mb-1.5">To prevent leaderboard and championship abuse, identity changes are <strong>rate-limited</strong>:</p>
         <ul className="list-disc pl-4 space-y-0.5">

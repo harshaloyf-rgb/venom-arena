@@ -1,7 +1,9 @@
 'use client';
 
-// VA-SETTINGS-SECTION: the Settings tab of the profile panel.
-// Entry button lives next to Sign Out (user-approved placement).
+// VA-SETTINGS-SECTION: the Settings dialog content, hosted by
+// src/components/modals/settings-modal.tsx. Entry button lives in the
+// lobby (Welcome page) header, next to Rules & Guide (user-approved
+// placement) — inside the 3-dot menu on phones.
 //
 // Items (user approved "all"): report/email support, music, sound,
 // orientation (default portrait), haptics, performance mode, privacy

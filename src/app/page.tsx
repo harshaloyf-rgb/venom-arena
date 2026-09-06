@@ -13,7 +13,7 @@ import {
   Compass, Shield, User, Trophy, Gift, ShoppingBag, Coins,
   Sparkles, Users, ChevronLeft, Play, ListTodo, Award,
   LogOut, Film, BookOpen, Crown, Loader2, Sunrise, Star,
-  MoreHorizontal, Swords, ShieldCheck, Ticket,
+  MoreHorizontal, Swords, ShieldCheck, Ticket, Settings as SettingsIcon,
 } from 'lucide-react';
 
 import { useAuth } from '@/components/providers/auth-provider';
@@ -36,6 +36,7 @@ import { ClipShowcase } from '@/components/panels/clip-showcase';
 import { AdminPanel } from '@/components/panels/admin-panel';
 import { PlayerInspectorModal} from '@/components/panels/player-inspector-modal';
 import { GameRulesModal } from '@/components/modals/game-rules-modal';
+import { SettingsModal } from '@/components/modals/settings-modal';
 import { JoinGateModal } from '@/components/modals/join-gate-modal';
 import { BottomTabBar } from '@/components/layout/bottom-tab-bar';
 import { ScrollTabStrip } from '@/components/layout/scroll-tab-strip';
@@ -139,6 +140,7 @@ export default function Home() {
   const [joinUseTicket, setJoinUseTicket] = useState(false);
 
   const [isRulesOpen, setIsRulesOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [missions, setMissions] = useState<Mission[]>([]);
   const [challengesLoading, setChallengesLoading] = useState(false);
@@ -458,6 +460,10 @@ export default function Home() {
                 <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
                 <span className="text-[11px] font-bold font-sans">Rules &amp; Guide</span>
               </button>
+              <button onClick={() => setIsSettingsOpen(true)} className="bg-slate-900/60 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800/80 hover:border-slate-600 px-1.5 py-0.5 rounded-lg transition duration-200 cursor-pointer flex items-center gap-1 shadow" title="Audio, mobile options, support & legal">
+                <SettingsIcon className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-[11px] font-bold font-sans">Settings</span>
+              </button>
               <button onClick={handleLogout} className="bg-slate-900/60 hover:bg-red-950/40 hover:text-red-400 hover:border-red-500/20 border border-slate-800/80 px-1.5 py-0.5 rounded-lg transition duration-200 cursor-pointer flex items-center gap-1" title="Secure Logout">
                 <LogOut className="w-3.5 h-3.5" />
                 <span className="text-[11px] font-bold font-sans">Sign Out</span>
@@ -479,6 +485,10 @@ export default function Home() {
                   <DropdownMenuItem onClick={() => setIsRulesOpen(true)} className="cursor-pointer focus:bg-slate-800">
                     <BookOpen className="w-4 h-4 mr-2 text-indigo-400" />
                     <span className="text-[11px]">Rules & Guide</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setIsSettingsOpen(true)} className="cursor-pointer focus:bg-slate-800">
+                    <SettingsIcon className="w-4 h-4 mr-2 text-slate-400" />
+                    <span className="text-[11px]">Settings</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="bg-slate-800" />
                   <DropdownMenuItem onClick={handleLogout} className="cursor-pointer focus:bg-red-950/40 text-red-400 focus:text-red-400">
@@ -732,6 +742,7 @@ export default function Home() {
 
       {/* ===================== MODALS ===================== */}
       <GameRulesModal isOpen={isRulesOpen} onClose={() => setIsRulesOpen(false)} />
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
 
       {gateArenaId && (
         <JoinGateModal

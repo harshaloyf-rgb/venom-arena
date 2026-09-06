@@ -8,12 +8,12 @@ export function Section16_Profile() {
   return (
     <Section icon={<UserCircle className="w-4 h-4" />} title="16. AGENT PROFILE" accent="text-pink-400">
       <InfoCard title="📋 Overview" accent="text-pink-300">
-        <p className="mb-1.5">The <strong>Agent Profile</strong> (accessed via the Profile tab in the lobby) is your personal command center. It has <strong>three tabs</strong>:</p>
+        <p className="mb-1.5">The <strong>Agent Profile</strong> (accessed via the Profile tab in the lobby) is your personal command center. It has <strong>two tabs</strong>:</p>
         <ul className="list-disc pl-4 space-y-0.5">
           <li><strong>Stats Tab</strong> — Your identity, stats, cosmetics, shareable cards, security settings, and account management</li>
           <li><strong>History Tab</strong> — Your match history with filters (All, Extracted, Collided)</li>
-          <li><strong>Settings Tab</strong> — Help &amp; support, audio (music/sound), mobile options (orientation, performance mode, vibration), legal &amp; data (privacy policy, account deletion), and app info</li>
         </ul>
+        <p className="mt-1.5"><strong>Settings</strong> is separate from the profile — it opens from the <strong>Settings button in the lobby header</strong>, right next to Rules &amp; Guide (3-dot menu on phones). See Section 0 for the full rundown.</p>
       </InfoCard>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
