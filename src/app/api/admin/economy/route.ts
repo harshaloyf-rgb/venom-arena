@@ -14,6 +14,7 @@ import { walletResetStatus, forceWalletReset } from '@/lib/year-rollover';
 // GET ?view=player  &userTag=                          -> one player's pass state + history
 // GET ?view=orders  [&userTag=][&store=][&sku=][&limit=][&offset=] -> PassOrder table
 // GET ?view=ledger  [&userTag=][&reason=][&limit=][&offset=]       -> TicketLedger table
+// GET ?view=cosmetics [&userTag=][&itemType=][&limit=][&offset=]   -> Purchase table (cosmetic ledger)
 // GET (no view)                                        -> reset status + plan catalog + totals
 //
 // POST { action: 'grant_pass',      userTag, sku }
@@ -158,6 +159,56 @@ export async function GET(req: NextRequest) {
         refId: r.refId,
       })),
       total,
+    });
+  }
+
+  // ── Cosmetic purchase ledger table (all players) ────────────────────────
+  // Purchase rows are written automatically by the buy flows (shop skin
+  // buys, Elite Pass unlock, season-pass claims). Read-only surface for
+  // dispute checks — added 2026-09-06 (Task 34 recommendation).
+  if (view === 'cosmetics') {
+    const { limit, offset } = parseLimitOffset(req);
+    const userTag = req.nextUrl.searchParams.get('userTag')?.trim();
+    const itemType = req.nextUrl.searchParams.get('itemType')?.trim();
+
+    const where: { playerId?: string; itemType?: string } = {};
+    if (userTag) {
+      const p = await db.player.findUnique({ where: { userTag }, select: { id: true } });
+      if (!p) return NextResponse.json({ purchases: [], total: 0, byType: [] });
+      where.playerId = p.id;
+    }
+    if (itemType) where.itemType = itemType;
+
+    const [rows, total, byType] = await Promise.all([
+      db.purchase.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+        include: { player: { select: { userTag: true, name: true } } },
+      }),
+      db.purchase.count({ where }),
+      db.purchase.groupBy({
+        by: ['itemType'],
+        _count: { _all: true },
+        _sum: { amountChips: true },
+      }),
+    ]);
+
+    return NextResponse.json({
+      purchases: rows.map((r) => ({
+        id: r.id,
+        createdAt: r.createdAt,
+        userTag: r.player.userTag,
+        playerName: r.player.name,
+        itemId: r.itemId,
+        itemType: r.itemType,
+        amountChips: r.amountChips,
+      })),
+      total,
+      byType: byType
+        .map((g) => ({ itemType: g.itemType, count: g._count._all, chips: g._sum.amountChips ?? 0 }))
+        .sort((a, b) => b.count - a.count),
     });
   }
 

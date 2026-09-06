@@ -3,11 +3,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshCw, Tickets, Crown, Wallet, AlertTriangle, Loader2, Search, X } from 'lucide-react';
 import { notify, type ToastFn } from '../_panel-primitives';
+import { getCosmeticById } from '@/lib/game-config';
 
 // Admin Economy tab — Time Pass / Ticket control room (locked spec 2026-09-04,
-// tooling added 2026-09-05). Read surfaces: pass orders, ticket ledger, wallet
-// reset status. Write surfaces: grant/revoke pass, ±tickets, clear ad window,
-// guarded force wallet reset (server additionally gated by ADMIN_FORCE_WALLET_RESET=1).
+// tooling added 2026-09-05, cosmetic purchase ledger added 2026-09-06).
+// Read surfaces: pass orders, ticket ledger, cosmetic purchase ledger,
+// wallet reset status. Write surfaces: grant/revoke pass, ±tickets, clear ad
+// window, guarded force wallet reset (server additionally gated by
+// ADMIN_FORCE_WALLET_RESET=1).
 
 interface PlanRow { sku: string; label: string; days: number; priceUsd: number; tickets: number }
 interface StatusData {
@@ -26,10 +29,25 @@ interface LedgerRow {
   id: string; createdAt: string; userTag: string; playerName: string;
   delta: number; reason: string; refId: string | null;
 }
+interface CosRow {
+  id: string; createdAt: string; userTag: string; playerName: string;
+  itemId: string; itemType: string; amountChips: number;
+}
+interface CosByType { itemType: string; count: number; chips: number }
 
 const PAGE_SIZE = 50;
 const STORES = ['', 'admin', 'play', 'appstore'];
 const REASONS = ['', 'pass_grant', 'admin_grant', 'admin_revoke', 'jade_corridor_join'];
+const COS_TYPES = ['', 'skin', 'elite-pass', 'pass-cosmetic', 'pass-chip'];
+
+// Friendly labels for the Purchase.itemType values written by the buy flows
+// (cosmetic route, season-pass routes). Unknown values render as-is.
+const COS_TYPE_META: Record<string, { label: string; tone: string }> = {
+  'skin': { label: 'Shop Skin', tone: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' },
+  'elite-pass': { label: 'Elite Pass', tone: 'bg-amber-500/10 text-amber-300 border-amber-500/30' },
+  'pass-cosmetic': { label: 'Pass Cosmetic', tone: 'bg-violet-500/10 text-violet-300 border-violet-500/30' },
+  'pass-chip': { label: 'Pass Chips', tone: 'bg-sky-500/10 text-sky-300 border-sky-500/30' },
+};
 
 function fmtWhen(iso: string): string {
   const d = new Date(iso);
@@ -48,7 +66,7 @@ function fmtDaysLeft(iso: string): string {
 
 export function EconomyTab({ onToast }: { onToast?: ToastFn }) {
   const [status, setStatus] = useState<StatusData | null>(null);
-  const [section, setSection] = useState<'orders' | 'ledger'>('orders');
+  const [section, setSection] = useState<'orders' | 'ledger' | 'cosmetics'>('orders');
   const [loading, setLoading] = useState(true);
 
   // filters
@@ -56,10 +74,13 @@ export function EconomyTab({ onToast }: { onToast?: ToastFn }) {
   const [storeFilter, setStoreFilter] = useState('');
   const [skuFilter, setSkuFilter] = useState('');
   const [reasonFilter, setReasonFilter] = useState('');
+  const [cosTypeFilter, setCosTypeFilter] = useState('');
   const [offset, setOffset] = useState(0);
 
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [ledger, setLedger] = useState<LedgerRow[]>([]);
+  const [purchases, setPurchases] = useState<CosRow[]>([]);
+  const [byType, setByType] = useState<CosByType[]>([]);
   const [total, setTotal] = useState(0);
 
   // guarded wallet reset
@@ -82,6 +103,8 @@ export function EconomyTab({ onToast }: { onToast?: ToastFn }) {
       if (section === 'orders') {
         if (storeFilter) params.set('store', storeFilter);
         if (skuFilter.trim()) params.set('sku', skuFilter.trim());
+      } else if (section === 'cosmetics') {
+        if (cosTypeFilter) params.set('itemType', cosTypeFilter);
       } else if (reasonFilter) {
         params.set('reason', reasonFilter);
       }
@@ -89,14 +112,14 @@ export function EconomyTab({ onToast }: { onToast?: ToastFn }) {
       if (!res.ok) throw new Error();
       const data = await res.json();
       if (section === 'orders') { setOrders(data.orders); setTotal(data.total); }
+      else if (section === 'cosmetics') { setPurchases(data.purchases); setTotal(data.total); setByType(data.byType ?? []); }
       else { setLedger(data.ledger); setTotal(data.total); }
     } catch {
       notify(`Failed to load ${section}.`, 'error', onToast);
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [section, offset, userFilter, storeFilter, skuFilter, reasonFilter]);
+  }, [section, offset, userFilter, storeFilter, skuFilter, reasonFilter, cosTypeFilter]);
 
   useEffect(() => { void fetchStatus(); }, [fetchStatus]);
   useEffect(() => { void fetchRows(); }, [fetchRows]);
@@ -225,14 +248,14 @@ export function EconomyTab({ onToast }: { onToast?: ToastFn }) {
       {/* Section toggle + filters */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex rounded-lg border border-slate-800 bg-slate-900/60 p-0.5">
-          {(['orders', 'ledger'] as const).map((s) => (
+          {(['orders', 'ledger', 'cosmetics'] as const).map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => { setSection(s); setOffset(0); }}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${section === s ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:text-slate-200'}`}
             >
-              {s === 'orders' ? 'Pass Orders' : 'Ticket Ledger'}
+              {s === 'orders' ? 'Pass Orders' : s === 'ledger' ? 'Ticket Ledger' : 'Cosmetics'}
             </button>
           ))}
         </div>
@@ -255,12 +278,32 @@ export function EconomyTab({ onToast }: { onToast?: ToastFn }) {
               {(status?.plans ?? []).map((p) => <option key={p.sku} value={p.sku}>{p.sku}</option>)}
             </select>
           </>
+        ) : section === 'cosmetics' ? (
+          <select value={cosTypeFilter} onChange={(e) => { setCosTypeFilter(e.target.value); setOffset(0); }} className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200">
+            {COS_TYPES.map((t) => <option key={t} value={t}>{t === '' ? 'All types' : COS_TYPE_META[t]?.label ?? t}</option>)}
+          </select>
         ) : (
           <select value={reasonFilter} onChange={(e) => { setReasonFilter(e.target.value); setOffset(0); }} className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200">
             {REASONS.map((r) => <option key={r} value={r}>{r === '' ? 'All reasons' : r}</option>)}
           </select>
         )}
       </div>
+
+      {/* Cosmetics lifetime breakdown (global, filter-independent) */}
+      {section === 'cosmetics' && byType.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wider text-slate-500">Lifetime</span>
+          {byType.map((g) => (
+            <div key={g.itemType} className="px-2.5 py-1 rounded-lg border border-slate-800 bg-slate-900/60 text-[10px] text-slate-400">
+              <span className="font-bold text-slate-200">{COS_TYPE_META[g.itemType]?.label ?? g.itemType}</span>
+              {' · '}{g.count} row{g.count === 1 ? '' : 's'} ·{' '}
+              <span className={`font-mono font-bold ${g.chips < 0 ? 'text-rose-300' : g.chips > 0 ? 'text-emerald-300' : 'text-slate-500'}`}>
+                {g.chips === 0 ? '±0c' : `${g.chips > 0 ? '+' : ''}${g.chips.toLocaleString('en-IN')}c`}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Tables */}
       <div className="rounded-xl border border-slate-800 bg-slate-950/60 overflow-x-auto">
@@ -295,6 +338,42 @@ export function EconomyTab({ onToast }: { onToast?: ToastFn }) {
                   <td className="px-3 py-2 font-mono text-slate-400 whitespace-nowrap" title={o.adFreeUntilAfter}>{fmtDaysLeft(o.adFreeUntilAfter)}</td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        ) : section === 'cosmetics' ? (
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-800">
+                <th className="px-3 py-2">When</th>
+                <th className="px-3 py-2">Player</th>
+                <th className="px-3 py-2">Type</th>
+                <th className="px-3 py-2">Item</th>
+                <th className="px-3 py-2 text-right">Chips</th>
+              </tr>
+            </thead>
+            <tbody>
+              {purchases.length === 0 && (
+                <tr><td colSpan={5} className="px-3 py-6 text-center text-slate-500">No cosmetic ledger rows match. Shop skin buys, Elite Pass unlocks and season-pass claims land here.</td></tr>
+              )}
+              {purchases.map((p) => {
+                const meta = COS_TYPE_META[p.itemType];
+                return (
+                  <tr key={p.id} className="border-b border-slate-900 last:border-0">
+                    <td className="px-3 py-2 text-slate-400 whitespace-nowrap">{fmtWhen(p.createdAt)}</td>
+                    <td className="px-3 py-2">
+                      <span className="font-mono text-emerald-300">{p.userTag}</span>
+                      <span className="text-slate-500 ml-1.5">{p.playerName}</span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${meta?.tone ?? 'bg-slate-500/10 text-slate-300 border-slate-500/30'}`}>{meta?.label ?? p.itemType}</span>
+                    </td>
+                    <td className="px-3 py-2 font-mono text-slate-300 max-w-[180px] truncate" title={p.itemId}>{getCosmeticById(p.itemId)?.name ?? p.itemId}</td>
+                    <td className={`px-3 py-2 text-right font-mono font-bold ${p.amountChips < 0 ? 'text-rose-300' : p.amountChips > 0 ? 'text-emerald-300' : 'text-slate-600'}`}>
+                      {p.amountChips === 0 ? '—' : `${p.amountChips > 0 ? '+' : ''}${p.amountChips.toLocaleString('en-IN')}`}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         ) : (

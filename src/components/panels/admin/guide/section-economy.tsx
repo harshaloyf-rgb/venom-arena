@@ -23,7 +23,7 @@ export function SectionEconomyOverview() {
       <TwoColumnTable
         rows={[
           { label: 'Match Buy-In', value: 'Entry fee deducted before match starts', note: 'primary drain' },
-          { label: 'Cosmetics', value: 'Skins, trails, death effects purchased in shop', note: 'NOT counted as losses' },
+          { label: 'Cosmetics', value: 'Skins purchased in the Shop & Lab', note: 'NOT counted as losses' },
           { label: 'Elite Cyber Pass', value: '100,000c one-time purchase to unlock elite track', note: 'server-validated, persistent', icon: <Crown className="h-3 w-3 text-amber-400" /> },
           { label: 'Gifts', value: 'Chips spent sending gifts to other players', note: 'sender loses, receiver gains', icon: <Gift className="h-3 w-3 text-pink-400" /> },
           { label: 'Clan Deposits', value: 'Player-initiated deposits to clan treasury', note: 'withdrawable + payouts exist' },
@@ -49,6 +49,22 @@ export function SectionEconomyOverview() {
         </Bullet>
         <Bullet>
           Pass cosmetic purchases do <strong className="text-emerald-400">NOT count as losses</strong> (same rule as regular cosmetics).
+        </Bullet>
+      </ul>
+
+      <SubHeading>Cosmetic Purchase Ledger (Economy tab → Cosmetics)</SubHeading>
+      <ul className="space-y-1.5 ml-1">
+        <Bullet>
+          Read-only view of the <code className="text-[11px] font-mono text-slate-300 bg-slate-800 px-1 rounded">Purchase</code> table — every shop skin buy (chips spent), Elite Pass unlock (100,000c), and season-pass claim (cosmetics / chip rewards) is written here automatically by the buy flows.
+        </Bullet>
+        <Bullet>
+          Filter by <strong className="text-slate-200">player tag</strong> or <strong className="text-slate-200">type</strong> (Shop Skin / Elite Pass / Pass Cosmetic / Pass Chips). A lifetime per-type breakdown shows row counts and net chips spent vs granted.
+        </Bullet>
+        <Bullet>
+          Negative amounts (red) = chips spent by the player; positive (green) = chips granted via pass rewards; “—” = cosmetic claim with no chip movement. Use it for dispute checks instead of querying the DB by hand.
+        </Bullet>
+        <Bullet>
+          Real-money orders are NOT here — those live in <strong className="text-slate-200">Store</strong> (IAP orders) and <strong className="text-slate-200">Pass Orders</strong>. This ledger covers chip-denominated purchases only.
         </Bullet>
       </ul>
 
