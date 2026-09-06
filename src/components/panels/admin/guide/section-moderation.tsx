@@ -9,7 +9,7 @@ export function SectionContentModeration() {
       <SubHeading>Clip Submission Workflow</SubHeading>
       <ul className="space-y-1.5 ml-1">
         <Bullet>
-          Players can submit game clips from the Highlights tab after a match.
+          Players submit clips from the Highlights tab via the <strong className="text-red-400">Share Clip</strong> button (logged-in players only).
         </Bullet>
         <Bullet>
           New clips enter <code className="text-[11px] font-mono text-amber-400/80 bg-amber-500/10 px-1 rounded">PENDING</code> status and are not visible to other players.
@@ -36,19 +36,22 @@ export function SectionContentModeration() {
       </div>
       <ul className="space-y-1.5 ml-1">
         <Bullet>
-          Navigate to the <strong className="text-slate-200">Highlights</strong> tab.
+          Open the <strong className="text-slate-200">Clips</strong> tab in this admin panel (header shows an amber <strong className="text-amber-400">N pending</strong> badge whenever the queue is not empty).
         </Bullet>
         <Bullet>
-          Click the <strong className="text-amber-400">MODERATE</strong> button to enter moderation mode.
+          Filter by status — <strong className="text-amber-400">Pending</strong>, <strong className="text-emerald-400">Approved</strong>, <strong className="text-rose-400">Rejected</strong>, or <strong className="text-slate-200">All</strong> — each tab shows its live count. Oldest pending clips are listed first.
         </Bullet>
         <Bullet>
-          Review each pending clip — preview the clip content, check metadata.
+          Click a clip in the left list to open its detail panel: video preview, description, player, platform, arena, chips, kills, and the source URL.
         </Bullet>
         <Bullet>
-          Click <strong className="text-emerald-400">Approve</strong> to publish to the public feed, or <strong className="text-rose-400">Reject</strong> to hide it.
+          Click <strong className="text-emerald-400">Approve</strong> to publish to the public feed, or <strong className="text-rose-400">Reject</strong> to hide it. Both actions stamp the reviewer and time on the clip and write an audit-log entry.
         </Bullet>
         <Bullet>
-          For <strong className="text-amber-400">approved</strong> clips, a <strong className="text-amber-300">Feature ★</strong> button appears — click it to pin the clip as the Top Play spotlight on the Highlights feed. Click again to unfeature. Only one clip should be featured at a time for best results.
+          Use <strong className="text-emerald-400">Approve All</strong> / <strong className="text-rose-400">Reject All</strong> (top of the list, Pending tab only) to bulk-process the whole queue in one click — also audit-logged as a single entry.
+        </Bullet>
+        <Bullet>
+          For <strong className="text-amber-400">approved</strong> clips, a <strong className="text-amber-300">Feature ★</strong> button appears — click it to pin the clip as the Top Play spotlight on the Highlights feed. Click again (Unfeature) to release it. Every featured clip stays pinned until unfeatured — unfeature the old one when featuring a new one for best results.
         </Bullet>
       </ul>
 
