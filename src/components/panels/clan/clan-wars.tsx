@@ -1,6 +1,7 @@
 'use client';
 
-import { Skull, Swords, Search, Lock, Loader2, X } from 'lucide-react';
+import { useState } from 'react';
+import { Skull, Swords, Search, Lock, Loader2, X, Info, ChevronDown, ChevronUp } from 'lucide-react';
 import { timeAgo } from '@/lib/date-utils';
 import { PanelSkeleton } from '../_panel-primitives';
 import type { ClanInfo, WarInfo } from './_types';
@@ -24,6 +25,18 @@ export function ClanWars({
   warSearch, warWager, actionBusy,
   onWarSearchChange, onWarWagerChange, onDeclareWar,
 }: ClanWarsProps) {
+  // T52: launch feedback — users still found wars confusing even with the
+  // 3-step strip, so a plain-words explainer with a worked example + FAQ is
+  // shown right here. Open by default; collapsible so regulars can hide it.
+  const [explainerOpen, setExplainerOpen] = useState(true);
+  const FAQ: { q: string; a: React.ReactNode }[] = [
+    { q: 'Do I need to join a special war match?', a: <>No. Play <strong className="text-slate-200">any match as usual</strong> — while the war is on, your real-player kills count automatically.</> },
+    { q: 'Can the other clan say no?', a: <>No. The war starts the moment our Leader declares. The only protection is a <strong className="text-slate-200">War Shield</strong> (Clan Shop — blocks declarations for 7 days).</> },
+    { q: 'Who can declare a war?', a: <>Only the clan <strong className="text-slate-200">Leader</strong>. Co-Leaders and members cannot.</> },
+    { q: 'What if nobody reaches 50?', a: <>The war just stays open until someone does — <strong className="text-slate-200">there is no timer</strong>. If a clan disbands mid-war, both wagers are refunded in full.</> },
+    { q: 'Where do the winnings go?', a: <>Into the winning clan&apos;s <strong className="text-slate-200">Treasury</strong> — never personal wallets. Leaders can then pay members from it.</> },
+    { q: 'Do bot kills count?', a: <>No — <strong className="text-slate-200">only eliminations of real players</strong> score points.</> },
+  ];
   return (
     <div className="space-y-4">
       <div className="p-4 lg:p-1.5 rounded-2xl border border-rose-500/20 bg-rose-500/5">
@@ -44,6 +57,46 @@ export function ClanWars({
           <p className="text-[10px] lg:text-[11px] font-bold text-rose-300 mb-0.5">3 · First to 50 Wins</p>
           <p className="text-[10px] lg:text-[11px] text-slate-400 leading-relaxed">The war ends automatically and the winning clan&apos;s treasury receives the entire pot (wager × 2). Buy a <strong className="text-slate-200">War Shield</strong> to block declarations for 7 days.</p>
         </div>
+      </div>
+      {/* T52: plain-words explainer — worked example + FAQ, open by default */}
+      <div className="rounded-2xl border border-rose-500/20 bg-slate-950/60 overflow-hidden">
+        <button type="button" onClick={() => setExplainerOpen((v) => !v)} className="w-full p-4 lg:p-1.5 flex items-center justify-between gap-2 text-left hover:bg-rose-500/5 transition">
+          <span className="flex items-center gap-2">
+            <Info className="w-4 h-4 lg:w-3 lg:h-3 text-rose-400 shrink-0" />
+            <span className="text-sm lg:text-[11px] font-bold text-white">Wars in plain words — with an example</span>
+          </span>
+          {explainerOpen ? <ChevronUp className="w-4 h-4 lg:w-3 lg:h-3 text-slate-500 shrink-0" /> : <ChevronDown className="w-4 h-4 lg:w-3 lg:h-3 text-slate-500 shrink-0" />}
+        </button>
+        {explainerOpen && (
+          <div className="px-4 pb-4 lg:px-1.5 lg:pb-1.5 space-y-3 lg:space-y-1.5">
+            <p className="text-[11px] lg:text-[11px] text-slate-300 leading-relaxed">
+              A clan war is a <strong className="text-rose-300">kill race with a money pot</strong>. Two clans put chips into a pot, members keep playing normal matches, and the first clan to <strong className="text-rose-300">50 real-player kills</strong> takes everything.
+            </p>
+            <div className="p-3 lg:p-1.5 rounded-xl border border-slate-800 bg-slate-950/80 space-y-1.5 lg:space-y-1">
+              <p className="text-[10px] font-mono uppercase tracking-widest text-slate-500">Example — VTX vs VTZ, 1,000c wager</p>
+              {[
+                <>VTX&apos;s Leader declares war on VTZ with a <strong className="text-amber-300">1,000c</strong> wager → 1,000c leaves <em>each</em> treasury → locked pot = <strong className="text-amber-300">2,000c</strong>.</>,
+                <>VTZ cannot refuse — the war is live immediately. (A War Shield would have blocked the declaration.)</>,
+                <>Both clans play normal matches — nothing to join. Every real-player kill scores <strong className="text-slate-200">+1</strong> for that killer&apos;s clan. Bot kills score nothing.</>,
+                <>VTX reaches 50 first (say 50–37) → the war ends automatically.</>,
+                <>VTX&apos;s Treasury receives the full <strong className="text-amber-300">2,000c</strong> pot. Personal wallets are never touched by wars.</>,
+              ].map((step, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className="shrink-0 w-4 h-4 lg:w-3.5 lg:h-3.5 mt-0.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[9px] font-bold flex items-center justify-center">{i + 1}</span>
+                  <p className="text-[10px] lg:text-[11px] text-slate-400 leading-relaxed">{step}</p>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-1.5 lg:space-y-1">
+              {FAQ.map((f) => (
+                <div key={f.q} className="p-2.5 lg:p-1 rounded-xl border border-slate-800 bg-slate-950/60">
+                  <p className="text-[11px] font-bold text-white">{f.q}</p>
+                  <p className="text-[10px] lg:text-[11px] text-slate-400 leading-relaxed mt-0.5">{f.a}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
       {warLoading ? <PanelSkeleton count={2} height="h-48" /> : activeWar ? (
         <div className="p-4 lg:p-1.5 rounded-2xl border border-rose-500/40 bg-rose-500/5 space-y-4 lg:space-y-1">

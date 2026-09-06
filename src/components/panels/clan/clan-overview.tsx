@@ -224,6 +224,25 @@ export function ClanOverview({
         </div>
       </div>
 
+      {/* T52: war teaser — every member should know what wars are from the main
+          clan view, without opening the Wars tab or the Rules & Guide */}
+      <div className="p-4 lg:p-1.5 rounded-2xl border border-rose-500/25 bg-rose-500/5">
+        <div className="flex items-start sm:items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-start gap-2.5 min-w-0">
+            <Swords className="w-4 h-4 lg:w-3 lg:h-3 text-rose-400 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-xs lg:text-[11px] font-bold text-white">Clan Wars — a kill race with a chip pot</p>
+              <p className="text-[10px] lg:text-[11px] text-slate-400 leading-relaxed mt-0.5">
+                Our Leader can wager Treasury chips on a rival clan (their treasury auto-matches it). We then just play normal matches — every real-player kill scores 1 point. First clan to 50 takes the whole pot. The other clan can&apos;t refuse; only a War Shield blocks it.
+              </p>
+            </div>
+          </div>
+          <button type="button" onClick={() => onSetMineSub('wars')} className="shrink-0 px-3 lg:px-1.5 py-1.5 lg:py-0.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] lg:text-[11px] font-bold transition">
+            How wars work →
+          </button>
+        </div>
+      </div>
+
       {/* Treasury Actions: Shop */}
       {isLeader && (
         <div className="p-4 lg:p-1.5 rounded-2xl border border-violet-500/20 bg-violet-500/5">
