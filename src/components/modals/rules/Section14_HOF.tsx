@@ -57,7 +57,7 @@ export function Section14_HOF() {
             <li>Milestone inductions are based on the <strong>first time</strong> you reach a tier — even if your chips later drop below, the HOF entry stays</li>
             <li>Championship inductions are <strong>finalized on Jan 1st</strong> and locked permanently</li>
             <li>There is no appeal, removal, or expiration of HOF records</li>
-            <li>Your highest HOF badge is shown on the <strong>leaderboard</strong> and <strong>player inspector</strong></li>
+            <li>HOF status is visible everywhere — a small 🏆 icon on <strong>leaderboard rows</strong>, your highest badge in the <strong>player inspector</strong></li>
           </ul>
         </InfoCard>
 

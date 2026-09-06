@@ -11,7 +11,7 @@ export function Section12_Leaderboards() {
         <InfoCard title="What is the Lobby Leaderboard?" accent="text-amber-300">
           <p>The lobby houses <strong>5 tabs</strong> of official tournament leaderboards, all <strong>database-backed and live</strong> — they auto-refresh every 30 minutes, or update instantly via the Refresh button. Your rank reflects your lifetime <strong>banked chips</strong> across all matches. Each tab has a description box explaining what it shows.</p>
           <ul className="list-disc pl-4 space-y-0.5 mt-1.5">
-            <li><strong>World Summit</strong> — #1 player per country (top 100)</li>
+            <li><strong>World Cup Summit</strong> — #1 player per country (top 100)</li>
             <li><strong>Global Rankings</strong> — All players worldwide, 1-to-N</li>
             <li><strong>National Rankings</strong> — Players from one country (top 100)</li>
             <li><strong>Regional Rankings</strong> — Players from one of 8 world regions (top 100)</li>

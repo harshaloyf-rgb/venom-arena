@@ -9,7 +9,7 @@ export function Section13_Championships() {
     <Section icon={<Trophy className="w-4 h-4" />} title="13. ANNUAL CHAMPIONSHIPS" accent="text-amber-400">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <InfoCard title="🏆 What is the Annual Championship?" accent="text-amber-300">
-          <p className="mb-1">The <strong>Annual Championship</strong> is a year-long competitive event. Unlike the lobby leaderboard (which is live/session-based), championship standings persist across the entire calendar year and culminate in the <strong>Jan 1st season close</strong>.</p>
+          <p className="mb-1">The <strong>Annual Championship</strong> is a year-long competitive event. Unlike the lobby leaderboard (which ranks lifetime <strong>banked chips</strong> and refreshes every 30 minutes — see Section 12), championship standings persist across the entire calendar year and culminate in the <strong>Jan 1st season close</strong>.</p>
           <ul className="list-disc pl-4 space-y-0.5">
             <li>Runs from <strong>Jan 1 to Dec 31</strong> each year</li>
             <li><strong>What counts:</strong> your <strong>banked wallet chips</strong> at year-end decide the final ranking — &quot;Max chips at year-end decides rank!&quot;</li>
@@ -120,7 +120,7 @@ export function Section13_Championships() {
             <li><strong>Year selector</strong> — Dropdown at the top to switch between current and past years</li>
             <li><strong>Frozen badge</strong> — Archived years display a &quot;🔒 FROZEN&quot; indicator</li>
           </ul>
-          <p className="mt-1.5"><strong>Championship vs. Lobby Leaderboard:</strong> The lobby leaderboard is <strong>session-based</strong> — it shows real-time chip totals and updates continuously. The championship is <strong>annual-based</strong> — it tracks cumulative performance across the whole year. A player can be #1 on the lobby board but #50 in the championship (or vice versa).</p>
+          <p className="mt-1.5"><strong>Championship vs. Lobby Leaderboard:</strong> The lobby leaderboard is <strong>database-backed</strong> — it ranks lifetime <strong>banked chips</strong> and refreshes every 30 minutes (or instantly via the Refresh button — see Section 12). The championship is <strong>annual-based</strong> — it tracks cumulative performance across the whole year. A player can be #1 on the lobby board but #50 in the championship (or vice versa).</p>
         </InfoCard>
       </div>
     </Section>
