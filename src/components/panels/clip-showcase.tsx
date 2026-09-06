@@ -60,6 +60,7 @@ interface ClipItem {
   dislikes: number;
   featured: boolean;
   cardType: string;
+  status: 'pending' | 'approved' | 'rejected' | string;
   matchData: {
     outcome: string;
     chipsLost: number;
@@ -75,6 +76,14 @@ interface ClipItem {
 interface LiveStats {
   today: { totalMatches: number; extractions: number; chipsEarned: number; kills: number };
   totalPlayers: number;
+  topTodayClip?: {
+    id: string;
+    title: string;
+    chipsExtracted: number;
+    kills: number;
+    arenaName: string;
+    player: { name: string; userTag: string };
+  } | null;
 }
 
 interface ClipShowcaseProps {
@@ -285,7 +294,7 @@ function ExpandedView({
             type="text"
             defaultValue={search}
             onKeyDown={handleSearchKeyDown}
-            placeholder="Search by title or player name..."
+            placeholder="Search by title or player name… (press Enter)"
             className="w-full pl-8 pr-8 py-2 lg:py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-red-500/50 transition"
           />
           {search && (
@@ -416,9 +425,9 @@ function GuideSteps({ isLoggedIn, onOpenUpload }: { isLoggedIn: boolean; onOpenU
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:gap-1 mb-5 lg:mb-1 max-w-sm mx-auto">
-        <StepCard icon={<Video className="w-5 h-5 lg:w-3 lg:h-3 text-red-400" />} step="1" title="Play Matches" desc="Impressive games (5K+ chips or 3+ kills) auto-generate highlight cards" />
+        <StepCard icon={<Video className="w-5 h-5 lg:w-3 lg:h-3 text-red-400" />} step="1" title="Play Matches" desc="Extraction with 5K+ chips banked or 3+ kills — or a 5+ kill fight — auto-generates a Match Card" />
         <StepCard icon={<Upload className="w-5 h-5 lg:w-3 lg:h-3 text-amber-400" />} step="2" title="Record & Upload" desc="Record gameplay, upload to YouTube/Instagram, paste the link here" />
-        <StepCard icon={<Trophy className="w-5 h-5 lg:w-3 lg:h-3 text-emerald-400" />} step="3" title="Get Featured" desc="Most upvoted clips hit the Top Play spotlight at the top of the feed" />
+        <StepCard icon={<Trophy className="w-5 h-5 lg:w-3 lg:h-3 text-emerald-400" />} step="3" title="Get Featured" desc="Top-voted clips, the best daily Match Card, and admin picks all compete for the Top Play spotlight" />
       </div>
 
       <div className="max-w-sm mx-auto mb-5 lg:mb-1 space-y-2 lg:space-y-1">
@@ -427,7 +436,7 @@ function GuideSteps({ isLoggedIn, onOpenUpload }: { isLoggedIn: boolean; onOpenU
           <ul className="text-[11px] text-slate-400 space-y-1">
             <li className="flex items-start gap-1.5"><span className="text-emerald-400 mt-0.5">✓</span> <span><strong className="text-slate-300">Match Cards</strong> — Auto-generated stat cards from impressive matches</span></li>
             <li className="flex items-start gap-1.5"><span className="text-emerald-400 mt-0.5">✓</span> <span><strong className="text-slate-300">Video Clips</strong> — Community-submitted gameplay from YouTube, YouTube Shorts, and Instagram Reels</span></li>
-            <li className="flex items-start gap-1.5"><span className="text-emerald-400 mt-0.5">✓</span> <span><strong className="text-slate-300">Top Play</strong> — The most upvoted clip gets the featured trophy spotlight</span></li>
+            <li className="flex items-start gap-1.5"><span className="text-emerald-400 mt-0.5">✓</span> <span><strong className="text-slate-300">Top Play</strong> — Admin pick, today's best Match Card, or the most-upvoted clip takes the spotlight</span></li>
           </ul>
         </div>
         <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-3 lg:p-1.5 text-left">
@@ -646,9 +655,10 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
       const r = await fetch('/api/clips/vote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clipId: clip.id, vote }) });
       if (!r.ok) throw new Error();
     } catch {
-      // rollback
+      // rollback (all surfaces the optimistic update touched)
       setClips(prev => prev.map(c => c.id === clip.id ? clip : c));
       setExpandedClips(prev => prev.map(c => c.id === clip.id ? clip : c));
+      if (featured?.id === clip.id) setFeatured(clip);
       if (onToast) notify('Failed to vote.', 'error', onToast);
     }
   }
@@ -676,8 +686,11 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
   const isMatchCard = (c: ClipItem) => c.cardType === 'match-card';
   const featuredId = featured?.id;
   const isPlatformTab = filterType !== 'all' && filterType !== 'match-card';
-  // On platform-specific tabs, show ALL clips (don't hide featured)
-  const displayClips = isPlatformTab ? clips : clips.filter((c) => c.id !== featuredId);
+  // FIX (My Clips blank screen): in My Clips mode the rows must render on the
+  // All tab too — the previous `!myClipsOnly` gate left players staring at an
+  // empty content area with their clips fetched but unrendered. Also: never
+  // drop own clips from the rows because a PUBLIC featured copy exists.
+  const displayClips = (isPlatformTab || myClipsOnly) ? clips : clips.filter((c) => c.id !== featuredId);
   const hasMore = clips.length < total;
 
   // Separate clips by platform for scroll rows
@@ -764,6 +777,9 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
             <StatChip icon="✅" value={String(liveStats.today.extractions)} label="Extracts" />
             <StatChip icon="💰" value={formatCompact(liveStats.today.chipsEarned)} label="Earned" />
             <StatChip icon="💀" value={String(liveStats.today.kills)} label="Kills" />
+            {liveStats.topTodayClip && (
+              <StatChip icon="🏆" value={`${formatCompact(liveStats.topTodayClip.chipsExtracted)}c`} label={`Best extract (by ${liveStats.topTodayClip.player.name})`} />
+            )}
             <div className="ml-auto shrink-0 flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5 text-blue-400 lg:w-3 lg:h-3" />
               <span className="text-[11px] font-mono text-slate-500"><span className="text-blue-400 font-bold">{liveStats.totalPlayers}</span> Players</span>
@@ -863,10 +879,10 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
         )}
 
         {/* ═══ ALL TAB: Featured + horizontal scroll rows (only when NOT expanded) ═══ */}
-        {!loading && !isExpanded && filterType === 'all' && !myClipsOnly && (
+        {!loading && !isExpanded && filterType === 'all' && (
           <>
-            {/* Featured Clip */}
-            {featured && (
+            {/* Featured Clip — the PUBLIC Top Play; hidden in My Clips mode */}
+            {featured && !myClipsOnly && (
               <div className="mb-4 lg:mb-1">
                 <div className="flex items-center gap-2 lg:gap-1 mb-3 lg:mb-0.5">
                   <Trophy className="w-4 h-4 text-amber-400 lg:w-3 lg:h-3" />
@@ -881,7 +897,7 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
                   <VideoCardHorizontal clip={featured} onVote={handleVote} onInspect={handleInspectCreator} canVote={isLoggedIn} />
                 )}
                 </div>
-
+                {!isLoggedIn && <BeatThisCTA />}
               </div>
             )}
 
@@ -940,7 +956,7 @@ export function ClipShowcase({ onToast, onInspectPlayer }: ClipShowcaseProps) {
 
 // ── Feed Item (vertical, for match cards) ──
 
-function FeedItem({ clip, onVote, onInspect, canVote, showCTA }: { clip: ClipItem; onVote: (c: ClipItem, vote: 'like' | 'dislike') => void; onInspect: (c: ClipItem) => void; canVote: boolean; showCTA?: boolean }) {
+function FeedItem({ clip, onVote, onInspect, canVote }: { clip: ClipItem; onVote: (c: ClipItem, vote: 'like' | 'dislike') => void; onInspect: (c: ClipItem) => void; canVote: boolean }) {
   return (
     <div className="group">
       <div className="flex items-center gap-2.5 lg:gap-1 mb-2.5 lg:mb-1 px-1">
@@ -950,6 +966,7 @@ function FeedItem({ clip, onVote, onInspect, canVote, showCTA }: { clip: ClipIte
             <div className="flex items-center gap-1.5">
               <span className="text-xs font-bold text-white lg:text-[11px]">{clip.player.name}</span>
               {clip.player.clanTag && <span className="text-[11px] font-mono text-red-400 bg-red-500/10 border border-red-500/20 px-1 py-0.5 rounded">[{clip.player.clanTag}]</span>}
+              <StatusTag status={clip.status} />
             </div>
             <div className="text-[11px] font-mono text-slate-500">#{clip.player.userTag} · {timeAgo(clip.createdAt)}</div>
           </div>
@@ -961,11 +978,6 @@ function FeedItem({ clip, onVote, onInspect, canVote, showCTA }: { clip: ClipIte
         </div>
       </div>
       <MatchCardVisual title={clip.title} playerName={clip.player.name} userTag={clip.player.userTag} country={clip.player.country} level={clip.player.level} clanTag={clip.player.clanTag} arenaName={clip.arenaName} outcome={(clip.matchData?.outcome as 'extract' | 'death') || 'extract'} chipsEarned={clip.chipsExtracted} chipsLost={clip.matchData?.chipsLost || 0} kills={clip.kills} snakeLength={clip.matchData?.snakeLength || 0} durationSec={clip.matchData?.durationSec || 0} isOnline={clip.matchData?.isOnline || false} upvotes={clip.likes} compact />
-      {showCTA && (
-        <div className="mt-3 lg:mt-1 px-4 lg:px-2 py-3 lg:py-1 rounded-xl bg-gradient-to-r from-red-600/10 to-amber-600/10 border border-red-500/20 text-center">
-          <p className="text-xs lg:text-[11px] text-slate-300"><span className="text-white font-bold">Can you beat this?</span> <span className="text-slate-500">Sign in and play to get your highlight on the feed!</span></p>
-        </div>
-      )}
       <div className="flex items-center gap-3 lg:gap-2 mt-2.5 lg:mt-0.5 px-1">
         <button type="button" onClick={() => onVote(clip, 'like')} disabled={!canVote} className={`flex items-center gap-1 lg:gap-0.5 text-xs lg:text-[11px] font-bold transition ${clip.myVote === 'like' ? 'text-emerald-400' : 'text-slate-500 hover:text-emerald-400'} disabled:opacity-40`}>
           <ThumbsUp className="w-3.5 h-3.5 lg:w-3 lg:h-3" /> {clip.likes}
@@ -976,6 +988,29 @@ function FeedItem({ clip, onVote, onInspect, canVote, showCTA }: { clip: ClipIte
         <button type="button" onClick={() => onInspect(clip)} className="flex items-center gap-1 lg:gap-0.5 text-xs lg:text-[11px] text-slate-500 hover:text-white transition"><User className="w-3.5 h-3.5 lg:w-3 lg:h-3" /> Profile</button>
       </div>
       <div className="border-b border-slate-800/40 mt-4 lg:mt-1" />
+    </div>
+  );
+}
+
+// ── Clip status tag — why a clip isn't public yet (My Clips view) ──
+
+function StatusTag({ status }: { status: string }) {
+  if (status === 'approved') return null;
+  const pending = status !== 'rejected'; // treat unknown/legacy as pending
+  return (
+    <span className={`text-[9px] font-mono font-bold uppercase tracking-wider px-1 py-0.5 rounded border shrink-0 ${pending ? 'text-amber-300 bg-amber-500/10 border-amber-500/30' : 'text-red-300 bg-red-500/10 border-red-500/30'}`}>
+      {pending ? 'Pending review' : 'Rejected'}
+    </span>
+  );
+}
+
+// ── Logged-out CTA under the Top Play spotlight (revives the previously dead
+//    "Can you beat this?" block — stats/live even computes the daily best for it) ──
+
+function BeatThisCTA() {
+  return (
+    <div className="mt-2 lg:mt-1 px-4 lg:px-2 py-2.5 lg:py-1 rounded-xl bg-gradient-to-r from-red-600/10 to-amber-600/10 border border-red-500/20 text-center">
+      <p className="text-xs lg:text-[11px] text-slate-300"><span className="text-white font-bold">Can you beat this?</span> <span className="text-slate-500">Sign in and play to get your highlight on the feed!</span></p>
     </div>
   );
 }
@@ -1011,10 +1046,12 @@ function VideoCardHorizontal({ clip, onVote, onInspect, canVote }: { clip: ClipI
       {/* Info */}
       <div className="flex-1 min-w-0 p-2.5 flex flex-col justify-center">
         <h3 className="text-sm font-bold text-white leading-tight line-clamp-2">{clip.title}</h3>
-        <div className="flex items-center gap-1 mt-1">
+        {clip.description && <p className="text-[11px] text-slate-400 leading-snug line-clamp-1 mt-0.5">{clip.description}</p>}
+        <div className="flex items-center gap-1 mt-1 flex-wrap">
           <span className="text-[11px] font-mono text-slate-500">{clip.player.name}</span>
           <span className="text-[11px] text-slate-700">·</span>
           <span className="text-[11px] font-mono text-slate-600">{timeAgo(clip.createdAt)}</span>
+          <StatusTag status={clip.status} />
         </div>
       </div>
       </a>
@@ -1066,7 +1103,11 @@ function VideoCardVertical({ clip, onVote, onInspect, canVote }: { clip: ClipIte
       {/* Info */}
       <div className="p-2.5">
         <h3 className="text-xs font-bold text-white leading-tight line-clamp-2">{clip.title}</h3>
-        <div className="text-[11px] font-mono text-slate-500 mt-0.5">{timeAgo(clip.createdAt)}</div>
+        {clip.description && <p className="text-[10px] text-slate-400 leading-snug line-clamp-1 mt-0.5">{clip.description}</p>}
+        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+          <span className="text-[11px] font-mono text-slate-500">{timeAgo(clip.createdAt)}</span>
+          <StatusTag status={clip.status} />
+        </div>
       </div>
       {onVote && onInspect && (
         <div className="flex items-center gap-2 px-2.5 py-1.5 border-t border-slate-800/60">

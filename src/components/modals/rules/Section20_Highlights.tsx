@@ -18,20 +18,20 @@ export function Section20_Highlights() {
         <InfoCard title="⚡ Match Cards — Auto-Published" accent="text-emerald-300">
           <p className="mb-1.5">No manual action needed — when a match of yours is impressive enough, the server automatically publishes a <strong>Match Card</strong> to the feed (arena name, chips earned/lost, kills, snake length, duration, and your clan tag). Any of these triggers it:</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>Extraction with <strong>5,000+ chips earned</strong></li>
+            <li>Extraction with <strong>5,000+ chips banked</strong></li>
             <li>Extraction with <strong>3+ kills</strong></li>
             <li>Death with <strong>5+ kills</strong></li>
           </ul>
-          <p className="text-slate-500 mt-1">Match Cards are <strong>auto-approved</strong> — no waiting. Video clips require admin review.</p>
+          <p className="text-slate-500 mt-1">Real-stakes arenas only — Practice arenas never generate cards. Match Cards are <strong>auto-approved</strong> — no waiting. Video clips require admin review.</p>
         </InfoCard>
         <InfoCard title="📹 Submitting Video Clips" accent="text-amber-300">
           <ul className="list-disc pl-4 space-y-0.5">
-            <li>Click <strong>Upload Clip</strong> on the Highlights tab</li>
+            <li>Click <strong>Share Clip</strong> on the Highlights tab</li>
             <li>Choose platform: <strong>YouTube</strong>, <strong>YouTube Shorts</strong>, or <strong>Instagram</strong> (auto-detected from the URL)</li>
             <li>Paste the video URL — YouTube thumbnails are auto-extracted</li>
-            <li>Title: 5-120 characters. Description: up to 300 characters</li>
+            <li>Title: 5-120 characters. Description: up to 300 characters (shown on your clip card)</li>
             <li>Profanity filter applies (English + Hindi)</li>
-            <li>Submitted clips enter <strong>&quot;Pending&quot;</strong> status — visible only to you until an admin approves or rejects them</li>
+            <li>Submitted clips enter <strong>&quot;Pending&quot;</strong> status — visible only to you (labelled <strong>Pending review</strong> in My Clips) until an admin approves or rejects them</li>
           </ul>
         </InfoCard>
       </div>
@@ -62,6 +62,7 @@ export function Section20_Highlights() {
             <li><strong>Extractions</strong> completed today</li>
             <li><strong>Chips earned</strong> by all players today</li>
             <li><strong>Kills</strong> across all matches today</li>
+            <li><strong>Best extract</strong> — the biggest Match Card extraction of the day</li>
             <li><strong>Total players</strong> registered on the platform</li>
           </ul>
         </InfoCard>
@@ -70,11 +71,11 @@ export function Section20_Highlights() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
         <InfoCard title="🔍 Feed Controls" accent="text-emerald-300">
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong>My Clips</strong> toggle — Filter to show only your own clips (including pending ones)</li>
+            <li><strong>My Clips</strong> toggle — Show only your own clips, including pending and rejected ones, each labelled with its review status</li>
             <li><strong>Type Filter</strong> — All, Match Cards only, or Video Clips only</li>
-            <li><strong>Infinite scroll</strong> — 20 clips per page, auto-loads as you scroll down</li>
+            <li><strong>Infinite scroll</strong> — the feed loads 40 clips at a time as you scroll; each section&apos;s <strong>View All</strong> page paginates 20 per page with search and sorting (Newest / Oldest / Most Upvoted)</li>
             <li>Click a player&apos;s name to <strong>inspect their profile</strong></li>
-            <li>Video clips show a <strong>Watch</strong> link that opens the video on the original platform</li>
+            <li>Video clip cards open the video on the original platform in a new tab</li>
           </ul>
         </InfoCard>
         <InfoCard title="🛡️ Content Rules &amp; Moderation" accent="text-amber-300">

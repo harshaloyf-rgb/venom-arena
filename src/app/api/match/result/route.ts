@@ -4,6 +4,7 @@ import { toProfile } from '@/lib/player-helpers';
 import { getArenaById, levelFromXp, MILESTONE_TIERS, HALL_OF_FAME_TIERS, PASS_TIER_XP, PASS_DAILY_XP_CAP, PASS_XP_MULTIPLIER, REFERRAL_REWARD, REFERRAL_MATCH_THRESHOLD } from '@/lib/game-config';
 import { utcToday, utcMonday } from '@/lib/date-utils';
 import { verifyInternalSecret } from '@/lib/api-helpers';
+import { isImpressiveMatch, publishMatchCard } from '@/lib/clips';
 
 const TRACKABLE_TIERS = ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'omega'] as const;
 
@@ -238,6 +239,7 @@ export async function POST(req: NextRequest) {
   let updated;
   let passXpGained = 0;
   let newPassTier = 0;
+  let matchEntryId: string | null = null;
   try {
     updated = await db.$transaction(async (tx) => {
     const p = await tx.player.findUnique({ where: { id: player.id } });
@@ -375,7 +377,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await tx.matchHistory.create({
+    const historyEntry = await tx.matchHistory.create({
       data: {
         playerId: player.id,
         arenaId,
@@ -392,6 +394,7 @@ export async function POST(req: NextRequest) {
         killerIsBot: killerIsBotCol,
       },
     });
+    matchEntryId = historyEntry.id;
 
     // --- Increment ChampionshipRegistration.gamesPlayed for online matches ---
     // The 10,000-match annual cap (MAX_GAMES in register route + UI progress
@@ -475,6 +478,29 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     return NextResponse.json({ error: 'Database error processing match result.' }, { status: 500 });
+  }
+
+  // --- Auto-publish impressive matches to the Highlights feed (Match Cards) ---
+  // FIX (highlights audit): the auto-publish used to live ONLY in
+  // /api/player/match-history — an endpoint nothing ever called — so Match
+  // Cards were dead code and never appeared in the feed. Real matches all
+  // flow through here (game-server → internal secret), so the trigger lives
+  // on the server-authoritative path now. Practice arenas (rewardMultiplier
+  // = 0) never publish: a "Massive 0c Extraction!" card would be spam.
+  // Best-effort: a clip failure must not fail an already-committed match.
+  if (arena.rewardMultiplier > 0 && isImpressiveMatch(outcome === 'extract', chipsEarned, kills)) {
+    await publishMatchCard({
+      playerId: player.id,
+      matchId: matchEntryId,
+      arenaName: arena.name,
+      isExtract: outcome === 'extract',
+      chipsEarned,
+      chipsLost,
+      kills,
+      snakeLength: score,
+      durationSec: durationSeconds,
+      isOnline: arena.rewardMultiplier > 0,
+    });
   }
 
   return NextResponse.json({

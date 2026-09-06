@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { formatChipsIndian } from '@/lib/format-chips';
+import { isImpressiveMatch, publishMatchCard } from '@/lib/clips';
 
-// Auto-publish thresholds for highlights feed
-const AUTO_PUBLISH_MIN_CHIPS = 5000;
-const AUTO_PUBLISH_MIN_KILLS = 3;
-const AUTO_PUBLISH_DEATH_KILLS = 5; // death-only needs more kills to be impressive
+// NOTE (highlights audit): the auto-publish logic (thresholds + titles + clip
+// row) moved to src/lib/clips.ts and now ALSO runs on the server-authoritative
+// path (/api/match/result) — previously it lived only here, an endpoint with
+// zero callers, so Match Cards never actually appeared in the feed. This route
+// keeps working for any future client-reported history submissions.
 
 // GET /api/player/match-history?limit=25&offset=0&status=
 export async function GET(request: Request) {
@@ -105,60 +106,19 @@ export async function POST(req: NextRequest) {
 
     // ── Auto-publish impressive matches to Highlights feed ──
     // Marketing: every great match becomes a free content card on the platform
-    const isImpressive =
-      (isExtract && safeChipsEarned >= AUTO_PUBLISH_MIN_CHIPS) ||
-      (isExtract && safeKills >= AUTO_PUBLISH_MIN_KILLS) ||
-      (!isExtract && safeKills >= AUTO_PUBLISH_DEATH_KILLS);
-
-    if (isImpressive) {
-      try {
-        const player = await db.player.findUnique({
-          where: { id: session.playerId },
-          select: { name: true, userTag: true, country: true, level: true, clanTag: true },
-        });
-        if (player) {
-          // Generate a catchy title
-          let title: string;
-          if (isExtract && safeChipsEarned >= AUTO_PUBLISH_MIN_CHIPS && safeKills >= AUTO_PUBLISH_MIN_KILLS) {
-            title = `💥 ${formatChipsIndian(safeChipsEarned)}c Extraction with ${safeKills} Kills!`;
-          } else if (isExtract && safeChipsEarned >= AUTO_PUBLISH_MIN_CHIPS) {
-            title = `💰 Massive ${formatChipsIndian(safeChipsEarned)}c Extraction!`;
-          } else if (isExtract && safeKills >= AUTO_PUBLISH_MIN_KILLS) {
-            title = `💀 ${safeKills}-Kill Extraction in ${arenaName}!`;
-          } else {
-            title = `⚔️ ${safeKills} Eliminations Before Falling!`;
-          }
-
-          const matchData = JSON.stringify({
-            outcome: isExtract ? 'extract' : 'death',
-            chipsLost: safeChipsLost,
-            snakeLength: safeSnakeLength,
-            durationSec: safeDuration,
-            isOnline: Boolean(isOnline),
-          });
-
-          await db.clip.create({
-            data: {
-              playerId: session.playerId,
-              matchId: entry.id,
-              title,
-              description: '',
-              platform: 'match-card',
-              url: '',
-              chipsExtracted: safeChipsEarned,
-              kills: safeKills,
-              arenaName: String(arenaName),
-              tags: JSON.stringify(['auto', isExtract ? 'extraction' : 'combat']),
-              cardType: 'match-card',
-              matchData,
-              status: 'approved', // system-generated, auto-approved
-            },
-          });
-        }
-      } catch (clipErr) {
-        // Don't fail the match history save if clip creation fails
-        console.error('[match-history] auto-publish clip failed', clipErr);
-      }
+    if (isImpressiveMatch(isExtract, safeChipsEarned, safeKills)) {
+      await publishMatchCard({
+        playerId: session.playerId,
+        matchId: entry.id,
+        arenaName: String(arenaName),
+        isExtract,
+        chipsEarned: safeChipsEarned,
+        chipsLost: safeChipsLost,
+        kills: safeKills,
+        snakeLength: safeSnakeLength,
+        durationSec: safeDuration,
+        isOnline: Boolean(isOnline),
+      });
     }
 
     // ── Clan war scoring ──
