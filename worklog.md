@@ -40,7 +40,7 @@ Work Log:
 - db/custom.db exists, schema in sync (db:push)
 - Server running on port 3000 (PID 9060)
 - Guest login: works (with country=IN, returns player JSON)
-- Admin login: works (harshpawar57@gmail.com, returns admin player JSON)
+- Admin login: works (owner admin account, returns admin player JSON)
 - Page renders: VENOM ARENA screen confirmed via agent-browser
 
 Stage Summary:

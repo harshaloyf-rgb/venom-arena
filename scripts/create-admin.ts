@@ -3,10 +3,17 @@ import bcrypt from 'bcryptjs';
 
 // Canonical owner/admin account.
 // Idempotent: safe to re-run (updates password/chips if the account exists,
-// creates it if missing). Run with `bun scripts/create-admin.ts` (or npx tsx).
-const ADMIN_EMAIL = 'harshpawar57@gmail.com';
-const ADMIN_PASSWORD = '123456';
+// creates it if missing).
+// Run with: ADMIN_EMAIL=... ADMIN_PASSWORD=... bun scripts/create-admin.ts
+// Credentials come from the environment — NEVER hardcode them in this public repo.
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? '';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '';
 const ADMIN_CHIPS = 1_000_000_000; // ~1 billion — owner account
+
+if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
+  console.error('Set ADMIN_EMAIL and ADMIN_PASSWORD environment variables first.');
+  process.exit(1);
+}
 
 async function main() {
   const hash = bcrypt.hashSync(ADMIN_PASSWORD, 10);

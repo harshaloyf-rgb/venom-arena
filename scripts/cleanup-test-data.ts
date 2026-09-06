@@ -7,7 +7,13 @@ import { db } from '../src/lib/db';
 // registrations, purchases, sessions). Clan + clan-scoped rows are removed
 // explicitly since Clan is keyed by tag, not playerId.
 
-const KEEP_EMAILS = new Set(['harshpawar57@gmail.com']);
+// Run with: ADMIN_EMAIL=... bun scripts/cleanup-test-data.ts
+// (owner email comes from env — never hardcode it in this public repo)
+if (!process.env.ADMIN_EMAIL) {
+  console.error('Set the ADMIN_EMAIL environment variable first (refusing to delete without a keep-list).');
+  process.exit(1);
+}
+const KEEP_EMAILS = new Set([process.env.ADMIN_EMAIL]);
 
 async function main() {
   const doomed = await db.player.findMany({
