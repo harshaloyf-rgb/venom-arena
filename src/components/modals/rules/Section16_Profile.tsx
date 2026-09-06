@@ -22,7 +22,7 @@ export function Section16_Profile() {
           <ul className="list-disc pl-4 space-y-0.5">
             <li><strong>Challenger Handle (Name):</strong> Change your display name (30-day cooldown). Remaining cooldown is shown if active</li>
             <li><strong>Faction Region (Country):</strong> Choose from 197 countries (7-day cooldown). Your flag updates everywhere instantly</li>
-            <li><strong>Avatar:</strong> Upload a custom image or choose from preset avatars. No cooldown</li>
+            <li><strong>Avatar:</strong> Choose from preset emblems, or reset to your equipped skin&apos;s default emoji. Sign-in provider pictures (e.g. Google) are used automatically when present. No cooldown</li>
             <li><strong>Social Links:</strong> Add your Instagram, YouTube, and Twitch handles. Shown on your profile</li>
           </ul>
         </InfoCard>
@@ -60,7 +60,7 @@ export function Section16_Profile() {
         <InfoCard title="📊 Stats Display" accent="text-emerald-300">
           <p className="mb-1.5">The Stats tab shows your key performance metrics:</p>
           <ul className="list-disc pl-4 space-y-0.5">
-            <li><strong>Level &amp; XP:</strong> Current level, XP progress bar, and XP needed for next level</li>
+            <li><strong>Level &amp; XP:</strong> Current level and an XP bar showing progress within the current level (X / 200 XP — identical to the lobby header)</li>
             <li><strong>Chips:</strong> Banked wallet balance and current buy-in arena tier</li>
             <li><strong>K/D Ratio:</strong> Lifetime real-player kills (bot eliminations don&apos;t count), deaths, and kill/death ratio</li>
             <li><strong>Win Stats:</strong> Total runs, extractions, and extraction rate percentage</li>
